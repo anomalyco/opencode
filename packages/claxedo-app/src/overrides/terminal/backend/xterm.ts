@@ -10,7 +10,6 @@ import {
   scrollToBottom,
 } from "../helpers"
 import { createModeScanner } from "../mode-scan"
-import { createQuerySuppressor } from "../query-suppression"
 import type { TerminalBackend, TerminalBackendOptions, Disposable, CreateBackendFn } from "./types"
 
 export const createBackend: CreateBackendFn = async (
@@ -39,9 +38,6 @@ export const createBackend: CreateBackendFn = async (
 
   // Track bracketed paste mode across split writes.
   const mode = createModeScanner()
-  const suppress = createQuerySuppressor()
-
-  // Intercept writes to detect bracketed paste mode
   const originalWrite = xterm.write.bind(xterm)
 
   // Data/key listeners managed externally
@@ -71,48 +67,24 @@ export const createBackend: CreateBackendFn = async (
   const cleanupCopy = setupCopyHandler(xterm)
   cleanups.push(cleanupCopy)
 
-  // Setup resize handlers
-  const cleanupResize = setupResizeHandlers(container, xterm, fitAddon, (cols, rows) => {
-    for (const fn of resizeListeners) fn({ cols, rows })
-  })
-  cleanups.push(cleanupResize)
-
-  // Force initial fits (tab/portal mount can report 0px initially)
-  let fitTimer: ReturnType<typeof setTimeout> | undefined
-  requestAnimationFrame(() => window.dispatchEvent(new Event("opencode:terminal-fit")))
-  fitTimer = setTimeout(() => window.dispatchEvent(new Event("opencode:terminal-fit")), 50)
-  cleanups.push(() => {
-    if (fitTimer) clearTimeout(fitTimer)
-  })
-
-  // Visibility change handler
-  const handleVisibilityChange = () => {
-    if (document.hidden) return
-    const buffer = xterm.buffer.active
-    const wasAtBottom = buffer.viewportY >= buffer.baseY
-    const prevCols = xterm.cols
-    const prevRows = xterm.rows
-
-    try {
-      fitAddon.fit()
-    } catch {
-      return
-    }
-
-    try {
-      xterm.refresh(0, xterm.rows - 1)
-    } catch {}
-
-    if (xterm.cols !== prevCols || xterm.rows !== prevRows) {
-      for (const fn of resizeListeners) fn({ cols: xterm.cols, rows: xterm.rows })
-    }
-
-    if (wasAtBottom) {
-      requestAnimationFrame(() => scrollToBottom(xterm))
-    }
+  // Toggle cursor blink on focus/blur (matches upstream ghostty-web behavior)
+  const textarea = xterm.textarea
+  if (textarea) {
+    const onFocus = () => { xterm.options.cursorBlink = true }
+    const onBlur = () => { xterm.options.cursorBlink = false }
+    textarea.addEventListener("focus", onFocus)
+    textarea.addEventListener("blur", onBlur)
+    cleanups.push(() => {
+      textarea.removeEventListener("focus", onFocus)
+      textarea.removeEventListener("blur", onBlur)
+    })
   }
-  document.addEventListener("visibilitychange", handleVisibilityChange)
-  cleanups.push(() => document.removeEventListener("visibilitychange", handleVisibilityChange))
+
+  // Setup resize handlers (includes visibilitychange + mount fits)
+  const resizeHandlers = setupResizeHandlers(container, xterm, fitAddon, (cols, rows) => {
+    for (const fn of resizeListeners) fn({ cols, rows })
+  }, instance.renderer)
+  cleanups.push(resizeHandlers.cleanup)
 
   // Wire xterm's native onData (user typing) into our data listeners
   const xtermOnData = xterm.onData((data) => {
@@ -143,16 +115,11 @@ export const createBackend: CreateBackendFn = async (
     },
 
     write(data: string, callback?: () => void) {
-      const filtered = suppress.scan(data)
-      mode.scan(filtered)
-      if (!filtered) {
-        callback?.()
-        return
-      }
+      mode.scan(data)
       if (callback) {
-        originalWrite(filtered, callback)
+        originalWrite(data, callback)
       } else {
-        originalWrite(filtered)
+        originalWrite(data)
       }
     },
 
@@ -235,6 +202,10 @@ export const createBackend: CreateBackendFn = async (
 
     refresh(start, end) {
       xterm.refresh(start, end)
+    },
+
+    flushResize() {
+      resizeHandlers.coordinator.flush()
     },
 
     serialize(options) {

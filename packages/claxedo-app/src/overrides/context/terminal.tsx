@@ -5,18 +5,7 @@ import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { Persist, persisted } from "@/utils/persist"
 import { clearInitialCommandMarker } from "../components/terminal-recovery"
-
-export type LocalPTY = {
-  id: string
-  title: string
-  titleNumber: number
-  cwd?: string
-  rows?: number
-  cols?: number
-  buffer?: string
-  scrollY?: number
-  initialCommand?: string
-}
+import { mergeCreatedTerminal, type LocalPTY } from "./terminal-shared"
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
@@ -52,46 +41,15 @@ function tvlog(...args: unknown[]) {
   console.log("[terminal:store:verbose]", ...args)
 }
 
-function titleNum(title: string) {
-  const m = title.match(/^Terminal (\d+)$/)
-  if (!m) return
-  const n = Number(m[1])
-  if (!Number.isFinite(n) || n <= 0) return
-  return n
-}
-
-function nextNum(all: LocalPTY[]) {
-  const nums = new Set(
-    all.flatMap((pty) => {
-      const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
-      if (direct !== undefined) return [direct]
-      const parsed = titleNum(pty.title)
-      if (parsed === undefined) return []
-      return [parsed]
-    }),
-  )
-  return Array.from({ length: nums.size + 1 }, (_, i) => i + 1).find((n) => !nums.has(n)) ?? 1
-}
-
-export function mergeCreatedTerminal(
-  all: LocalPTY[],
-  info: { id: string; title?: string; cwd?: string },
-) {
-  const existing = all.find((pty) => pty.id === info.id)
-  if (existing) return all
-  const parsed = info.title ? titleNum(info.title) : undefined
-  const titleNumber = parsed ?? nextNum(all)
-  const title = info.title ?? `Terminal ${titleNumber}`
-  return [...all, { id: info.id, title, titleNumber, cwd: info.cwd }]
-}
-
 export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
   const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
 
   const numberFromTitle = (title: string) => {
-    const value = titleNum(title)
-    if (value === undefined || !Number.isFinite(value) || value <= 0) return
-    return value
+    const m = title.match(/^Terminal (\d+)$/)
+    if (!m) return
+    const n = Number(m[1])
+    if (!Number.isFinite(n) || n <= 0) return
+    return n
   }
 
   const [store, setStore, _, ready] = persisted(
@@ -125,8 +83,16 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
   const unsubCreated = sdk.event.on("pty.created", (event) => {
     const info = event.properties.info
     if (!info?.id) return
-    tlog("event pty.created", { dir, id: info.id, title: info.title, cwd: info.cwd })
-    setStore("all", (all) => mergeCreatedTerminal(all, { id: info.id, title: info.title, cwd: info.cwd }))
+    const cmd = pendingInitialCommand
+    pendingInitialCommand = undefined
+    tlog("event pty.created", { dir, id: info.id, title: info.title, cwd: info.cwd, pendingCmd: !!cmd })
+    setStore("all", (all) => {
+      const merged = mergeCreatedTerminal(all, { id: info.id, title: info.title, cwd: info.cwd })
+      if (!cmd) return merged
+      const idx = merged.findIndex((item) => item.id === info.id)
+      if (idx === -1) return merged
+      return merged.map((item, i) => (i === idx ? { ...item, initialCommand: cmd } : item))
+    })
     if (!store.active) setStore("active", info.id)
     tvlog("after pty.created", { dir, active: store.active, ids: store.all.map((x) => x.id) })
   })
@@ -163,7 +129,15 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
   })
   onCleanup(unsubDeleted)
 
-  const meta = { migrated: false }
+  // Pending initial command for terminals created by new().
+  // The pty.created SSE event arrives before the HTTP .then() callback,
+  // so the event handler adds the PTY to the store without initialCommand.
+  // The Terminal component mounts with a stale reference and never sees it.
+  // This variable bridges the gap: new() sets it before the API call,
+  // and the event handler consumes it when adding the PTY.
+  let pendingInitialCommand: string | undefined
+
+  const meta = { migrated: false, reconciled: false }
 
   // Migration effect for titleNumber
   createEffect(() => {
@@ -181,6 +155,33 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
       })
       if (next.every((pty, index) => pty === all[index])) return all
       return next
+    })
+  })
+
+  // Reconcile persisted store.all against live server PTYs on load.
+  // Removes PTY entries that no longer exist on the server (e.g. server
+  // restarted, PTY exited while frontend was disconnected, stale localStorage).
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.reconciled) return
+    if (store.all.length === 0) return
+    meta.reconciled = true
+
+    sdk.client.pty.list().then((res) => {
+      const serverIds = new Set((res.data ?? []).map((p: { id: string }) => p.id))
+      const stale = store.all.filter((p) => !serverIds.has(p.id))
+      if (stale.length === 0) return
+      tlog("reconcile: pruning stale PTYs", { stale: stale.map((p) => p.id), server: [...serverIds] })
+      batch(() => {
+        setStore("all", (all) => all.filter((p) => serverIds.has(p.id)))
+        if (store.active && !serverIds.has(store.active)) {
+          const remaining = store.all.filter((p) => serverIds.has(p.id))
+          setStore("active", remaining[0]?.id)
+        }
+      })
+    }).catch((e) => {
+      // If the server is unreachable, skip reconciliation — we'll try again on next load
+      tlog("reconcile: failed to list PTYs", e)
     })
   })
 
@@ -225,6 +226,10 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
       // Use provided title or default to "Terminal N"
       const terminalTitle = title ? `${title} ${nextNumber}` : `Terminal ${nextNumber}`
 
+      // Set before the API call so the pty.created event handler can pick it up.
+      // The event fires before .then() resolves, so this bridges the gap.
+      if (initialCommand) pendingInitialCommand = initialCommand
+
       sdk.client.pty
         .create({
           title: terminalTitle,
@@ -237,6 +242,7 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
           },
         })
         .then((pty) => {
+          pendingInitialCommand = undefined
           const id = pty.data?.id
           if (!id) return
           if (debug) {
@@ -255,6 +261,7 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
           tvlog("new() post create", { dir, id, all: store.all.map((x) => x.id), active: store.active })
         })
         .catch((e) => {
+          pendingInitialCommand = undefined
           if (debug) {
             // eslint-disable-next-line no-console
             console.log("[terminal]", "create failed", e)

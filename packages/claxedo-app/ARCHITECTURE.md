@@ -13,6 +13,7 @@ This document provides comprehensive technical documentation for the Claxedo App
 7. [Cloud Components](#7-cloud-components)
 8. [Desktop Integration](#8-desktop-integration)
 9. [Backend Server Integration](#9-backend-server-integration)
+10. [Process Control Plane Feature](#10-process-control-plane-feature)
 
 ---
 
@@ -673,6 +674,16 @@ bun run dev
 
 # Frontend will proxy to gateway at localhost:3000
 ```
+
+---
+
+## 10. Process Control Plane Feature
+
+The Process Control Plane feature is tracked as a Claxedo-first feature plan, aligned to the existing override, terminal, and gateway architecture.
+
+- Source of truth spec: **[docs/PROCESS_CONTROL_PLANE_V1.md](./docs/PROCESS_CONTROL_PLANE_V1.md)**
+- Scope: local project/process orchestration, terminal interaction, trust gating, MCP-safe automation, and config-first operation.
+- Delivery model: phased rollout across `packages/claxedo-app`, `claxedo/`, and targeted `opencode` command surfaces.
 
 ---
 

@@ -722,7 +722,7 @@ function RailLayoutInner(props: RailLayoutProps) {
                             "ring-1 ring-inset ring-blue-500/30":
                               claxedo.split.active() && group.id === claxedo.split.focusedId(),
                           }}
-                          onPointerDown={() => claxedo.split.setFocus(group.id)}
+                          on:pointerdown={() => claxedo.split.setFocus(group.id)}
                         >
                           {/* Close button for non-primary panels */}
                           <Show when={i() > 0}>

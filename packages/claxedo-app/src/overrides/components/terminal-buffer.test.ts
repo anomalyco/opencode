@@ -12,6 +12,7 @@ describe("terminal buffer guards", () => {
     const tail = "tail"
     const value = `${head}${tail}`
     const result = prepareRestoreBuffer(value)
+    expect(result.trimmed).toBe(true)
     expect(result.value?.endsWith(tail)).toBe(true)
     expect(result.value?.length).toBe(MAX_RESTORE_BUFFER_BYTES)
   })
@@ -33,15 +34,6 @@ describe("terminal buffer guards", () => {
     const result = preparePersistBuffer(value)
     expect(result.length).toBe(MAX_PERSIST_BUFFER_BYTES)
     expect(result.endsWith(tail)).toBe(true)
-  })
-
-  test("persist_buffer_trim_keeps_recent_tail", () => {
-    const head = "x".repeat(MAX_PERSIST_BUFFER_BYTES)
-    const tail = "persist"
-    const value = `${head}${tail}`
-    const result = preparePersistBuffer(value)
-    expect(result.endsWith(tail)).toBe(true)
-    expect(result.length).toBe(MAX_PERSIST_BUFFER_BYTES)
   })
 
   test("persist_then_restore_roundtrip_keeps_latest_tail_exactly", () => {

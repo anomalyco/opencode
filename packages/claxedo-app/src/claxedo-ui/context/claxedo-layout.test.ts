@@ -565,51 +565,82 @@ describe("terminal pane isolation", () => {
     }
   })
 
-  test("terminal focus is per-tab", () => {
+  test("terminal focus is per-tab and updating one tab does not change the other", () => {
     const { api, dispose } = createTestLayout()
     try {
       api.terminal.ensure("tab-a", "pty-1")
+      api.terminal.split({ tab: "tab-a", at: "pty-1", id: "pty-1b", dir: "v" })
       api.terminal.ensure("tab-b", "pty-2")
 
       api.terminal.setFocus("tab-a", "pty-1")
       api.terminal.setFocus("tab-b", "pty-2")
 
+      // Focus is independent per tab
       expect(api.terminal.focus("tab-a")).toBe("pty-1")
       expect(api.terminal.focus("tab-b")).toBe("pty-2")
 
-      api.terminal.setFocus("tab-a", "pty-999")
-
-      expect(api.terminal.focus("tab-a")).toBe("pty-999")
+      // Changing focus within a split pane updates only that tab
+      api.terminal.setFocus("tab-a", "pty-1b")
+      expect(api.terminal.focus("tab-a")).toBe("pty-1b")
       expect(api.terminal.focus("tab-b")).toBe("pty-2")
+
+      // Focus on a tab that was never ensured returns undefined
+      expect(api.terminal.focus("tab-nonexistent")).toBeUndefined()
     } finally {
       dispose()
     }
   })
 
-  test("terminal zoom is per-tab", () => {
+  test("terminal zoom is per-tab and can be cleared independently", () => {
     const { api, dispose } = createTestLayout()
     try {
       api.terminal.ensure("tab-a", "pty-1")
       api.terminal.ensure("tab-b", "pty-2")
 
       api.terminal.setZoom("tab-a", "pty-1")
+      api.terminal.setZoom("tab-b", "pty-2")
 
+      // Zoom is independent per tab
       expect(api.terminal.zoom("tab-a")).toBe("pty-1")
-      expect(api.terminal.zoom("tab-b")).toBeUndefined()
+      expect(api.terminal.zoom("tab-b")).toBe("pty-2")
+
+      // Clearing zoom on tab-a does not affect tab-b
+      api.terminal.setZoom("tab-a", undefined)
+      expect(api.terminal.zoom("tab-a")).toBeUndefined()
+      expect(api.terminal.zoom("tab-b")).toBe("pty-2")
     } finally {
       dispose()
     }
   })
 
-  test("terminal owner is per-terminal-id", () => {
+  test("terminal owner is per-terminal-id and controls closeInTab guard behavior", () => {
     const { api, dispose } = createTestLayout()
     try {
-      api.terminal.own("tab-a", "pty-1")
-      api.terminal.own("tab-b", "pty-2")
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+      const tabA = tabs1.addTerminal("/ws", "pty-1", "Terminal 1")
+      const tabB = tabs2.addTerminal("/ws", "pty-2", "Terminal 2")
 
-      expect(api.terminal.owner("pty-1")).toBe("tab-a")
-      expect(api.terminal.owner("pty-2")).toBe("tab-b")
+      api.terminal.ensure(tabA, "pty-1")
+      api.terminal.ensure(tabB, "pty-2")
+      api.terminal.own(tabA, "pty-1")
+      api.terminal.own(tabB, "pty-2")
+
+      // Owner links are per-terminal-id
+      expect(api.terminal.owner("pty-1")).toBe(tabA)
+      expect(api.terminal.owner("pty-2")).toBe(tabB)
       expect(api.terminal.owner("pty-3")).toBeUndefined()
+
+      // closeInTab respects ownership: trying to close pty-2 from tabA is
+      // rejected because pty-2's owner is tabB
+      api.terminal.split({ tab: tabA, at: "pty-1", id: "pty-2", dir: "v" })
+      api.terminal.own(tabB, "pty-2")
+      api.terminal.closeInTab({
+        tab: tabA,
+        id: "pty-2",
+        origin: { tabId: tabA, groupId: g1, hostId: `claxedo-tab-host-${tabA}` },
+      })
+      // pty-2 should still be in tab-a pane because owner mismatch blocked the close
+      expect(api.terminal.ids(tabA)).toContain("pty-2")
     } finally {
       dispose()
     }
@@ -675,10 +706,19 @@ describe("terminal pane isolation", () => {
 
       api.topTabs.close(tabId)
 
-      expect(api.terminal.pane(tabId)).toBeUndefined()
+      // Phase 1: clearTerminalTabState preserves pane (so reactive close
+      // effect can read sibling IDs), but clears focus/zoom/owner and
+      // sets lifecycle to "closing".
+      expect(api.terminal.pane(tabId)).toBeDefined()
       expect(api.terminal.focus(tabId)).toBeUndefined()
       expect(api.terminal.zoom(tabId)).toBeUndefined()
       expect(api.terminal.owner("pty-1")).toBeUndefined()
+      expect(api.terminal.lifecycle("pty-1")).toBe("closing")
+
+      // Phase 2: clear() is called by the reactive close effect after
+      // killing all terminals — this wipes the pane tree.
+      api.terminal.clear(tabId)
+      expect(api.terminal.pane(tabId)).toBeUndefined()
     } finally {
       dispose()
     }
@@ -700,8 +740,14 @@ describe("terminal pane isolation", () => {
 
       api.topTabs.close(tabId)
 
-      expect(api.terminal.pane(tabId)).toBeUndefined()
+      // Pane preserved for reactive close effect; agent state cleared
+      expect(api.terminal.pane(tabId)).toBeDefined()
       expect(api.terminal.agentStatus("pty-1")).toBe("idle")
+      expect(api.terminal.lifecycle("pty-1")).toBe("closing")
+
+      // Phase 2: clear() wipes pane
+      api.terminal.clear(tabId)
+      expect(api.terminal.pane(tabId)).toBeUndefined()
     } finally {
       dispose()
     }
@@ -755,15 +801,35 @@ describe("terminal pane isolation", () => {
 // ---------------------------------------------------------------------------
 
 describe("agent status isolation", () => {
-  test("agent status is per terminal", () => {
+  test("agent status is per terminal and aggregates correctly in getTabAgentStatus", () => {
     const { api, dispose } = createTestLayout()
     try {
+      // Set up terminals in separate tabs
+      api.terminal.ensure("tab-a", "pty-1")
+      api.terminal.ensure("tab-b", "pty-2")
+
       api.terminal.setAgentStatus("pty-1", "working")
       api.terminal.setAgentStatus("pty-2", "permission")
 
+      // Per-terminal status is correct
       expect(api.terminal.agentStatus("pty-1")).toBe("working")
       expect(api.terminal.agentStatus("pty-2")).toBe("permission")
       expect(api.terminal.agentStatus("pty-3")).toBe("idle")
+
+      // Aggregated tab status reflects the individual terminal status
+      const statusA = api.terminal.getTabAgentStatus("tab-a")
+      expect(statusA.loading).toBe(true)
+      expect(statusA.attention).toBe(false)
+
+      const statusB = api.terminal.getTabAgentStatus("tab-b")
+      expect(statusB.loading).toBe(false)
+      expect(statusB.attention).toBe(true)
+
+      // Tab with no ensured terminals shows idle aggregated status
+      const statusEmpty = api.terminal.getTabAgentStatus("tab-nonexistent")
+      expect(statusEmpty.loading).toBe(false)
+      expect(statusEmpty.attention).toBe(false)
+      expect(statusEmpty.done).toBe(false)
     } finally {
       dispose()
     }
@@ -844,7 +910,7 @@ describe("agent status isolation", () => {
 // ---------------------------------------------------------------------------
 
 describe("worktree isolation between groups", () => {
-  test("setDefault in group A does not affect group B", () => {
+  test("setDefault in group A does not affect group B and is visible via worktree alias when focused", () => {
     const { api, dispose } = createTestLayout()
     try {
       const { g1, g2 } = splitInto2(api)
@@ -853,14 +919,23 @@ describe("worktree isolation between groups", () => {
 
       wt1.setDefault("/workspace-a")
 
-      expect(wt1.default()).toBe("/workspace-a")
+      // Group B is unaffected (isolation)
       expect(wt2.default()).toBeNull()
+
+      // The worktree alias delegates to the focused group.
+      // When g1 is focused, the alias should reflect g1's default.
+      api.split.setFocus(g1)
+      expect(api.worktree.default()).toBe("/workspace-a")
+
+      // When g2 is focused, the alias should reflect g2's default (null).
+      api.split.setFocus(g2)
+      expect(api.worktree.default()).toBeNull()
     } finally {
       dispose()
     }
   })
 
-  test("setPinned in group A does not affect group B", () => {
+  test("setPinned in group A does not affect group B and is visible via worktree alias when focused", () => {
     const { api, dispose } = createTestLayout()
     try {
       const { g1, g2 } = splitInto2(api)
@@ -869,8 +944,16 @@ describe("worktree isolation between groups", () => {
 
       wt1.setPinned("/pinned-a")
 
-      expect(wt1.pinned()).toBe("/pinned-a")
+      // Group B is unaffected (isolation)
       expect(wt2.pinned()).toBeNull()
+
+      // The worktree alias delegates to the focused group.
+      api.split.setFocus(g1)
+      expect(api.worktree.pinned()).toBe("/pinned-a")
+
+      // When g2 is focused, the alias should reflect g2's pinned (null).
+      api.split.setFocus(g2)
+      expect(api.worktree.pinned()).toBeNull()
     } finally {
       dispose()
     }
@@ -902,7 +985,7 @@ describe("worktree isolation between groups", () => {
 // ---------------------------------------------------------------------------
 
 describe("layout isolation between groups", () => {
-  test("file tree state per group", () => {
+  test("file tree state per group persists across focus switches", () => {
     const { api, dispose } = createTestLayout()
     try {
       const { g1, g2 } = splitInto2(api)
@@ -913,20 +996,30 @@ describe("layout isolation between groups", () => {
       layout1.fileTree.setWidth(200)
       layout1.fileTree.setTab("all")
 
+      // Group B defaults untouched (isolation)
+      expect(layout2.fileTree.opened()).toBe(true)
+      expect(layout2.fileTree.width()).toBe(344)
+      expect(layout2.fileTree.tab()).toBe("changes")
+
+      // After switching focus to g2 and back, g1's layout should persist
+      api.split.setFocus(g2)
+      api.split.setFocus(g1)
+
       expect(layout1.fileTree.opened()).toBe(false)
       expect(layout1.fileTree.width()).toBe(200)
       expect(layout1.fileTree.tab()).toBe("all")
 
-      // Group B defaults untouched
-      expect(layout2.fileTree.opened()).toBe(true)
-      expect(layout2.fileTree.width()).toBe(344)
-      expect(layout2.fileTree.tab()).toBe("changes")
+      // Modifying g2's layout while g2 is focused does not affect g1
+      api.split.setFocus(g2)
+      layout2.fileTree.setWidth(500)
+      expect(layout1.fileTree.width()).toBe(200)
+      expect(layout2.fileTree.width()).toBe(500)
     } finally {
       dispose()
     }
   })
 
-  test("session panel state per group", () => {
+  test("session panel state per group persists across focus switches", () => {
     const { api, dispose } = createTestLayout()
     try {
       const { g1, g2 } = splitInto2(api)
@@ -937,14 +1030,27 @@ describe("layout isolation between groups", () => {
       layout1.session.setWidth(300)
       layout1.session.setPanelMode(2)
 
+      // Group B defaults untouched (isolation)
+      expect(layout2.session.collapsed()).toBe(false)
+      expect(layout2.session.width()).toBe(600)
+      expect(layout2.session.panelMode()).toBe(0)
+
+      // After switching focus to g2 and back, g1's session state should persist
+      api.split.setFocus(g2)
+      api.split.setFocus(g1)
+
       expect(layout1.session.collapsed()).toBe(true)
       expect(layout1.session.width()).toBe(300)
       expect(layout1.session.panelMode()).toBe(2)
 
-      // Group B defaults untouched
-      expect(layout2.session.collapsed()).toBe(false)
-      expect(layout2.session.width()).toBe(600)
-      expect(layout2.session.panelMode()).toBe(0)
+      // Modifying g2's session while g2 is focused does not affect g1
+      api.split.setFocus(g2)
+      layout2.session.setWidth(800)
+      layout2.session.setPanelMode(1)
+      expect(layout1.session.width()).toBe(300)
+      expect(layout1.session.panelMode()).toBe(2)
+      expect(layout2.session.width()).toBe(800)
+      expect(layout2.session.panelMode()).toBe(1)
     } finally {
       dispose()
     }
@@ -1348,7 +1454,7 @@ describe("end-to-end split panel scenarios", () => {
 // Bug regression: split toggle merge and state cleanup
 // ---------------------------------------------------------------------------
 
-describe("bug: closeGroup merge deduplicates tabs", () => {
+describe("closeGroup deduplicates tabs on merge", () => {
   test("closeGroup deduplicates session tabs with same sessionId and directory", () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -1443,7 +1549,7 @@ describe("bug: closeGroup merge deduplicates tabs", () => {
   })
 })
 
-describe("bug: closeGroup clears stale creating state for removed groups", () => {
+describe("closeGroup clears stale creating state for removed groups", () => {
   test("closeGroup clears creating counter and groupId when removing group with pending create", () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -1494,7 +1600,7 @@ describe("bug: closeGroup clears stale creating state for removed groups", () =>
   })
 })
 
-describe("bug: tab operations work after closing split", () => {
+describe("tab operations work after closing split", () => {
   test("close all tabs in right panel, closeGroup, then create/close tabs in remaining panel", () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -1555,6 +1661,54 @@ describe("bug: tab operations work after closing split", () => {
       expect(api.split.active()).toBe(true)
 
       // Everything preserved
+      expect(tabs1.items()).toHaveLength(1)
+      expect(tabs2.items()).toHaveLength(2)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("toggle on focused secondary group toggles visibility and topTabs reflects focused group", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+
+      // Populate both groups
+      tabs1.addSession("/ws", "s1", "Primary Session")
+      tabs2.addSession("/ws", "s2", "Secondary Session")
+
+      // Focus secondary group
+      api.split.setFocus(g2)
+      expect(api.split.focusedId()).toBe(g2)
+
+      // topTabs should delegate to focused group (g2)
+      expect(api.topTabs.active()?.sessionId).toBe("s2")
+
+      // Toggle hides the split
+      api.split.toggle()
+      expect(api.split.active()).toBe(false)
+      expect(api.split.hidden()).toBe(true)
+
+      // topTabs should still delegate to focused group (g2)
+      expect(api.topTabs.active()?.sessionId).toBe("s2")
+
+      // Adding a session via topTabs while hidden should go to focused group (g2)
+      api.topTabs.addSession("/ws", "s3", "Added While Hidden")
+      expect(tabs2.items()).toHaveLength(2)
+      expect(tabs1.items()).toHaveLength(1)
+
+      // Toggle shows the split again
+      api.split.toggle()
+      expect(api.split.active()).toBe(true)
+      expect(api.split.hidden()).toBe(false)
+
+      // Focus should still be on g2
+      expect(api.split.focusedId()).toBe(g2)
+
+      // Sizes should be preserved
+      expect(api.split.sizes()).toEqual([0.5, 0.5])
+
+      // Both groups should have correct tabs
       expect(tabs1.items()).toHaveLength(1)
       expect(tabs2.items()).toHaveLength(2)
     } finally {
@@ -1671,6 +1825,140 @@ describe("terminal lifecycle state machine", () => {
       expect(api.terminal.transitionLifecycle("pty-2", "attached", "test")).toBe(true)
       expect(api.terminal.transitionLifecycle("pty-2", "creating", "test")).toBe(false)
       expect(api.terminal.lifecycle("pty-2")).toBe("attached")
+    } finally {
+      dispose()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug: Toggle focus tracking after hide/show cycle
+// ---------------------------------------------------------------------------
+
+describe("toggle focus tracking after hide/show cycle", () => {
+  test("full user sequence: focus g2, hide, show, focus g1, hide → g1 stays visible", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+
+      // Populate both groups so user can distinguish them
+      tabs1.addSession("/ws", "s1", "Primary Session")
+      tabs2.addSession("/ws", "s2", "Secondary Session")
+
+      // Initial: focus defaults to g1
+      expect(api.split.focusedId()).toBe(g1)
+
+      // Step 1: Toggle hides non-focused (g2)
+      api.split.toggle()
+      expect(api.split.hidden()).toBe(true)
+      expect(api.split.focusedId()).toBe(g1)
+      expect(api.topTabs.active()?.sessionId).toBe("s1")
+
+      // Step 2: Unhide
+      api.split.toggle()
+      expect(api.split.hidden()).toBe(false)
+
+      // Step 3: Click on secondary (g2) to focus it
+      api.split.setFocus(g2)
+      expect(api.split.focusedId()).toBe(g2)
+
+      // Step 4: Toggle hides non-focused (g1)
+      api.split.toggle()
+      expect(api.split.hidden()).toBe(true)
+      expect(api.split.focusedId()).toBe(g2)
+      expect(api.topTabs.active()?.sessionId).toBe("s2")
+
+      // Step 5: Unhide
+      api.split.toggle()
+      expect(api.split.hidden()).toBe(false)
+
+      // Step 6: Click on primary (g1) to focus it
+      api.split.setFocus(g1)
+      expect(api.split.focusedId()).toBe(g1)
+
+      // Step 7: Toggle hides non-focused — g2 should hide, g1 should stay
+      api.split.toggle()
+      expect(api.split.hidden()).toBe(true)
+      expect(api.split.focusedId()).toBe(g1)
+
+      // Critical assertion: topTabs should delegate to g1 (the focused group)
+      expect(api.topTabs.active()?.sessionId).toBe("s1")
+
+      // The focused group returned by groups().find(g => g.id === focusedId) is g1
+      const focused = api.split.groups().find((g: any) => g.id === api.split.focusedId())
+      expect(focused?.id).toBe(g1)
+    } finally {
+      dispose()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug: closeGroup breaks store proxy identity (causes terminal blank)
+// ---------------------------------------------------------------------------
+
+describe("closeGroup store proxy identity", () => {
+  test("closeGroup preserves surviving group proxy identity for <For> tracking", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+
+      tabs1.addSession("/ws", "s1", "Session 1")
+      tabs2.addSession("/ws", "s2", "Session 2")
+
+      // Capture the proxy reference for g1 before closeGroup
+      const g1ProxyBefore = api.split.groups().find((g: any) => g.id === g1)
+
+      // Close g2
+      api.split.closeGroup(g2)
+
+      // g1 should be the only remaining group
+      expect(api.split.groups()).toHaveLength(1)
+      expect(api.split.groups()[0].id).toBe(g1)
+
+      // BUG: The proxy reference for g1 should be the SAME object.
+      // closeGroup uses { ...g, tabs: { ...g.tabs, ... } } which creates
+      // a new plain object, breaking SolidJS store proxy identity.
+      // This causes <For> to treat g1 as a NEW item, destroying and
+      // recreating its DOM — including terminal host divs that portals
+      // mount into. Since TerminalPortal only re-resolves hosts when
+      // split.hidden() changes, the portal still references the old
+      // (now-destroyed) host div, rendering terminal content invisible.
+      const g1ProxyAfter = api.split.groups().find((g: any) => g.id === g1)
+      expect(g1ProxyAfter).toBe(g1ProxyBefore)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("closeGroup with terminal tabs preserves remaining group terminal state", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+
+      // Add terminal tabs to both groups
+      const termTab1 = tabs1.addTerminal("/ws", "pty-1", "Terminal 1")
+      const termTab2 = tabs2.addTerminal("/ws", "pty-2", "Terminal 2")
+
+      // Set up terminal state for both
+      api.terminal.ensure(termTab1, "pty-1")
+      api.terminal.ensure(termTab2, "pty-2")
+
+      // Close g2
+      api.split.closeGroup(g2)
+
+      // g1's terminal tab should still exist and be active
+      expect(api.split.groups()).toHaveLength(1)
+      const remaining = api.groupTabs(g1)
+      const termTabs = remaining.items().filter((t: any) => t.type === "terminal")
+      expect(termTabs).toHaveLength(1)
+      expect(termTabs[0].terminalId).toBe("pty-1")
+
+      // g1's terminal state should be intact
+      expect(api.terminal.ids(termTab1)).toContain("pty-1")
+
+      // g2's terminal state should be cleared
+      expect(api.terminal.ids(termTab2)).toEqual([])
     } finally {
       dispose()
     }

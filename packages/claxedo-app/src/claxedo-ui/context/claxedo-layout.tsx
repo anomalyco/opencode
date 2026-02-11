@@ -613,10 +613,10 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
 
     // Rail management
     const rail = {
-      collapsed: createMemo(() => store.rail.collapsed),
-      hovered: createMemo(() => store.rail.hovered),
-      pinned: createMemo(() => store.rail.pinned),
-      locked: createMemo(() => store.rail.locked),
+      collapsed: (() => store.rail.collapsed) as Accessor<boolean>,
+      hovered: (() => store.rail.hovered) as Accessor<boolean>,
+      pinned: (() => store.rail.pinned) as Accessor<boolean>,
+      locked: (() => store.rail.locked) as Accessor<boolean>,
       width: createMemo(() =>
         store.rail.collapsed && !store.rail.pinned ? RAIL_COLLAPSED_WIDTH : RAIL_EXPANDED_WIDTH,
       ),
@@ -807,7 +807,6 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         .map(([k]) => k)
       const ids = [...new Set([...paneIds, ...tabIds, ...owned])]
 
-      setStore("terminalPane", tab, undefined)
       setStore("terminalFocus", tab, undefined)
       setStore("terminalZoom", tab, undefined)
 
@@ -815,7 +814,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         setStore("terminalOwner", id, undefined)
         setStore("terminalAgentStatus", id, undefined)
         setStore("terminalAgentSeen", id, undefined)
-        setStore("terminalLifecycle", id, undefined)
+        setStore("terminalLifecycle", id, "closing")
       }
     }
 
@@ -1119,6 +1118,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         const target = store.groups[idx]
         const remaining = store.groups.filter((g) => g.id !== groupId)
         const first = remaining[0]
+        const firstIdx = store.groups.findIndex((g) => g.id === first.id)
         const merged = mergeGroupTabs(first, [target])
         const mergedIds = new Set(merged.items.map((t) => t.id))
         const droppedTerminals = target.tabs.items
@@ -1128,14 +1128,20 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         batch(() => {
           for (const tab of droppedTerminals) {
             clearTerminalTabState(tab)
+            setStore("terminalPane", tab, undefined)
           }
+          // Update the surviving group's tabs via path-based setStore to
+          // preserve SolidJS store proxy identity.  Using { ...g } spread
+          // creates a new raw object which breaks <For> reference tracking,
+          // causing DOM destruction/recreation and orphaning terminal portals.
+          setStore("groups", firstIdx, "tabs", "items", merged.items)
+          setStore("groups", firstIdx, "tabs", "order", merged.order)
+          setStore("groups", firstIdx, "tabs", "activeId", merged.activeId)
+          // Remove the target group.  Remaining groups keep their raw objects
+          // (only nested tabs were modified above), so proxy identity holds.
           setStore(
             "groups",
-            remaining.map((g, i) =>
-              i === 0
-                ? { ...g, tabs: { ...g.tabs, items: merged.items, order: merged.order, activeId: merged.activeId } }
-                : g,
-            ),
+            store.groups.filter((g) => g.id !== groupId),
           )
           setStore(
             "split",
@@ -1618,6 +1624,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
 
         clear(tab: string) {
           clearTerminalTabState(tab)
+          setStore("terminalPane", tab, undefined)
         },
 
         // Agent status per terminal (PTY ID)

@@ -1117,11 +1117,28 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       })
     })
 
-    const renderState = createMemo(() => {
+    // Guard: is the pane valid? (reads map(), triggers on store changes — but is a boolean,
+    // so same value = no downstream updates)
+    const paneValid = createMemo(() => {
       const pane = paneRoot()
-      if (!paneInStore(pane, (id) => map().has(id))) return
-      return resolvePortalRender(pane, host())
+      return paneInStore(pane, (id) => map().has(id))
     })
+
+    // Key: only changes when pane or host actually changes (NOT when map() gets a new reference).
+    // The reducer returns the same object reference when content is unchanged, so
+    // <Show keyed> sees no change and avoids tearing down the portal subtree.
+    const renderState = createMemo<{ paneRoot: import("../context/claxedo-layout").Pane; host: HTMLElement } | undefined>(
+      (prev) => {
+        if (!paneValid()) return undefined
+        const pane = paneRoot()
+        const h = host()
+        if (!pane || !h) return undefined
+        // Return same reference if content is unchanged
+        if (prev && prev.paneRoot === pane && prev.host === h) return prev
+        return { paneRoot: pane, host: h }
+      },
+      undefined,
+    )
     return (
       <Show when={renderState()} keyed>
         {(state) => {

@@ -310,7 +310,7 @@ describe("rail sidebar: lock prevents collapse while dropdown is open", () => {
 // REGRESSION: sidebar hangs after unlock (the actual bug)
 // ---------------------------------------------------------------------------
 
-describe("regression: sidebar hangs after unlock when mouse already left", () => {
+describe("rail sidebar: unlock triggers deferred collapse", () => {
   test("sidebar should collapse after unlock when mouse left during lock", async () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -379,31 +379,6 @@ describe("regression: sidebar hangs after unlock when mouse already left", () =>
     }
   })
 
-  test("workaround: sidebar collapses if user triggers a new mouse-leave after unlock", async () => {
-    const { api, dispose } = createTestLayout()
-    try {
-      // Reproduce the hang
-      api.rail.handleHotZoneEnter()
-      await sleep(TIMER_WAIT)
-      api.rail.lock()
-      api.rail.handleMouseLeave()
-      await sleep(TIMER_WAIT)
-      api.rail.unlock()
-      await sleep(TIMER_WAIT)
-
-      // Sidebar is still expanded (the hang)
-      // User discovers they need to move mouse back INTO the rail and out again
-      // to trigger a new mouseleave event
-      api.rail.cancelCollapse() // mouseenter
-      api.rail.handleMouseLeave() // mouseleave
-      await sleep(TIMER_WAIT)
-
-      // Now it collapses — but the user had to "jiggle" the mouse
-      expect(api.rail.collapsed()).toBe(true)
-    } finally {
-      dispose()
-    }
-  })
 })
 
 // ---------------------------------------------------------------------------
@@ -416,16 +391,7 @@ describe("regression: sidebar hangs after unlock when mouse already left", () =>
 // with the current cursor X and the rail's right edge.
 // ---------------------------------------------------------------------------
 
-describe("regression: trackPosition handles both hot zone and floating collapse", () => {
-  test("rail exposes trackPosition method", () => {
-    const { api, dispose } = createTestLayout()
-    try {
-      expect(typeof api.rail.trackPosition).toBe("function")
-    } finally {
-      dispose()
-    }
-  })
-
+describe("rail sidebar: trackPosition handles hot zone and floating collapse", () => {
   test("trackPosition triggers hot zone enter when collapsed and mouse in hot zone", async () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -628,7 +594,7 @@ describe("regression: trackPosition handles both hot zone and floating collapse"
 // Fix: trackPosition must check clientY against rail top/bottom bounds.
 // ---------------------------------------------------------------------------
 
-describe("regression: sidebar hangs on vertical exit (Y-axis check)", () => {
+describe("rail sidebar: trackPosition handles vertical exit (Y-axis)", () => {
   test("trackPosition triggers collapse when mouse is above rail top", async () => {
     const { api, dispose } = createTestLayout()
     try {

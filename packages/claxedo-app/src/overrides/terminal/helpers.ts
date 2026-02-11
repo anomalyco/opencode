@@ -4,10 +4,35 @@ import { ClipboardAddon } from "@xterm/addon-clipboard"
 import { Unicode11Addon } from "@xterm/addon-unicode11"
 import { ImageAddon } from "@xterm/addon-image"
 import { WebglAddon } from "@xterm/addon-webgl"
-import { CanvasAddon } from "@xterm/addon-canvas"
 import { WebLinksAddon } from "@xterm/addon-web-links"
-import { TERMINAL_OPTIONS, RESIZE_DEBOUNCE_MS } from "./config"
+import { TERMINAL_OPTIONS, MIN_CONTAINER_PX } from "./config"
+import { createResizeCoordinator, type ResizeCoordinator } from "./resize-coordinator"
 import type { ITheme } from "@xterm/xterm"
+
+function terminalDebugLevel() {
+  if (typeof localStorage === "undefined") return 0
+  try {
+    const raw = localStorage.getItem("opencode.debug.terminal")
+    if (!raw) return 0
+    if (raw === "true") return 1
+    if (raw === "false") return 0
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return 1
+    return n
+  } catch {
+    return 0
+  }
+}
+
+function fitDebug() {
+  return terminalDebugLevel() >= 2
+}
+
+function flog(...args: unknown[]) {
+  if (!fitDebug()) return
+  // eslint-disable-next-line no-console
+  console.log("[terminal:fit]", ...args)
+}
 
 // ============================================================================
 // Scroll Utilities
@@ -35,7 +60,7 @@ export function scrollToBottom(terminal: XTerm, behavior: ScrollBehavior = "inst
 
 export interface TerminalRendererRef {
   current: {
-    kind: "webgl" | "canvas" | "dom"
+    kind: "webgl" | "dom"
     dispose: () => void
     clearTextureAtlas?: () => void
   }
@@ -53,29 +78,12 @@ export interface CreateTerminalResult {
 // ============================================================================
 
 function loadRenderer(xterm: XTerm): TerminalRendererRef["current"] {
-  // Avoid WebGL on macOS due to corruption issues
-  const preferCanvas = navigator.userAgent.includes("Macintosh")
-
-  if (preferCanvas) {
-    try {
-      const canvas = new CanvasAddon()
-      xterm.loadAddon(canvas)
-      return { kind: "canvas", dispose: () => canvas.dispose() }
-    } catch {
-      return { kind: "dom", dispose: () => {} }
-    }
-  }
-
   try {
     const webgl = new WebglAddon()
     webgl.onContextLoss(() => {
       webgl.dispose()
-      // Fallback to canvas on context loss
-      try {
-        const canvas = new CanvasAddon()
-        xterm.loadAddon(canvas)
-        xterm.refresh(0, xterm.rows - 1)
-      } catch {}
+      // Fall back to DOM renderer on context loss
+      xterm.refresh(0, xterm.rows - 1)
     })
     xterm.loadAddon(webgl)
     return {
@@ -88,13 +96,7 @@ function loadRenderer(xterm: XTerm): TerminalRendererRef["current"] {
       },
     }
   } catch {
-    try {
-      const canvas = new CanvasAddon()
-      xterm.loadAddon(canvas)
-      return { kind: "canvas", dispose: () => canvas.dispose() }
-    } catch {
-      return { kind: "dom", dispose: () => {} }
-    }
+    return { kind: "dom", dispose: () => {} }
   }
 }
 
@@ -126,6 +128,10 @@ export function createTerminalInstance(
     current: { kind: "dom", dispose: () => {}, clearTextureAtlas: undefined },
   }
 
+  flog("open", {
+    clientWidth: container.clientWidth,
+    clientHeight: container.clientHeight,
+  })
   xterm.open(container)
 
   // Load non-renderer addons immediately
@@ -135,15 +141,36 @@ export function createTerminalInstance(
   xterm.loadAddon(imageAddon)
   xterm.loadAddon(webLinksAddon)
 
-  // Defer GPU renderer to next animation frame (avoids race condition)
+  // Defer GPU renderer to next animation frame (avoids race condition).
+  // After loading, fit immediately with the new cell metrics (GPU renderers
+  // measure differently than DOM). Then dispatch an event so the coordinator
+  // updates its lastCols/lastRows tracking and fires notify/clear if needed.
   rafId = requestAnimationFrame(() => {
     rafId = null
     if (isDisposed) return
     rendererRef.current = loadRenderer(xterm)
+    // Fit immediately after renderer loads — this is the fast path that sizes
+    // the terminal correctly on the first frame. The coordinator event below
+    // handles the bookkeeping (lastCols/lastRows, notify, clear).
     try {
       fitAddon.fit()
+    } catch {}
+    try {
       xterm.refresh(0, xterm.rows - 1)
     } catch {}
+    flog("renderer-ready", {
+      renderer: rendererRef.current.kind,
+      cols: xterm.cols,
+      rows: xterm.rows,
+      proposed: (() => {
+        try {
+          return fitAddon.proposeDimensions()
+        } catch {
+          return undefined
+        }
+      })(),
+    })
+    window.dispatchEvent(new Event("opencode:terminal-fit"))
   })
 
   // Load ligatures addon async
@@ -157,7 +184,45 @@ export function createTerminalInstance(
     .catch(() => {})
 
   xterm.unicode.activeVersion = "11"
-  fitAddon.fit()
+  try {
+    fitAddon.fit()
+  } catch {
+    // Container may be 0x0 on portal mount — coordinator + retry loop handle sizing later
+  }
+  flog("initial-fit", {
+    cols: xterm.cols,
+    rows: xterm.rows,
+    proposed: (() => {
+      try {
+        return fitAddon.proposeDimensions()
+      } catch {
+        return undefined
+      }
+    })(),
+  })
+
+  // Re-trigger fit after fonts are ready. If the initial fit ran before fonts
+  // loaded, xterm's cell dimensions may be 0 (proposeDimensions() returns
+  // undefined) or measured against a fallback font. Either way the terminal
+  // stays at the default 80×24. Dispatching the fit event after fonts.ready
+  // lets the resize coordinator re-fit with accurate cell metrics.
+  if (typeof document !== "undefined" && document.fonts) {
+    document.fonts.ready.then(() => {
+      if (isDisposed) return
+      flog("fonts-ready", {
+        cols: xterm.cols,
+        rows: xterm.rows,
+        proposed: (() => {
+          try {
+            return fitAddon.proposeDimensions()
+          } catch {
+            return undefined
+          }
+        })(),
+      })
+      window.dispatchEvent(new Event("opencode:terminal-fit"))
+    })
+  }
 
   return {
     xterm,
@@ -391,113 +456,179 @@ export function setupCopyHandler(xterm: XTerm): () => void {
 // Resize Handler
 // ============================================================================
 
+export interface ResizeHandlersResult {
+  coordinator: ResizeCoordinator
+  cleanup: () => void
+}
+
 export function setupResizeHandlers(
   container: HTMLDivElement,
   xterm: XTerm,
   fitAddon: FitAddon,
   onResize: (cols: number, rows: number) => void,
-): () => void {
-  const suspended = () => typeof document !== "undefined" && document.documentElement.dataset.terminalResizeSuspended === "1"
-
-  let resizeTimer: ReturnType<typeof setTimeout> | undefined
-  let raf = 0
-  let lastFit = 0
-  let lastCols = xterm.cols
-  let lastRows = xterm.rows
-  let w = 0
-  let h = 0
-  let pending = false
-
-  const run = (force?: boolean) => {
-    if (suspended()) return
-    const now = performance.now()
-    if (!force && now - lastFit < 50) return
-    lastFit = now
-    pending = false
-
-    // Skip resize if container has no dimensions (hidden or transitioning)
-    if (!w || !h) {
-      w = container.clientWidth
-      h = container.clientHeight
-    }
-    if (w < 10 || h < 10) return
-
-    const buffer = xterm.buffer.active
-    const wasAtBottom = buffer.viewportY >= buffer.baseY
-
-    try {
+  renderer?: TerminalRendererRef,
+): ResizeHandlersResult {
+  const snapshot = () => ({
+    clientWidth: Math.round(container.clientWidth),
+    clientHeight: Math.round(container.clientHeight),
+    cols: xterm.cols,
+    rows: xterm.rows,
+    proposed: (() => {
+      try {
+        return fitAddon.proposeDimensions()
+      } catch {
+        return undefined
+      }
+    })(),
+  })
+  const coordinator = createResizeCoordinator({
+    fit: () => {
+      // proposeDimensions() accesses RenderService.dimensions internally.
+      // If the renderer isn't ready yet, it throws — guard here to prevent
+      // fit() from triggering internal xterm Viewport.syncScrollArea errors.
+      try {
+        const dims = fitAddon.proposeDimensions()
+        if (!dims) return
+      } catch { return }
       fitAddon.fit()
-    } catch {
-      // fit() can throw if terminal is disposed
-      return
-    }
+    },
+    measure: () => ({ width: container.clientWidth, height: container.clientHeight }),
+    getCols: () => xterm.cols,
+    getRows: () => xterm.rows,
+    refresh: () => {
+      try { xterm.refresh(0, xterm.rows - 1) } catch {}
+      try { renderer?.current.clearTextureAtlas?.() } catch {}
+    },
+    notify: (cols, rows) => {
+      flog("coordinator-notify", {
+        cols,
+        rows,
+        snapshot: snapshot(),
+      })
+      onResize(cols, rows)
+    },
+    clock: {
+      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      clearTimeout: (id: number) => clearTimeout(id),
+    },
+    raf: {
+      request: (fn: () => void) => requestAnimationFrame(fn),
+      cancel: (id: number) => cancelAnimationFrame(id),
+    },
+  })
 
-    try {
-      xterm.refresh(0, xterm.rows - 1)
-    } catch {}
+  // Check global suspension flag
+  const isSuspended = () =>
+    typeof document !== "undefined" && document.documentElement.dataset.terminalResizeSuspended === "1"
 
-    // Only notify if dimensions actually changed
-    if (xterm.cols !== lastCols || xterm.rows !== lastRows) {
-      lastCols = xterm.cols
-      lastRows = xterm.rows
-      onResize(xterm.cols, xterm.rows)
-    }
+  let wasSuspended = isSuspended()
 
-    if (wasAtBottom) {
-      requestAnimationFrame(() => scrollToBottom(xterm))
+  const checkSuspension = () => {
+    const nowSuspended = isSuspended()
+    if (nowSuspended && !wasSuspended) {
+      coordinator.suspend()
+    } else if (!nowSuspended && wasSuspended) {
+      coordinator.resume()
     }
-  }
-
-  const schedule = () => {
-    if (suspended()) {
-      pending = true
-      return
-    }
-    pending = true
-    if (resizeTimer) clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => {
-      if (!pending) return
-      run(true)
-    }, RESIZE_DEBOUNCE_MS)
-    if (raf) return
-    raf = requestAnimationFrame(() => {
-      raf = 0
-      run()
-    })
+    wasSuspended = nowSuspended
   }
 
   const handleResize = () => {
-    if (suspended()) {
-      pending = true
-      return
-    }
-    w = container.clientWidth
-    h = container.clientHeight
-    schedule()
+    flog("window-resize", snapshot())
+    checkSuspension()
+    coordinator.request("window-resize")
   }
+
+  // Track container visibility transitions. When the container goes from
+  // 0x0 to non-zero (e.g., tab switch from display:none), xterm's cached
+  // cell dimensions may be 0 from the initial open(). Nudge fontSize to
+  // force xterm to re-measure cells so fitAddon.fit() can work.
+  let lastObservedWidth = 0
+  let lastObservedHeight = 0
 
   const resizeObserver = new ResizeObserver((entries) => {
     if (!container.isConnected) return
-    const r = entries[0]?.contentRect
-    if (r) {
-      w = r.width
-      h = r.height
-    } else {
-      w = container.clientWidth
-      h = container.clientHeight
+
+    const entry = entries[0]
+    const width = entry?.contentRect?.width ?? container.clientWidth
+    const height = entry?.contentRect?.height ?? container.clientHeight
+
+    if (lastObservedWidth === 0 && lastObservedHeight === 0 && width > 0 && height > 0) {
+      // Container just became visible — force cell re-measurement
+      const fs = xterm.options.fontSize ?? 14
+      xterm.options.fontSize = fs + 0.001
+      xterm.options.fontSize = fs
     }
-    schedule()
+
+    lastObservedWidth = width
+    lastObservedHeight = height
+
+    checkSuspension()
+    flog("resize-observer", { width, height, snapshot: snapshot() })
+    coordinator.request("resize-observer")
   })
   resizeObserver.observe(container)
   window.addEventListener("resize", handleResize)
-  const handleFit = () => schedule()
+
+  const handleFit = () => {
+    flog("fit-event", snapshot())
+    checkSuspension()
+    coordinator.request("fit-event")
+  }
   window.addEventListener("opencode:terminal-fit", handleFit)
 
-  return () => {
-    window.removeEventListener("resize", handleResize)
-    window.removeEventListener("opencode:terminal-fit", handleFit)
-    resizeObserver.disconnect()
-    if (resizeTimer) clearTimeout(resizeTimer)
-    if (raf) cancelAnimationFrame(raf)
+  // Visibility change: request fit when tab becomes visible
+  const handleVisibilityChange = () => {
+    if (document.hidden) return
+    flog("visibility", snapshot())
+    coordinator.request("visibility")
+  }
+  document.addEventListener("visibilitychange", handleVisibilityChange)
+
+  // Initial mount fits (tab/portal mount can report 0px initially)
+  requestAnimationFrame(() => coordinator.request("mount"))
+  const mountTimer = setTimeout(() => coordinator.request("mount"), 50)
+  const mountLateTimer = setTimeout(() => coordinator.request("mount"), 250)
+  flog("mount-scheduled", snapshot())
+
+  // Safety net: poll for dimension mismatch for the first 3 seconds.
+  // Handles the case where fitAddon.fit() was a no-op because cell dims were 0
+  // (container was display:none or renderer hadn't measured font yet).
+  let retryCount = 0
+  const retryTimer = setInterval(() => {
+    retryCount++
+    if (retryCount >= 10) {
+      clearInterval(retryTimer)
+      return
+    }
+    if (container.clientWidth < MIN_CONTAINER_PX) return
+    const proposed = fitAddon.proposeDimensions()
+    if (!proposed) return
+    flog("retry-fit", {
+      retryCount,
+      proposed,
+      snapshot: snapshot(),
+    })
+    if (proposed.cols !== xterm.cols || proposed.rows !== xterm.rows) {
+      coordinator.request("retry-fit")
+    } else {
+      // Dims match — terminal is correctly sized, stop polling
+      flog("retry-fit-stable", { retryCount, snapshot: snapshot() })
+      clearInterval(retryTimer)
+    }
+  }, 200)
+
+  return {
+    coordinator,
+    cleanup: () => {
+      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("opencode:terminal-fit", handleFit)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      resizeObserver.disconnect()
+      clearTimeout(mountTimer)
+      clearTimeout(mountLateTimer)
+      clearInterval(retryTimer)
+      coordinator.dispose()
+    },
   }
 }

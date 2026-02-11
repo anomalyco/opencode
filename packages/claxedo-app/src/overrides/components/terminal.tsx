@@ -11,7 +11,7 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { markInitialCommandRan, shouldRunInitialCommand } from "./terminal-recovery"
 import { preparePersistBuffer, prepareRestoreBuffer } from "./terminal-buffer"
-import { shouldRecoverDesync, shouldSendResize } from "./terminal-geometry"
+import { hostStable, shouldRecoverDesync, shouldSendResize, sizeSane } from "./terminal-geometry"
 import { sigwinchToggleSize, socketCloseIsError } from "./terminal-connection"
 import { createTerminalRuntimeQueue } from "./terminal-runtime-queue"
 import {
@@ -86,6 +86,9 @@ export const Terminal = (props: TerminalProps) => {
   let isBufferRestored = !props.pty.buffer
   let msgCount = 0
   const hasBuffer = !!(props.pty.buffer && props.pty.buffer.length > 0)
+  const start =
+    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  let cursor = start ?? 0
   const profile = waitProfile(!!local.pty.initialCommand)
   const [wait, setWait] = createSignal(initWait(hasBuffer))
 
@@ -111,6 +114,20 @@ export const Terminal = (props: TerminalProps) => {
     if (!verbose()) return
     // eslint-disable-next-line no-console
     console.log("[terminal:ui:verbose]", ...args)
+  }
+  const num = (value: number) => Math.round(value * 10) / 10
+  const host = () => {
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    return {
+      clientWidth: num(container.clientWidth),
+      clientHeight: num(container.clientHeight),
+      rectWidth: num(rect.width),
+      rectHeight: num(rect.height),
+      offsetWidth: num(container.offsetWidth),
+      offsetHeight: num(container.offsetHeight),
+      visible: container.getClientRects().length > 0,
+    }
   }
 
   const cleanup = () => {
@@ -213,6 +230,14 @@ export const Terminal = (props: TerminalProps) => {
 
       backend = b
       cleanups.push(() => b.dispose())
+      if (debug()) {
+        tlog("backend ready", {
+          ptyId: local.pty.id,
+          backendCols: b.cols,
+          backendRows: b.rows,
+          host: host(),
+        })
+      }
 
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
@@ -238,7 +263,11 @@ export const Terminal = (props: TerminalProps) => {
       })
 
       // Setup WebSocket connection
-      let urlString = sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`
+      // Prefer cursor-based delta replay (no gaps, no duplication) when available.
+      // Fallback to cursor=-1 only when we have a local buffer but no cursor (skips replay; may miss output while disconnected).
+      const cursorParam = `&cursor=${start !== undefined ? start : hasBuffer ? -1 : 0}`
+      let urlString =
+        sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}${cursorParam}`
       if (platform.getAuthToken) {
         try {
           const token = await platform.getAuthToken()
@@ -251,16 +280,31 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const url = new URL(urlString)
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__.serverPassword
       }
 
       const socket = new WebSocket(url)
+      socket.binaryType = "arraybuffer"
       tlog("socket connecting", { ptyId: local.pty.id, url: url.toString() })
       cleanups.push(() => {
         if (socket.readyState === WebSocket.OPEN) socket.close()
       })
+      if (verbose()) {
+        const sampleTimer = setInterval(() => {
+          if (disposed) return
+          tvlog("geometry sample", {
+            ptyId: local.pty.id,
+            host: host(),
+            backendCols: b.cols,
+            backendRows: b.rows,
+            socketReadyState: socket.readyState,
+          })
+        }, 1000)
+        cleanups.push(() => clearInterval(sampleTimer))
+      }
 
       if (disposed) {
         cleanup()
@@ -294,16 +338,36 @@ export const Terminal = (props: TerminalProps) => {
       let suspectResizes = 0
       let lastRecoveryAt = 0
 
-      const publishResize = (size: { cols: number; rows: number }) => {
-        if (socket.readyState !== WebSocket.OPEN) return
+      const publishResize = (size: { cols: number; rows: number }, source: string) => {
+        const snapshot = {
+          ptyId: local.pty.id,
+          source,
+          size,
+          host: host(),
+          backendCols: b.cols,
+          backendRows: b.rows,
+          socketReadyState: socket.readyState,
+        }
+        if (socket.readyState !== WebSocket.OPEN) {
+          if (debug()) tlog("resize publish skipped", snapshot)
+          return
+        }
+        if (debug()) tlog("resize publish", snapshot)
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
             size,
           })
-          .catch(() => {})
+          .then(() => {
+            if (verbose()) tvlog("resize ack", snapshot)
+          })
+          .catch((error) => {
+            tlog("resize publish failed", {
+              ...snapshot,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
       }
-
       const recoverDesync = () => {
         const now = Date.now()
         if (!shouldRecoverDesync({ suspect: suspectResizes, now, last: lastRecoveryAt })) return
@@ -318,7 +382,7 @@ export const Terminal = (props: TerminalProps) => {
         const rows = Math.max(2, b.rows)
         // Force SIGWINCH so TUIs reflow after transient layout corruption.
         for (const size of sigwinchToggleSize(cols, rows)) {
-          publishResize(size)
+          publishResize(size, "desync-recovery")
         }
       }
 
@@ -329,13 +393,36 @@ export const Terminal = (props: TerminalProps) => {
           backendResizeTimer = setTimeout(() => {
             if (!pendingSize) return
             const rect = container.getBoundingClientRect()
-            if (!shouldSendResize(pendingSize, rect)) {
+            const hostOk = hostStable(rect)
+            const sizeOk = sizeSane(pendingSize, rect)
+            if (!hostOk || !sizeOk || !shouldSendResize(pendingSize, rect)) {
               suspectResizes += 1
+              if (debug()) {
+                tlog("resize rejected", {
+                  ptyId: local.pty.id,
+                  pendingSize,
+                  rect: { width: num(rect.width), height: num(rect.height) },
+                  hostOk,
+                  sizeOk,
+                  suspectResizes,
+                  backendCols: b.cols,
+                  backendRows: b.rows,
+                })
+              }
               recoverDesync()
               return
             }
             suspectResizes = 0
-            publishResize(pendingSize)
+            if (verbose()) {
+              tvlog("resize accepted", {
+                ptyId: local.pty.id,
+                pendingSize,
+                rect: { width: num(rect.width), height: num(rect.height) },
+                backendCols: b.cols,
+                backendRows: b.rows,
+              })
+            }
+            publishResize(pendingSize, "backend-onResize")
           }, 100)
         }).dispose,
       )
@@ -363,8 +450,8 @@ export const Terminal = (props: TerminalProps) => {
         maxBatchBytes: MAX_BATCH_BYTES,
         maxBatchItems: MAX_BATCH_ITEMS,
         maxDroppedChunks: MAX_DROPPED_CHUNKS,
-        requestFrame: requestAnimationFrame,
-        cancelFrame: cancelAnimationFrame,
+        requestFrame: (cb) => requestAnimationFrame(cb),
+        cancelFrame: (id) => cancelAnimationFrame(id),
         write: (chunk, done) => b.write(chunk, done),
         onOverload: handleOverload,
         onThrottled: (dropped) => tlog("output throttled", { ptyId: local.pty.id, dropped }),
@@ -407,12 +494,20 @@ export const Terminal = (props: TerminalProps) => {
             () => {
               if (disposed) return true
               const rect = container.getBoundingClientRect()
+              if (verbose()) {
+                tvlog("restore retry", {
+                  ptyId: local.pty.id,
+                  phase: "with-buffer",
+                  rect: { width: num(rect.width), height: num(rect.height) },
+                  backendCols: b.cols,
+                  backendRows: b.rows,
+                })
+              }
               if (rect.width < 10 || rect.height < 10) return false
 
               try {
-                b.fit()
+                b.flushResize()
                 if (b.cols < 2 || b.rows < 2) return false
-                b.refresh(0, b.rows - 1)
                 return true
               } catch {
                 return false
@@ -420,9 +515,19 @@ export const Terminal = (props: TerminalProps) => {
             },
             {
               delay: 50,
-              max: 8,
+              max: 10,
               onDone: (ok) => {
                 if (disposed) return
+                if (debug()) {
+                  tlog("restore retry complete", {
+                    ptyId: local.pty.id,
+                    phase: "with-buffer",
+                    ok,
+                    host: host(),
+                    backendCols: b.cols,
+                    backendRows: b.rows,
+                  })
+                }
                 if (!ok) {
                   try {
                     b.resize(80, 24)
@@ -441,12 +546,20 @@ export const Terminal = (props: TerminalProps) => {
           () => {
             if (disposed) return true
             const rect = container.getBoundingClientRect()
+            if (verbose()) {
+              tvlog("restore retry", {
+                ptyId: local.pty.id,
+                phase: "without-buffer",
+                rect: { width: num(rect.width), height: num(rect.height) },
+                backendCols: b.cols,
+                backendRows: b.rows,
+              })
+            }
             if (rect.width < 10 || rect.height < 10) return false
 
             try {
-              b.fit()
+              b.flushResize()
               if (b.cols < 2 || b.rows < 2) return false
-              b.refresh(0, b.rows - 1)
               return true
             } catch {
               return false
@@ -454,14 +567,26 @@ export const Terminal = (props: TerminalProps) => {
           },
           {
             delay: 50,
-            max: 8,
+            max: 10,
             onDone: (ok) => {
               if (disposed) return
-              if (ok) return
-              try {
-                b.resize(80, 24)
-                b.refresh(0, b.rows - 1)
-              } catch {}
+              if (debug()) {
+                tlog("restore retry complete", {
+                  ptyId: local.pty.id,
+                  phase: "without-buffer",
+                  ok,
+                  host: host(),
+                  backendCols: b.cols,
+                  backendRows: b.rows,
+                })
+              }
+              if (!ok) {
+                try {
+                  b.resize(80, 24)
+                  b.refresh(0, b.rows - 1)
+                } catch {}
+              }
+              flushPendingMessages()
             },
           },
         )
@@ -479,18 +604,38 @@ export const Terminal = (props: TerminalProps) => {
         const targetCols = b.cols
         const targetRows = b.rows
         const [first, second] = sigwinchToggleSize(targetCols, targetRows)
+        if (debug()) {
+          tlog("socket open sigwinch", {
+            ptyId: local.pty.id,
+            target: { cols: targetCols, rows: targetRows },
+            first,
+            second,
+            host: host(),
+          })
+        }
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
             size: first,
           })
-          .then(() =>
-            sdk.client.pty.update({
+          .then(() => {
+            if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: first, step: 1 })
+            return sdk.client.pty.update({
               ptyID: local.pty.id,
               size: second,
-            }),
-          )
-          .catch(() => {})
+            })
+          })
+          .then(() => {
+            if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: second, step: 2 })
+          })
+          .catch((error) => {
+            tlog("socket open sigwinch failed", {
+              ptyId: local.pty.id,
+              first,
+              second,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
 
         // Execute initial command only once per PTY, including across reloads.
         if (shouldRunInitialCommand(local.pty)) {
@@ -508,25 +653,47 @@ export const Terminal = (props: TerminalProps) => {
       socket.addEventListener("open", handleOpen)
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
+      const decoder = new TextDecoder()
+
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
-        if (typeof event.data !== "string") return
-        if (event.data.length > 0) setWait((state) => markBytes(state, event.data.length, profile.minReadyBytes))
+        if (event.data instanceof ArrayBuffer) {
+          // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+          const bytes = new Uint8Array(event.data)
+          if (bytes[0] !== 0) return
+          const json = decoder.decode(bytes.subarray(1))
+          try {
+            const meta = JSON.parse(json) as { cursor?: unknown }
+            const next = meta?.cursor
+            if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
+              if (verbose()) tvlog("cursor meta", { ptyId: local.pty.id, before: cursor, next })
+              cursor = next
+            }
+          } catch {
+            // ignore
+          }
+          return
+        }
+
+        const data = typeof event.data === "string" ? event.data : ""
+        if (!data) return
+        cursor += data.length
+        if (data.length > 0) setWait((state) => markBytes(state, data.length, profile.minReadyBytes))
         msgCount += 1
         if (verbose() && (msgCount <= 5 || msgCount % 50 === 0)) {
           tvlog("socket message", {
             ptyId: local.pty.id,
             index: msgCount,
-            bytes: event.data.length,
+            bytes: data.length,
             restored: isBufferRestored,
           })
         }
         // Queue messages if buffer restoration is still in progress
         if (!isBufferRestored) {
-          queue.push(event.data)
+          queue.push(data)
           return
         }
-        queue.push(event.data)
+        queue.push(data)
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -570,7 +737,15 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   onCleanup(() => {
-    if (debug()) tlog("unmount", { ptyId: props.pty.id, msgCount })
+    if (debug()) {
+      tlog("unmount", {
+        ptyId: props.pty.id,
+        msgCount,
+        host: host(),
+        backendCols: backend?.cols,
+        backendRows: backend?.rows,
+      })
+    }
 
     disposed = true
 
@@ -586,6 +761,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onCleanup({
         ...local.pty,
         buffer,
+        cursor,
         rows: backend.rows,
         cols: backend.cols,
         scrollY: backend.getViewportY(),

@@ -20,11 +20,14 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
   allowProposedApi: true,
   scrollback: 10000,
   macOptionIsMeta: true,
-  cursorStyle: "block",
-  cursorInactiveStyle: "none",
-  fastScrollModifier: "alt",
+  cursorStyle: "bar",
+  cursorInactiveStyle: "outline",
   fastScrollSensitivity: 5,
 }
 
 export const RESIZE_DEBOUNCE_MS = 150
 export const FIRST_RENDER_RESTORE_FALLBACK_MS = 250
+
+// Resize coordinator settings (Ghostty-style settle gate)
+export const SETTLE_MS = 80
+export const MIN_CONTAINER_PX = 10

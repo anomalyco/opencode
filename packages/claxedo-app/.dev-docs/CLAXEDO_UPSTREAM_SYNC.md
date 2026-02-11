@@ -28,12 +28,9 @@ When rebasing `fork/dev` onto `upstream/dev`, use this table to decide conflict 
 | `packages/desktop/src/perf.ts` | Ensure frontend perf timestamps reach Rust (`atMs` + `at_ms`) | Keep ours |
 | `packages/desktop/src-tauri/src/cli.rs` | Avoid slow interactive shell startup (`-i`) when running the sidecar | Keep ours |
 | `packages/app/src/app.tsx` | Claxedo extension system wiring | Merge carefully |
-| `packages/opencode/src/pty/history.ts` | In-memory ring buffer for pty history (new file, used by claxedo patches) | Keep ours |
-| `packages/opencode/src/pty/history-disk.ts` | Disk-backed pty history persistence (new file) | Keep ours |
-| `packages/opencode/src/pty/escape-filter.ts` | Detect clear-scrollback sequences (new file) | Keep ours |
-| `packages/opencode/src/pty/osc7.test.ts` | Tests for osc7 parser (new file) | Keep ours |
+| `packages/opencode/src/pty/escape-filter.ts` | Detect clear-scrollback sequences (new file, for upstream PR) | Keep ours |
 | `packages/opencode/src/pty/index.ts` | Upstream manages this; we do NOT modify it | Accept upstream |
-| `packages/opencode/src/server/routes/pty.ts` | Upstream manages this; lifecycle route lives in gateway instead | Accept upstream |
+| `packages/opencode/src/server/routes/pty.ts` | Upstream manages this; we do NOT modify it | Accept upstream |
 
 ## Notes
 

@@ -189,20 +189,20 @@ function parse(value: string) {
 }
 
 function workspaceStorage(dir: string) {
-  const head = dir.slice(0, 12) || "workspace"
+  const head = (dir ?? "").slice(0, 12) || "workspace"
   const sum = checksum(dir) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat`
 }
 
 function serverWorkspaceStorage(serverUrl: string, dir: string) {
   const serverHead =
-    serverUrl
+    (serverUrl ?? "")
       .replace(/^https?:\/\//, "")
       .replace(/\/+$/, "")
       .replace(/[^a-z0-9.-]/gi, "-")
       .slice(0, 24) || "server"
   const serverSum = checksum(serverUrl) ?? "0"
-  const dirHead = dir.slice(0, 12) || "workspace"
+  const dirHead = (dir ?? "").slice(0, 12) || "workspace"
   const dirSum = checksum(dir) ?? "0"
   return `opencode.server.${serverHead}.${serverSum}.workspace.${dirHead}.${dirSum}.dat`
 }

@@ -53,6 +53,7 @@ export interface TerminalBackend {
   resize(cols: number, rows: number): void
   fit(): void
   refresh(start: number, end: number): void
+  flushResize(): void
 
   // Serialization
   serialize(options?: {

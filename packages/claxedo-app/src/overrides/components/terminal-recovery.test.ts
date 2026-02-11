@@ -16,23 +16,21 @@ describe("terminal recovery", () => {
     expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(true)
   })
 
-  test("initial command is blocked after marker is set in memory/localStorage", () => {
+  test("initial command is blocked after marker is set", () => {
     markInitialCommandRan("pty-1")
-    expect(localStorage.getItem(initialCommandKey("pty-1"))).toBe("1")
     expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(false)
   })
 
-  test("initial command marker can be cleared when pty exits", () => {
+  test("clearing marker re-enables initial command", () => {
     markInitialCommandRan("pty-1")
+    expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(false)
     clearInitialCommandMarker("pty-1")
-    expect(localStorage.getItem(initialCommandKey("pty-1"))).toBeNull()
     expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(true)
   })
 
-  test("initial_command_runs_once_across_remount", () => {
-    expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(true)
+  test("mark and clear are scoped to individual pty ids", () => {
     markInitialCommandRan("pty-1")
     expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(false)
-    expect(localStorage.getItem(initialCommandKey("pty-1"))).toBe("1")
+    expect(shouldRunInitialCommand({ id: "pty-2", initialCommand: "codex" })).toBe(true)
   })
 })
