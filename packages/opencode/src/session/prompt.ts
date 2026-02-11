@@ -98,6 +98,7 @@ export namespace SessionPrompt {
       ),
     system: z.string().optional(),
     variant: z.string().optional(),
+    profileID: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -173,7 +174,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop({ sessionID: input.sessionID })
+    return loop({ sessionID: input.sessionID, profileID: input.profileID })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -262,6 +263,7 @@ export namespace SessionPrompt {
   export const LoopInput = z.object({
     sessionID: Identifier.schema("session"),
     resume_existing: z.boolean().optional(),
+    profileID: z.string().optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
     const { sessionID, resume_existing } = input
@@ -624,6 +626,7 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
+        profileID: input.profileID,
         system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
@@ -1625,6 +1628,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    profileID: z.string().optional(),
     parts: z
       .array(
         z.discriminatedUnion("type", [
@@ -1782,6 +1786,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
+      profileID: input.profileID,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

@@ -699,7 +699,7 @@ export namespace Provider {
     }
   }
 
-  const state = Instance.state(async (profileContext?: string) => {
+  const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
@@ -847,27 +847,10 @@ export namespace Provider {
       })
     }
 
-    // load apikeys
-    // If profileContext is provided, load specific profile, otherwise load current profiles
-    const authData = profileContext ? await Auth.allWithProfiles() : await Auth.all()
-
-    for (const [providerID, provider] of Object.entries(authData)) {
+    // load apikeys (uses current/default profile per provider)
+    for (const [providerID, authInfo] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
-
-      let authInfo
-      if (profileContext && provider.profiles) {
-        // Load specific profile
-        authInfo = provider.profiles[profileContext]
-      } else if (provider.type) {
-        // Current profile (legacy format)
-        authInfo = provider
-      } else {
-        // Profile format - use current profile
-        const currentProfile = provider.currentProfile || "default"
-        authInfo = provider.profiles[currentProfile]
-      }
-
-      if (authInfo?.type === "api") {
+      if (authInfo.type === "api") {
         mergeProvider(providerID, {
           source: "api",
           key: authInfo.key,
@@ -882,15 +865,12 @@ export namespace Provider {
 
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
-      // Use profile-aware auth retrieval
-      const auth = profileContext ? await Auth.getProfile(providerID, profileContext) : await Auth.get(providerID)
+      const auth = await Auth.get(providerID)
       if (auth) hasAuth = true
 
       // Special handling for github-copilot: also check for enterprise auth
       if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = profileContext
-          ? await Auth.getProfile("github-copilot-enterprise", profileContext)
-          : await Auth.get("github-copilot-enterprise")
+        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
         if (enterpriseAuth) hasAuth = true
       }
 
@@ -909,9 +889,7 @@ export namespace Provider {
       if (providerID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
         if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = profileContext
-            ? await Auth.getProfile(enterpriseProviderID, profileContext)
-            : await Auth.get(enterpriseProviderID)
+          const enterpriseAuth = await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
             const enterpriseOptions = await plugin.auth.loader(
               () => enterpriseAuth as any,
@@ -1114,9 +1092,11 @@ export namespace Provider {
         profileID: profileID || "current",
       })
 
-      // Get profile-specific provider state
-      const s = await state(profileID)
+      const s = await state()
       const provider = s.providers[model.providerID]
+      if (!provider) {
+        throw new InitError({ providerID: model.providerID })
+      }
       const options = { ...provider.options }
 
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
@@ -1127,7 +1107,7 @@ export namespace Provider {
 
       // Use profile-specific authentication if provided
       if (profileID) {
-        const auth = await Auth.getProfile(model.providerID, profileID)
+        const auth = await Auth.getProfile(model.providerID, profileID) ?? await Auth.get(model.providerID)
         if (auth && auth.type === "api" && options["apiKey"] === undefined) {
           options["apiKey"] = auth.key
         }
@@ -1179,21 +1159,26 @@ export namespace Provider {
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
-        if (model.api.npm.includes("@ai-sdk/openai") || model.api.npm.includes("@ai-sdk/openai-compatible")) {
-          if (opts.body) {
-            try {
-              const body = typeof opts.body === "string" ? JSON.parse(opts.body) : opts.body
-              if (body.itemId) {
-                delete body.itemId
-                opts.body = JSON.stringify(body)
+        // IDs are only re-attached for Azure with store=true
+        if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+          const body = JSON.parse(opts.body as string)
+          const isAzure = model.providerID.includes("azure")
+          const keepIds = isAzure && body.store === true
+          if (!keepIds && Array.isArray(body.input)) {
+            for (const item of body.input) {
+              if ("id" in item) {
+                delete item.id
               }
-            } catch {
-              // Ignore JSON parsing errors
             }
+            opts.body = JSON.stringify(body)
           }
         }
 
-        return fetchFn(input, opts)
+        return fetchFn(input, {
+          ...opts,
+          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+          timeout: false,
+        })
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
@@ -1228,12 +1213,6 @@ export namespace Provider {
     }
   }
 
-  // Profile-aware provider listing - enables multi-account support
-  export async function listWithProfile(profileID?: string) {
-    const s = await state(profileID)
-    return s.providers
-  }
-
   export async function getProvider(providerID: string) {
     return state().then((s) => s.providers[providerID])
   }
@@ -1258,14 +1237,14 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
+  export async function getLanguage(model: Model, profileID?: string): Promise<LanguageModelV2> {
     const s = await state()
-    const key = `${model.providerID}/${model.id}`
+    const key = `${model.providerID}/${model.id}${profileID ? `:${profileID}` : ""}`
     if (s.models.has(key)) return s.models.get(key)!
 
     const provider = s.providers[model.providerID]
-    const sdk = await getSDK(model)
-    // Retained for backward compatibility - use getSDKWithProfile for multi-account support
+    const sdk = profileID ? await getSDKWithProfile(model, profileID) : await getSDK(model)
+    // Retains backward compatibility with existing getSDK() function
 
     try {
       const language = s.modelLoaders[model.providerID]
@@ -1278,7 +1257,7 @@ export namespace Provider {
         throw new ModelNotFoundError(
           {
             modelID: model.id,
-            providerID: model.providerID,
+            providerID: model.providerID
           },
           { cause: e },
         )

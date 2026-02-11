@@ -58,22 +58,12 @@ export namespace Auth {
   async function getRaw(): Promise<StorageFormat> {
     const file = Bun.file(filepath)
     const data = await file.json().catch(() => ({}) as Record<string, unknown>)
-    const parsed = Object.entries(data).reduce((acc, [key, value]) => {
+    return Object.entries(data).reduce((acc, [key, value]) => {
       const parsed = ProviderOrInfo.safeParse(value)
       if (!parsed.success) return acc
       acc[key] = parsed.data
       return acc
     }, {} as StorageFormat)
-
-    // Auto-migrate legacy format
-    const needsMigration = Object.entries(parsed).some(([_, value]) => Info.safeParse(value).success)
-    if (needsMigration) {
-      const normalized = normalizeToInternal(parsed)
-      await Bun.write(filepath, JSON.stringify(normalized, null, 2), { mode: 0o600 })
-      return normalized as unknown as StorageFormat
-    }
-
-    return parsed
   }
 
   function normalizeToInternal(data: StorageFormat): InternalFormat {
@@ -98,15 +88,14 @@ export namespace Auth {
   }
 
   export async function get(providerID: string, profileID?: string): Promise<Info | undefined> {
-    const auth = await all()
-    const provider = auth[providerID]
+    const authData = await allWithProfiles()
+    const provider = authData[providerID]
     if (!provider) return undefined
 
     if (profileID) {
       return provider.profiles[profileID]
     }
 
-    // Return current profile if no profile specified
     const currentProfile = provider.currentProfile || "default"
     return provider.profiles[currentProfile]
   }
@@ -181,6 +170,7 @@ export namespace Auth {
   }
 
   export async function addProfile(providerID: string, profileID: string, info: Info): Promise<void> {
+    validateProfileName(profileID)
     const auth = await allWithProfiles()
 
     if (!auth[providerID]) {
@@ -224,7 +214,7 @@ export namespace Auth {
     let needsMigration = false
 
     // Check if any entries are in legacy format
-    for (const [key, value] of Object.entries(raw)) {
+    for (const [_, value] of Object.entries(raw)) {
       if (Info.safeParse(value).success) {
         needsMigration = true
         break
@@ -239,4 +229,23 @@ export namespace Auth {
 
     return false
   }
+
+  export function validateProfileName(profileID: string): void {
+    if (!profileID || !profileID.trim()) {
+      throw new Error("Profile name cannot be empty")
+    }
+    if (profileID.length > 50) {
+      throw new Error("Profile name too long (maximum 50 characters)")
+    }
+    if (profileID.includes("/") || profileID.includes("\\")) {
+      throw new Error("Profile name cannot contain slashes (/ or \\)")
+    }
+    if (profileID.includes("..")) {
+      throw new Error("Profile name cannot contain parent directory references (..)")
+    }
+    if (/^[\s]/.test(profileID) || /[\s]$/.test(profileID)) {
+      throw new Error("Profile name cannot start or end with whitespace")
+    }
+  }
+
 }

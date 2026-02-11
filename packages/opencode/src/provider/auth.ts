@@ -93,7 +93,7 @@ export namespace ProviderAuth {
 
       if (result?.type === "success") {
         if ("key" in result) {
-          await Auth.set(input.providerID, {
+          await Auth.addProfile(input.providerID, "default", {
             type: "api",
             key: result.key,
           })
@@ -108,7 +108,7 @@ export namespace ProviderAuth {
           if (result.accountId) {
             info.accountId = result.accountId
           }
-          await Auth.set(input.providerID, info)
+          await Auth.addProfile(input.providerID, "default", info)
         }
         return
       }
@@ -123,7 +123,7 @@ export namespace ProviderAuth {
       key: z.string(),
     }),
     async (input) => {
-      await Auth.set(input.providerID, {
+      await Auth.addProfile(input.providerID, "default", {
         type: "api",
         key: input.key,
       })

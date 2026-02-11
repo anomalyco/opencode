@@ -287,6 +287,11 @@ export const RunCommand = cmd({
         describe: "show thinking blocks",
         default: false,
       })
+      .option("profile", {
+        alias: ["p"],
+        type: "string",
+        describe: "account profile to use for this request",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -568,6 +573,7 @@ export const RunCommand = cmd({
           command: args.command,
           arguments: message,
           variant: args.variant,
+          profileID: args.profile, // Pass profile to session
         })
       } else {
         const model = args.model ? Provider.parseModel(args.model) : undefined
@@ -576,6 +582,7 @@ export const RunCommand = cmd({
           agent,
           model,
           variant: args.variant,
+          profileID: args.profile, // Pass profile to session
           parts: [...files, { type: "text", text: message }],
         })
       }
