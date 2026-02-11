@@ -176,7 +176,7 @@ opencode サーバーは次の API を公開します。
 | `GET`  | `/session/:id/message/:messageID` | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}>メッセージ</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
 | `POST` | `/session/:id/prompt_async`       | メッセージを非同期に送信する (待機なし) | body: `/session/:id/message` と同じ、`204 No Content` を返します。                                                                                                         |
 | `POST` | `/session/:id/command`            | スラッシュコマンドを実行します          | 本文: `{ messageID?, agent?, model?, command, arguments }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
-| `POST` | `/session/:id/shell`              | シェルコマンドを実行する                | 本文: `{ agent, model?, command }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | shell コマンドを実行する                | 本文: `{ agent, model?, command }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 

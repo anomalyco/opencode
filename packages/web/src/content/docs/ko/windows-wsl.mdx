@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components"
 opencode는 Windows에서 직접 실행할 수 있지만, 가장 좋은 사용 경험을 위해 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) 사용을 권장합니다. WSL은 opencode 기능과 자연스럽게 동작하는 Linux 환경을 제공합니다.
 
 :::tip[왜 WSL인가요?]
-WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고 opencode가 의존하는 개발 도구와의 호환성을 제공합니다.
+WSL은 더 나은 파일 시스템 성능, 완전한 terminal 지원, 그리고 opencode가 의존하는 개발 도구와의 호환성을 제공합니다.
 :::
 
 ---
@@ -23,7 +23,7 @@ WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고
 
 2. **WSL에 opencode 설치하기**
 
-   WSL 설정이 끝나면 WSL 터미널을 열고 [설치 방법](/docs/) 중 하나로 opencode를 설치하세요.
+   WSL 설정이 끝나면 WSL terminal을 열고 [설치 방법](/docs/) 중 하나로 opencode를 설치하세요.
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
@@ -77,7 +77,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Windows에서 웹 사용 경험을 가장 좋게 하려면:
 
-1. **PowerShell 대신 WSL 터미널에서 `opencode web` 실행하기**
+1. **PowerShell 대신 WSL terminal에서 `opencode web` 실행하기**
 
    ```bash
    opencode web --hostname 0.0.0.0
@@ -87,7 +87,7 @@ Windows에서 웹 사용 경험을 가장 좋게 하려면:
 
    `http://localhost:<port>`로 접속하세요(opencode가 URL을 출력합니다).
 
-WSL에서 `opencode web`를 실행하면 올바른 파일 시스템 접근과 터미널 통합을 유지하면서도 Windows 브라우저에서 바로 사용할 수 있습니다.
+WSL에서 `opencode web`를 실행하면 올바른 파일 시스템 접근과 terminal 통합을 유지하면서도 Windows 브라우저에서 바로 사용할 수 있습니다.
 
 ---
 

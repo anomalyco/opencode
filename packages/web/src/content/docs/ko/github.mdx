@@ -39,37 +39,37 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
 저장소에 `.github/workflows/opencode.yml`에 다음 작업 흐름 파일을 추가합니다. 적절한 `model`를 설정하고 `env`의 API 키가 필요합니다.
 
 ```yml title=".github/workflows/opencode.yml" {24,26}
-name: opencode
+   name: opencode
 
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
 
-jobs:
-  opencode:
-    if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-       - name: Checkout repository
-         uses: actions/checkout@v6
-         with:
-           fetch-depth: 1
-           persist-credentials: false
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+       steps:
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
 
-       - name: Run opencode
-        uses: anomalyco/opencode/github@latest
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        with:
-          model: anthropic/claude-sonnet-4-20250514
-          # share: true
-          # github_token: xxxx
+          - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             # share: true
+             # github_token: xxxx
 ```
 
 3. ** 비밀의 API 키 저장 **
@@ -81,7 +81,7 @@ jobs:
 ## 구성
 
 - `model`: opencode를 사용하는 모형. `provider/model`의 형식을 가져 가라. **필수**입니다.
-- `agent`: 사용을 위한 대리인. 1 차적인 대리인이어야 합니다. `default_agent`로 돌아와서 config 또는 `"build"`에서 찾을 수 없습니다.
+- `agent`: 사용을 위한 에이전트. 주요 에이전트이어야 합니다. `default_agent`로 돌아와서 config 또는 `"build"`에서 찾을 수 없습니다.
 - `share`: opencode 세션을 공유하는 것. Defaults to **true** for public 저장소.
 - `prompt` : 기본 동작을 무시하기 위해 옵션 사용자 정의 프롬프트. opencode 프로세스 요청을 사용자 정의하기 위해 이것을 사용합니다.
 - `token`: 코멘트를 생성, 커밋 변경 및 오프닝 풀 요청과 같은 작업을 수행하기위한 옵션 GitHub 액세스 토큰. 기본적으로 opencode는 opencode GitHub App에서 설치 액세스 토큰을 사용하므로 커밋, 코멘트 및 풀 요청은 앱에서 오는 것과 같이 나타납니다.
@@ -118,7 +118,7 @@ opencode는 다음 GitHub 이벤트에 의해 트리거 될 수 있습니다:
 자동화된 작업을 수행하는 일정에 opencode를 실행:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled opencode Task
+name: Scheduled OpenCode Task
 
 on:
   schedule:
@@ -138,7 +138,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run opencode
+      - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -277,7 +277,7 @@ GitHub에서 opencode를 사용할 수있는 몇 가지 예입니다.
 GitHub 문제에서 이 의견 추가.
 
 ```
-/opencode explain this issue
+  /opencode explain this issue
 ```
 
 opencode는 모든 코멘트를 포함하여 전체 스레드를 읽고, 명확한 설명과 대답.
@@ -287,7 +287,7 @@ opencode는 모든 코멘트를 포함하여 전체 스레드를 읽고, 명확�
 GitHub 문제에서:
 
 ```
-/opencode fix this
+  /opencode fix this
 ```
 
 opencode는 새로운 지점을 만들 것이며 변경 사항을 실행하고 PR을 변경합니다.
@@ -297,7 +297,7 @@ opencode는 새로운 지점을 만들 것이며 변경 사항을 실행하고 P
 GitHub PR에 다음 댓글을 남겨주세요.
 
 ```
-Delete the attachment from S3 when the note is removed /oc
+  Delete the attachment from S3 when the note is removed /oc
 ```
 
 opencode는 요청한 변경을 구현하고 동일한 PR에 커밋합니다.
@@ -307,8 +307,8 @@ opencode는 요청한 변경을 구현하고 동일한 PR에 커밋합니다.
 PR의 "Files" 탭의 코드 라인에 직접 댓글을 남겨주세요. opencode는 파일, 줄 번호 및 diff 컨텍스트를 자동으로 감지하여 정확한 응답을 제공합니다.
 
 ```
-[Comment on specific lines in Files tab]
-/oc add error handling here
+  [Comment on specific lines in Files tab]
+  /oc add error handling here
 ```
 
 특정 라인에 대한 의견이 있을 때, opencode는 다음과 같습니다.

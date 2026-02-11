@@ -123,9 +123,9 @@ L'SDK espone tutte le API del server tramite un client type-safe.
 
 ---
 
-### Global
+### Globale
 
-| Metodo            | Descrizione                       | Response                             |
+| Metodo            | Descrizione                       | Risposta                             |
 | ----------------- | --------------------------------- | ------------------------------------ |
 | `global.health()` | Controlla stato e versione server | `{ healthy: true, version: string }` |
 
@@ -142,7 +142,7 @@ console.log(health.data.version)
 
 ### App
 
-| Metodo         | Descrizione             | Response                                    |
+| Metodo         | Descrizione             | Risposta                                    |
 | -------------- | ----------------------- | ------------------------------------------- |
 | `app.log()`    | Scrive una voce di log  | `boolean`                                   |
 | `app.agents()` | Elenca tutti gli agenti | <a href={typesUrl}><code>Agent[]</code></a> |
@@ -167,9 +167,9 @@ const agents = await client.app.agents()
 
 ---
 
-### Project
+### Progetto
 
-| Metodo              | Descrizione       | Response                                      |
+| Metodo              | Descrizione       | Risposta                                      |
 | ------------------- | ----------------- | --------------------------------------------- |
 | `project.list()`    | Elenca i progetti | <a href={typesUrl}><code>Project[]</code></a> |
 | `project.current()` | Progetto corrente | <a href={typesUrl}><code>Project</code></a>   |
@@ -190,7 +190,7 @@ const currentProject = await client.project.current()
 
 ### Path
 
-| Metodo       | Descrizione       | Response                                 |
+| Metodo       | Descrizione       | Risposta                                 |
 | ------------ | ----------------- | ---------------------------------------- |
 | `path.get()` | Percorso corrente | <a href={typesUrl}><code>Path</code></a> |
 
@@ -207,7 +207,7 @@ const pathInfo = await client.path.get()
 
 ### Config
 
-| Metodo               | Descrizione                       | Response                                                                                              |
+| Metodo               | Descrizione                       | Risposta                                                                                              |
 | -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `config.get()`       | Ottieni info config               | <a href={typesUrl}><code>Config</code></a>                                                            |
 | `config.providers()` | Elenca provider e modelli default | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
@@ -224,7 +224,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### Sessions
+### Sessioni
 
 | Metodo                                                     | Descrizione                       | Note                                                                                                                                              |
 | ---------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -283,7 +283,7 @@ await client.session.prompt({
 
 ### File
 
-| Metodo                    | Descrizione                     | Response                                                                                    |
+| Metodo                    | Descrizione                     | Risposta                                                                                    |
 | ------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Cerca testo nei file            | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Trova file e directory per nome | `string[]` (paths)                                                                          |
@@ -324,7 +324,7 @@ const content = await client.file.read({
 
 ### TUI
 
-| Metodo                         | Descrizione                | Response  |
+| Metodo                         | Descrizione                | Risposta  |
 | ------------------------------ | -------------------------- | --------- |
 | `tui.appendPrompt({ body })`   | Aggiunge testo al prompt   | `boolean` |
 | `tui.openHelp()`               | Apre la finestra help      | `boolean` |
@@ -353,9 +353,9 @@ await client.tui.showToast({
 
 ---
 
-### Auth
+### Autenticazione
 
-| Metodo              | Descrizione              | Response  |
+| Metodo              | Descrizione              | Risposta  |
 | ------------------- | ------------------------ | --------- |
 | `auth.set({ ... })` | Imposta credenziali auth | `boolean` |
 
@@ -374,7 +374,7 @@ await client.auth.set({
 
 ### Eventi
 
-| Metodo              | Descrizione                  | Response                     |
+| Metodo              | Descrizione                  | Risposta                     |
 | ------------------- | ---------------------------- | ---------------------------- |
 | `event.subscribe()` | Stream di server-sent events | Stream di server-sent events |
 

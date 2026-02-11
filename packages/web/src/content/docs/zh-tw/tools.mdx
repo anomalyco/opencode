@@ -3,7 +3,7 @@ title: 工具
 description: 管理LLM可以使用的工具。
 ---
 
-工具允許 LLM 在您的代碼庫中執行操作。 opencode 附帶了一組內置工具，但您可以使用[定制工具](/docs/custom-tools) 或[MCP服務器](/docs/mcp-servers) 對其進行擴展。
+工具允許 LLM 在您的程式碼庫中執行操作。 opencode 附帶了一組內置工具，但您可以使用[定制工具](/docs/custom-tools) 或[MCP服務器](/docs/mcp-servers) 對其進行擴展。
 
 默認情況下，所有工具都是**啟用**並且不需要運行權限。您可以通過[權限](/docs/permissions)控制工具行為。
 
@@ -58,7 +58,7 @@ description: 管理LLM可以使用的工具。
 }
 ```
 
-該工具允許LLM運行 `npm install`、`git status` 等終端命令或任何其他 shell 命令。
+該工具允許LLM運行 `npm install`、`git status` 等terminal 命令或任何其他 shell 命令。
 
 ---
 
@@ -75,7 +75,7 @@ description: 管理LLM可以使用的工具。
 }
 ```
 
-該工具通過替換精確的文本匹配來對文件執行精確編輯。這是LLM修改代碼的主要方式。
+該工具通過替換精確的文本匹配來對文件執行精確編輯。這是LLM修改程式碼的主要方式。
 
 ---
 
@@ -102,7 +102,7 @@ description: 管理LLM可以使用的工具。
 
 ### read
 
-從代碼庫中讀取文件內容。
+從程式碼庫中讀取文件內容。
 
 ```json title="opencode.json" {4}
 {
@@ -130,7 +130,7 @@ description: 管理LLM可以使用的工具。
 }
 ```
 
-在您的代碼庫中快速進行內容搜索。支持完整的正則表達式語法和文件模式過濾。
+在您的程式碼庫中快速進行內容搜索。支持完整的正則表達式語法和文件模式過濾。
 
 ---
 
@@ -170,7 +170,7 @@ description: 管理LLM可以使用的工具。
 
 ### lsp（實驗性）
 
-與您配置的 LSP 服務器交互，以獲得代碼智能功能，例如定義、引用、懸停信息和調用層次結構。
+與您配置的 LSP 服務器交互，以獲得程式碼智能功能，例如定義、引用、懸停信息和調用層次結構。
 
 :::note
 該工具僅在`OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或`OPENCODE_EXPERIMENTAL=true`）時可用。
@@ -204,7 +204,7 @@ description: 管理LLM可以使用的工具。
 }
 ```
 
-該工具將補丁文件應用到您的代碼庫。對於應用來自各種來源的差異和補丁很有用。
+該工具將補丁文件應用到您的程式碼庫。對於應用來自各種來源的差異和補丁很有用。
 
 :::note
 `patch`工具由`edit`權限控制，該權限涵蓋所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
@@ -291,7 +291,7 @@ description: 管理LLM可以使用的工具。
 在網絡上搜索信息。
 
 :::note
-僅當使用 opencode 提供程序或 `OPENCODE_ENABLE_EXA` 環境變量設置為任何真值（例如 `true` 或 `1`）時，此工具才可用。
+僅當使用 opencode 提供商或 `OPENCODE_ENABLE_EXA` 環境變量設置為任何真值（例如 `true` 或 `1`）時，此工具才可用。
 
 要在啟動 opencode 時啟用：
 
@@ -346,7 +346,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ## 定制工具
 
-自定義工具可讓您定義LLM可以調用的自己的函數。這些是在您的配置文件中定義的並且可以執行任意代碼。
+自定義工具可讓您定義LLM可以調用的自己的函數。這些是在您的配置文件中定義的並且可以執行任意程式碼。
 
 [了解更多](/docs/custom-tools) 關於創建自定義工具。
 

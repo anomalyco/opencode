@@ -99,11 +99,19 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
     openLink(url: string) {
       void shellOpen(url).catch(() => undefined)
     },
-
     async openPath(path: string, app?: string) {
-      if (os === "windows" && window.__OPENCODE__?.wsl) {
-        const converted = await commands.wslPath(path, "windows").catch(() => null)
-        return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
+      const os = ostype()
+      if (os === "windows") {
+        const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
+        const resolvedPath = await (async () => {
+          if (window.__OPENCODE__?.wsl) {
+            const converted = await commands.wslPath(path, "windows").catch(() => null)
+            if (converted) return converted
+          }
+
+          return path
+        })()
+        return openerOpenPath(resolvedPath, resolvedApp)
       }
       return openerOpenPath(path, app)
     },

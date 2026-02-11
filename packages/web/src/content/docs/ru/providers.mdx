@@ -15,14 +15,14 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 ---
 
-### Реквизиты для входа
+### Credentials
 
 Когда вы добавляете ключи API провайдера с помощью команды `/connect`, они сохраняются
 в `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Конфигурация
+### Config
 
 Вы можете настроить поставщиков через раздел `provider` в вашем opencode.
 конфиг.
@@ -95,7 +95,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### 302.ИИ
+### 302.AI
 
 1. Перейдите в консоль 302.AI](https://302.ai/), создайте учетную запись и сгенерируйте ключ API.
 
@@ -122,14 +122,14 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### Амазонка
+### Amazon Bedrock
 
 Чтобы использовать Amazon Bedrock с opencode:
 
 1. Перейдите в **Каталог моделей** в консоли Amazon Bedrock и запросите
    доступ к нужным моделям.
 
-   :::кончик
+   :::tip
    Вам необходимо иметь доступ к нужной модели в Amazon Bedrock.
    :::
 
@@ -180,7 +180,7 @@ OpenCode Zen — это список моделей, предоставленн�
    - `profile` – именованный профиль AWS из `~/.aws/credentials`.
    - `endpoint` — URL-адрес пользовательской конечной точки для конечных точек VPC (псевдоним для общей опции `baseURL`).
 
-   :::кончик
+   :::tip
    Параметры файла конфигурации имеют приоритет над переменными среды.
    :::
 
@@ -203,7 +203,7 @@ OpenCode Zen — это список моделей, предоставленн�
    }
    ```
 
-   :::примечание
+   :::note
    Параметр `endpoint` — это псевдоним общего параметра `baseURL`, использующий терминологию, специфичную для AWS. Если указаны и `endpoint`, и `baseURL`, `endpoint` имеет приоритет.
    :::
 
@@ -219,7 +219,7 @@ OpenCode Zen — это список моделей, предоставленн�
    1. **Токен носителя** — переменная среды `AWS_BEARER_TOKEN_BEDROCK` или токен из команды `/connect`.
    2. **Цепочка учетных данных AWS** — профиль, ключи доступа, общие учетные данные, роли IAM, токены веб-идентификации (EKS IRSA), метаданные экземпляра.
 
-   :::примечание
+   :::note
    Когда токен-носитель установлен (через `/connect` или `AWS_BEARER_TOKEN_BEDROCK`), он имеет приоритет над всеми методами учетных данных AWS, включая настроенные профили.
    :::
 
@@ -252,7 +252,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### антропный
+### Anthropic
 
 1. После регистрации введите команду `/connect` и выберите Anthropic.
 
@@ -341,7 +341,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### Когнитивные службы Azure
+### Azure Cognitive Services
 
 1. Перейдите на [портал Azure](https://portal.azure.com/) и создайте ресурс **Azure OpenAI**. Вам понадобится:
    - **Имя ресурса**: оно становится частью вашей конечной точки API (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`).
@@ -388,7 +388,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### Бассет-хаунд
+### Baseten
 
 1. Перейдите в [Baseten](https://app.baseten.co/), создайте учетную запись и сгенерируйте ключ API.
 
@@ -415,7 +415,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### Мозги
+### Cerebras
 
 1. Перейдите в [консоль Cerebras](https://inference.cerebras.ai/), создайте учетную запись и сгенерируйте ключ API.
 
@@ -442,7 +442,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ---
 
-### Cloudflare AI-шлюз
+### Cloudflare AI Gateway
 
 Cloudflare AI Gateway позволяет вам получать доступ к моделям OpenAI, Anthropic, Workers AI и т. д. через единую конечную точку. Благодаря [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) вам не нужны отдельные ключи API для каждого провайдера.
 
@@ -500,7 +500,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### Кора
+### Cortecs
 
 1. Перейдите в [консоль Cortecs](https://cortecs.ai/), создайте учетную запись и сгенерируйте ключ API.
 
@@ -527,7 +527,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### ДипСик
+### DeepSeek
 
 1. Перейдите в [консоль DeepSeek](https://platform.deepseek.com/), создайте учетную запись и нажмите **Создать новый ключ API**.
 
@@ -554,7 +554,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### Глубокая инфра
+### Deep Infra
 
 1. Перейдите на панель мониторинга Deep Infra](https://deepinfra.com/dash), создайте учетную запись и сгенерируйте ключ API.
 
@@ -581,17 +581,17 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### Прошивка
+### Firmware
 
-1. Перейдите на [панель встроенного ПО](https://app.firmware.ai/signup), создайте учетную запись и сгенерируйте ключ API.
+1. Перейдите на [панель Firmware](https://app.firmware.ai/signup), создайте учетную запись и сгенерируйте ключ API.
 
-2. Запустите команду `/connect` и найдите **Прошивка**.
+2. Запустите команду `/connect` и найдите **Firmware**.
 
    ```txt
    /connect
    ```
 
-3. Введите ключ API прошивки.
+3. Введите ключ API Firmware.
 
    ```txt
    ┌ API key
@@ -608,7 +608,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### Фейерверк ИИ
+### Fireworks AI
 
 1. Перейдите в [консоль Fireworks AI](https://app.fireworks.ai/), создайте учетную запись и нажмите **Создать ключ API**.
 
@@ -635,7 +635,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ---
 
-### GitLab Дуэт
+### GitLab Duo
 
 GitLab Duo предоставляет агентский чат на базе искусственного интеллекта со встроенными возможностями вызова инструментов через прокси-сервер GitLab Anthropic.
 
@@ -784,7 +784,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### GitHub второй пилот
+### GitHub Copilot
 
 Чтобы использовать подписку GitHub Copilot с открытым кодом:
 
@@ -821,14 +821,14 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### Google Вертекс ИИ
+### Google Vertex AI
 
 Чтобы использовать Google Vertex AI с opencode:
 
 1. Перейдите в **Model Garden** в Google Cloud Console и проверьте
    модели, доступные в вашем регионе.
 
-   :::примечание
+   :::note
    Вам необходим проект Google Cloud с включенным Vertex AI API.
    :::
 
@@ -837,7 +837,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    - `VERTEX_LOCATION` (необязательно): регион для Vertex AI (по умолчанию `global`).
    - Аутентификация (выберите одну):
      - `GOOGLE_APPLICATION_CREDENTIALS`: путь к ключевому файлу JSON вашего сервисного аккаунта.
-     - Аутентификация с помощью интерфейса командной строки gcloud: `gcloud auth application-default login`.
+     - Аутентификация через CLI gcloud: `gcloud auth application-default login`.
 
    Установите их во время запуска opencode.
 
@@ -865,7 +865,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### Грок
+### Groq
 
 1. Перейдите в консоль Groq](https://console.groq.com/), нажмите **Создать ключ API** и скопируйте ключ.
 
@@ -892,19 +892,19 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### Обнимающее лицо
+### Hugging Face
 
-[Поставщики Hugging Face Inference Provider](https://huggingface.co/docs/inference-providers) предоставляют доступ к открытым моделям, поддерживаемым более чем 17 поставщиками.
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) предоставляют доступ к открытым моделям, поддерживаемым более чем 17 поставщиками.
 
 1. Перейдите в [Настройки Hugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained), чтобы создать токен с разрешением совершать вызовы к поставщикам выводов.
 
-2. Запустите команду `/connect` и найдите **Обнимающее лицо**.
+2. Запустите команду `/connect` и найдите **Hugging Face**.
 
    ```txt
    /connect
    ```
 
-3. Введите свой жетон «Обнимающее лицо».
+3. Введите свой токен Hugging Face.
 
    ```txt
    ┌ API key
@@ -921,7 +921,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### Геликон
+### Helicone
 
 [Helicone](https://helicone.ai) — это платформа наблюдения LLM, которая обеспечивает ведение журнала, мониторинг и аналитику для ваших приложений искусственного интеллекта. Helicone AI Gateway автоматически направляет ваши запросы соответствующему поставщику на основе модели.
 
@@ -1034,7 +1034,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-### вызов.cpp
+### llama.cpp
 
 Вы можете настроить opencode для использования локальных моделей с помощью [утилиты llama-server llama.cpp's](https://github.com/ggml-org/llama.cpp)
 
@@ -1072,7 +1072,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-### ИО.НЕТ
+### IO.NET
 
 IO.NET предлагает 17 моделей, оптимизированных для различных случаев использования:
 
@@ -1101,7 +1101,7 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ---
 
-### ЛМ Студия
+### LM Studio
 
 Вы можете настроить opencode для использования локальных моделей через LM Studio.
 
@@ -1135,7 +1135,7 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ---
 
-### Лунный выстрел ИИ
+### Moonshot AI
 
 Чтобы использовать Кими К2 из Moonshot AI:
 
@@ -1164,7 +1164,7 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ---
 
-### МиниМакс
+### MiniMax
 
 1. Перейдите в [консоль API MiniMax](https://platform.minimax.io/login), создайте учетную запись и сгенерируйте ключ API.
 
@@ -1191,7 +1191,7 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ---
 
-### Фабрика токенов Небиуса
+### Nebius Token Factory
 
 1. Перейдите в консоль Nebius Token Factory](https://tokenfactory.nebius.com/), создайте учетную запись и нажмите **Добавить ключ**.
 
@@ -1218,7 +1218,7 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ---
 
-### Быть
+### Ollama
 
 Вы можете настроить opencode для использования локальных моделей через Ollama.
 
@@ -1260,7 +1260,7 @@ Ollama может автоматически настроиться для openc
 
 ---
 
-### Оллама Облако
+### Ollama Cloud
 
 Чтобы использовать Ollama Cloud с opencode:
 
@@ -1299,7 +1299,7 @@ Ollama может автоматически настроиться для openc
 
 ---
 
-### ОпенАИ
+### OpenAI
 
 Мы рекомендуем подписаться на [ChatGPT Plus или Pro](https://chatgpt.com/pricing).
 
@@ -1332,7 +1332,7 @@ Ollama может автоматически настроиться для openc
 
 ---
 
-### opencode Дзен
+### OpenCode Zen
 
 OpenCode Zen — это список протестированных и проверенных моделей, предоставленный командой opencode. [Подробнее](/docs/zen).
 
@@ -1425,13 +1425,13 @@ OpenCode Zen — это список протестированных и про�
 
 ---
 
-### SAP AI Ядро
+### SAP AI Core
 
 SAP AI Core предоставляет доступ к более чем 40 моделям от OpenAI, Anthropic, Google, Amazon, Meta, Mistral и AI21 через единую платформу.
 
 1. Перейдите в [SAP BTP Cockpit](https://account.hana.ondemand.com/), перейдите к экземпляру службы SAP AI Core и создайте ключ службы.
 
-   :::кончик
+   :::tip
    Ключ службы — это объект JSON, содержащий `clientid`, `clientsecret`, `url` и `serviceurls.AI_API_URL`. Экземпляр AI Core можно найти в разделе **Сервисы** > **Экземпляры и подписки** в панели управления BTP.
    :::
 
@@ -1468,7 +1468,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
-   :::примечание
+   :::note
    Эти параметры являются необязательными и должны быть настроены в соответствии с настройками SAP AI Core.
    :::
 
@@ -1480,7 +1480,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 ---
 
-### Конечные точки OVHcloud AI
+### OVHcloud AI Endpoints
 
 1. Перейдите к [OVHcloud Panel](https://ovh.com/manager). Перейдите в раздел `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` и на вкладке `API Keys` нажмите **Создать новый ключ API**.
 
@@ -1507,7 +1507,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 ---
 
-### Чешуйчатая дорога
+### Scaleway
 
 Чтобы использовать [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) с opencode:
 
@@ -1536,7 +1536,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 ---
 
-### Вместе ИИ
+### Together AI
 
 1. Перейдите в [консоль Together AI](https://api.together.ai), создайте учетную запись и нажмите **Добавить ключ**.
 
@@ -1563,17 +1563,17 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 ---
 
-### Венеция ИИ
+### Venice AI
 
 1. Перейдите к [консоли Venice AI](https://venice.ai), создайте учетную запись и сгенерируйте ключ API.
 
-2. Запустите команду `/connect` и найдите **Венеция AI**.
+2. Запустите команду `/connect` и найдите **Venice AI**.
 
    ```txt
    /connect
    ```
 
-3. Введите свой ключ API Венеции AI.
+3. Введите свой ключ API Venice AI.
 
    ```txt
    ┌ API key
@@ -1590,7 +1590,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 ---
 
-### AI-шлюз Vercel
+### Vercel AI Gateway
 
 Vercel AI Gateway позволяет получать доступ к моделям OpenAI, Anthropic, Google, xAI и других источников через единую конечную точку. Модели предлагаются по прейскурантной цене без наценок.
 
@@ -1673,7 +1673,7 @@ Vercel AI Gateway позволяет получать доступ к модел
 
 ---
 
-### З.АИ
+### Z.AI
 
 1. Перейдите в [консоль Z.AI API](https://z.ai/manage-apikey/apikey-list), создайте учетную запись и нажмите **Создать новый ключ API**.
 
@@ -1702,7 +1702,7 @@ Vercel AI Gateway позволяет получать доступ к модел
 
 ---
 
-### ДзенМукс
+### ZenMux
 
 1. Перейдите на [панель управления ZenMux](https://zenmux.ai/settings/keys), нажмите **Создать ключ API** и скопируйте ключ.
 

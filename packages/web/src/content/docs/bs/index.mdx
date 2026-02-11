@@ -1,6 +1,6 @@
 ---
 title: Intro
-description: Započnite s OpenCodeom.
+description: Započnite s OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
@@ -8,7 +8,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 
 [**OpenCode**](/) je agent za AI kodiranje otvorenog koda. Dostupan je kao interfejs baziran na terminalu, desktop aplikacija ili IDE ekstenzija.
-![OpenCode TUI sa temom otvorenog koda](../../../assets/lander/screenshot.png)
+![OpenCode TUI sa opencode temom](../../../assets/lander/screenshot.png)
 Hajde da počnemo.
 
 ---
@@ -28,7 +28,7 @@ Da biste koristili OpenCode u svom terminalu, trebat će vam:
 
 ## Instaliraj
 
-Najlakši način za instaliranje OpenCode-a je putem instalacione skripte.
+Najlakši način za instaliranje OpenCode je putem instalacione skripte.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -74,8 +74,6 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
 ```bash
   brew install anomalyco/tap/opencode
-
-
 ```
 
 > Preporučujemo korištenje OpenCode tap za najnovija izdanja. Službenu formulu `brew install opencode` održava Homebrew tim i ažurira se rjeđe.
@@ -84,8 +82,6 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
 ```bash
   paru -S opencode-bin
-
-
 ```
 
 #### Windows
@@ -94,47 +90,37 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 Za najbolje iskustvo na Windows-u preporučujemo korištenje [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Pruža bolje performanse i potpunu kompatibilnost sa OpenCode karakteristikama.
 :::
 
-- **Upotreba čokolade**
+- **Upotreba Chocolatey-a**
 
 ```bash
   choco install opencode
-
-
 ```
 
 - **Upotreba Scoop-a**
 
 ```bash
   scoop install opencode
-
-
 ```
 
-- **Upotreba NPM-a**
+- **Korištenje NPM-a**
 
 ```bash
   npm install -g opencode-ai
-
-
 ```
 
 - **Korišćenje Mise**
 
 ```bash
   mise use -g github:anomalyco/opencode
-
-
 ```
 
 - **Korišćenje Dockera**
 
 ```bash
   docker run -it --rm ghcr.io/anomalyco/opencode
-
-
 ```
 
-Podrška za instaliranje OpenCode-a na Windows koristeći Bun je trenutno u toku.
+Podrška za instaliranje OpenCode na Windows koristeći Bun je trenutno u toku.
 Također možete preuzeti binarnu datoteku iz [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
@@ -143,15 +129,13 @@ Također možete preuzeti binarnu datoteku iz [Releases](https://github.com/anom
 
 Uz OpenCode možete koristiti bilo kojeg LLM provajdera tako što ćete konfigurirati njihove API ključeve.
 Ako ste tek počeli koristiti LLM provajdere, preporučujemo korištenje [OpenCode Zen](/docs/zen).
-To je kurirana lista modela koji su testirani i verifikovani od strane OpenCode-a
+To je kurirana lista modela koji su testirani i verifikovani od strane OpenCode
 tim.
 
 1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [opencode.ai/auth](https://opencode.ai/auth).
 
 ```txt
    /connect
-
-
 ```
 
 2. Prijavite se, dodajte svoje detalje naplate i kopirajte svoj API ključ.
@@ -162,8 +146,6 @@ tim.
    │
    │
    └ enter
-
-
 ```
 
 Alternativno, možete odabrati jednog od drugih provajdera. [Saznajte više](/docs/providers#directory).
@@ -196,7 +178,7 @@ korijen projekta.
 :::tip
 Trebali biste urezati datoteku `AGENTS.md` vašeg projekta u Git.
 :::
-Ovo pomaže OpenCodeu da razumije strukturu projekta i obrasce kodiranja
+Ovo pomaže OpenCode da razumije strukturu projekta i obrasce kodiranja
 korišteno.
 
 ---
@@ -236,8 +218,6 @@ Možete zamoliti OpenCode da vašem projektu doda nove funkcije. Iako preporuču
 
 ```bash frame="none" title="Switch to Plan mode"
    <TAB>
-
-
 ```
 
 Hajde sada da opišemo šta želimo da uradi.
@@ -246,14 +226,12 @@ Hajde sada da opišemo šta želimo da uradi.
    When a user deletes a note, we'd like to flag it as deleted in the database.
    Then create a screen that shows all the recently deleted notes.
    From this screen, the user can undelete a note or permanently delete it.
-
-
 ```
 
-Želite da date OpenCode-u dovoljno detalja da razumete šta želite. Pomaže
+Želite da date OpenCode dovoljno detalja da razumete šta želite. Pomaže
 da razgovarate s njim kao da razgovarate sa mlađim programerom u svom timu.
 :::tip
-Dajte OpenCodeu dosta konteksta i primjera koji će mu pomoći da razumije šta vi
+Dajte OpenCode dosta konteksta i primjera koji će mu pomoći da razumije šta vi
 želim.
 :::
 
@@ -263,8 +241,6 @@ Dajte OpenCodeu dosta konteksta i primjera koji će mu pomoći da razumije šta 
 ```txt frame="none"
    We'd like to design this new screen using a design I've used before.
    [Image #1] Take a look at this image and use it as a reference.
-
-
 ```
 
 :::tip
@@ -279,16 +255,12 @@ učinite to povlačenjem i ispuštanjem slike u terminal.
 
 ```bash frame="none"
    <TAB>
-
-
 ```
 
 I tražeći od njega da napravi promjene.
 
 ```bash frame="none"
    Sounds good! Go ahead and make the changes.
-
-
 ```
 
 ---
@@ -311,7 +283,7 @@ promjene.
 
 ### Poništi promjene
 
-Recimo da tražite od OpenCodea da izvrši neke promjene.
+Recimo da tražite od OpenCode da izvrši neke promjene.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -345,7 +317,7 @@ Ili **možete ponoviti** promjene koristeći naredbu `/redo`.
 
 ## Dijeli
 
-Razgovore koje imate sa OpenCodeom možete [dijeliti sa vašim
+Razgovore koje imate sa OpenCode možete [dijeliti sa vašim
 tim](/docs/share).
 
 ```bash frame="none"
@@ -356,11 +328,11 @@ Ovo će kreirati vezu do trenutnog razgovora i kopirati je u međuspremnik.
 :::note
 Razgovori se ne dijele prema zadanim postavkama.
 :::
-Evo [primjer razgovora](https://opencode.ai/s/4XP1fce5) sa OpenCodeom.
+Evo [primjer razgovora](https://opencode.ai/s/4XP1fce5) sa OpenCode.
 
 ---
 
 ## Prilagodi
 
-I to je to! Sada ste profesionalac u korištenju OpenCodea.
+I to je to! Sada ste profesionalac u korištenju OpenCode.
 Da biste to učinili svojim, preporučujemo [odabir teme](/docs/themes), [prilagođavanje povezivanja tipki](/docs/keybinds), [konfiguriranje formatera koda](/docs/formatters), [kreiranje prilagođenih komandi](/docs/commands), ili igranje sa [OpenCode config](/docs/config).

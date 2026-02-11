@@ -1,6 +1,6 @@
 ---
 title: GitLab
-description: Brug OpenCode i GitLab-problemer og fletteanmodninger.
+description: Brug OpenCode i GitLab-problemer og Merge Requests.
 ---
 
 OpenCode integreres med din GitLab-arbejdsgang gennem din GitLab CI/CD-pipeline eller med GitLab Duo.
@@ -19,7 +19,7 @@ Her bruger vi en community-skabt CI/CD-komponent til OpenCode — [nagyv/gitlab-
 
 ### Funktioner
 
-- **Brug tilpasset konfiguration pr. job**: Konfigurer OpenCode med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. OpenCode påkald.
+- **Brug brugerdefineret konfiguration pr. job**: Konfigurer OpenCode med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. OpenCode påkald.
 - **Minimal opsætning**: CI-komponenten sætter OpenCode op i baggrunden, du behøver kun at oprette OpenCode-konfigurationen og den indledende prompt.
 - **Fleksibel**: CI-komponenten understøtter flere input til at tilpasse dens adfærd
 
@@ -27,7 +27,7 @@ Her bruger vi en community-skabt CI/CD-komponent til OpenCode — [nagyv/gitlab-
 
 ### Opsætning
 
-1. Gem din OpenCode-godkendelse JSON som en filtype CI-miljøvariabel under **Indstillinger** > **CI/CD** > **Variabler**. Sørg for at markere dem som "Maskede og skjulte".
+1. Gem din OpenCode-autentificering JSON som en filtype CI-miljøvariabel under **Indstillinger** > **CI/CD** > **Variabler**. Sørg for at markere dem som "Maskede og skjulte".
 2. Tilføj følgende til din `.gitlab-ci.yml` fil.
 
    ```yaml title=".gitlab-ci.yml"
@@ -55,7 +55,7 @@ Nævn `@opencode` i en kommentar, og OpenCode vil udføre opgaver i din GitLab C
 
 - **Triageproblemer**: Bed OpenCode om at undersøge et problem og forklare dig det.
 - **Ret og implementer**: Bed OpenCode om at løse et problem eller implementere en funktion.
-  Det vil oprette en ny filial og rejse en fletteanmodning med ændringer.
+  Det vil oprette en ny branch og rejse en Merge Request med ændringer.
 - **Sikker**: OpenCode kører på dine GitLab-løbere.
 
 ---
@@ -70,7 +70,7 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
 
 1.  Konfigurer dit GitLab-miljø
 2.  Konfigurer CI/CD
-3.  Få en API nøgle til en AI-modeludbyder
+3.  Få en API-nøgle til en AI-modeludbyder
 4.  Opret en servicekonto
 5.  Konfigurer CI/CD variabler
 6.  Opret en flow-konfigurationsfil, her er et eksempel:
@@ -182,14 +182,14 @@ Du kan konfigurere til at bruge en anden udløsersætning end `@opencode`.
   @opencode fix this
   ```
 
-  OpenCode vil oprette en ny filial, implementere ændringer og åbne en fletteanmodning med ændringer.
+  OpenCode vil oprette en ny branch, implementere ændringer og åbne en Merge Request med ændringer.
 
-- **Gennemgå anmodninger om fletning**
+- **Gennemgå Merge Requests**
 
-  Efterlad følgende kommentar til en GitLab-fletningsanmodning.
+  Efterlad følgende kommentar til en GitLab-Merge Request.
 
   ```
   @opencode review this merge request
   ```
 
-  OpenCode vil gennemgå anmodningen om fletning og give feedback.
+  OpenCode vil gennemgå din Merge Request og give feedback.
