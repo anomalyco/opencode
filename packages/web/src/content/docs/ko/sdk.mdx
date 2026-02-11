@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 opencode의 인스턴스 만들기:
 
 ```javascript
-import { createopencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const { client } = await createopencode()
+const { client } = await createOpencode()
 ```
 
 서버와 클라이언트 모두 시작
@@ -52,9 +52,9 @@ const { client } = await createopencode()
 구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
-import { createopencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const opencode = await createopencode({
+const opencode = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
 
 ```javascript
-import { createopencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@opencode-ai/sdk"
 
-const client = createopencodeClient({
+const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -243,7 +243,7 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.message({ path })`                                | 메시지 상세정보                 | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`               |
 | `session.prompt({ path, body })`                           | prompt 메시지 보내기            | `body.noReply: true` 반환 UserMessage (콘텍스트 전용). 기본 반환 <a href={typesUrl}><code>AssistantMessage</code></a> 에 AI 응답 |
 | `session.command({ path, body })`                          | 세션으로 명령을 전송            | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
-| `session.shell({ path, body })`                            | 쉘 명령을 실행                  | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
+| `session.shell({ path, body })`                            | shell 명령을 실행               | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
 | `session.revert({ path, body })`                           | 메시지 다시 변환                | <a href={typesUrl}><code>Session</code></a>                                                                                      |
 | `session.unrevert({ path })`                               | 통일된 메시지                   | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                  | 반품 `boolean`                                                                                                                   |

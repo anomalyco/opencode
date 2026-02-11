@@ -58,7 +58,7 @@
   "share.models": "Modeli",
   "share.cost": "Cijena",
   "share.input_tokens": "Input Tokens",
-  "share.output_tokens": "Izlazni tokeni",
+  "share.output_tokens": "Output Tokens",
   "share.reasoning_tokens": "Reasoning Tokens",
   "share.scroll_to_bottom": "Pomaknite se na dno",
   "share.attachment": "Prilog",

@@ -111,7 +111,7 @@ O SDK pode lançar erros que você pode capturar e tratar:
 try {
   await client.session.get({ path: { id: "invalid-id" } })
 } catch (error) {
-  console.error("Falha ao obter a sessão:", (error as Error).message)
+  console.error("Failed to get session:", (error as Error).message)
 }
 ```
 
@@ -152,16 +152,16 @@ console.log(health.data.version)
 #### Exemplos
 
 ```javascript
-// Escrever uma entrada de log
+// Write a log entry
 await client.app.log({
   body: {
     service: "my-app",
     level: "info",
-    message: "Operação concluída",
+    message: "Operation completed",
   },
 })
 
-// Listar agentes disponíveis
+// List available agents
 const agents = await client.app.agents()
 ```
 
@@ -179,10 +179,10 @@ const agents = await client.app.agents()
 #### Exemplos
 
 ```javascript
-// Listar todos os projetos
+// List all projects
 const projects = await client.project.list()
 
-// Obter projeto atual
+// Get current project
 const currentProject = await client.project.current()
 ```
 
@@ -199,7 +199,7 @@ const currentProject = await client.project.current()
 #### Exemplos
 
 ```javascript
-// Obter informações do caminho atual
+// Get current path information
 const pathInfo = await client.path.get()
 ```
 
@@ -241,7 +241,7 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.summarize({ path, body })`                        | Resumir sessão                     | Retorna `boolean`                                                                                                                                    |
 | `session.messages({ path })`                               | Listar mensagens em uma sessão     | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                              |
 | `session.message({ path })`                                | Obter detalhes da mensagem         | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                |
-| `session.prompt({ path, body })`                           | Enviar mensagem de prompt          | `body.noReply: true` retorna UserMessage (apenas contexto). O padrão retorna <a href={typesUrl}><code>AssistantMessage</code></a> com resposta da IA |
+| `session.prompt({ path, body })`                           | Enviar mensagem de prompt          | `body.noReply: true` retorna UserMessage (apenas contexto). O padrão retorna <a href={typesUrl}><code>AssistantMessage</code></a> com resposta da AI |
 | `session.command({ path, body })`                          | Enviar comando para a sessão       | Retorna `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                       |
 | `session.shell({ path, body })`                            | Executar um comando shell          | Retorna <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                         |
 | `session.revert({ path, body })`                           | Reverter uma mensagem              | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
@@ -253,28 +253,28 @@ const { providers, default: defaults } = await client.config.providers()
 #### Exemplos
 
 ```javascript
-// Criar e gerenciar sessões
+// Create and manage sessions
 const session = await client.session.create({
-  body: { title: "Minha sessão" },
+  body: { title: "My session" },
 })
 
 const sessions = await client.session.list()
 
-// Enviar uma mensagem de prompt
+// Send a prompt message
 const result = await client.session.prompt({
   path: { id: session.id },
   body: {
     model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
-    parts: [{ type: "text", text: "Olá!" }],
+    parts: [{ type: "text", text: "Hello!" }],
   },
 })
 
-// Injetar contexto sem acionar resposta da IA (útil para plugins)
+// Inject context without triggering AI response (useful for plugins)
 await client.session.prompt({
   path: { id: session.id },
   body: {
     noReply: true,
-    parts: [{ type: "text", text: "Você é um assistente útil." }],
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
   },
 })
 ```
@@ -302,7 +302,7 @@ await client.session.prompt({
 #### Exemplos
 
 ```javascript
-// Pesquisar e ler arquivos
+// Search and read files
 const textResults = await client.find.text({
   query: { pattern: "function.*opencode" },
 })
@@ -341,13 +341,13 @@ const content = await client.file.read({
 #### Exemplos
 
 ```javascript
-// Controlar a interface TUI
+// Control TUI interface
 await client.tui.appendPrompt({
-  body: { text: "Adicione isso ao prompt" },
+  body: { text: "Add this to prompt" },
 })
 
 await client.tui.showToast({
-  body: { message: "Tarefa concluída", variant: "success" },
+  body: { message: "Task completed", variant: "success" },
 })
 ```
 
@@ -366,7 +366,7 @@ await client.tui.showToast({
 ```javascript
 await client.auth.set({
   path: { id: "anthropic" },
-  body: { type: "api", key: "sua-chave-api" },
+  body: { type: "api", key: "your-api-key" },
 })
 ```
 
@@ -383,9 +383,9 @@ await client.auth.set({
 #### Exemplos
 
 ```javascript
-// Ouvir eventos em tempo real
+// Listen to real-time events
 const events = await client.event.subscribe()
 for await (const event of events.stream) {
-  console.log("Evento:", event.type, event.properties)
+  console.log("Event:", event.type, event.properties)
 }
 ```
