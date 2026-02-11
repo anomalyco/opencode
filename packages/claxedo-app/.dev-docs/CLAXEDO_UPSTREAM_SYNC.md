@@ -6,6 +6,7 @@ This document tracks how this fork is kept in sync with `upstream/dev`, and reco
 
 | Claxedo Version | Upstream Commit | Last Sync Date |
 |----------------|-----------------|----------------|
+| dev | 7e1247c42 | 2026-02-11 |
 | dev | d1f5b9e91 | 2026-02-10 |
 | dev | d116c227e | 2026-02-03 |
 
@@ -27,7 +28,10 @@ When rebasing `fork/dev` onto `upstream/dev`, use this table to decide conflict 
 | `packages/desktop/src-tauri/src/perf.rs` | Support `TAURI_ENV_OC_PERF*` env passthrough in `tauri dev` | Keep ours |
 | `packages/desktop/src/perf.ts` | Ensure frontend perf timestamps reach Rust (`atMs` + `at_ms`) | Keep ours |
 | `packages/desktop/src-tauri/src/cli.rs` | Avoid slow interactive shell startup (`-i`) when running the sidecar | Keep ours |
-| `packages/app/src/app.tsx` | Claxedo extension system wiring | Merge carefully |
+| `packages/app/src/app.tsx` | Claxedo extension system wiring (`DesktopPerf` type + `wsl` in Window.__OPENCODE__) | Merge carefully |
+| `packages/app/src/pages/layout.tsx` | Extension hooks + additional sidebar/workspace props | Merge carefully |
+| `packages/app/src/pages/session.tsx` | Extension hooks (focusInput, etc.) | Merge carefully |
+| `packages/app/src/context/command.tsx` | Widen `isTerminalElement` param to accept `undefined` | Keep ours |
 | `packages/opencode/src/pty/escape-filter.ts` | Detect clear-scrollback sequences (new file, for upstream PR) | Keep ours |
 | `packages/opencode/src/pty/index.ts` | Upstream manages this; we do NOT modify it | Accept upstream |
 | `packages/opencode/src/server/routes/pty.ts` | Upstream manages this; we do NOT modify it | Accept upstream |
