@@ -22,7 +22,7 @@ opencode /path/to/project
 TUI icinde bir mesaj yazarak istem gonderebilirsiniz.
 
 ```text
-Kod tabani icin hizli bir ozet ver.
+Give me a quick summary of the codebase.
 ```
 
 ---
@@ -36,7 +36,7 @@ Mesajlarinizda dosyalara referans vermek icin `@` kullanabilirsiniz.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
-@packages/functions/src/api/index.ts dosyasinda kimlik dogrulama nasil ele alinmis?
+How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
 Dosya icerigi otomatik olarak konusmaya eklenir.
@@ -45,7 +45,7 @@ Dosya icerigi otomatik olarak konusmaya eklenir.
 
 ## Bash komutlari
 
-Bir mesaji `!` ile baslatarak kabuk komutu calistirin.
+Bir mesaji `!` ile baslatarak shell komutu calistirin.
 
 ```bash frame="none"
 !ls -la
@@ -290,12 +290,12 @@ Mevcut oturumun paylasimini kaldirir. [Daha fazla bilgi](/docs/share#paylasimi-k
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    # nano veya vim ornegi
+    # Example for nano or vim
     export EDITOR=nano
     export EDITOR=vim
 
-    # VS Code, Cursor, VSCodium, Windsurf, Zed vb. GUI editorler icin
-    # --wait ekleyin
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     export EDITOR="code --wait"
     ```
 
@@ -308,8 +308,8 @@ Mevcut oturumun paylasimini kaldirir. [Daha fazla bilgi](/docs/share#paylasimi-k
     ```bash
     set EDITOR=notepad
 
-    # VS Code, Cursor, VSCodium, Windsurf, Zed vb. GUI editorler icin
-    # --wait ekleyin
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     set EDITOR=code --wait
     ```
 
@@ -321,8 +321,8 @@ Mevcut oturumun paylasimini kaldirir. [Daha fazla bilgi](/docs/share#paylasimi-k
     ```powershell
     $env:EDITOR = "notepad"
 
-    # VS Code, Cursor, VSCodium, Windsurf, Zed vb. GUI editorler icin
-    # --wait ekleyin
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     $env:EDITOR = "code --wait"
     ```
 

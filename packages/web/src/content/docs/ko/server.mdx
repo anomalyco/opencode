@@ -177,7 +177,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `GET`  | `/session/:id/message/:messageID` | 메시지 보내기                          | `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
 | `POST` | `/session/:id/prompt_async`       | 비동기적으로 메시지 보내기             | 몸: `/session/:id/message`와 동일, `204 No Content`를 반환                                                                                                       |
 | `POST` | `/session/:id/command`            | 슬래시 명령어 실행                     | 본체: `{ messageID?, agent?, model?, command, arguments }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`             |
-| `POST` | `/session/:id/shell`              | 쉘 명령 실행                           | 체: `{ agent, model?, command }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | shell 명령 실행                        | 체: `{ agent, model?, command }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 

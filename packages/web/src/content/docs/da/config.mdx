@@ -52,7 +52,7 @@ Konfigurationskilder indlæses i denne rækkefølge (senere kilder tilsidesætte
 Dette betyder, at projektkonfigurationer kan tilsidesætte globale standardindstillinger, og globale konfigurationer kan tilsidesætte eksterne organisatoriske standarder.
 
 :::note
-`.opencode` og `~/.config/opencode` bibliotekerne bruger **flertalsnavne** for undermapper: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkelte navne (f.eks. `agent/`) understøtter også bagudkompatibilitet.
+`.opencode` og `~/.config/opencode` mapperne bruger **flertalsnavne** for undermapper: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkelte navne (f.eks. `agent/`) understøtter også bagudkompatibilitet.
 :::
 
 ---
@@ -109,7 +109,7 @@ Tilføj `opencode.json` i dit projektrod. Project config har den højeste forran
 Placer projektspecifik konfiguration i roden af ​​dit projekt.
 :::
 
-Når OpenCode starter op, søger den efter en konfigurationsfil i det aktuelle kort eller går op til den nærmeste Git-mappe.
+Når OpenCode starter op, søger den efter en konfigurationsfil i den aktuelle mappe eller går op til den nærmeste Git-mappe.
 
 Dette er også sikkert at blive tjekket ind i Git og bruger det samme skema som det globale.
 
@@ -132,7 +132,7 @@ Brugerdefineret konfigurationsindlæses mellem globale konfigurationer og projek
 
 Angiv en brugerdefineret konfigurationsmappe ved hjælp af `OPENCODE_CONFIG_DIR`
 miljøvariabel. Dette kort vil blive søgt efter agenter, kommandoer,
-modes og plugins ligesom standard `.opencode` biblioteket, og bør
+modes og plugins ligesom standard `.opencode` mappen, og bør
 følge samme struktur.
 
 ```bash
@@ -140,7 +140,7 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-Den brugerdefinerede map indlæses efter den globale konfig og `.opencode` mapper, så den **kan tilsidesætte** deres indstillinger.
+Den brugerdefinerede mappe indlæses efter den globale konfig og `.opencode` mapper, så den **kan tilsidesætte** deres indstillinger.
 
 ---
 
@@ -268,7 +268,7 @@ Du kan også konfigurere [local models](/docs/models#local). [Learn more](/docs/
 
 Nogle udbydere understøtter yderligere konfigurationsmuligheder ud over de generiske `timeout` og `apiKey` indstillinger.
 
-##### Amazonas grundfjeld
+##### Amazon Bedrock
 
 Amazon Bedrock understøtter AWS-specifik konfiguration:
 
@@ -287,12 +287,12 @@ Amazon Bedrock understøtter AWS-specifik konfiguration:
 }
 ```
 
-- `region` - AWS region for grundfjeld (standard til `AWS_REGION` env var eller `us-east-1`)
+- `region` - AWS region for Bedrock (standard til `AWS_REGION` env var eller `us-east-1`)
 - `profile` - AWS navngivet profil fra `~/.aws/credentials` (standard til `AWS_PROFILE` env var)
 - `endpoint` - Brugerdefineret slutpunkt URL for VPC-endepunkter. Dette er et alias for den generiske `baseURL`-indstilling, der bruger AWS-specifik terminologi. Hvis begge er angivet, har `endpoint` forrang.
 
 :::note
-Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](/docs/providers#authentication-precedence) for detaljer.
+Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](/docs/providers#authentication-precedence) for detaljer.
 :::
 
 [Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).

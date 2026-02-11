@@ -86,7 +86,7 @@ opencode server izlaže sljedece API-je.
 
 ### Global
 
-| Method | Path             | Description                    | Response                             |
+| Metoda | Putanja          | Opis                           | Odgovor                              |
 | ------ | ---------------- | ------------------------------ | ------------------------------------ |
 | `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
 | `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
@@ -95,7 +95,7 @@ opencode server izlaže sljedece API-je.
 
 ### Project
 
-| Method | Path               | Description             | Response                                      |
+| Metoda | Putanja            | Opis                    | Odgovor                                       |
 | ------ | ------------------ | ----------------------- | --------------------------------------------- |
 | `GET`  | `/project`         | List all projects       | <a href={typesUrl}><code>Project[]</code></a> |
 | `GET`  | `/project/current` | Get the current project | <a href={typesUrl}><code>Project</code></a>   |
@@ -104,7 +104,7 @@ opencode server izlaže sljedece API-je.
 
 ### Path & VCS
 
-| Method | Path    | Description                          | Response                                    |
+| Metoda | Putanja | Opis                                 | Odgovor                                     |
 | ------ | ------- | ------------------------------------ | ------------------------------------------- |
 | `GET`  | `/path` | Get the current path                 | <a href={typesUrl}><code>Path</code></a>    |
 | `GET`  | `/vcs`  | Get VCS info for the current project | <a href={typesUrl}><code>VcsInfo</code></a> |
@@ -113,7 +113,7 @@ opencode server izlaže sljedece API-je.
 
 ### Instance
 
-| Method | Path                | Description                  | Response  |
+| Metoda | Putanja             | Opis                         | Odgovor   |
 | ------ | ------------------- | ---------------------------- | --------- |
 | `POST` | `/instance/dispose` | Dispose the current instance | `boolean` |
 
@@ -121,7 +121,7 @@ opencode server izlaže sljedece API-je.
 
 ### Config
 
-| Method  | Path                | Description                       | Response                                                                                 |
+| Metoda  | Putanja             | Opis                              | Odgovor                                                                                  |
 | ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
 | `GET`   | `/config`           | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                               |
 | `PATCH` | `/config`           | Update config                     | <a href={typesUrl}><code>Config</code></a>                                               |
@@ -131,7 +131,7 @@ opencode server izlaže sljedece API-je.
 
 ### Provider
 
-| Method | Path                             | Description                          | Response                                                                            |
+| Metoda | Putanja                          | Opis                                 | Odgovor                                                                             |
 | ------ | -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
 | `GET`  | `/provider`                      | List all providers                   | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
 | `GET`  | `/provider/auth`                 | Get provider authentication methods  | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
@@ -142,7 +142,7 @@ opencode server izlaže sljedece API-je.
 
 ### Sessions
 
-| Method   | Path                                     | Description                           | Notes                                                                              |
+| Metoda   | Putanja                                  | Opis                                  | Napomene                                                                           |
 | -------- | ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
 | `GET`    | `/session`                               | List all sessions                     | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
 | `POST`   | `/session`                               | Create a new session                  | body: `{ parentID?, title? }`, returns <a href={typesUrl}><code>Session</code></a> |
@@ -167,7 +167,7 @@ opencode server izlaže sljedece API-je.
 
 ### Messages
 
-| Method | Path                              | Description                             | Notes                                                                                                                                                                 |
+| Metoda | Putanja                           | Opis                                    | Napomene                                                                                                                                                              |
 | ------ | --------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/session/:id/message`            | List messages in a session              | query: `limit?`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                        |
 | `POST` | `/session/:id/message`            | Send a message and wait for response    | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
@@ -180,7 +180,7 @@ opencode server izlaže sljedece API-je.
 
 ### Commands
 
-| Method | Path       | Description       | Response                                      |
+| Metoda | Putanja    | Opis              | Odgovor                                       |
 | ------ | ---------- | ----------------- | --------------------------------------------- |
 | `GET`  | `/command` | List all commands | <a href={typesUrl}><code>Command[]</code></a> |
 
@@ -188,7 +188,7 @@ opencode server izlaže sljedece API-je.
 
 ### Files
 
-| Method | Path                     | Description                        | Response                                                                                    |
+| Metoda | Putanja                  | Opis                               | Odgovor                                                                                     |
 | ------ | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `GET`  | `/find?pattern=<pat>`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `GET`  | `/find/file?query=<q>`   | Find files and directories by name | `string[]` (paths)                                                                          |
@@ -209,7 +209,7 @@ opencode server izlaže sljedece API-je.
 
 ### Tools (Experimental)
 
-| Method | Path                                        | Description                              | Response                                     |
+| Metoda | Putanja                                     | Opis                                     | Odgovor                                      |
 | ------ | ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
 | `GET`  | `/experimental/tool/ids`                    | List all tool IDs                        | <a href={typesUrl}><code>ToolIDs</code></a>  |
 | `GET`  | `/experimental/tool?provider=<p>&model=<m>` | List tools with JSON schemas for a model | <a href={typesUrl}><code>ToolList</code></a> |
@@ -218,7 +218,7 @@ opencode server izlaže sljedece API-je.
 
 ### LSP, Formatters & MCP
 
-| Method | Path         | Description                | Response                                                 |
+| Metoda | Putanja      | Opis                       | Odgovor                                                  |
 | ------ | ------------ | -------------------------- | -------------------------------------------------------- |
 | `GET`  | `/lsp`       | Get LSP server status      | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
 | `GET`  | `/formatter` | Get formatter status       | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
@@ -229,7 +229,7 @@ opencode server izlaže sljedece API-je.
 
 ### Agents
 
-| Method | Path     | Description               | Response                                    |
+| Metoda | Putanja  | Opis                      | Odgovor                                     |
 | ------ | -------- | ------------------------- | ------------------------------------------- |
 | `GET`  | `/agent` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
@@ -237,15 +237,15 @@ opencode server izlaže sljedece API-je.
 
 ### Logging
 
-| Method | Path   | Description                                                  | Response  |
-| ------ | ------ | ------------------------------------------------------------ | --------- |
-| `POST` | `/log` | Write log entry. Body: `{ service, level, message, extra? }` | `boolean` |
+| Metoda | Putanja | Opis                                                         | Odgovor   |
+| ------ | ------- | ------------------------------------------------------------ | --------- |
+| `POST` | `/log`  | Write log entry. Body: `{ service, level, message, extra? }` | `boolean` |
 
 ---
 
 ### TUI
 
-| Method | Path                    | Description                                 | Response               |
+| Metoda | Putanja                 | Opis                                        | Odgovor                |
 | ------ | ----------------------- | ------------------------------------------- | ---------------------- |
 | `POST` | `/tui/append-prompt`    | Append text to the prompt                   | `boolean`              |
 | `POST` | `/tui/open-help`        | Open the help dialog                        | `boolean`              |
@@ -263,7 +263,7 @@ opencode server izlaže sljedece API-je.
 
 ### Auth
 
-| Method | Path        | Description                                                     | Response  |
+| Metoda | Putanja     | Opis                                                            | Odgovor   |
 | ------ | ----------- | --------------------------------------------------------------- | --------- |
 | `PUT`  | `/auth/:id` | Set authentication credentials. Body must match provider schema | `boolean` |
 
@@ -271,7 +271,7 @@ opencode server izlaže sljedece API-je.
 
 ### Events
 
-| Method | Path     | Description                                                                   | Response                  |
+| Metoda | Putanja  | Opis                                                                          | Odgovor                   |
 | ------ | -------- | ----------------------------------------------------------------------------- | ------------------------- |
 | `GET`  | `/event` | Server-sent events stream. First event is `server.connected`, then bus events | Server-sent events stream |
 
@@ -279,6 +279,6 @@ opencode server izlaže sljedece API-je.
 
 ### Docs
 
-| Method | Path   | Description               | Response                    |
-| ------ | ------ | ------------------------- | --------------------------- |
-| `GET`  | `/doc` | OpenAPI 3.1 specification | HTML page with OpenAPI spec |
+| Metoda | Putanja | Opis                      | Odgovor                     |
+| ------ | ------- | ------------------------- | --------------------------- |
+| `GET`  | `/doc`  | OpenAPI 3.1 specification | HTML page with OpenAPI spec |
