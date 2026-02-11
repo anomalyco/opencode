@@ -425,6 +425,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             >
               <IconButton
                 icon={copied() ? "check" : "copy"}
+                size="small"
                 variant="secondary"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
@@ -694,6 +695,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             >
               <IconButton
                 icon={copied() ? "check" : "copy"}
+                size="small"
                 variant="secondary"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCopy}
@@ -874,15 +876,85 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const summary = () =>
-      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
+    const childSessionId = () => props.metadata.sessionId as string | undefined
+
+    const href = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return
+
+      const direct = data.sessionHref?.(sessionId)
+      if (direct) return direct
+
+      if (typeof window === "undefined") return
+      const path = window.location.pathname
+      const idx = path.indexOf("/session")
+      if (idx === -1) return
+      return `${path.slice(0, idx)}/session/${sessionId}`
+    })
+
+    createEffect(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return
+      const sync = data.syncSession
+      if (!sync) return
+      Promise.resolve(sync(sessionId)).catch(() => undefined)
+    })
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const sessionId = childSessionId()
+      const url = href()
+      if (!sessionId || !url) return
+
+      e.stopPropagation()
+
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+
+      const nav = data.navigateToSession
+      if (!nav || typeof window === "undefined") return
+
+      e.preventDefault()
+      const before = window.location.pathname + window.location.search + window.location.hash
+      nav(sessionId)
+      setTimeout(() => {
+        const after = window.location.pathname + window.location.search + window.location.hash
+        if (after === before) window.location.assign(url)
+      }, 50)
+    }
+
+    const trigger = () => (
+      <div data-slot="basic-tool-tool-info-structured">
+        <div data-slot="basic-tool-tool-info-main">
+          <span data-slot="basic-tool-tool-title" class="capitalize">
+            {i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool })}
+          </span>
+          <Show when={props.input.description}>
+            <Switch>
+              <Match when={href()}>
+                {(url) => (
+                  <a data-slot="basic-tool-tool-subtitle" class="clickable" href={url()} onClick={handleLinkClick}>
+                    {props.input.description}
+                  </a>
+                )}
+              </Match>
+              <Match when={true}>
+                <span data-slot="basic-tool-tool-subtitle">{props.input.description}</span>
+              </Match>
+            </Switch>
+          </Show>
+        </div>
+      </div>
+    )
+
+    const childToolParts = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return []
+      return getSessionToolParts(data.store, sessionId)
+    })
 
     const autoScroll = createAutoScroll({
       working: () => true,
       overflowAnchor: "auto",
     })
-
-    const childSessionId = () => props.metadata.sessionId as string | undefined
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -920,13 +992,6 @@ ToolRegistry.register({
       })
     }
 
-    const handleSubtitleClick = () => {
-      const sessionId = childSessionId()
-      if (sessionId && data.navigateToSession) {
-        data.navigateToSession(sessionId)
-      }
-    }
-
     const renderChildToolPart = () => {
       const toolData = childToolPart()
       if (!toolData) return null
@@ -954,21 +1019,7 @@ ToolRegistry.register({
         <Switch>
           <Match when={childPermission()}>
             <>
-              <Show
-                when={childToolPart()}
-                fallback={
-                  <BasicTool
-                    icon="task"
-                    defaultOpen={true}
-                    trigger={{
-                      title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
-                      titleClass: "capitalize",
-                      subtitle: props.input.description,
-                    }}
-                    onSubtitleClick={handleSubtitleClick}
-                  />
-                }
-              >
+              <Show when={childToolPart()} fallback={<BasicTool icon="task" defaultOpen={true} trigger={trigger()} />}>
                 {renderChildToolPart()}
               </Show>
               <div data-component="permission-prompt">
@@ -987,16 +1038,7 @@ ToolRegistry.register({
             </>
           </Match>
           <Match when={true}>
-            <BasicTool
-              icon="task"
-              defaultOpen={true}
-              trigger={{
-                title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
-                titleClass: "capitalize",
-                subtitle: props.input.description,
-              }}
-              onSubtitleClick={handleSubtitleClick}
-            >
+            <BasicTool icon="task" defaultOpen={true} trigger={trigger()}>
               <div
                 ref={autoScroll.scrollRef}
                 onScroll={autoScroll.handleScroll}
@@ -1004,15 +1046,21 @@ ToolRegistry.register({
                 data-scrollable
               >
                 <div ref={autoScroll.contentRef} data-component="task-tools">
-                  <For each={summary()}>
+                  <For each={childToolParts()}>
                     {(item) => {
-                      const info = getToolInfo(item.tool)
+                      const info = createMemo(() => getToolInfo(item.tool, item.state.input))
+                      const subtitle = createMemo(() => {
+                        if (info().subtitle) return info().subtitle
+                        if (item.state.status === "completed" || item.state.status === "running") {
+                          return item.state.title
+                        }
+                      })
                       return (
                         <div data-slot="task-tool-item">
-                          <Icon name={info.icon} size="small" />
-                          <span data-slot="task-tool-title">{info.title}</span>
-                          <Show when={item.state.title}>
-                            <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                          <Icon name={info().icon} size="small" />
+                          <span data-slot="task-tool-title">{info().title}</span>
+                          <Show when={subtitle()}>
+                            <span data-slot="task-tool-subtitle">{subtitle()}</span>
                           </Show>
                         </div>
                       )

@@ -193,6 +193,25 @@ test("handles file inclusion substitution", async () => {
   })
 })
 
+test("handles file inclusion with replacement tokens", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        theme: "{file:included.md}",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("const out = await Bun.$`echo hi`")
+    },
+  })
+})
+
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -564,6 +583,68 @@ test("gets config directories", async () => {
       expect(dirs.length).toBeGreaterThanOrEqual(1)
     },
   })
+})
+
+test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", async () => {
+  if (process.platform === "win32") return
+
+  await using tmp = await tmpdir<string>({
+    init: async (dir) => {
+      const ro = path.join(dir, "readonly")
+      await fs.mkdir(ro, { recursive: true })
+      await fs.chmod(ro, 0o555)
+      return ro
+    },
+    dispose: async (dir) => {
+      const ro = path.join(dir, "readonly")
+      await fs.chmod(ro, 0o755).catch(() => {})
+      return ro
+    },
+  })
+
+  const prev = process.env.OPENCODE_CONFIG_DIR
+  process.env.OPENCODE_CONFIG_DIR = tmp.extra
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+      },
+    })
+  } finally {
+    if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = prev
+  }
+})
+
+test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
+  await using tmp = await tmpdir<string>({
+    init: async (dir) => {
+      const cfg = path.join(dir, "configdir")
+      await fs.mkdir(cfg, { recursive: true })
+      return cfg
+    },
+  })
+
+  const prev = process.env.OPENCODE_CONFIG_DIR
+  process.env.OPENCODE_CONFIG_DIR = tmp.extra
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+        await Config.waitForDependencies()
+      },
+    })
+
+    expect(await Bun.file(path.join(tmp.extra, "package.json")).exists()).toBe(true)
+    expect(await Bun.file(path.join(tmp.extra, ".gitignore")).exists()).toBe(true)
+  } finally {
+    if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = prev
+  }
 })
 
 test("resolves scoped npm plugins in config", async () => {

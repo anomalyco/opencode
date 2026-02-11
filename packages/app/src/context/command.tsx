@@ -64,6 +64,16 @@ export type CommandCatalogItem = {
   slash?: string
 }
 
+export type CommandRegistration = {
+  key?: string
+  options: Accessor<CommandOption[]>
+}
+
+export function upsertCommandRegistration(registrations: CommandRegistration[], entry: CommandRegistration) {
+  if (entry.key === undefined) return [entry, ...registrations]
+  return [entry, ...registrations.filter((x) => x.key !== entry.key)]
+}
+
 export function parseKeybind(config: string): Keybind[] {
   if (!config || config === "none") return []
 
@@ -166,9 +176,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
     const [store, setStore] = createStore({
-      registrations: [] as Accessor<CommandOption[]>[],
+      registrations: [] as CommandRegistration[],
       suspendCount: 0,
     })
+    const warnedDuplicates = new Set<string>()
 
     const [catalog, setCatalog, _, catalogReady] = persisted(
       Persist.global("command.catalog.v1"),
@@ -187,8 +198,14 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const all: CommandOption[] = []
 
       for (const reg of store.registrations) {
-        for (const opt of reg()) {
-          if (seen.has(opt.id)) continue
+        for (const opt of reg.options()) {
+          if (seen.has(opt.id)) {
+            if (import.meta.env.DEV && !warnedDuplicates.has(opt.id)) {
+              warnedDuplicates.add(opt.id)
+              console.warn(`[command] duplicate command id \"${opt.id}\" registered; keeping first entry`)
+            }
+            continue
+          }
           seen.add(opt.id)
           all.push(opt)
         }
@@ -296,14 +313,25 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       document.removeEventListener("keydown", handleKeyDown)
     })
 
+    function register(cb: () => CommandOption[]): void
+    function register(key: string, cb: () => CommandOption[]): void
+    function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
+      const id = typeof key === "string" ? key : undefined
+      const next = typeof key === "function" ? key : cb
+      if (!next) return
+      const options = createMemo(next)
+      const entry: CommandRegistration = {
+        key: id,
+        options,
+      }
+      setStore("registrations", (arr) => upsertCommandRegistration(arr, entry))
+      onCleanup(() => {
+        setStore("registrations", (arr) => arr.filter((x) => x !== entry))
+      })
+    }
+
     return {
-      register(cb: () => CommandOption[]) {
-        const results = createMemo(cb)
-        setStore("registrations", (arr) => [results, ...arr])
-        onCleanup(() => {
-          setStore("registrations", (arr) => arr.filter((x) => x !== results))
-        })
-      },
+      register,
       trigger(id: string, source?: "palette" | "keybind" | "slash") {
         run(id, source)
       },

@@ -175,100 +175,6 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
-describe("ProviderTransform.maxOutputTokens", () => {
-  test("returns 32k when modelLimit > 32k", () => {
-    const modelLimit = 100000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(OUTPUT_TOKEN_MAX)
-  })
-
-  test("returns modelLimit when modelLimit < 32k", () => {
-    const modelLimit = 16000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(16000)
-  })
-
-  describe("azure", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("bedrock", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("anthropic without thinking options", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("anthropic with thinking options", () => {
-    test("returns 32k when budgetTokens + 32k <= modelLimit", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit - budgetTokens when budgetTokens + 32k > modelLimit", () => {
-      const modelLimit = 50000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 30000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(20000)
-    })
-
-    test("returns 32k when thinking type is not enabled", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "disabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-  })
-})
-
 describe("ProviderTransform.schema - gemini array items", () => {
   test("adds missing items for array properties", () => {
     const geminiModel = {
@@ -290,6 +196,119 @@ describe("ProviderTransform.schema - gemini array items", () => {
 
     expect(result.properties.nodes.items).toBeDefined()
     expect(result.properties.edges.items.type).toBe("string")
+  })
+})
+
+describe("ProviderTransform.schema - gemini nested array items", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("adds type to 2D array with empty inner items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        values: {
+          type: "array",
+          items: {
+            type: "array",
+            items: {}, // Empty items object
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // Inner items should have a default type
+    expect(result.properties.values.items.items.type).toBe("string")
+  })
+
+  test("adds items and type to 2D array with missing inner items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "array",
+          items: { type: "array" }, // No items at all
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.items.items).toBeDefined()
+    expect(result.properties.data.items.items.type).toBe("string")
+  })
+
+  test("handles deeply nested arrays (3D)", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        matrix: {
+          type: "array",
+          items: {
+            type: "array",
+            items: {
+              type: "array",
+              // No items
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.matrix.items.items.items).toBeDefined()
+    expect(result.properties.matrix.items.items.items.type).toBe("string")
+  })
+
+  test("preserves existing item types in nested arrays", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        numbers: {
+          type: "array",
+          items: {
+            type: "array",
+            items: { type: "number" }, // Has explicit type
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // Should preserve the explicit type
+    expect(result.properties.numbers.items.items.type).toBe("number")
+  })
+
+  test("handles mixed nested structures with objects and arrays", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        spreadsheetData: {
+          type: "object",
+          properties: {
+            rows: {
+              type: "array",
+              items: {
+                type: "array",
+                items: {}, // Empty items
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.spreadsheetData.properties.rows.items.items.type).toBe("string")
   })
 })
 
