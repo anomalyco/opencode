@@ -3,7 +3,6 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
-import { Bus } from "@/bus"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -166,62 +165,12 @@ export const PtyRoutes = lazy(() =>
             handler = Pty.connect(id, ws, cursor)
           },
           onMessage(event) {
-            try {
-              handler?.onMessage(String(event.data))
-            } catch {
-              // ignore write path errors; lifecycle subscribers receive explicit stream error events
-            }
+            handler?.onMessage(String(event.data))
           },
           onClose() {
             handler?.onClose()
           },
         }
       }),
-    )
-    .get(
-      "/:ptyID/connect/lifecycle",
-      describeRoute({
-        summary: "Connect to PTY lifecycle events",
-        description: "Receive typed lifecycle events for a PTY session (`exit`, `disconnect`, `error`).",
-        operationId: "pty.connect.lifecycle",
-        responses: {
-          200: {
-            description: "Connected event stream",
-            content: {
-              "application/json": {
-                schema: resolver(z.boolean()),
-              },
-            },
-          },
-          ...errors(404),
-        },
-      }),
-      validator("param", z.object({ ptyID: z.string() })),
-      upgradeWebSocket((c) => {
-        const id = c.req.param("ptyID")
-        if (!Pty.get(id)) throw new Error("Session not found")
-        let unsub: VoidFunction | undefined
-        const send = (ws: { send: (value: string) => unknown }, payload: { event: "exit" | "disconnect" | "error"; ptyID: string; exitCode?: number; message?: string }) => {
-          try {
-            ws.send(JSON.stringify({ type: "pty.lifecycle", ...payload }))
-          } catch {}
-        }
-        return {
-          onOpen(_event, ws) {
-            unsub = Bus.subscribe(Pty.Event.Stream, (event) => {
-              if (event.properties.id !== id) return
-              send(ws, {
-                event: event.properties.kind,
-                ptyID: id,
-                exitCode: event.properties.exitCode,
-                message: event.properties.message,
-              })
-            })
-          },
-          onClose() {
-            unsub?.()
-          },
-        }
-      }),
-    )
+    ),
 )
