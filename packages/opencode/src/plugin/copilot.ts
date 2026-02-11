@@ -1,11 +1,41 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
+import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { iife } from "@/util/iife"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
+
+type AuthProvider = Parameters<NonNullable<NonNullable<Hooks["auth"]>["loader"]>>[1]
+
+function ensureGpt53Codex(provider: AuthProvider) {
+  if (!provider.models || provider.models["gpt-5.3-codex"]) return
+  const source =
+    provider.models["gpt-5.2-codex"] ||
+    provider.models["gpt-5.1-codex-max"] ||
+    provider.models["gpt-5.1-codex"] ||
+    provider.models["gpt-5.1-codex-mini"]
+  if (!source) return
+  const model = {
+    ...source,
+    id: "gpt-5.3-codex",
+    name: "GPT-5.3-Codex",
+    api: {
+      ...source.api,
+      id: "gpt-5.3-codex",
+      npm: "@ai-sdk/github-copilot",
+    },
+    release_date: "2026-02-09",
+    last_updated: "2026-02-09",
+  }
+  provider.models["gpt-5.3-codex"] = model
+  const variantModel = provider.models["gpt-5.3-codex"] as unknown as Provider.Model
+  variantModel.variants = ProviderTransform.variants(variantModel)
+}
+
 function normalizeDomain(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
@@ -30,6 +60,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         const baseURL = enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : undefined
 
         if (provider && provider.models) {
+          ensureGpt53Codex(provider)
+
           for (const model of Object.values(provider.models)) {
             model.cost = {
               input: 0,
