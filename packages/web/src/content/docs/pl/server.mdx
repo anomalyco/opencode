@@ -176,7 +176,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 | `POST` | `/session/:id/message`            | Wyślij wiadomość i poczekaj na odpowiedź        | treść: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}` |
 | `GET`  | `/session/:id/message/:messageID` | Uzyskaj szczegóły wiadomości                    | Zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                                                            |
 | `POST` | `/session/:id/prompt_async`       | Wyślij wiadomość asynchronicznie (bez czekania) | treść: taka sama jak `/session/:id/message`, zwraca `204 No Content`                                                                                                     |
-| `POST` | `/session/:id/command`            | Wykonaj polecenie ukośnika                      | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
+| `POST` | `/session/:id/command`            | Wykonaj slash command                           | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
 | `POST` | `/session/:id/shell`              | Uruchom polecenie shell                         | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
 
 ---
@@ -250,13 +250,13 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 | Method | Path                    | Description                                  | Response                |
 | ------ | ----------------------- | -------------------------------------------- | ----------------------- |
-| `POST` | `/tui/append-prompt`    | Dołącz tekst do zachęty                      | `boolean`               |
+| `POST` | `/tui/append-prompt`    | Dołącz tekst do promptu                      | `boolean`               |
 | `POST` | `/tui/open-help`        | Otwórz okno pomocy                           | `boolean`               |
 | `POST` | `/tui/open-sessions`    | Otwórz selektor sesji                        | `boolean`               |
 | `POST` | `/tui/open-themes`      | Otwórz selektor motywów                      | `boolean`               |
 | `POST` | `/tui/open-models`      | Otwórz selektor modelu                       | `boolean`               |
-| `POST` | `/tui/submit-prompt`    | Prześlij bieżący monit                       | `boolean`               |
-| `POST` | `/tui/clear-prompt`     | Wyczyść monit                                | `boolean`               |
+| `POST` | `/tui/submit-prompt`    | Prześlij bieżący prompt                      | `boolean`               |
+| `POST` | `/tui/clear-prompt`     | Wyczyść prompt                               | `boolean`               |
 | `POST` | `/tui/execute-command`  | Wykonaj polecenie (`{ command }`)            | `boolean`               |
 | `POST` | `/tui/show-toast`       | Pokaż toast (`{ title?, message, variant }`) | `boolean`               |
 | `GET`  | `/tui/control/next`     | Poczekaj na następne żądanie kontroli        | Obiekt żądania kontroli |

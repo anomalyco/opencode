@@ -583,15 +583,15 @@ Cloudflare AI Gateway umożliwia dostęp do modeli z OpenAI, Anthropic, Workers 
 
 ### Firmware
 
-1. Przejdź do [panelu oprogramowania sprzętowego](https://app.firmware.ai/signup), utwórz konto i wygeneruj klucz API.
+1. Przejdź do [Firmware dashboard](https://app.firmware.ai/signup), utwórz konto i wygeneruj klucz API.
 
-2. Uruchom polecenie `/connect` i wyszukaj **Oprogramowanie sprzętowe**.
+2. Uruchom polecenie `/connect` i wyszukaj **Firmware**.
 
    ```txt
    /connect
    ```
 
-3. Wprowadź klucz API oprogramowania układowego.
+3. Wprowadź klucz API Firmware.
 
    ```txt
    ┌ API key
@@ -1194,7 +1194,7 @@ Aby użyć Kimi K2 z Moonshot AI:
 
 1. Przejdź do [konsoli Nebius Token Factory](https://tokenfactory.nebius.com/), utwórz konto i kliknij **Dodaj klucz**.
 
-2. Uruchom komendę `/connect` i wyszukaj **Fabrykę tokenów Nebius**.
+2. Uruchom komendę `/connect` i wyszukaj **Nebius Token Factory**.
 
    ```txt
    /connect
@@ -1802,7 +1802,7 @@ Możesz użyć dowolnego dostawcy kompatybilnego z OpenAI z opencode. Większoś
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI Provider Display Name",
+         "name": "My AI ProviderDisplay Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -1840,7 +1840,7 @@ Oto przykład ustawienia opcji `apiKey`, `headers` i modelu `limit`.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI Provider Display Name",
+      "name": "My AI ProviderDisplay Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",
@@ -1866,7 +1866,7 @@ Szczegóły konfiguracji:
 
 - **apiKey**: Ustaw przy użyciu składni zmiennej `env`, [dowiedz się więcej](/docs/config#env-vars).
 - **nagłówki**: niestandardowe nagłówki wysyłane z każdym żądaniem.
-- **limit.context**: Maksymalna liczba żetonów wejściowych akceptowanych przez model.
+- **limit.context**: Maksymalna liczba tokenów wejściowych akceptowanych przez model.
 - **limit.output**: Maksymalna liczba tokenów, które model może wygenerować.
 
 Pola `limit` pozwalają opencode zrozumieć, ile kontekstu pozostało. Standardowi dostawcy pobierają je automatycznie z models.dev.

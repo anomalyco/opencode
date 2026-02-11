@@ -9,16 +9,17 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "拆分",
   "ui.sessionReview.expandAll": "全部展开",
   "ui.sessionReview.collapseAll": "全部收起",
-
   "ui.sessionReview.change.added": "已添加",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在评论 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.submit": "评论",
+
   "ui.sessionTurn.steps.show": "显示步骤",
   "ui.sessionTurn.steps.hide": "隐藏步骤",
   "ui.sessionTurn.summary.response": "回复",
@@ -92,7 +93,7 @@ export const dict = {
   "ui.message.expand": "展开消息",
   "ui.message.collapse": "收起消息",
   "ui.message.copy": "复制",
-  "ui.message.copied": "已复制",
+  "ui.message.copied": "已复制！",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已删除",
