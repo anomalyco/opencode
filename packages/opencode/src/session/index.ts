@@ -476,7 +476,11 @@ export namespace Session {
       const total = iife(() => {
         // Anthropic doesn't provide total_tokens, also ai sdk will vastly undercount if we
         // don't compute from components
-        if (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/bedrock") {
+        if (
+          input.model.api.npm === "@ai-sdk/anthropic" ||
+          input.model.api.npm === "@ai-sdk/bedrock" ||
+          input.model.api.npm === "@ai-sdk/google-vertex/anthropic"
+        ) {
           return adjustedInputTokens + outputTokens + cacheReadInputTokens + cacheWriteInputTokens
         }
         return input.usage.totalTokens
