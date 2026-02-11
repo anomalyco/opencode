@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openPalette } from "../actions"
+import { openPalette, clickListItem } from "../actions"
 
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -12,13 +12,7 @@ test("smoke file viewer renders real file content", async ({ page, gotoSession }
   const input = dialog.getByRole("textbox").first()
   await input.fill(file)
 
-  const fileItem = dialog
-    .locator(
-      '[data-slot="list-item"][data-key^="file:"][data-key*="packages"][data-key*="app"][data-key$="package.json"]',
-    )
-    .first()
-  await expect(fileItem).toBeVisible()
-  await fileItem.click()
+  await clickListItem(dialog, { text: /packages.*app.*package.json/ })
 
   await expect(dialog).toHaveCount(0)
 

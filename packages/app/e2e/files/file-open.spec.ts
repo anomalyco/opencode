@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openPalette } from "../actions"
+import { openPalette, clickListItem } from "../actions"
 
 test("can open a file tab from the search palette", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -9,9 +9,7 @@ test("can open a file tab from the search palette", async ({ page, gotoSession }
   const input = dialog.getByRole("textbox").first()
   await input.fill("package.json")
 
-  const fileItem = dialog.locator('[data-slot="list-item"][data-key^="file:"]').first()
-  await expect(fileItem).toBeVisible()
-  await fileItem.click()
+  await clickListItem(dialog, { keyStartsWith: "file:" })
 
   await expect(dialog).toHaveCount(0)
 
