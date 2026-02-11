@@ -24,6 +24,33 @@ function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 
+export function unescapeString(text: string): string {
+  return text.replace(/\\(n|t|r|'|"|`|\\|\n|\$)/g, (match, captured) => {
+    switch (captured) {
+      case "n":
+        return "\n"
+      case "t":
+        return "\t"
+      case "r":
+        return "\r"
+      case "'":
+        return "'"
+      case '"':
+        return '"'
+      case "`":
+        return "`"
+      case "\\":
+        return "\\"
+      case "\n":
+        return "\n"
+      case "$":
+        return "$"
+      default:
+        return match
+    }
+  })
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -50,7 +77,7 @@ export const EditTool = Tool.define("edit", {
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         const existed = await Bun.file(filePath).exists()
-        contentNew = params.newString
+        contentNew = unescapeString(params.newString)
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
@@ -61,7 +88,7 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
+        await Bun.write(filePath, contentNew)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -433,33 +460,6 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
 }
 
 export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
-  const unescapeString = (str: string): string => {
-    return str.replace(/\\(n|t|r|'|"|`|\\|\n|\$)/g, (match, capturedChar) => {
-      switch (capturedChar) {
-        case "n":
-          return "\n"
-        case "t":
-          return "\t"
-        case "r":
-          return "\r"
-        case "'":
-          return "'"
-        case '"':
-          return '"'
-        case "`":
-          return "`"
-        case "\\":
-          return "\\"
-        case "\n":
-          return "\n"
-        case "$":
-          return "$"
-        default:
-          return match
-      }
-    })
-  }
-
   const unescapedFind = unescapeString(find)
 
   // Try direct match with unescaped find string
@@ -616,7 +616,9 @@ export function trimDiff(diff: string): string {
 }
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
-  if (oldString === newString) {
+  const replacement = unescapeString(newString)
+
+  if (oldString === replacement) {
     throw new Error("oldString and newString must be different")
   }
 
@@ -638,11 +640,11 @@ export function replace(content: string, oldString: string, newString: string, r
       if (index === -1) continue
       notFound = false
       if (replaceAll) {
-        return content.replaceAll(search, newString)
+        return content.replaceAll(search, replacement)
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
+      return content.substring(0, index) + replacement + content.substring(index + search.length)
     }
   }
 
