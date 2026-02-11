@@ -6,6 +6,7 @@ import { useSDK } from "@/context/sdk"
 import { Persist, persisted } from "@/utils/persist"
 import { clearInitialCommandMarker } from "../components/terminal-recovery"
 import { mergeCreatedTerminal, type LocalPTY } from "./terminal-shared"
+export type { LocalPTY } from "./terminal-shared"
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20

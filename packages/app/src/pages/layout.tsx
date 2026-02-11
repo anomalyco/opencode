@@ -4,11 +4,13 @@ import {
   createMemo,
   createSignal,
   For,
+  Match,
   on,
   onCleanup,
   onMount,
   ParentProps,
   Show,
+  Switch,
   untrack,
   type JSX,
 } from "solid-js"
@@ -27,9 +29,13 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { HoverCard } from "@opencode-ai/ui/hover-card"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
-import { Session, type Message } from "@opencode-ai/sdk/v2/client"
+import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -2606,7 +2612,7 @@ export default function Layout(props: ParentProps) {
                         </TooltipKeybind>
                       </div>
                       <div class="flex-1 min-h-0">
-                        <LocalWorkspace ctx={workspaceSidebarCtx} project={p()} mobile={panelProps.mobile} />
+                        <LocalWorkspace project={p()} mobile={panelProps.mobile} />
                       </div>
                     </>
                   }
@@ -2642,7 +2648,6 @@ export default function Layout(props: ParentProps) {
                             <For each={workspaces()}>
                               {(directory) => (
                                 <SortableWorkspace
-                                  ctx={workspaceSidebarCtx}
                                   directory={directory}
                                   project={p()}
                                   mobile={panelProps.mobile}
@@ -2652,11 +2657,7 @@ export default function Layout(props: ParentProps) {
                           </SortableProvider>
                         </div>
                         <DragOverlay>
-                          <WorkspaceDragOverlay
-                            sidebarProject={sidebarProject}
-                            activeWorkspace={() => store.activeWorkspace}
-                            workspaceLabel={workspaceLabel}
-                          />
+                          <WorkspaceDragOverlay />
                         </DragOverlay>
                       </DragDropProvider>
                     </div>
@@ -2730,7 +2731,7 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} />}
+              renderProject={(project) => <SortableProject project={project} />}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
@@ -2738,7 +2739,7 @@ export default function Layout(props: ParentProps) {
               openProjectKeybind={() => command.keybind("project.open")}
               onOpenProject={chooseProject}
               renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
+                <ProjectDragOverlay />
               )}
               settingsLabel={() => language.t("sidebar.settings")}
               settingsKeybind={() => command.keybind("settings.open")}
@@ -2793,7 +2794,7 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile />}
+              renderProject={(project) => <SortableProject project={project} mobile />}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
@@ -2801,7 +2802,7 @@ export default function Layout(props: ParentProps) {
               openProjectKeybind={() => command.keybind("project.open")}
               onOpenProject={chooseProject}
               renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
+                <ProjectDragOverlay />
               )}
               settingsLabel={() => language.t("sidebar.settings")}
               settingsKeybind={() => command.keybind("settings.open")}

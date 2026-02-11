@@ -245,6 +245,10 @@ export const createBackend: CreateBackendFn = async (
       // ghostty-web handles refresh internally; no-op
     },
 
+    flushResize() {
+      // ghostty-web handles resize flushing internally; no-op
+    },
+
     serialize() {
       return serializeAddon.serialize()
     },

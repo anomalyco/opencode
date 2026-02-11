@@ -508,7 +508,7 @@ export function setupResizeHandlers(
       onResize(cols, rows)
     },
     clock: {
-      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms) as unknown as number,
       clearTimeout: (id: number) => clearTimeout(id),
     },
     raf: {
