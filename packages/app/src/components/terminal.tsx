@@ -130,11 +130,12 @@ export const Terminal = (props: TerminalProps) => {
     const t = term
     if (!t) return
     t.focus()
+    t.textarea?.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
-    if (activeElement instanceof HTMLElement && activeElement !== container) {
+    if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
       activeElement.blur()
     }
     focusTerminal()
@@ -204,44 +205,32 @@ export const Terminal = (props: TerminalProps) => {
       ghostty = g
       term = t
 
-      const copy = () => {
+      const handleCopy = (event: ClipboardEvent) => {
         const selection = t.getSelection()
-        if (!selection) return false
+        if (!selection) return
 
-        const body = document.body
-        if (body) {
-          const textarea = document.createElement("textarea")
-          textarea.value = selection
-          textarea.setAttribute("readonly", "")
-          textarea.style.position = "fixed"
-          textarea.style.opacity = "0"
-          body.appendChild(textarea)
-          textarea.select()
-          const copied = document.execCommand("copy")
-          body.removeChild(textarea)
-          if (copied) return true
-        }
+        const clipboard = event.clipboardData
+        if (!clipboard) return
 
-        const clipboard = navigator.clipboard
-        if (clipboard?.writeText) {
-          clipboard.writeText(selection).catch(() => {})
-          return true
-        }
+        event.preventDefault()
+        clipboard.setData("text/plain", selection)
+      }
 
-        return false
+      const handlePaste = (event: ClipboardEvent) => {
+        const clipboard = event.clipboardData
+        const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+        if (!text) return
+
+        event.preventDefault()
+        event.stopPropagation()
+        t.paste(text)
       }
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-          copy()
-          return true
-        }
-
-        if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
-          if (!t.hasSelection()) return true
-          copy()
+          document.execCommand("copy")
           return true
         }
 
@@ -251,6 +240,12 @@ export const Terminal = (props: TerminalProps) => {
 
         return matchKeybind(keybinds, event)
       })
+
+      container.addEventListener("copy", handleCopy, true)
+      cleanups.push(() => container.removeEventListener("copy", handleCopy, true))
+
+      container.addEventListener("paste", handlePaste, true)
+      cleanups.push(() => container.removeEventListener("paste", handlePaste, true))
 
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
