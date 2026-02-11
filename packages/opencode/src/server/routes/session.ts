@@ -15,6 +15,7 @@ import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
+import { Storage } from "../../storage/storage"
 import { lazy } from "../../util/lazy"
 
 const log = Log.create({ service: "server" })
@@ -117,8 +118,15 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         log.info("SEARCH", { url: c.req.url })
-        const session = await Session.get(sessionID)
-        return c.json(session)
+        try {
+          const session = await Session.get(sessionID)
+          return c.json(session)
+        } catch (e) {
+          if (e instanceof Storage.NotFoundError) {
+            return c.json(e.toObject(), { status: 404 })
+          }
+          throw e
+        }
       },
     )
     .get(

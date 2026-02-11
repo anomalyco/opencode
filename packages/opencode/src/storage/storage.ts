@@ -208,7 +208,7 @@ export namespace Storage {
     })
   }
 
-  const glob = new Bun.Glob("**/*")
+  const glob = new Bun.Glob("**/*.json")
   export async function list(prefix: string[]) {
     const dir = await state().then((x) => x.dir)
     try {
