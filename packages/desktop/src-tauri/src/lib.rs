@@ -402,6 +402,10 @@ fn check_linux_app(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
+    if !cfg(windows) {
+        return Ok(path);
+    }
+
     let flag = match mode.unwrap_or(WslPathMode::Linux) {
         WslPathMode::Windows => "-w",
         WslPathMode::Linux => "-u",
