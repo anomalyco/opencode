@@ -1,4 +1,5 @@
 import { useFile } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -18,6 +19,10 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
+
+function pathToFileUrl(filepath: string): string {
+  return `file://${encodeFilePath(filepath)}`
+}
 
 type Kind = "add" | "del" | "mix"
 
@@ -215,12 +220,14 @@ export default function FileTree(props: {
       seen.add(item)
     }
 
-    return out.toSorted((a, b) => {
+    out.sort((a, b) => {
       if (a.type !== b.type) {
         return a.type === "directory" ? -1 : 1
       }
       return a.name.localeCompare(b.name)
     })
+
+    return out
   })
 
   const Node = (
@@ -247,7 +254,7 @@ export default function FileTree(props: {
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
           e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
+          e.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
 
           const dragImage = document.createElement("div")

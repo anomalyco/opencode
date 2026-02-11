@@ -48,8 +48,10 @@ export const dict = {
 
   "command.session.new": "新增工作階段",
   "command.file.open": "開啟檔案",
+  "command.tab.close": "關閉分頁",
   "command.context.addSelection": "將選取內容加入上下文",
   "command.context.addSelection.description": "加入目前檔案中選取的行",
+  "command.input.focus": "聚焦輸入框",
   "command.terminal.toggle": "切換終端機",
   "command.fileTree.toggle": "切換檔案樹",
   "command.review.toggle": "切換審查",
@@ -249,6 +251,7 @@ export const dict = {
   "prompt.popover.emptyResults": "沒有符合的結果",
   "prompt.popover.emptyCommands": "沒有符合的命令",
   "prompt.dropzone.label": "將圖片或 PDF 拖到這裡",
+  "prompt.dropzone.file.label": "拖放以 @提及檔案",
   "prompt.slash.badge.custom": "自訂",
   "prompt.slash.badge.skill": "技能",
   "prompt.slash.badge.mcp": "mcp",
@@ -270,6 +273,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "傳送 shell 命令失敗",
   "prompt.toast.commandSendFailed.title": "傳送命令失敗",
   "prompt.toast.promptSendFailed.title": "傳送提示失敗",
+  "prompt.toast.promptSendFailed.description": "無法取得工作階段",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "已啟用 {{enabled}} / {{total}}",
@@ -541,6 +545,9 @@ export const dict = {
   "settings.section.server": "伺服器",
   "settings.tab.general": "一般",
   "settings.tab.shortcuts": "快速鍵",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL integration",
+  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "外觀",
   "settings.general.section.notifications": "系統通知",
