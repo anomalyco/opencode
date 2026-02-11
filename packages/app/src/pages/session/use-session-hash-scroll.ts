@@ -101,6 +101,27 @@ export const useSessionHashScroll = (input: {
       input.autoScroll.forceScrollToBottom()
       const el = input.scroller()
       if (el) input.scheduleScrollState(el)
+
+      // iOS Safari and iPad Safari (including iPadOS desktop-mode UA) often need
+      // a delayed retry for the initial scroll to bottom after layout settles.
+      const isAppleMobileSafari = (() => {
+        if (typeof navigator !== "object") return false
+        const ua = navigator.userAgent
+        const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|mercury/i.test(ua)
+        const isIOS = /iPhone|iPad|iPod/i.test(ua)
+        const isIPadOSDesktop = navigator.maxTouchPoints > 0 && /Macintosh/i.test(ua)
+        return isSafari && (isIOS || isIPadOSDesktop)
+      })()
+
+      if (isAppleMobileSafari) {
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            input.autoScroll.forceScrollToBottom()
+            const el = input.scroller()
+            if (el) input.scheduleScrollState(el)
+          })
+        }, 100)
+      }
       return
     }
 
