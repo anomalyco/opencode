@@ -203,6 +203,28 @@ Here are some common issues and how to resolve them.
 
 ---
 
+### Wrong platform package installed
+
+If you see an error saying your package manager installed the wrong CLI package for your platform:
+
+1. Reinstall the CLI package with your package manager:
+
+   ```bash
+   npm uninstall -g opencode-ai
+   npm install -g opencode-ai
+   ```
+
+2. If it still fails, update Node/npm and reinstall again.
+3. As a fallback, use the install script from the docs homepage:
+
+   ```bash
+   curl -fsSL https://opencode.ai/install | bash
+   ```
+
+This usually resolves platform package resolution issues in WSL and Linux environments.
+
+---
+
 ### Authentication issues
 
 1. Try re-authenticating with the `/connect` command in the TUI
