@@ -8,6 +8,7 @@ import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
 import { EOL } from "os"
 
+/** Discriminated union returned by the ShareNext API (GET /api/share/:id/data) */
 export type ShareData =
   | { type: "session"; data: SDKSession }
   | { type: "message"; data: Message }
@@ -15,11 +16,20 @@ export type ShareData =
   | { type: "session_diff"; data: unknown }
   | { type: "model"; data: unknown }
 
+/** Extract share ID from a share URL like https://opncd.ai/share/abc123 */
 export function parseShareUrl(url: string): string | null {
   const match = url.match(/^https?:\/\/[^/]+\/share\/([a-zA-Z0-9_-]+)$/)
   return match ? match[1] : null
 }
 
+/**
+ * Transform ShareNext API response (flat array) into the nested structure for local file storage.
+ *
+ * The API returns a flat array: [session, message, message, part, part, ...]
+ * Local storage expects: { info: session, messages: [{ info: message, parts: [part, ...] }, ...] }
+ *
+ * This groups parts by their messageID to reconstruct the hierarchy before writing to disk.
+ */
 export function transformShareData(shareData: ShareData[]): {
   info: SDKSession
   messages: Array<{ info: Message; parts: Part[] }>

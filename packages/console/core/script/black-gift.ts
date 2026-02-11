@@ -90,6 +90,7 @@ await Database.transaction(async (tx) => {
     })
     .where(eq(BillingTable.workspaceID, workspaceID))
 
+  // Create a row in subscription table
   for (const user of users) {
     await tx.insert(SubscriptionTable).values({
       workspaceID,

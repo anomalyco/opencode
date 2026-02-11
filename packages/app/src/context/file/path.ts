@@ -84,7 +84,7 @@ export function encodeFilePath(filepath: string): string {
   // Normalize Windows paths: convert backslashes to forward slashes
   let normalized = filepath.replace(/\\/g, "/")
 
-  // D:/path -> /D:/path for file:// URLs
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
   if (/^[A-Za-z]:/.test(normalized)) {
     normalized = "/" + normalized
   }

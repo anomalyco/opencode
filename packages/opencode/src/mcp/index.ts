@@ -209,6 +209,7 @@ export namespace MCP {
     },
   )
 
+  // Helper function to fetch prompts for a specific client
   async function fetchPromptsForClient(clientName: string, client: Client) {
     const prompts = await client.listPrompts().catch((e) => {
       log.error("failed to get prompts", { clientName, error: e.message })
@@ -798,12 +799,18 @@ export namespace MCP {
     // We just need to open the browser
     log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
 
-    // must be before open() in case the IdP redirects immediately (active SSO session)
+    // Register the callback BEFORE opening the browser to avoid race condition
+    // when the IdP has an active SSO session and redirects immediately
     const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
 
     try {
       const subprocess = await open(authorizationUrl)
+      // The open package spawns a detached process and returns immediately.
+      // We need to listen for errors which fire asynchronously:
+      // - "error" event: command not found (ENOENT)
+      // - "exit" with non-zero code: command exists but failed (e.g., no display)
       await new Promise<void>((resolve, reject) => {
+        // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
         subprocess.on("error", (error) => {
           clearTimeout(timeout)

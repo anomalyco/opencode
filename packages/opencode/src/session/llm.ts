@@ -267,6 +267,8 @@ export namespace LLM {
     return input.tools
   }
 
+  // Check if messages contain any tool-call content
+  // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
   export function hasToolCalls(messages: ModelMessage[]): boolean {
     for (const msg of messages) {
       if (!Array.isArray(msg.content)) continue

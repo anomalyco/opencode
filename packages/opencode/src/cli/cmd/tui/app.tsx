@@ -250,6 +250,7 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
+      // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
@@ -282,7 +283,9 @@ function App() {
     }
   })
 
-  // wait for "complete" to avoid a race where reconcile overwrites the newly forked session
+  // Handle --session with --fork: wait for sync to be fully complete before forking
+  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
+  // to avoid a race where reconcile overwrites the newly forked session)
   let forked = false
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return

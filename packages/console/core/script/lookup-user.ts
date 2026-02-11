@@ -209,7 +209,7 @@ async function printWorkspace(workspaceID: string) {
 }
 
 function formatMicroCents(value: number | null | undefined) {
-  if (value == null) return null
+  if (value === null || value === undefined) return null
   return `$${(value / 100000000).toFixed(2)}`
 }
 
@@ -220,7 +220,7 @@ function formatDate(value: Date | null | undefined) {
 
 function formatMonthlyUsage(usage: number | null | undefined, limit: number | null | undefined) {
   const usageText = formatMicroCents(usage) ?? "$0.00"
-  if (limit == null) return `${usageText} / no limit`
+  if (limit === null || limit === undefined) return `${usageText} / no limit`
   return `${usageText} / $${limit.toFixed(2)}`
 }
 

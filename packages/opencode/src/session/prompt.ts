@@ -575,6 +575,7 @@ export namespace SessionPrompt {
       })
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
+      // Check if user explicitly invoked an agent via @ in this turn
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
@@ -898,6 +899,7 @@ export namespace SessionPrompt {
                 throw new Error(`Resource not found: ${clientName}/${uri}`)
               }
 
+              // Handle different content types
               const contents = Array.isArray(resourceContent.contents)
                 ? resourceContent.contents
                 : [resourceContent.contents]
@@ -913,6 +915,7 @@ export namespace SessionPrompt {
                     text: content.text as string,
                   })
                 } else if ("blob" in content && content.blob) {
+                  // Handle binary content if needed
                   const mimeType = "mimeType" in content ? content.mimeType : part.mime
                   pieces.push({
                     id: Identifier.ascending("part"),
@@ -1165,6 +1168,7 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [

@@ -124,6 +124,7 @@ export const TuiThreadCommand = cmd({
       return piped ? piped + "\n" + args.prompt : args.prompt
     })
 
+    // Check if server should be started (port or hostname explicitly set in CLI or config)
     const networkOpts = await resolveNetworkOptions(args)
     const shouldStartServer =
       process.argv.includes("--port") ||

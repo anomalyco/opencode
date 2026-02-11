@@ -7,7 +7,7 @@ function resolve(text: string, params?: Record<string, string | number>) {
   if (!params) return text
   return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
     const value = params[key]
-    if (value == null) return raw
+    if (value === undefined || value === null) return raw
     return String(value)
   })
 }

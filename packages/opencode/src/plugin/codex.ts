@@ -434,6 +434,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Cast to include accountId field
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
+            // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
               const tokens = await refreshAccessToken(currentAuth.refresh)

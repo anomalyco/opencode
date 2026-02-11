@@ -145,7 +145,8 @@ export const { use: useOpenApp, provider: OpenAppProvider } = createSimpleContex
     }
 
     const openFile = (file: string, directory: string) => {
-      const absolute = file.startsWith("/") ? file : `${directory}/${file}`
+      const isAbsolute = file.startsWith("/") || /^[A-Za-z]:/.test(file)
+      const absolute = isAbsolute ? file : `${directory}/${file}`
       open(absolute)
     }
 

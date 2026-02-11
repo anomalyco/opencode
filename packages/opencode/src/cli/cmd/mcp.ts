@@ -228,6 +228,7 @@ export const McpAuthCommand = cmd({
         const spinner = prompts.spinner()
         spinner.start("Starting OAuth flow...")
 
+        // Subscribe to browser open failure events to show URL for manual opening
         const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
           if (evt.properties.mcpName === serverName) {
             spinner.stop("Could not open browser automatically")
@@ -433,6 +434,7 @@ export const McpAddCommand = cmd({
           resolveConfigPath(Global.Path.config, true),
         ])
 
+        // Determine scope
         let configPath = globalConfigPath
         if (project.vcs === "git") {
           const scopeResult = await prompts.select({
