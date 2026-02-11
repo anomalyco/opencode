@@ -17,12 +17,19 @@
   color: var(--text-base);
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  align-self: flex-end;
+  margin-left: auto;
+  width: fit-content;
+  max-width: min(90%, 72ch);
   gap: 8px;
 
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 8px;
+    max-width: 100%;
   }
 
   [data-slot="user-message-attachment"] {
@@ -71,8 +78,12 @@
     }
   }
 
+  [data-slot="user-message-body"] {
+    width: 100%;
+    max-width: 100%;
+  }
+
   [data-slot="user-message-text"] {
-    position: relative;
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
@@ -89,17 +100,24 @@
       color: var(--syntax-type);
     }
 
-    [data-slot="user-message-copy-wrapper"] {
-      position: absolute;
-      top: 7px;
-      right: 7px;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-    }
+    max-width: 100%;
+  }
 
-    &:hover [data-slot="user-message-copy-wrapper"] {
-      opacity: 1;
-    }
+  [data-slot="user-message-copy-wrapper"] {
+    min-height: 24px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  [data-slot="user-message-body"]:hover [data-slot="user-message-copy-wrapper"],
+  [data-slot="user-message-body"]:focus-within [data-slot="user-message-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .text-text-strong {
@@ -115,21 +133,24 @@
   width: 100%;
 
   [data-slot="text-part-body"] {
-    position: relative;
-    margin-top: 32px;
+    margin-top: 0;
   }
 
   [data-slot="text-part-copy-wrapper"] {
-    position: absolute;
-    top: -28px;
-    right: 8px;
+    min-height: 24px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.15s ease;
-    z-index: 1;
   }
 
-  [data-slot="text-part-body"]:hover [data-slot="text-part-copy-wrapper"] {
+  &:hover [data-slot="text-part-copy-wrapper"],
+  &:focus-within [data-slot="text-part-copy-wrapper"] {
     opacity: 1;
+    pointer-events: auto;
   }
 
   [data-component="markdown"] {

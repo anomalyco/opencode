@@ -361,8 +361,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text">
-          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+        <div data-slot="user-message-body">
+          <div data-slot="user-message-text">
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          </div>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
@@ -372,7 +374,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <IconButton
                 icon={copied() ? "check" : "copy"}
                 size="small"
-                variant="secondary"
+                variant="ghost"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -633,22 +635,22 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       <div data-component="text-part">
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
-          <div data-slot="text-part-copy-wrapper">
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              placement="top"
-              gutter={8}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="small"
-                variant="secondary"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              />
-            </Tooltip>
-          </div>
+        </div>
+        <div data-slot="text-part-copy-wrapper">
+          <Tooltip
+            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+            placement="top"
+            gutter={8}
+          >
+            <IconButton
+              icon={copied() ? "check" : "copy"}
+              size="small"
+              variant="ghost"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleCopy}
+              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+            />
+          </Tooltip>
         </div>
       </div>
     </Show>

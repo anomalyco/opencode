@@ -4,7 +4,7 @@ import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
-import { Message, Part } from "./message-part"
+import { Message } from "./message-part"
 import { Card } from "./card"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
@@ -221,23 +221,6 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const shellModePart = createMemo(() => {
-    const p = parts()
-    if (p.length === 0) return
-    if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
-
-    const msgs = assistantMessages()
-    if (msgs.length !== 1) return
-
-    const msgParts = list(data.store.part?.[msgs[0].id], emptyParts)
-    if (msgParts.length !== 1) return
-
-    const assistantPart = msgParts[0]
-    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
-  })
-
-  const isShellMode = createMemo(() => !!shellModePart())
-
   const rawStatus = createMemo(() => {
     const msgs = assistantMessages()
     let last: PartType | undefined
@@ -436,61 +419,54 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
               >
-                <Switch>
-                  <Match when={isShellMode()}>
-                    <Part part={shellModePart()!} message={msg()} defaultOpen />
-                  </Match>
-                  <Match when={true}>
-                    <div data-slot="session-turn-message-content" aria-live="off">
-                      <Message message={msg()} parts={parts()} />
-                    </div>
-                    <Show when={working() || retry()}>
-                      <div data-slot="session-turn-status-row">
-                        <Show when={working()}>
-                          <Spinner />
-                        </Show>
-                        <Switch>
-                          <Match when={retry()}>
-                            <span data-slot="session-turn-retry-message">
-                              {(() => {
-                                const r = retry()
-                                if (!r) return ""
-                                const msg = unwrap(r.message)
-                                return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
-                              })()}
-                            </span>
-                            <span data-slot="session-turn-retry-seconds">
-                              · {i18n.t("ui.sessionTurn.retry.retrying")}
-                              {store.retrySeconds > 0
-                                ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                                : ""}
-                            </span>
-                            <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                          </Match>
-                          <Match when={working()}>
-                            <span data-slot="session-turn-status-text">
-                              {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
-                            </span>
-                          </Match>
-                        </Switch>
-                        <span aria-hidden="true">·</span>
-                        <span aria-live="off">{store.duration}</span>
-                      </div>
+                <div data-slot="session-turn-message-content" aria-live="off">
+                  <Message message={msg()} parts={parts()} />
+                </div>
+                <Show when={working() || retry()}>
+                  <div data-slot="session-turn-status-row">
+                    <Show when={working()}>
+                      <Spinner />
                     </Show>
-                    <Show when={assistantMessages().length > 0}>
-                      <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
-                        <For each={assistantMessages()}>
-                          {(assistantMessage) => <AssistantMessageItem message={assistantMessage} />}
-                        </For>
-                      </div>
-                    </Show>
-                    <Show when={error()}>
-                      <Card variant="error" class="error-card">
-                        {errorText()}
-                      </Card>
-                    </Show>
-                  </Match>
-                </Switch>
+                    <Switch>
+                      <Match when={retry()}>
+                        <span data-slot="session-turn-retry-message">
+                          {(() => {
+                            const r = retry()
+                            if (!r) return ""
+                            const msg = unwrap(r.message)
+                            return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
+                          })()}
+                        </span>
+                        <span data-slot="session-turn-retry-seconds">
+                          · {i18n.t("ui.sessionTurn.retry.retrying")}
+                          {store.retrySeconds > 0
+                            ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                            : ""}
+                        </span>
+                        <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                      </Match>
+                      <Match when={working()}>
+                        <span data-slot="session-turn-status-text">
+                          {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                        </span>
+                      </Match>
+                    </Switch>
+                    <span aria-hidden="true">·</span>
+                    <span aria-live="off">{store.duration}</span>
+                  </div>
+                </Show>
+                <Show when={assistantMessages().length > 0}>
+                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                    <For each={assistantMessages()}>
+                      {(assistantMessage) => <AssistantMessageItem message={assistantMessage} />}
+                    </For>
+                  </div>
+                </Show>
+                <Show when={error()}>
+                  <Card variant="error" class="error-card">
+                    {errorText()}
+                  </Card>
+                </Show>
               </div>
             )}
           </Show>

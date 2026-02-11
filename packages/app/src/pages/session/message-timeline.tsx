@@ -162,8 +162,9 @@ export function MessageTimeline(props: {
           <Show when={props.showHeader}>
             <div
               classList={{
-                "sticky top-0 z-30 bg-background-stronger": true,
+                "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                 "w-full": true,
+                "pb-4": true,
                 "px-4 md:px-6": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}

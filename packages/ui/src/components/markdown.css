@@ -3,7 +3,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: break-word;
-  color: var(--text-base);
+  color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: var(--line-height-x-large);
