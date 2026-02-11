@@ -1825,7 +1825,7 @@ export type Config = {
      */
     prune?: boolean
     /**
-     * Token headroom reserved to reduce overflow risk before compaction
+     * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
   }
