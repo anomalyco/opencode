@@ -3,7 +3,9 @@ type LocalServerAuth = {
   password: string
 }
 
-export function createInternalFetch(baseFetch: typeof globalThis.fetch, auth?: LocalServerAuth): typeof globalThis.fetch {
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response
+
+export function createInternalFetch(baseFetch: FetchLike, auth?: LocalServerAuth): FetchLike {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
     if (auth && !request.headers.has("authorization")) {

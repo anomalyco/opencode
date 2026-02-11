@@ -599,7 +599,7 @@ export const RunCommand = cmd({
         const request = new Request(input, init)
         return Server.App().fetch(request)
       }, auth)
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn as typeof globalThis.fetch })
       await execute(sdk)
     })
   },

@@ -17,7 +17,9 @@ test("createInternalFetch adds basic auth when configured", async () => {
   })
 
   await fetchWithAuth("http://opencode.internal/health")
-  expect(seenAuth).toBe(`Basic ${Buffer.from("opencode:secret").toString("base64")}`)
+  if (seenAuth === null) throw new Error("authorization header was not set")
+  const expected = `Basic ${Buffer.from("opencode:secret").toString("base64")}`
+  if (seenAuth !== expected) throw new Error(`unexpected authorization header: ${seenAuth}`)
 })
 
 test("createInternalFetch preserves explicit authorization header", async () => {
@@ -39,7 +41,8 @@ test("createInternalFetch preserves explicit authorization header", async () => 
     },
   })
 
-  expect(seenAuth).toBe("Basic custom-token")
+  if (seenAuth === null) throw new Error("authorization header was not preserved")
+  if (seenAuth !== "Basic custom-token") throw new Error(`unexpected authorization header: ${seenAuth}`)
 })
 
 test("internal fetch can access basic-auth protected route when env auth is set", async () => {
