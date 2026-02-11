@@ -2,6 +2,7 @@
 import Default from "@astrojs/starlight/components/PageTitle.astro"
 
 const { slug } = Astro.locals.starlightRoute.entry
+const description = Astro.locals.starlightRoute.entry.data.description
 const isHome = slug === ""
 const t = Astro.locals.t as (key: string, fallback?: string) => string
 
@@ -33,6 +34,7 @@ const failed = t("share.error", "Error")
     </button>
   )}
 </div>
+{description && <p class="page-description">{description}</p>}
 
 <script>
   function init() {
@@ -138,13 +140,24 @@ const failed = t("share.error", "Error")
     flex: 1 1 auto;
     min-width: 0;
     margin-block-start: 0;
+    font-size: var(--sl-text-h1);
+    font-weight: 600;
+    line-height: var(--sl-line-height-headings);
+    font-family: var(--__sl-font-headings);
+    letter-spacing: -0.5px;
+  }
+
+  .page-description {
+    margin-top: 0.25rem;
+    line-height: 1.5;
+    color: var(--sl-color-text-secondary);
   }
 
   .copy-page {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
     cursor: pointer;
     background: none;
     border: 1px solid var(--color-border-weak);
