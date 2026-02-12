@@ -10,6 +10,7 @@ import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@openco
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
+import { terminalWriter } from "@/utils/terminal-writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -56,6 +57,91 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   },
 }
 
+const debugTerminal = (...values: unknown[]) => {
+  if (!import.meta.env.DEV) return
+  console.debug("[terminal]", ...values)
+}
+
+const useTerminalUiBindings = (input: {
+  container: HTMLDivElement
+  term: Term
+  cleanups: VoidFunction[]
+  handlePointerDown: () => void
+  handleLinkClick: (event: MouseEvent) => void
+}) => {
+  const handleCopy = (event: ClipboardEvent) => {
+    const selection = input.term.getSelection()
+    if (!selection) return
+
+    const clipboard = event.clipboardData
+    if (!clipboard) return
+
+    event.preventDefault()
+    clipboard.setData("text/plain", selection)
+  }
+
+  const handlePaste = (event: ClipboardEvent) => {
+    const clipboard = event.clipboardData
+    const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+    if (!text) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    input.term.paste(text)
+  }
+
+  const handleTextareaFocus = () => {
+    input.term.options.cursorBlink = true
+  }
+  const handleTextareaBlur = () => {
+    input.term.options.cursorBlink = false
+  }
+
+  input.container.addEventListener("copy", handleCopy, true)
+  input.cleanups.push(() => input.container.removeEventListener("copy", handleCopy, true))
+
+  input.container.addEventListener("paste", handlePaste, true)
+  input.cleanups.push(() => input.container.removeEventListener("paste", handlePaste, true))
+
+  input.container.addEventListener("pointerdown", input.handlePointerDown)
+  input.cleanups.push(() => input.container.removeEventListener("pointerdown", input.handlePointerDown))
+
+  input.container.addEventListener("click", input.handleLinkClick, { capture: true })
+  input.cleanups.push(() => input.container.removeEventListener("click", input.handleLinkClick, { capture: true }))
+
+  input.term.textarea?.addEventListener("focus", handleTextareaFocus)
+  input.term.textarea?.addEventListener("blur", handleTextareaBlur)
+  input.cleanups.push(() => input.term.textarea?.removeEventListener("focus", handleTextareaFocus))
+  input.cleanups.push(() => input.term.textarea?.removeEventListener("blur", handleTextareaBlur))
+}
+
+const persistTerminal = (input: {
+  term: Term | undefined
+  addon: SerializeAddon | undefined
+  cursor: number
+  pty: LocalPTY
+  onCleanup?: (pty: LocalPTY) => void
+}) => {
+  if (!input.addon || !input.onCleanup || !input.term) return
+  const buffer = (() => {
+    try {
+      return input.addon.serialize()
+    } catch {
+      debugTerminal("failed to serialize terminal buffer")
+      return ""
+    }
+  })()
+
+  input.onCleanup({
+    ...input.pty,
+    buffer,
+    cursor: input.cursor,
+    rows: input.term.rows,
+    cols: input.term.cols,
+    scrollY: input.term.getViewportY(),
+  })
+}
+
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
   const sdk = useSDK()
@@ -70,13 +156,12 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
-  let handleTextareaFocus: () => void
-  let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
   const start =
     typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
   let cursor = start ?? 0
+  let output: ReturnType<typeof terminalWriter> | undefined
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -84,10 +169,21 @@ export const Terminal = (props: TerminalProps) => {
     for (const fn of fns) {
       try {
         fn()
-      } catch {
-        // ignore
+      } catch (err) {
+        debugTerminal("cleanup failed", err)
       }
     }
+  }
+
+  const pushSize = (cols: number, rows: number) => {
+    return sdk.client.pty
+      .update({
+        ptyID: local.pty.id,
+        size: { cols, rows },
+      })
+      .catch((err) => {
+        debugTerminal("failed to sync terminal size", err)
+      })
   }
 
   const getTerminalColors = (): TerminalColors => {
@@ -206,7 +302,7 @@ export const Terminal = (props: TerminalProps) => {
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: false,
-        convertEol: true,
+        convertEol: false,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
@@ -218,27 +314,7 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
-
-      const handleCopy = (event: ClipboardEvent) => {
-        const selection = t.getSelection()
-        if (!selection) return
-
-        const clipboard = event.clipboardData
-        if (!clipboard) return
-
-        event.preventDefault()
-        clipboard.setData("text/plain", selection)
-      }
-
-      const handlePaste = (event: ClipboardEvent) => {
-        const clipboard = event.clipboardData
-        const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
-        if (!text) return
-
-        event.preventDefault()
-        event.stopPropagation()
-        t.paste(text)
-      }
+      output = terminalWriter((data) => t.write(data))
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -255,12 +331,6 @@ export const Terminal = (props: TerminalProps) => {
         return matchKeybind(keybinds, event)
       })
 
-      container.addEventListener("copy", handleCopy, true)
-      cleanups.push(() => container.removeEventListener("copy", handleCopy, true))
-
-      container.addEventListener("paste", handlePaste, true)
-      cleanups.push(() => container.removeEventListener("paste", handlePaste, true))
-
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
       cleanups.push(() => disposeIfDisposable(fit))
@@ -270,24 +340,7 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
-
-      container.addEventListener("pointerdown", handlePointerDown)
-      cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
-
-      container.addEventListener("click", handleLinkClick, { capture: true })
-      cleanups.push(() => container.removeEventListener("click", handleLinkClick, { capture: true }))
-
-      handleTextareaFocus = () => {
-        t.options.cursorBlink = true
-      }
-      handleTextareaBlur = () => {
-        t.options.cursorBlink = false
-      }
-
-      t.textarea?.addEventListener("focus", handleTextareaFocus)
-      t.textarea?.addEventListener("blur", handleTextareaBlur)
-      cleanups.push(() => t.textarea?.removeEventListener("focus", handleTextareaFocus))
-      cleanups.push(() => t.textarea?.removeEventListener("blur", handleTextareaBlur))
+      useTerminalUiBindings({ container, term: t, cleanups, handlePointerDown, handleLinkClick })
 
       focusTerminal()
 
@@ -316,15 +369,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
-          await sdk.client.pty
-            .update({
-              ptyID: local.pty.id,
-              size: {
-                cols: size.cols,
-                rows: size.rows,
-              },
-            })
-            .catch(() => {})
+          await pushSize(size.cols, size.rows)
         }
       })
       cleanups.push(() => disposeIfDisposable(onResize))
@@ -346,15 +391,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const handleOpen = () => {
         local.onConnect?.()
-        sdk.client.pty
-          .update({
-            ptyID: local.pty.id,
-            size: {
-              cols: t.cols,
-              rows: t.rows,
-            },
-          })
-          .catch(() => {})
+        void pushSize(t.cols, t.rows)
       }
       socket.addEventListener("open", handleOpen)
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
@@ -374,15 +411,15 @@ export const Terminal = (props: TerminalProps) => {
             if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
               cursor = next
             }
-          } catch {
-            // ignore
+          } catch (err) {
+            debugTerminal("invalid websocket control frame", err)
           }
           return
         }
 
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
-        t.write(data)
+        output?.push(data)
         cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
@@ -425,25 +462,8 @@ export const Terminal = (props: TerminalProps) => {
 
   onCleanup(() => {
     disposed = true
-    const t = term
-    if (serializeAddon && props.onCleanup && t) {
-      const buffer = (() => {
-        try {
-          return serializeAddon.serialize()
-        } catch {
-          return ""
-        }
-      })()
-      props.onCleanup({
-        ...local.pty,
-        buffer,
-        cursor,
-        rows: t.rows,
-        cols: t.cols,
-        scrollY: t.getViewportY(),
-      })
-    }
-
+    output?.flush()
+    persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
     cleanup()
   })
 
