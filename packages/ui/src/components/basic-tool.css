@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   align-self: stretch;
-  gap: 8px;
+  gap: 0px;
   justify-content: flex-start;
 
   [data-slot="basic-tool-tool-trigger-content"] {
