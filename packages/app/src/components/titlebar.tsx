@@ -13,6 +13,28 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
+type TauriDesktopWindow = {
+  startDragging?: () => Promise<void>
+  toggleMaximize?: () => Promise<void>
+}
+
+type TauriThemeWindow = {
+  setTheme?: (theme?: "light" | "dark" | null) => Promise<void>
+}
+
+type TauriApi = {
+  window?: {
+    getCurrentWindow?: () => TauriDesktopWindow
+  }
+  webviewWindow?: {
+    getCurrentWebviewWindow?: () => TauriThemeWindow
+  }
+}
+
+const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
+const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
+const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
+
 export function Titlebar() {
   const layout = useLayout()
   const platform = usePlatform()
@@ -82,22 +104,7 @@ export function Titlebar() {
 
   const getWin = () => {
     if (platform.platform !== "desktop") return
-
-    const tauri = (
-      window as unknown as {
-        __TAURI__?: {
-          window?: {
-            getCurrentWindow?: () => {
-              startDragging?: () => Promise<void>
-              toggleMaximize?: () => Promise<void>
-            }
-          }
-        }
-      }
-    ).__TAURI__
-    if (!tauri?.window?.getCurrentWindow) return
-
-    return tauri.window.getCurrentWindow()
+    return currentDesktopWindow()
   }
 
   createEffect(() => {
@@ -106,13 +113,8 @@ export function Titlebar() {
     const scheme = theme.colorScheme()
     const value = scheme === "system" ? null : scheme
 
-    const tauri = (window as unknown as { __TAURI__?: { webviewWindow?: { getCurrentWebviewWindow?: () => unknown } } })
-      .__TAURI__
-    const get = tauri?.webviewWindow?.getCurrentWebviewWindow
-    if (!get) return
-
-    const win = get() as { setTheme?: (theme?: "light" | "dark" | null) => Promise<void> }
-    if (!win.setTheme) return
+    const win = currentThemeWindow()
+    if (!win?.setTheme) return
 
     void win.setTheme(value).catch(() => undefined)
   })

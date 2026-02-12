@@ -318,7 +318,7 @@ export function Code<T>(props: CodeProps<T>) {
     const needle = query.toLowerCase()
     const out: Range[] = []
 
-    const cols = Array.from(root.querySelectorAll("[data-column-content]")).filter(
+    const cols = Array.from(root.querySelectorAll("[data-content] [data-line], [data-column-content]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
 
@@ -537,23 +537,42 @@ export function Code<T>(props: CodeProps<T>) {
       node.removeAttribute("data-comment-selected")
     }
 
+    const annotations = Array.from(root.querySelectorAll("[data-line-annotation]")).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
+
     for (const range of ranges) {
       const start = Math.max(1, Math.min(range.start, range.end))
       const end = Math.max(range.start, range.end)
 
       for (let line = start; line <= end; line++) {
-        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"]`))
+        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-column-number="${line}"]`))
         for (const node of nodes) {
           if (!(node instanceof HTMLElement)) continue
           node.setAttribute("data-comment-selected", "")
         }
       }
+
+      for (const annotation of annotations) {
+        const line = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
+        if (Number.isNaN(line)) continue
+        if (line < start || line > end) continue
+        annotation.setAttribute("data-comment-selected", "")
+      }
     }
   }
 
+  const text = () => {
+    const value = local.file.contents as unknown
+    if (typeof value === "string") return value
+    if (Array.isArray(value)) return value.join("\n")
+    if (value == null) return ""
+    return String(value)
+  }
+
   const lineCount = () => {
-    const text = local.file.contents
-    const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
+    const value = text()
+    const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
     return Math.max(1, total)
   }
 
@@ -837,8 +856,9 @@ export function Code<T>(props: CodeProps<T>) {
     observer = undefined
 
     container.innerHTML = ""
+    const value = text()
     file().render({
-      file: local.file,
+      file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents: value },
       lineAnnotations: local.annotations,
       containerWrapper: container,
     })
