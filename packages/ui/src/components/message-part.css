@@ -299,7 +299,7 @@
     align-items: center;
     gap: 4px;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -309,16 +309,19 @@
 
   [data-slot="message-part-title-text"] {
     text-transform: capitalize;
+    color: var(--text-strong);
   }
 
   [data-slot="message-part-title-filename"] {
     /* No text-transform - preserve original filename casing */
+    font-weight: var(--font-weight-regular);
   }
 
   [data-slot="message-part-path"] {
     display: flex;
     flex-grow: 1;
     min-width: 0;
+    font-weight: var(--font-weight-regular);
   }
 
   [data-slot="message-part-directory"] {

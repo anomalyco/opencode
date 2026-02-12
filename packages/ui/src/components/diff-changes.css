@@ -7,7 +7,7 @@
   [data-slot="diff-changes-additions"] {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -19,7 +19,7 @@
   [data-slot="diff-changes-deletions"] {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
