@@ -43,13 +43,12 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { findLast } from "@opencode-ai/util/array"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
-import { createAutoScroll } from "../hooks"
+import { TextShimmer } from "./text-shimmer"
 
 interface Diagnostic {
   range: {
@@ -152,22 +151,6 @@ function relativizeProjectPaths(text: string, directory?: string) {
 function getDirectory(path: string | undefined) {
   const data = useData()
   return relativizeProjectPaths(_getDirectory(path), data.directory)
-}
-
-export function getSessionToolParts(store: ReturnType<typeof useData>["store"], sessionId: string): ToolPart[] {
-  const messages = store.message[sessionId]?.filter((m) => m.role === "assistant")
-  if (!messages) return []
-
-  const parts: ToolPart[] = []
-  for (const m of messages) {
-    const msgParts = store.part[m.id]
-    if (msgParts) {
-      for (const p of msgParts) {
-        if (p && p.type === "tool") parts.push(p as ToolPart)
-      }
-    }
-  }
-  return parts
 }
 
 import type { IconProps } from "./icon"
@@ -402,7 +385,11 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
-          <span data-slot="context-tool-group-title">{pending() ? "Gathering context" : "Gathered context"}</span>
+          <Show when={pending()} fallback={<span data-slot="context-tool-group-title">Gathered context</span>}>
+            <span data-slot="context-tool-group-title">
+              <TextShimmer text="Gathering context" />
+            </span>
+          </Show>
           <Collapsible.Arrow />
         </div>
       </Collapsible.Trigger>
@@ -410,7 +397,6 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
         <div data-component="context-tool-group-list">
           <For each={props.parts}>
             {(part) => {
-              const info = getToolInfo(part.tool, part.state.input ?? {})
               const trigger = contextToolTrigger(part, i18n)
               const running = part.state.status === "pending" || part.state.status === "running"
               return (
@@ -1003,6 +989,13 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
+    const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
+    const description = createMemo(() => {
+      const value = props.input.description
+      if (typeof value === "string") return value
+      return undefined
+    })
+    const running = createMemo(() => props.status === "pending" || props.status === "running")
 
     const href = createMemo(() => {
       const sessionId = childSessionId()
@@ -1016,14 +1009,6 @@ ToolRegistry.register({
       const idx = path.indexOf("/session")
       if (idx === -1) return
       return `${path.slice(0, idx)}/session/${sessionId}`
-    })
-
-    createEffect(() => {
-      const sessionId = childSessionId()
-      if (!sessionId) return
-      const sync = data.syncSession
-      if (!sync) return
-      Promise.resolve(sync(sessionId)).catch(() => undefined)
     })
 
     const handleLinkClick = (e: MouseEvent) => {
@@ -1047,13 +1032,15 @@ ToolRegistry.register({
       }, 50)
     }
 
+    const titleContent = () => <TextShimmer text={title()} active={running()} />
+
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
           <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool })}
+            {titleContent()}
           </span>
-          <Show when={props.input.description}>
+          <Show when={description()}>
             <Switch>
               <Match when={href()}>
                 {(url) => (
@@ -1063,12 +1050,12 @@ ToolRegistry.register({
                     href={url()}
                     onClick={handleLinkClick}
                   >
-                    {props.input.description}
+                    {description()}
                   </a>
                 )}
               </Match>
               <Match when={true}>
-                <span data-slot="basic-tool-tool-subtitle">{props.input.description}</span>
+                <span data-slot="basic-tool-tool-subtitle">{description()}</span>
               </Match>
             </Switch>
           </Show>
@@ -1076,141 +1063,7 @@ ToolRegistry.register({
       </div>
     )
 
-    const childToolParts = createMemo(() => {
-      const sessionId = childSessionId()
-      if (!sessionId) return []
-      return getSessionToolParts(data.store, sessionId)
-    })
-
-    const autoScroll = createAutoScroll({
-      working: () => true,
-      overflowAnchor: "dynamic",
-    })
-
-    const childPermission = createMemo(() => {
-      const sessionId = childSessionId()
-      if (!sessionId) return undefined
-      const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions[0]
-    })
-
-    const childToolPart = createMemo(() => {
-      const perm = childPermission()
-      if (!perm || !perm.tool) return undefined
-      const sessionId = childSessionId()
-      if (!sessionId) return undefined
-      // Find the tool part that matches the permission's callID
-      const messages = data.store.message[sessionId] ?? []
-      const message = findLast(messages, (m) => m.id === perm.tool!.messageID)
-      if (!message) return undefined
-      const parts = data.store.part[message.id] ?? []
-      for (const part of parts) {
-        if (part.type === "tool" && (part as ToolPart).callID === perm.tool!.callID) {
-          return { part: part as ToolPart, message }
-        }
-      }
-
-      return undefined
-    })
-
-    const respond = (response: "once" | "always" | "reject") => {
-      const perm = childPermission()
-      if (!perm || !data.respondToPermission) return
-      data.respondToPermission({
-        sessionID: perm.sessionID,
-        permissionID: perm.id,
-        response,
-      })
-    }
-
-    const renderChildToolPart = () => {
-      const toolData = childToolPart()
-      if (!toolData) return null
-      const { part } = toolData
-      const render = ToolRegistry.render(part.tool) ?? GenericTool
-      // @ts-expect-error
-      const metadata = part.state?.metadata ?? {}
-      const input = part.state?.input ?? {}
-      return (
-        <Dynamic
-          component={render}
-          input={input}
-          tool={part.tool}
-          metadata={metadata}
-          // @ts-expect-error
-          output={part.state.output}
-          status={part.state.status}
-          defaultOpen={true}
-        />
-      )
-    }
-
-    return (
-      <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
-        <Switch>
-          <Match when={childPermission()}>
-            <>
-              <Show
-                when={childToolPart()}
-                fallback={<BasicTool icon="task" status={props.status} defaultOpen={true} trigger={trigger()} />}
-              >
-                {renderChildToolPart()}
-              </Show>
-              <div data-component="permission-prompt">
-                <div data-slot="permission-actions">
-                  <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-                    {i18n.t("ui.permission.deny")}
-                  </Button>
-                  <Button variant="secondary" size="small" onClick={() => respond("always")}>
-                    {i18n.t("ui.permission.allowAlways")}
-                  </Button>
-                  <Button variant="primary" size="small" onClick={() => respond("once")}>
-                    {i18n.t("ui.permission.allowOnce")}
-                  </Button>
-                </div>
-              </div>
-            </>
-          </Match>
-          <Match when={true}>
-            <BasicTool icon="task" status={props.status} defaultOpen={true} trigger={trigger()}>
-              <div
-                ref={autoScroll.scrollRef}
-                onScroll={autoScroll.handleScroll}
-                data-component="tool-output"
-                data-scrollable
-                data-subagent={props.input.subagent_type || "task"}
-              >
-                <div ref={autoScroll.contentRef} data-component="task-tools">
-                  <For each={childToolParts()}>
-                    {(item) => {
-                      const info = createMemo(() => getToolInfo(item.tool, item.state.input))
-                      const subtitle = createMemo(() => {
-                        if (item.state.status !== "completed") return
-                        if (info().subtitle) return info().subtitle
-                        return item.state.title
-                      })
-                      return (
-                        <div data-slot="task-tool-item">
-                          <span data-slot="task-tool-title">{info().title}</span>
-                          <Show when={item.state.status === "pending" || item.state.status === "running"}>
-                            <div data-slot="task-tool-indicator">
-                              <Spinner style={{ width: "16px" }} />
-                            </div>
-                          </Show>
-                          <Show when={subtitle()}>
-                            <span data-slot="task-tool-subtitle">{subtitle()}</span>
-                          </Show>
-                        </div>
-                      )
-                    }}
-                  </For>
-                </div>
-              </div>
-            </BasicTool>
-          </Match>
-        </Switch>
-      </div>
-    )
+    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails />
   },
 })
 

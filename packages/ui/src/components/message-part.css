@@ -276,11 +276,6 @@
       overflow: visible;
     }
   }
-
-  &[data-scrollable][data-subagent="explore"] {
-    max-height: none;
-    overflow-y: visible;
-  }
 }
 
 [data-slot="collapsible-content"]:has([data-component="edit-content"]),
@@ -490,71 +485,6 @@
       text-decoration: line-through;
       color: var(--text-weaker);
     }
-  }
-}
-
-[data-component="task-tools"] {
-  padding: 0;
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-
-  [data-slot="task-tool-item"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-weak);
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
-
-    [data-slot="icon-svg"] {
-      flex-shrink: 0;
-      color: var(--icon-weak);
-    }
-  }
-
-  [data-slot="task-tool-indicator"] {
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--text-weak);
-
-    margin-left: 0;
-    margin-right: 0;
-
-    [data-component="spinner"] {
-      width: 16px;
-      height: 16px;
-    }
-  }
-
-  [data-slot="task-tool-title"] {
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    color: var(--text-strong);
-    flex-shrink: 0;
-  }
-
-  [data-slot="task-tool-subtitle"] {
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    color: var(--text-base);
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 
