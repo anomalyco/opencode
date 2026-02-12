@@ -72,8 +72,10 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
+const hidden = new Set(["todowrite", "todoread"])
+
 function visible(part: PartType) {
-  if (part.type === "tool") return true
+  if (part.type === "tool") return !hidden.has(part.tool)
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return !!part.text?.trim()
   return false

@@ -694,6 +694,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ToolPart
   if (part.tool === "todowrite" || part.tool === "todoread") return null
+  if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return null
 
   const permission = createMemo(() => {
     const next = data.store.permission?.[props.message.sessionID]?.[0]
