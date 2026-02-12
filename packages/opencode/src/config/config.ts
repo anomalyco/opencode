@@ -175,7 +175,7 @@ export namespace Config {
     }
 
     // Inline config content overrides all non-managed config sources.
-    const inlineContent = process.env["OPENCODE_CONFIG_CONTENT"]
+    const inlineContent = Flag.OPENCODE_CONFIG_CONTENT
     if (inlineContent) {
       // Parse and re-serialize with $schema to robustly prevent load() from
       // attempting a write-back to a non-existent file path.
