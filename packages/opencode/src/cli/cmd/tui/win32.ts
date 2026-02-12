@@ -52,6 +52,22 @@ export function win32FlushInputBuffer() {
   k32!.symbols.FlushConsoleInputBuffer(handle)
 }
 
+/**
+ * Check if the CTRL key is currently held down. (Windows)
+ */
+let u32: any
+export function win32IsCtrlHeld(): boolean {
+  if (process.platform !== "win32") return false
+  try {
+    u32 ??= dlopen("user32.dll", {
+      GetAsyncKeyState: { args: ["i32"], returns: "i16" },
+    })
+    return (u32.symbols.GetAsyncKeyState(0x11) & 0x8000) !== 0
+  } catch {
+    return false
+  }
+}
+
 let unhook: (() => void) | undefined
 
 /**

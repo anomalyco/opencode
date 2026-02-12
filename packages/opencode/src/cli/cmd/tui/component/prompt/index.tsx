@@ -28,6 +28,7 @@ import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { win32IsCtrlHeld } from "../../win32"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
@@ -831,6 +832,28 @@ export function Prompt(props: PromptProps) {
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
                 if (props.disabled) {
+                  e.preventDefault()
+                  return
+                }
+                // Handle Windows CTRL+BACKSPACE workaround
+                // Windows Terminal doesn't properly set ctrl modifier for backspace
+                if (process.platform === "win32" && e.name === "backspace" && !e.ctrl && win32IsCtrlHeld()) {
+                  const text = input.plainText
+                  const offset = input.cursorOffset
+                  if (offset > 0) {
+                    // Find the start of the word to delete
+                    let start = offset - 1
+                    // Skip trailing whitespace
+                    while (start > 0 && /\s/.test(text[start - 1]!)) start--
+                    // Find the start of the word
+                    while (start > 0 && !/\s/.test(text[start - 1]!)) start--
+                    const endCursor = input.logicalCursor
+                    input.cursorOffset = start
+                    const startCursor = input.logicalCursor
+                    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+                    setStore("prompt", "input", input.plainText)
+                    syncExtmarksWithPromptParts()
+                  }
                   e.preventDefault()
                   return
                 }
