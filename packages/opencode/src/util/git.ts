@@ -18,26 +18,36 @@ export interface GitResult {
  */
 export async function git(args: string[], opts: { cwd: string; env?: Record<string, string> }): Promise<GitResult> {
   if (Flag.OPENCODE_CLIENT === "acp") {
-    const proc = Bun.spawn(["git", ...args], {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: opts.cwd,
-      env: opts.env ? { ...process.env, ...opts.env } : process.env,
-    })
-    // Read output concurrently with exit to avoid pipe buffer deadlock
-    const [exitCode, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).arrayBuffer(),
-    ])
-    const stdoutBuf = Buffer.from(stdout)
-    const stderrBuf = Buffer.from(stderr)
-    return {
-      exitCode,
-      text: () => stdoutBuf.toString(),
-      stdout: stdoutBuf,
-      stderr: stderrBuf,
+    try {
+      const proc = Bun.spawn(["git", ...args], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        cwd: opts.cwd,
+        env: opts.env ? { ...process.env, ...opts.env } : process.env,
+      })
+      // Read output concurrently with exit to avoid pipe buffer deadlock
+      const [exitCode, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).arrayBuffer(),
+        new Response(proc.stderr).arrayBuffer(),
+      ])
+      const stdoutBuf = Buffer.from(stdout)
+      const stderrBuf = Buffer.from(stderr)
+      return {
+        exitCode,
+        text: () => stdoutBuf.toString(),
+        stdout: stdoutBuf,
+        stderr: stderrBuf,
+      }
+    } catch (error) {
+      const stderr = Buffer.from(error instanceof Error ? error.message : String(error))
+      return {
+        exitCode: 1,
+        text: () => "",
+        stdout: Buffer.alloc(0),
+        stderr,
+      }
     }
   }
 
