@@ -1,0 +1,188 @@
+---
+title: LSP Sunucuları
+description: opencode, LSP sunucularınızla bütünleşir.
+---
+
+opencode, LLM'in kod tabanınızla etkileşime girmesine yardımcı olmak için Dil Sunucusu Protokolünüzle (LSP) bütünleşir. LLM'ye geri bildirim sağlamak için tanılamayı kullanır.
+
+---
+
+## Yerleşik
+
+opencode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte gelir:
+
+| LSP Sunucu         | Uzantılar                                                           | Gereksinimler                                                         |
+| ------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| astro              | .astro                                                              | Astro projeleri için otomatik kurulumlar                              |
+| bash               | .sh, .bash, .zsh, .ksh                                              | `bash-language-server`'ı otomatik olarak yükler                       |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | C/C++ projeleri için otomatik kurulumlar                              |
+| csharp             | .cs                                                                 | `.NET SDK` kurulu                                                     |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` komutu mevcut                                           |
+| dart               | .dart                                                               | `dart` komutu mevcut                                                  |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` komutu mevcut (deno.json/deno.jsonc otomatik olarak algılanır) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` komutu mevcut                                                |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | Projede `eslint` bağımlılığı                                          |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` kurulu                                                     |
+| gleam              | .gleam                                                              | `gleam` komutu mevcut                                                 |
+| gopls              | .go                                                                 | `go` komutu mevcut                                                    |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` komutu mevcut                       |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` kurulu                                       |
+| kotlin-ls          | .kt, .kts                                                           | Kotlin projeleri için otomatik kurulumlar                             |
+| lua-ls             | .lua                                                                | Lua projeleri için otomatik kurulumlar                                |
+| nixd               | .nix                                                                | `nixd` komutu mevcut                                                  |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` komutu mevcut                                              |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Projede `oxlint` bağımlılığı                                          |
+| php intelephense   | .php                                                                | PHP projeleri için otomatik yüklemeler                                |
+| prisma             | .prisma                                                             | `prisma` komutu mevcut                                                |
+| pyright            | .py, .pyi                                                           | `pyright` bağımlılığı kurulu                                          |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` ve `gem` komutları mevcut                                      |
+| rust               | .rs                                                                 | `rust-analyzer` komutu mevcut                                         |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` kurulu (macOS'ta `xcode`)                                     |
+| svelte             | .svelte                                                             | Svelte projeleri için otomatik kurulumlar                             |
+| terraform          | .tf, .tfvars                                                        | GitHub sürümlerinden otomatik yüklemeler                              |
+| tinymist           | .typ, .typc                                                         | GitHub sürümlerinden otomatik yüklemeler                              |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | Projede `typescript` bağımlılığı                                      |
+| vue                | .vue                                                                | Vue projeleri için otomatik yüklemeler                                |
+| yaml-ls            | .yaml, .yml                                                         | Red Hat yaml-language-server'ı otomatik olarak yükler                 |
+| zls                | .zig, .zon                                                          | `zig` komutu mevcut                                                   |
+
+Yukarıdaki dosya uzantılarından biri tespit edildiğinde ve gereksinimler karşılandığında LSP sunucuları otomatik olarak etkinleştirilir.
+
+:::note
+`OPENCODE_DISABLE_LSP_DOWNLOAD` ortam değişkenini `true` olarak ayarlayarak otomatik LSP sunucu indirmelerini devre dışı bırakabilirsiniz.
+:::
+
+---
+
+## Nasıl Çalışır?
+
+Opencode bir dosyayı açtığında:
+
+1. Dosya uzantısını tüm etkin LSP sunucularına göre kontrol eder.
+2. Henüz çalışmıyorsa uygun LSP sunucusunu başlatır.
+
+---
+
+## Yapılandırma
+
+LSP sunucularını, opencode yapılandırmanızdaki `lsp` bölümü aracılığıyla özelleştirebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+Her LSP sunucusu aşağıdakileri destekler:
+
+| Özellik          | Tip      | Açıklama                                                             |
+| ---------------- | -------- | -------------------------------------------------------------------- |
+| `disabled`       | boolean  | LSP sunucusunu devre dışı bırakmak için bunu `true` olarak ayarlayın |
+| `command`        | string[] | LSP sunucusunu başlatma komutu                                       |
+| `extensions`     | string[] | Bu LSP sunucusunun işlemesi gereken dosya uzantıları                 |
+| `env`            | object   | Sunucuyu başlatırken ayarlanacak ortam değişkenleri                  |
+| `initialization` | object   | LSP sunucusuna gönderilecek başlatma seçenekleri                     |
+
+Bazı örneklere bakalım.
+
+---
+
+### Ortam değişkenleri
+
+LSP sunucusunu başlatırken ortam değişkenlerini ayarlamak için `env` özelliğini kullanın:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Başlatma seçenekleri
+
+Başlatma seçeneklerini LSP sunucusuna iletmek için `initialization` özelliğini kullanın. Bunlar LSP `initialize` isteği sırasında gönderilen sunucuya özel ayarlardır:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Başlatma seçenekleri LSP sunucusuna göre değişir. Mevcut seçenekler için LSP sunucunuzun belgelerine bakın.
+:::
+
+---
+
+### LSP sunucularını devre dışı bırakma
+
+**tüm** LSP sunucularını genel olarak devre dışı bırakmak için `lsp`'yi `false` olarak ayarlayın:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+**Belirli** bir LSP sunucusunu devre dışı bırakmak için `disabled`'yi `true` olarak ayarlayın:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Özel LSP sunucuları
+
+Komutu ve dosya uzantılarını belirterek özel LSP sunucuları ekleyebilirsiniz:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## Ek Bilgiler
+
+### PHP Intelephense
+
+PHP Intelephense, bir lisans anahtarı aracılığıyla premium özellikler sunar. Anahtarı (yalnızca) şu adresteki bir metin dosyasına yerleştirerek bir lisans anahtarı sağlayabilirsiniz:
+
+- MacOS/Linux'ta: `$HOME/intelephense/license.txt`
+- Windows'ta: `%USERPROFILE%/intelephense/license.txt`
+
+Dosya, ek içerik olmadan yalnızca lisans anahtarını içermelidir.

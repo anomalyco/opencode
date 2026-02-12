@@ -1,0 +1,170 @@
+---
+title: カスタムツール
+description: LLM が OpenCode で呼び出すことができるツールを作成します。
+---
+
+カスタムツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、OpenCode の[組み込みツール](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
+
+---
+
+## ツールの作成
+
+ツールは **TypeScript** または **JavaScript** ファイルとして定義されます。ただし、ツール定義では**任意の言語**で記述されたスクリプトを呼び出すことができます。TypeScript または JavaScript はツール定義自体にのみ使用されます。
+
+---
+
+### 場所
+
+それらは次のように定義できます。
+
+- ローカルでは、プロジェクトの `.opencode/tools/` ディレクトリに配置します。
+- または、グローバルに、それらを `~/.config/opencode/tools/` に配置します。
+
+---
+
+### 構造
+
+ツールを作成する最も簡単な方法は、型安全性と検証を提供する `tool()` ヘルパーを使用することです。
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**ファイル名**は**ツール名**になります。上記により `database` ツールが作成されます。
+
+---
+
+#### ファイルごとに複数のツール
+
+単一のファイルから複数のツールをエクスポートすることもできます。各エクスポートは **`<filename>_<exportname>`** という名前の **別のツール** になります。
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+これにより、`math_add` と `math_multiply` という 2 つのツールが作成されます。
+
+---
+
+### 引数
+
+引数の型を定義するには、`tool.schema` (つまり [Zod](https://zod.dev)) を使用できます。
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+[Zod](https://zod.dev) を直接インポートしてプレーンオブジェクトを返すこともできます。
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### コンテキスト
+
+ツールは現在のセッションに関するコンテキストを受け取ります。
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+セッションの作業ディレクトリには `context.directory` を使用します。
+git ワークツリーのルートには `context.worktree` を使用します。
+
+---
+
+## 例
+
+### Python でのツールの作成
+
+ツールは任意の言語で作成できます。以下は、Python を使用して 2 つの数値を加算する例です。
+
+まず、ツールを Python スクリプトとして作成します。
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+次に、それを呼び出すツール定義を作成します。
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+ここでは、[`Bun.$`](https://bun.com/docs/runtime/shell) ユーティリティを使用して Python スクリプトを実行しています。

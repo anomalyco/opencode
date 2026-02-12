@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -34,6 +35,7 @@ import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { clearWorkspaceTerminals } from "@/context/terminal"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
@@ -123,7 +125,7 @@ export default function Layout(props: ParentProps) {
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
-    busyWorkspaces: new Set<string>(),
+    busyWorkspaces: {} as Record<string, boolean>,
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -133,15 +135,28 @@ export default function Layout(props: ParentProps) {
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = workspaceKey(directory)
-    setState("busyWorkspaces", (prev) => {
-      const next = new Set(prev)
-      if (value) next.add(key)
-      else next.delete(key)
-      return next
-    })
+    if (value) {
+      setState("busyWorkspaces", key, true)
+      return
+    }
+    setState(
+      "busyWorkspaces",
+      produce((draft) => {
+        delete draft[key]
+      }),
+    )
   }
-  const isBusy = (directory: string) => state.busyWorkspaces.has(workspaceKey(directory))
+  const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
+  const [sortNow, setSortNow] = createSignal(Date.now())
+  let sortNowInterval: ReturnType<typeof setInterval> | undefined
+  const sortNowTimeout = setTimeout(
+    () => {
+      setSortNow(Date.now())
+      sortNowInterval = setInterval(() => setSortNow(Date.now()), 60_000)
+    },
+    60_000 - (Date.now() % 60_000),
+  )
 
   const aim = createAim({
     enabled: () => !layout.sidebar.opened(),
@@ -156,6 +171,8 @@ export default function Layout(props: ParentProps) {
 
   onCleanup(() => {
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
+    clearTimeout(sortNowTimeout)
+    if (sortNowInterval) clearInterval(sortNowInterval)
     aim.reset()
   })
 
@@ -181,20 +198,6 @@ export default function Layout(props: ParentProps) {
     aim.reset()
   })
 
-  createEffect(
-    on(
-      () => ({ dir: params.dir, id: params.id }),
-      () => {
-        if (layout.sidebar.opened()) return
-        if (!state.hoverProject) return
-        aim.reset()
-        setState("hoverSession", undefined)
-        setState("hoverProject", undefined)
-      },
-      { defer: true },
-    ),
-  )
-
   const autoselecting = createMemo(() => {
     if (params.dir) return false
     if (!state.autoselect) return false
@@ -219,6 +222,18 @@ export default function Layout(props: ParentProps) {
   const closeEditor = editor.closeEditor
   const setEditor = editor.setEditor
   const InlineEditor = editor.InlineEditor
+
+  const clearSidebarHoverState = () => {
+    if (layout.sidebar.opened()) return
+    setState("hoverSession", undefined)
+    setState("hoverProject", undefined)
+  }
+
+  const navigateWithSidebarReset = (href: string) => {
+    clearSidebarHoverState()
+    navigate(href)
+    layout.mobileSidebar.hide()
+  }
 
   function cycleTheme(direction = 1) {
     const ids = availableThemeEntries().map(([id]) => id)
@@ -265,166 +280,167 @@ export default function Layout(props: ParentProps) {
     setLocale(next)
   }
 
-  onMount(() => {
-    if (!platform.checkUpdate || !platform.update || !platform.restart) return
+  const useUpdatePolling = () =>
+    onMount(() => {
+      if (!platform.checkUpdate || !platform.update || !platform.restart) return
 
-    let toastId: number | undefined
-    let interval: ReturnType<typeof setInterval> | undefined
+      let toastId: number | undefined
+      let interval: ReturnType<typeof setInterval> | undefined
 
-    async function pollUpdate() {
-      const { updateAvailable, version } = await platform.checkUpdate!()
-      if (updateAvailable && toastId === undefined) {
-        toastId = showToast({
-          persistent: true,
-          icon: "download",
-          title: language.t("toast.update.title"),
-          description: language.t("toast.update.description", { version: version ?? "" }),
-          actions: [
-            {
-              label: language.t("toast.update.action.installRestart"),
-              onClick: async () => {
-                await platform.update!()
-                await platform.restart!()
+      const pollUpdate = () =>
+        platform.checkUpdate!().then(({ updateAvailable, version }) => {
+          if (!updateAvailable) return
+          if (toastId !== undefined) return
+          toastId = showToast({
+            persistent: true,
+            icon: "download",
+            title: language.t("toast.update.title"),
+            description: language.t("toast.update.description", { version: version ?? "" }),
+            actions: [
+              {
+                label: language.t("toast.update.action.installRestart"),
+                onClick: async () => {
+                  await platform.update!()
+                  await platform.restart!()
+                },
               },
-            },
-            {
-              label: language.t("toast.update.action.notYet"),
-              onClick: "dismiss",
-            },
-          ],
+              {
+                label: language.t("toast.update.action.notYet"),
+                onClick: "dismiss",
+              },
+            ],
+          })
         })
-      }
-    }
 
-    createEffect(() => {
-      if (!settings.ready()) return
+      createEffect(() => {
+        if (!settings.ready()) return
 
-      if (!settings.updates.startup()) {
+        if (!settings.updates.startup()) {
+          if (interval === undefined) return
+          clearInterval(interval)
+          interval = undefined
+          return
+        }
+
+        if (interval !== undefined) return
+        void pollUpdate()
+        interval = setInterval(pollUpdate, 10 * 60 * 1000)
+      })
+
+      onCleanup(() => {
         if (interval === undefined) return
         clearInterval(interval)
-        interval = undefined
-        return
-      }
-
-      if (interval !== undefined) return
-      void pollUpdate()
-      interval = setInterval(pollUpdate, 10 * 60 * 1000)
-    })
-
-    onCleanup(() => {
-      if (interval === undefined) return
-      clearInterval(interval)
-    })
-  })
-
-  onMount(() => {
-    const toastBySession = new Map<string, number>()
-    const alertedAtBySession = new Map<string, number>()
-    const cooldownMs = 5000
-
-    const unsub = globalSDK.event.listen((e) => {
-      if (e.details?.type === "worktree.ready") {
-        setBusy(e.name, false)
-        WorktreeState.ready(e.name)
-        return
-      }
-
-      if (e.details?.type === "worktree.failed") {
-        setBusy(e.name, false)
-        WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
-        return
-      }
-
-      if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
-      const title =
-        e.details.type === "permission.asked"
-          ? language.t("notification.permission.title")
-          : language.t("notification.question.title")
-      const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
-      const directory = e.name
-      const props = e.details.properties
-      if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
-
-      const [store] = globalSync.child(directory, { bootstrap: false })
-      const session = store.session.find((s) => s.id === props.sessionID)
-      const sessionKey = `${directory}:${props.sessionID}`
-
-      const sessionTitle = session?.title ?? language.t("command.session.new")
-      const projectName = getFilename(directory)
-      const description =
-        e.details.type === "permission.asked"
-          ? language.t("notification.permission.description", { sessionTitle, projectName })
-          : language.t("notification.question.description", { sessionTitle, projectName })
-      const href = `/${base64Encode(directory)}/session/${props.sessionID}`
-
-      const now = Date.now()
-      const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
-      if (now - lastAlerted < cooldownMs) return
-      alertedAtBySession.set(sessionKey, now)
-
-      if (e.details.type === "permission.asked") {
-        playSound(soundSrc(settings.sounds.permissions()))
-        if (settings.notifications.permissions()) {
-          void platform.notify(title, description, href)
-        }
-      }
-
-      if (e.details.type === "question.asked") {
-        if (settings.notifications.agent()) {
-          void platform.notify(title, description, href)
-        }
-      }
-
-      const currentSession = params.id
-      if (directory === currentDir() && props.sessionID === currentSession) return
-      if (directory === currentDir() && session?.parentID === currentSession) return
-
-      const existingToastId = toastBySession.get(sessionKey)
-      if (existingToastId !== undefined) toaster.dismiss(existingToastId)
-
-      const toastId = showToast({
-        persistent: true,
-        icon,
-        title,
-        description,
-        actions: [
-          {
-            label: language.t("notification.action.goToSession"),
-            onClick: () => navigate(href),
-          },
-          {
-            label: language.t("common.dismiss"),
-            onClick: "dismiss",
-          },
-        ],
       })
-      toastBySession.set(sessionKey, toastId)
     })
-    onCleanup(unsub)
 
-    createEffect(() => {
-      const currentSession = params.id
-      if (!currentDir() || !currentSession) return
-      const sessionKey = `${currentDir()}:${currentSession}`
-      const toastId = toastBySession.get(sessionKey)
-      if (toastId !== undefined) {
+  const useSDKNotificationToasts = () =>
+    onMount(() => {
+      const toastBySession = new Map<string, number>()
+      const alertedAtBySession = new Map<string, number>()
+      const cooldownMs = 5000
+
+      const dismissSessionAlert = (sessionKey: string) => {
+        const toastId = toastBySession.get(sessionKey)
+        if (toastId === undefined) return
         toaster.dismiss(toastId)
         toastBySession.delete(sessionKey)
         alertedAtBySession.delete(sessionKey)
       }
-      const [store] = globalSync.child(currentDir(), { bootstrap: false })
-      const childSessions = store.session.filter((s) => s.parentID === currentSession)
-      for (const child of childSessions) {
-        const childKey = `${currentDir()}:${child.id}`
-        const childToastId = toastBySession.get(childKey)
-        if (childToastId !== undefined) {
-          toaster.dismiss(childToastId)
-          toastBySession.delete(childKey)
-          alertedAtBySession.delete(childKey)
+
+      const unsub = globalSDK.event.listen((e) => {
+        if (e.details?.type === "worktree.ready") {
+          setBusy(e.name, false)
+          WorktreeState.ready(e.name)
+          return
         }
-      }
+
+        if (e.details?.type === "worktree.failed") {
+          setBusy(e.name, false)
+          WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
+          return
+        }
+
+        if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
+        const title =
+          e.details.type === "permission.asked"
+            ? language.t("notification.permission.title")
+            : language.t("notification.question.title")
+        const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
+        const directory = e.name
+        const props = e.details.properties
+        if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
+
+        const [store] = globalSync.child(directory, { bootstrap: false })
+        const session = store.session.find((s) => s.id === props.sessionID)
+        const sessionKey = `${directory}:${props.sessionID}`
+
+        const sessionTitle = session?.title ?? language.t("command.session.new")
+        const projectName = getFilename(directory)
+        const description =
+          e.details.type === "permission.asked"
+            ? language.t("notification.permission.description", { sessionTitle, projectName })
+            : language.t("notification.question.description", { sessionTitle, projectName })
+        const href = `/${base64Encode(directory)}/session/${props.sessionID}`
+
+        const now = Date.now()
+        const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
+        if (now - lastAlerted < cooldownMs) return
+        alertedAtBySession.set(sessionKey, now)
+
+        if (e.details.type === "permission.asked") {
+          playSound(soundSrc(settings.sounds.permissions()))
+          if (settings.notifications.permissions()) {
+            void platform.notify(title, description, href)
+          }
+        }
+
+        if (e.details.type === "question.asked") {
+          if (settings.notifications.agent()) {
+            void platform.notify(title, description, href)
+          }
+        }
+
+        const currentSession = params.id
+        if (directory === currentDir() && props.sessionID === currentSession) return
+        if (directory === currentDir() && session?.parentID === currentSession) return
+
+        dismissSessionAlert(sessionKey)
+
+        const toastId = showToast({
+          persistent: true,
+          icon,
+          title,
+          description,
+          actions: [
+            {
+              label: language.t("notification.action.goToSession"),
+              onClick: () => navigate(href),
+            },
+            {
+              label: language.t("common.dismiss"),
+              onClick: "dismiss",
+            },
+          ],
+        })
+        toastBySession.set(sessionKey, toastId)
+      })
+      onCleanup(unsub)
+
+      createEffect(() => {
+        const currentSession = params.id
+        if (!currentDir() || !currentSession) return
+        const sessionKey = `${currentDir()}:${currentSession}`
+        dismissSessionAlert(sessionKey)
+        const [store] = globalSync.child(currentDir(), { bootstrap: false })
+        const childSessions = store.session.filter((s) => s.parentID === currentSession)
+        for (const child of childSessions) {
+          dismissSessionAlert(`${currentDir()}:${child.id}`)
+        }
+      })
     })
-  })
+
+  useUpdatePolling()
+  useSDKNotificationToasts()
 
   function scrollToSession(sessionId: string, sessionKey: string) {
     if (!scrollContainerRef) return
@@ -518,10 +534,13 @@ export default function Layout(props: ParentProps) {
 
   const setWorkspaceName = (directory: string, next: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
-    setStore("workspaceName", (prev) => ({ ...(prev ?? {}), [key]: next }))
+    setStore("workspaceName", key, next)
     if (!projectId) return
     if (!branch) return
-    setStore("workspaceBranchName", projectId, (prev) => ({ ...(prev ?? {}), [branch]: next }))
+    if (!store.workspaceBranchName[projectId]) {
+      setStore("workspaceBranchName", projectId, {})
+    }
+    setStore("workspaceBranchName", projectId, branch, next)
   }
 
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
@@ -654,6 +673,21 @@ export default function Layout(props: ParentProps) {
     return created
   }
 
+  const mergeByID = <T extends { id: string }>(current: T[], incoming: T[]) => {
+    if (current.length === 0) {
+      return incoming.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    }
+
+    const map = new Map<string, T>()
+    for (const item of current) {
+      map.set(item.id, item)
+    }
+    for (const item of incoming) {
+      map.set(item.id, item)
+    }
+    return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  }
+
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
     const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
@@ -662,51 +696,24 @@ export default function Layout(props: ParentProps) {
         if (prefetchToken.value !== token) return
 
         const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-        const next = items
-          .map((x) => x.info)
-          .filter((m) => !!m?.id)
-          .slice()
-          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
+        const sorted = mergeByID([], next)
 
         const current = store.message[sessionID] ?? []
-        const merged = (() => {
-          if (current.length === 0) return next
-
-          const map = new Map<string, Message>()
-          for (const item of current) {
-            if (!item?.id) continue
-            map.set(item.id, item)
-          }
-          for (const item of next) {
-            map.set(item.id, item)
-          }
-          return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        })()
+        const merged = mergeByID(
+          current.filter((item): item is Message => !!item?.id),
+          sorted,
+        )
 
         batch(() => {
           setStore("message", sessionID, reconcile(merged, { key: "id" }))
 
           for (const message of items) {
             const currentParts = store.part[message.info.id] ?? []
-            const mergedParts = (() => {
-              if (currentParts.length === 0) {
-                return message.parts
-                  .filter((p) => !!p?.id)
-                  .slice()
-                  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-              }
-
-              const map = new Map<string, (typeof currentParts)[number]>()
-              for (const item of currentParts) {
-                if (!item?.id) continue
-                map.set(item.id, item)
-              }
-              for (const item of message.parts) {
-                if (!item?.id) continue
-                map.set(item.id, item)
-              }
-              return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-            })()
+            const mergedParts = mergeByID(
+              currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
+              message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
+            )
 
             setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
           }
@@ -1086,24 +1093,14 @@ export default function Layout(props: ParentProps) {
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
-    if (!layout.sidebar.opened()) {
-      setState("hoverSession", undefined)
-      setState("hoverProject", undefined)
-    }
     server.projects.touch(directory)
     const lastSession = store.lastSession[directory]
-    navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
-    layout.mobileSidebar.hide()
+    navigateWithSidebarReset(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    if (!layout.sidebar.opened()) {
-      setState("hoverSession", undefined)
-      setState("hoverProject", undefined)
-    }
-    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
-    layout.mobileSidebar.hide()
+    navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
   function openProject(directory: string, navigate = true) {
@@ -1216,6 +1213,16 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
+    globalSync.set(
+      "project",
+      produce((draft) => {
+        const project = draft.find((item) => item.worktree === root)
+        if (!project) return
+        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => sandbox !== directory)
+      }),
+    )
+    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
+
     layout.projects.close(directory)
     layout.projects.open(root)
 
@@ -1235,10 +1242,17 @@ export default function Layout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions = await globalSDK.client.session
+    const sessions: Session[] = await globalSDK.client.session
       .list({ directory })
       .then((x) => x.data ?? [])
       .catch(() => [])
+
+    clearWorkspaceTerminals(
+      directory,
+      sessions.map((s) => s.id),
+      platform,
+    )
+    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
       .reset({ directory: root, worktreeResetInput: { directory } })
@@ -1271,8 +1285,6 @@ export default function Layout(props: ParentProps) {
             .catch(() => undefined),
         ),
     )
-
-    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     setBusy(directory, false)
     dismiss()
@@ -1454,23 +1466,41 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
+  const loadedSessionDirs = new Set<string>()
+
   createEffect(() => {
     const project = currentProject()
-    if (!project) return
+    const workspaces = workspaceSetting()
+    const next = new Set<string>()
+    if (!project) {
+      loadedSessionDirs.clear()
+      return
+    }
 
-    if (workspaceSetting()) {
+    if (workspaces) {
       const activeDir = currentDir()
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
         const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
         const active = directory === activeDir
         if (!expanded && !active) continue
-        globalSync.project.loadSessions(directory)
+        next.add(directory)
       }
-      return
     }
 
-    globalSync.project.loadSessions(project.worktree)
+    if (!workspaces) {
+      next.add(project.worktree)
+    }
+
+    for (const directory of next) {
+      if (loadedSessionDirs.has(directory)) continue
+      globalSync.project.loadSessions(directory)
+    }
+
+    loadedSessionDirs.clear()
+    for (const directory of next) {
+      loadedSessionDirs.add(directory)
+    }
   })
 
   function handleDragStart(event: unknown) {
@@ -1553,10 +1583,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const createWorkspace = async (project: LocalProject) => {
-    if (!layout.sidebar.opened()) {
-      setState("hoverSession", undefined)
-      setState("hoverProject", undefined)
-    }
+    clearSidebarHoverState()
     const created = await globalSDK.client.worktree
       .create({ directory: project.worktree })
       .then((x) => x.data)
@@ -1593,8 +1620,7 @@ export default function Layout(props: ParentProps) {
     })
 
     globalSync.child(created.directory)
-    navigate(`/${base64Encode(created.directory)}/session`)
-    layout.mobileSidebar.hide()
+    navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
   }
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
@@ -1770,21 +1796,19 @@ export default function Layout(props: ParentProps) {
                             size="large"
                             icon="plus-small"
                             class="w-full"
-                            onClick={() => {
-                              if (!layout.sidebar.opened()) {
-                                setState("hoverSession", undefined)
-                                setState("hoverProject", undefined)
-                              }
-                              navigate(`/${base64Encode(p().worktree)}/session`)
-                              layout.mobileSidebar.hide()
-                            }}
+                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
                           >
                             {language.t("command.session.new")}
                           </Button>
                         </TooltipKeybind>
                       </div>
                       <div class="flex-1 min-h-0">
-                        <LocalWorkspace ctx={workspaceSidebarCtx} project={p()} mobile={panelProps.mobile} />
+                        <LocalWorkspace
+                          ctx={workspaceSidebarCtx}
+                          project={p()}
+                          sortNow={sortNow}
+                          mobile={panelProps.mobile}
+                        />
                       </div>
                     </>
                   }
@@ -1823,6 +1847,7 @@ export default function Layout(props: ParentProps) {
                                   ctx={workspaceSidebarCtx}
                                   directory={directory}
                                   project={p()}
+                                  sortNow={sortNow}
                                   mobile={panelProps.mobile}
                                 />
                               )}
@@ -1908,7 +1933,9 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} />}
+              renderProject={(project) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
+              )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
@@ -1926,10 +1953,10 @@ export default function Layout(props: ParentProps) {
               renderPanel={() => <SidebarPanel project={currentProject()} />}
             />
           </div>
-          <Show when={!layout.sidebar.opened() ? hoverProjectData() : undefined} keyed>
-            {(project) => (
+          <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
+            {(worktree) => (
               <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
-                <SidebarPanel project={project} />
+                <SidebarPanel project={hoverProjectData()} />
               </div>
             )}
           </Show>
@@ -1938,7 +1965,7 @@ export default function Layout(props: ParentProps) {
               direction="horizontal"
               size={layout.sidebar.width()}
               min={244}
-              max={window.innerWidth * 0.3 + 64}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
               collapseThreshold={244}
               onResize={layout.sidebar.resize}
               onCollapse={layout.sidebar.close}
@@ -1971,7 +1998,9 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile />}
+              renderProject={(project) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
+              )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
