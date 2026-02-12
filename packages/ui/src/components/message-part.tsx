@@ -1260,9 +1260,11 @@ ToolRegistry.register({
               />
             </Tooltip>
           </div>
-          <pre data-slot="bash-pre">
-            <code>{text()}</code>
-          </pre>
+          <div data-slot="bash-scroll" data-scrollable>
+            <pre data-slot="bash-pre">
+              <code>{text()}</code>
+            </pre>
+          </div>
         </div>
       </BasicTool>
     )

@@ -293,11 +293,11 @@
 
 [data-component="bash-output"] {
   width: 100%;
-  padding: 12px;
   border: 1px solid var(--border-weak-base);
   border-radius: 6px;
   background: transparent;
   position: relative;
+  overflow: hidden;
 
   [data-slot="bash-copy"] {
     position: absolute;
@@ -323,9 +323,10 @@
     color: var(--icon-base);
   }
 
-  [data-slot="bash-pre"] {
-    margin: 0;
-    overflow: auto;
+  [data-slot="bash-scroll"] {
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
     max-height: 240px;
 
     scrollbar-width: none;
@@ -334,12 +335,18 @@
     }
   }
 
+  [data-slot="bash-pre"] {
+    margin: 0;
+    padding: 12px;
+  }
+
   [data-slot="bash-pre"] code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     font-size: 13px;
     line-height: var(--line-height-large);
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 }
 
