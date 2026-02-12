@@ -1160,6 +1160,8 @@ export namespace Provider {
     const provider = await state().then((state) => state.providers[providerID])
     if (provider) {
       let priority = [
+        "gpt-4o-mini",
+        "gpt-3.5-turbo",
         "claude-haiku-4-5",
         "claude-haiku-4.5",
         "3-5-haiku",
