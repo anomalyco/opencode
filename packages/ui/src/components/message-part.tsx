@@ -1050,14 +1050,19 @@ ToolRegistry.register({
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize">
+          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
             {i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool })}
           </span>
           <Show when={props.input.description}>
             <Switch>
               <Match when={href()}>
                 {(url) => (
-                  <a data-slot="basic-tool-tool-subtitle" class="clickable" href={url()} onClick={handleLinkClick}>
+                  <a
+                    data-slot="basic-tool-tool-subtitle"
+                    class="clickable subagent-link"
+                    href={url()}
+                    onClick={handleLinkClick}
+                  >
                     {props.input.description}
                   </a>
                 )}

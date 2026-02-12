@@ -67,6 +67,10 @@
     &.capitalize {
       text-transform: capitalize;
     }
+
+    &.agent-title {
+      color: var(--text-strong);
+    }
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
@@ -90,6 +94,25 @@
 
       &:hover {
         color: var(--text-base);
+      }
+    }
+
+    &.subagent-link {
+      color: var(--text-interactive-base);
+      text-decoration: none;
+      text-underline-offset: 2px;
+
+      &:hover {
+        color: var(--text-interactive-base);
+        text-decoration: underline;
+      }
+
+      &:active {
+        color: var(--text-interactive-base);
+      }
+
+      &:visited {
+        color: var(--text-interactive-base);
       }
     }
   }
