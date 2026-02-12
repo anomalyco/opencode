@@ -15,7 +15,7 @@ Možete se prebacivati ​​između agenata tokom sesije ili ih pozvati spominj
 
 ## Vrste
 
-Postoje dvije vrste agenata u OpenCode; primarni agenti i podagenti.
+Postoje dvije vrste agenata u OpenCode: primarni agenti i podagenti.
 
 ---
 
@@ -45,17 +45,17 @@ OpenCode dolazi sa dva ugrađena primarna agenta i dva ugrađena subagenta.
 
 ---
 
-### Koristi build
+### Build agent
 
-_Mode_: `primary`
+_Režim_: `primary`
 
 Build je **podrazumevani** primarni agent sa svim omogućenim alatima. Ovo je standardni agent za razvojni rad gdje vam je potreban pun pristup operacijama datoteka i sistemskim komandama.
 
 ---
 
-### Koristi plan
+### Plan agent
 
-_Mode_: `primary`
+_Režim_: `primary`
 
 Ograničeni agent dizajniran za planiranje i analizu. Koristimo sistem dozvola kako bismo vam pružili veću kontrolu i spriječili neželjene promjene.
 Prema zadanim postavkama, sve sljedeće je postavljeno na `ask`:
@@ -67,47 +67,47 @@ Ovaj agent je koristan kada želite da LLM analizira kod, predloži promjene ili
 
 ---
 
-### Koristi general
+### General agent
 
-_Mode_: `subagent`
+_Režim_: `subagent`
 
 Agent opće namjene za istraživanje složenih pitanja i izvršavanje zadataka u više koraka. Ima potpuni pristup alatima (osim todo), tako da može mijenjati fajlove kada je to potrebno. Koristite ovo za paralelno pokretanje više jedinica rada.
 
 ---
 
-### Koristi explore
+### Explore agent
 
-_Mode_: `subagent`
+_Režim_: `subagent`
 
 Brzi agent samo za čitanje za istraživanje kodnih baza. Nije moguće mijenjati fajlove. Koristite ovo kada trebate brzo pronaći datoteke po uzorku, pretražiti kod za ključne riječi ili odgovoriti na pitanja o bazi kodova.
 
 ---
 
-### Koristi compaction
+### Compaction agent
 
-_Mode_: `primary`
+_Režim_: `primary`
 
 Skriveni sistemski agent koji sažima dugi kontekst u manji sažetak. Pokreće se automatski kada je potrebno i ne može se odabrati u korisničkom interfejsu.
 
 ---
 
-### Koristi title
+### Title agent
 
-_Mode_: `primary`
+_Režim_: `primary`
 
 Skriveni sistemski agent koji generiše kratke naslove sesija. Pokreće se automatski i ne može se odabrati u korisničkom interfejsu.
 
 ---
 
-### Koristi summary
+### Summary agent
 
-_Mode_: `primary`
+_Režim_: `primary`
 
 Skriveni sistemski agent koji kreira sažetke sesije. Pokreće se automatski i ne može se odabrati u korisničkom interfejsu.
 
 ---
 
-## Upotreba
+## Korištenje
 
 1. Za primarne agente, koristite taster **Tab** za kretanje kroz njih tokom sesije. Također možete koristiti svoju konfiguriranu vezu tipke `switch_agent`.
 
@@ -215,7 +215,7 @@ Pogledajmo ove opcije konfiguracije detaljno.
 
 ---
 
-### Description
+### Opis
 
 Koristite opciju `description` da pružite kratak opis onoga što agent radi i kada ga koristiti.
 
@@ -233,7 +233,7 @@ Ovo je **obavezna** opcija konfiguracije.
 
 ---
 
-### Temperature
+### Temperatura
 
 Kontrolišite slučajnost i kreativnost odgovora LLM-a pomoću `temperature` konfiguracije.
 
@@ -280,7 +280,7 @@ Ako temperatura nije navedena, OpenCode koristi standardne postavke specifične 
 
 ---
 
-### Max steps
+### Maksimalan broj koraka
 
 Kontrolirajte maksimalni broj iteracija agenta koje agent može izvesti prije nego što bude prisiljen da odgovori samo tekstom. Ovo omogućava korisnicima koji žele kontrolirati troškove da postave ograničenje na akcije agenta.
 
@@ -306,7 +306,7 @@ Naslijeđeno polje `maxSteps` je zastarjelo. Umjesto toga koristite `steps`.
 
 ---
 
-### Disable
+### Onemogućavanje
 
 Postavite na `true` da onemogućite agenta.
 
@@ -322,7 +322,7 @@ Postavite na `true` da onemogućite agenta.
 
 ---
 
-### Prompt
+### Upit
 
 Navedite prilagođenu sistemsku prompt datoteku za ovog agenta sa `prompt` konfiguracijom. Datoteka s promptom treba da sadrži upute specifične za svrhu agenta.
 
@@ -362,7 +362,7 @@ ID modela u vašoj OpenCode konfiguraciji koristi format `provider/model-id`. Na
 
 ---
 
-### Tools
+### Alati
 
 Kontrolirajte koji su alati dostupni u ovom agentu koristeći konfiguraciju `tools`. Možete omogućiti ili onemogućiti određene alate tako što ćete ih postaviti na `true` ili `false`.
 
@@ -409,7 +409,7 @@ Također možete koristiti zamjenske znakove za kontrolu više alata odjednom. N
 
 ---
 
-### Permissions
+### Dozvole
 
 Možete konfigurirati dozvole za upravljanje radnjama koje agent može poduzeti. Trenutno se dozvole za alate `edit`, `bash` i `webfetch` mogu konfigurirati na:
 
@@ -521,7 +521,7 @@ Budući da posljednje podudarno pravilo ima prednost, prvo postavite zamjenski z
 
 ---
 
-### Mode
+### Način rada
 
 Kontrolirajte način rada agenta koristeći konfiguraciju `mode`. Opcija `mode` se koristi da specificira kako se agent može koristiti.
 
@@ -539,7 +539,7 @@ Opcija `mode` se može postaviti na `primary`, `subagent` ili `all`. Ako `mode` 
 
 ---
 
-### Hidden
+### Skriveno
 
 Sakrij podagenta iz `@` menija za automatsko dovršavanje sa `hidden: true`. Korisno za interne podagente koje bi drugi agenti trebali programski pozvati samo preko Task alata.
 
@@ -562,7 +562,7 @@ Odnosi se samo na `mode: subagent` agente.
 
 ---
 
-### Task permissions
+### Dozvole zadataka
 
 Kontrolirajte koje podagente agent može pozvati preko Task alata sa `permission.task`. Koristi glob uzorke za fleksibilno uparivanje.
 
@@ -595,7 +595,7 @@ Korisnici uvijek mogu pozvati bilo kojeg subagenta direktno preko `@` menija za 
 
 ---
 
-### Color
+### Boja
 
 Prilagodite vizualni izgled agenta u korisničkom sučelju s opcijom `color`. Ovo utiče na to kako se agent pojavljuje u interfejsu.
 
@@ -634,7 +634,7 @@ Vrijednosti se kreću od 0.0 do 1.0. Niže vrijednosti su više fokusirane, viš
 
 ---
 
-### Additional
+### Dodatno
 
 Sve druge opcije koje navedete u konfiguraciji agenta će biti **direktno proslijeđene** dobavljaču kao opcije modela. Ovo vam omogućava da koristite karakteristike i parametre specifične za provajdera.
 
@@ -661,7 +661,7 @@ Pokrenite `opencode models` da vidite listu dostupnih modela.
 
 ---
 
-## Kreirajte agente
+## Kreiranje agenata
 
 Možete kreirati nove agente koristeći sljedeću naredbu:
 
@@ -679,7 +679,7 @@ Ova interaktivna komanda će:
 
 ---
 
-## Slučajevi upotrebe
+## Primjeri upotrebe
 
 Evo nekoliko uobičajenih slučajeva upotrebe različitih agenata.
 

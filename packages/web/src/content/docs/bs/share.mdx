@@ -21,13 +21,13 @@ Kada podijelite razgovor, OpenCode:
 
 ---
 
-## Sharing
+## Dijeljenje
 
 OpenCode podrzava tri nacina dijeljenja koji odreduju kako se razgovori dijele:
 
 ---
 
-### Manual (default)
+### Ručno (zadano)
 
 Po defaultu, OpenCode koristi rucni nacin dijeljenja. Sesije se ne dijele automatski, ali ih mozete rucno podijeliti komandom `/share`:
 
@@ -48,7 +48,7 @@ Da eksplicitno postavite rucni nacin u [config datoteci](/docs/config):
 
 ---
 
-### Auto-share
+### Automatsko dijeljenje
 
 Mozete ukljuciti automatsko dijeljenje za sve nove razgovore tako sto `share` postavite na `"auto"` u [config datoteci](/docs/config):
 
@@ -63,7 +63,7 @@ Kada je auto-share ukljucen, svaki novi razgovor se automatski dijeli i kreira s
 
 ---
 
-### Disabled
+### Onemogućeno
 
 Dijeljenje mozete potpuno iskljuciti tako sto `share` postavite na `"disabled"` u [config datoteci](/docs/config):
 
@@ -96,7 +96,7 @@ Imajte na umu nekoliko stvari prije dijeljenja razgovora.
 
 ---
 
-### Cuvanje podataka
+### Čuvanje podataka
 
 Dijeljeni razgovori ostaju dostupni dok ih eksplicitno ne uklonite iz dijeljenja. Ovo ukljucuje:
 
