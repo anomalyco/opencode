@@ -13,21 +13,11 @@ export function SessionMobileTabs(props: {
   return (
     <Show when={props.open}>
       <Tabs value={props.mobileTab} class="h-auto">
-        <Tabs.List class="!grid !grid-cols-2 [&::after]:hidden">
-          <Tabs.Trigger
-            value="session"
-            class="w-full !max-w-none"
-            classes={{ button: "w-full" }}
-            onClick={props.onSession}
-          >
+        <Tabs.List class="!grid !grid-cols-2 [&::after]:hidden [&_[data-slot=tabs-trigger-wrapper]]:!max-w-none">
+          <Tabs.Trigger value="session" class="w-full" classes={{ button: "w-full" }} onClick={props.onSession}>
             {props.t("session.tab.session")}
           </Tabs.Trigger>
-          <Tabs.Trigger
-            value="changes"
-            class="w-full !max-w-none !border-r-0"
-            classes={{ button: "w-full" }}
-            onClick={props.onChanges}
-          >
+          <Tabs.Trigger value="changes" class="w-full" classes={{ button: "w-full" }} onClick={props.onChanges}>
             {props.hasReview
               ? props.t("session.review.filesChanged", { count: props.reviewCount })
               : props.t("session.review.change.other")}
