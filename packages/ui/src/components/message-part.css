@@ -87,10 +87,10 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    background: var(--surface-weak);
+    background: var(--surface-base);
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: 6px;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
