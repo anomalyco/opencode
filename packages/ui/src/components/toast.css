@@ -40,6 +40,8 @@
   background: var(--surface-float-base);
   color: var(--text-invert-base);
   box-shadow: var(--shadow-md);
+  margin-bottom: 5px;
+  margin-top: 5px;
 
   [data-slot="toast-inner"] {
     display: flex;
