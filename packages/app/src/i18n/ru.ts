@@ -225,6 +225,7 @@ export const dict = {
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
   "prompt.placeholder.summarizeComment": "Суммировать комментарий…",
+  "prompt.placeholder.agent": "Я {{name}}, {{description}}",
   "prompt.mode.shell": "Оболочка",
   "prompt.mode.shell.exit": "esc для выхода",
 

@@ -228,6 +228,7 @@ export const dict = {
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
   "prompt.placeholder.summarizeComment": "Oppsummer kommentar…",
+  "prompt.placeholder.agent": "Jeg er {{name}}, {{description}}",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "ESC for å avslutte",
 

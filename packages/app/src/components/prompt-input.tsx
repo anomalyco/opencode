@@ -224,6 +224,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       mode: store.mode,
       commentCount: commentCount(),
       example: language.t(EXAMPLES[store.placeholder]),
+      agent: local.agent.current(),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
