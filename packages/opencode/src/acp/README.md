@@ -37,12 +37,29 @@ The implementation follows a clean separation of concerns:
 ### Command Line
 
 ```bash
-# Start the ACP server in the current directory
+# Start the ACP server in the current directory (stdio)
 opencode acp
 
 # Start in a specific directory
 opencode acp --cwd /path/to/project
+
+# Start server with ACP over WebSocket (endpoint: ws://host:port/acp)
+opencode acp-websocket
 ```
+
+### WebSocket (Remote Access)
+
+For network access, use `opencode acp-websocket` to start the server with an ACP WebSocket endpoint at `/acp`:
+
+```bash
+opencode acp-websocket
+# ACP WebSocket: ws://localhost:4096/acp
+```
+
+The directory is the one OpenCode was started from. Override via query param or header:
+
+- `?directory=/path/to/project`
+- `x-opencode-directory: /path/to/project`
 
 ### Programmatic
 
@@ -122,8 +139,12 @@ This implementation follows the ACP specification v1:
 # Run ACP tests
 bun test test/acp.test.ts
 
-# Test manually with stdio
+# Test stdio
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}' | opencode acp
+
+# Test WebSocket (server must be running: opencode acp-websocket)
+bun run script/test-acp-websocket.ts
+# Or with custom URL: ACP_WS_URL=ws://host:4096/acp bun run script/test-acp-websocket.ts
 ```
 
 ## Design Decisions

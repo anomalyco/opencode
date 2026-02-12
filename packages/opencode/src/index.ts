@@ -22,6 +22,7 @@ import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { AcpCommand } from "./cli/cmd/acp"
+import { AcpWebSocketCommand } from "./cli/cmd/acp-websocket"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
@@ -78,6 +79,7 @@ const cli = yargs(hideBin(process.argv))
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
+  .command(AcpWebSocketCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
