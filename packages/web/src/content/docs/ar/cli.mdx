@@ -1,11 +1,11 @@
 ---
-title: سطر الأوامر
-description: خيارات وأوامر سطر أوامر OpenCode.
+title: CLI
+description: أوامر وخيارات CLI في OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يبدأ سطر أوامر OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
+يبدأ CLI الخاص بـ OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
 
 ```bash
 opencode
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-بدء واجهة المستخدم الطرفية (TUI) الخاصة بـ OpenCode.
+بدء واجهة المستخدم terminal (TUI) الخاصة بـ OpenCode.
 
 ```bash
 opencode [project]
@@ -29,21 +29,22 @@ opencode [project]
 
 #### الخيارات
 
-| الخيار       | المختصر | الوصف                                        |
-| ------------ | ------- | -------------------------------------------- |
-| `--continue` | `-c`    | متابعة الجلسة الأخيرة                        |
-| `--session`  | `-s`    | معرّف الجلسة للمتابعة                        |
-| `--prompt`   |         | الموجّه المراد استخدامه                      |
-| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model |
-| `--agent`    |         | الوكيل المراد استخدامه                       |
-| `--port`     |         | المنفذ الذي يتم الاستماع عليه                |
-| `--hostname` |         | اسم المضيف الذي يتم الاستماع عليه            |
+| الخيار       | المختصر | الوصف                                                             |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| `--continue` | `-c`    | متابعة الجلسة الأخيرة                                             |
+| `--session`  | `-s`    | معرّف الجلسة للمتابعة                                             |
+| `--fork`     |         | تفريع الجلسة عند المتابعة (يستخدم مع `--continue` أو `--session`) |
+| `--prompt`   |         | الموجّه المراد استخدامه                                           |
+| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                      |
+| `--agent`    |         | الوكيل المراد استخدامه                                            |
+| `--port`     |         | المنفذ الذي يتم الاستماع عليه                                     |
+| `--hostname` |         | اسم المضيف الذي يتم الاستماع عليه                                 |
 
 ---
 
 ## الأوامر
 
-يتضمن سطر أوامر OpenCode أيضا الأوامر التالية.
+يتضمن CLI الخاص بـ OpenCode أيضا الأوامر التالية.
 
 ---
 
@@ -59,7 +60,7 @@ opencode agent [command]
 
 ### attach
 
-إرفاق طرفية بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
+إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
 
 ```bash
 opencode attach [url]
@@ -68,10 +69,10 @@ opencode attach [url]
 يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
 
 ```bash
-# Start the backend server for web/mobile access
+# ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
 opencode web --port 4096 --hostname 0.0.0.0
 
-# In another terminal, attach the TUI to the running backend
+# في محطة طرفية (terminal) أخرى، اربط TUI بالواجهة الخلفية قيد التشغيل
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -325,28 +326,29 @@ opencode run Explain the use of context in Go
 يمكنك أيضا الإرفاق بمثيل `opencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
 
 ```bash
-# Start a headless server in one terminal
+# ابدأ خادمًا بلا واجهة في محطة طرفية واحدة
 opencode serve
 
-# In another terminal, run commands that attach to it
+# في محطة طرفية أخرى، شغّل الأوامر التي ترتبط به
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### الرايات
 
-| الراية       | المختصر | الوصف                                                          |
-| ------------ | ------- | -------------------------------------------------------------- |
-| `--command`  |         | الأمر المراد تشغيله؛ استخدم الرسالة كوسائط                     |
-| `--continue` | `-c`    | متابعة الجلسة الأخيرة                                          |
-| `--session`  | `-s`    | معرّف الجلسة للمتابعة                                          |
-| `--share`    |         | مشاركة الجلسة                                                  |
-| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                   |
-| `--agent`    |         | الوكيل المراد استخدامه                                         |
-| `--file`     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                    |
-| `--format`   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)               |
-| `--title`    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)        |
-| `--attach`   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096) |
-| `--port`     |         | منفذ الخادم المحلي (الافتراضي منفذ عشوائي)                     |
+| الراية       | المختصر | الوصف                                                             |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| `--command`  |         | الأمر المراد تشغيله؛ استخدم الرسالة كوسائط                        |
+| `--continue` | `-c`    | متابعة الجلسة الأخيرة                                             |
+| `--session`  | `-s`    | معرّف الجلسة للمتابعة                                             |
+| `--fork`     |         | تفريع الجلسة عند المتابعة (يستخدم مع `--continue` أو `--session`) |
+| `--share`    |         | مشاركة الجلسة                                                     |
+| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                      |
+| `--agent`    |         | الوكيل المراد استخدامه                                            |
+| `--file`     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                       |
+| `--format`   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)                  |
+| `--title`    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)           |
+| `--attach`   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096)    |
+| `--port`     |         | منفذ الخادم المحلي (الافتراضي منفذ عشوائي)                        |
 
 ---
 
@@ -560,7 +562,7 @@ opencode upgrade v0.1.48
 | `OPENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
 | `OPENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان الطرفية تلقائيا                         |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
 | `OPENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
 | `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |

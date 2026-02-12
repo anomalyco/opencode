@@ -28,25 +28,11 @@ Sie können die **Tabulatortaste** verwenden, um während einer Sitzung zwischen
 :::
 
 OpenCode verfügt über zwei integrierte Primäragenten: **Build** und **Plan**. Auch
-Schauen Sie sich diese unten an.
+Schauen wir uns diese unten an.
 
 ---
 
-### Subagenten
-
-Unteragenten sind spezialisierte Assistenten, die Primäragenten für bestimmte Aufgaben aufrufen können. Sie können sie auch manuell aufrufen, indem Sie sie in Ihren Nachrichten **@erwähnen**.
-
-OpenCode verfügt über zwei integrierte Subagenten: **General** und **Explore**. Wir werden uns das weiter unten ansehen.
-
----
-
-## Eingebaut
-
-OpenCode verfügt über zwei integrierte Primäragenten und zwei integrierte Subagenten.
-
----
-
-### Verwenden Sie Build
+### Build
 
 _Modus_: `primary`
 
@@ -54,7 +40,7 @@ Build ist der **Standard**-Primäragent mit allen aktivierten Tools. Dies ist de
 
 ---
 
-### Nutzungsplan
+### Plan
 
 _Modus_: `primary`
 
@@ -68,7 +54,7 @@ Dieser Agent ist nützlich, wenn Sie möchten, dass LLM Code analysiert, Änderu
 
 ---
 
-### Verwenden Sie es allgemein
+### General
 
 _Modus_: `subagent`
 
@@ -76,7 +62,7 @@ Ein Allzweckagent zur Recherche komplexerer Fragen und zur Ausführung mehrstufi
 
 ---
 
-### Verwenden Sie „Erkunden“.
+### Explore
 
 _Modus_: `subagent`
 
@@ -84,7 +70,7 @@ Ein schneller, schreibgeschützter Agent zum Erkunden von Codebasen. Dateien kö
 
 ---
 
-### Verwenden Sie Dichtung
+### Compaction
 
 _Modus_: `primary`
 
@@ -92,7 +78,7 @@ Versteckter Systemagent, der lange Kontext in einer kleineren Zusammenfassung ko
 
 ---
 
-### Titel verwenden
+### Title
 
 _Modus_: `primary`
 
@@ -100,7 +86,7 @@ Versteckter Systemagent, der kurze Sitzungstitel generiert. Es läuft automatisc
 
 ---
 
-### Zusammenfassung verwenden
+### Summary
 
 _Modus_: `primary`
 
@@ -121,14 +107,14 @@ Versteckter Systemagent, der Sitzungszusammenfassungen erstellt. Es läuft autom
      ```
 
 3. **Navigation zwischen Sitzungen**: Wenn Subagenten ihre eigenen untergeordneten Sitzungen erstellen, können Sie zwischen der übergeordneten Sitzung und allen untergeordneten Sitzungen sorgfältig handeln, indem Sie Folgendes verwenden:
-   - **\<Leader>+Rechts** (oder Ihre konfigurierte `session_child_cycle`-Tastenkombination), um vorwärts durch Eltern → Kind1 → Kind2 → ... → Eltern zu blättern
-   - **\<Leader>+Links** (oder Ihre konfigurierte `session_child_cycle_reverse`-Tastenkombination), um rückwärts durch übergeordnetes Element ← untergeordnetes Element1 ← untergeordnetes Element2 ← ... ← übergeordnetes Element zu blättern
+   - **\<Leader>+Rechts** (oder Ihre konfigurierte `session_child_cycle`-Tastenkombination), um vorwärts durch Parent → Child1 → Child2 → ... → Parent zu blättern
+   - **\<Leader>+Links** (oder Ihre konfigurierte `session_child_cycle_reverse`-Tastenkombination), um rückwärts durch Parent ← Child1 ← Child2 ← ... ← Parent zu blättern
 
    Dadurch können Sie nahtlos zwischen der Hauptkonversation und der spezialisierten Subagentenarbeit wechseln.
 
 ---
 
-## Konfigurieren
+## Konfiguration
 
 Sie können die integrierten Agenten anpassen oder über die Konfiguration eigene erstellen. Agenten können auf zwei Arten konfiguriert werden:
 
@@ -210,9 +196,9 @@ Der Name der Markdown-Datei wird zum Agentennamen. Beispielsweise erstellte `rev
 
 ---
 
-## Options
+## Optionen
 
-Schauen Sie sich diese Konfigurationsmöglichkeiten im Detail an.
+Schauen wir uns diese Konfigurationsmöglichkeiten im Detail an.
 
 ---
 
@@ -234,7 +220,7 @@ Dies ist eine **erforderliche** Konfigurationsoption.
 
 ---
 
-### Temperature
+### Temperatur
 
 Steuern Sie die Zufälligkeit und Kreativität der Antworten von LLM mit der `temperature`-Konfiguration.
 
@@ -281,7 +267,7 @@ Wenn keine Temperatur angegeben ist, verwendet OpenCode modellspezifische Standa
 
 ---
 
-### Maximale Schritte
+### Schritte
 
 Steuern Sie die maximale Anzahl an Agenteniterationen, die ein Agent durchführen kann, bevor er gezwungen wird, nur mit Text zu antworten. Dadurch können Benutzer, die die Kosten kontrollieren möchten, ein Limit für Agentenaktionen festlegen.
 
@@ -307,7 +293,7 @@ Das alte Feld `maxSteps` ist veraltet. Verwenden Sie stattdessen `steps`.
 
 ---
 
-### Disable
+### Deaktivieren
 
 Auf `true` setzen, um den Agenten zu deaktivieren.
 
@@ -359,11 +345,11 @@ Wenn Sie kein Modell angeben, verwenden Sie den primären Agenten [model globall
 }
 ```
 
-Das Modell ID in Ihrer OpenCode-Konfiguration verwendet das Format `provider/model-id`. Wenn Sie beispielsweise [OpenCode Zen](/docs/zen) verwenden, würden Sie `opencode/gpt-5.1-codex` für GPT 5.1 Codex verwenden.
+Die Modell-ID in Ihrer OpenCode-Konfiguration verwendet das Format `provider/model-id`. Wenn Sie beispielsweise [OpenCode Zen](/docs/zen) verwenden, würden Sie `opencode/gpt-5.1-codex` für GPT 5.1 Codex verwenden.
 
 ---
 
-### Tools
+### Werkzeuge
 
 Steuern Sie mit der `tools`-Konfiguration, welche Tools in diesem Agent verfügbar sind. Sie können bestimmte Tools aktivieren oder deaktivieren, indem Sie sie auf `true` oder `false` setzen.
 
@@ -410,7 +396,7 @@ Sie können Platzhalter auch verwenden, um mehrere Werkzeuge gleichzeitig zu ste
 
 ---
 
-### Permissions
+### Berechtigungen
 
 Sie können Berechtigungen konfigurieren, um zu verwalten, welche Aktionen ein Agent ausführen kann. Derzeit können die Berechtigungen für die Tools `edit`, `bash` und `webfetch` wie folgt konfiguriert werden:
 
@@ -482,7 +468,7 @@ Sie können Berechtigungen für bestimmte Bash-Befehle festlegen.
 }
 ```
 
-Dies kann ein Kugelmuster annehmen.
+Dies kann ein Glob-Muster annehmen.
 
 ```json title="opencode.json" {7}
 {
@@ -522,7 +508,7 @@ Da die letzte übereinstimmende Regel Vorrang hat, setzen Sie zuerst den Platzha
 
 ---
 
-### Mode
+### Modus
 
 Steuern Sie den Modus des Agenten mit der `mode`-Konfiguration. Mit der Option `mode` wird festgelegt, wie der Agent verwendet werden kann.
 
@@ -540,7 +526,7 @@ Die Option `mode` kann auf `primary`, `subagent` oder `all` gesetzt werden. Wenn
 
 ---
 
-### Hidden
+### Versteckt
 
 Verstecken Sie einen Subagenten im Autovervollständigungsmenü `@` mit `hidden: true`. Nützlich für interne Subagenten, die nur programmgesteuert von anderen Agenten über das Task-Tool aufgerufen werden sollten.
 
@@ -563,7 +549,7 @@ Gilt nur für `mode: subagent`-Agenten.
 
 ---
 
-### Aufgabenberechtigungen
+### Task-Berechtigungen
 
 Steuern Sie, welche Subagenten ein Agent über das Task-Tool mit `permission.task` aufrufen kann. Verwendet Glob-Muster für eine flexible Zuordnung.
 
@@ -591,16 +577,16 @@ Die Regeln werden der Reihe nach ausgewertet und die **letzte übereinstimmende 
 :::
 
 :::tip
-Benutzer können jeden Subagenten immer direkt über das Autovervollständigungsmenü `@` aufrufen, auch wenn die Aufgabenberechtigungen des Agenten sterben würden.
+Benutzer können jeden Subagenten immer direkt über das Autovervollständigungsmenü `@` aufrufen, auch wenn die Aufgabenberechtigungen des Agenten dies verweigern würden.
 :::
 
 ---
 
-### Color
+### Farbe
 
 Passen Sie das visuelle Erscheinungsbild des Agenten im UI mit der Option `color` an. Dies wirkt sich darauf aus, wie der Agent in der Benutzeroberfläche angezeigt wird.
 
-Verwenden Sie eine gültige Hex-Farbe (e.g., `#FF5733`) oder Designfarbe: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+Verwenden Sie eine gültige Hex-Farbe (z. B. `#FF5733`) oder Themenfarbe: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
 ```json title="opencode.json"
 {
@@ -631,11 +617,11 @@ Steuern Sie die Antwortvielfalt mit der Option `top_p`. Alternative zur Temperat
 }
 ```
 
-Die Werte reichen von 0.0 bis 1.0. Die meisten Werte sind fokussierter, die höheren Werte vielfältiger.
+Die Werte reichen von 0.0 bis 1.0. Niedrigere Werte sind fokussierter, höhere Werte vielfältiger.
 
 ---
 
-### Additional
+### Zusätzliche Optionen
 
 Alle anderen Optionen, die Sie in Ihrer Agentenkonfiguration angeben, werden als Modelloptionen **direkt** an den Anbieter weitergeleitet. Dadurch können Sie anbieterspezifische Funktionen und Parameter nutzen.
 
@@ -662,7 +648,7 @@ Führen Sie `opencode models` aus, um eine Liste der verfügbaren Modelle anzubi
 
 ---
 
-## Erstellen Sie Agenten
+## Agenten erstellen
 
 Mit dem folgenden Befehl können Sie neue Agenten erstellen:
 
@@ -692,12 +678,12 @@ Hier sind einige häufige Anwendungsfälle für verschiedene Agenten.
 
 ---
 
-## Examples
+## Beispiele
 
 Hier sind einige Beispielagenten, die für Sie nützlich sein könnten.
 
 :::tip
-Haben Sie einen Agenten, den Sie gerne teilen möchten? [Submit a PR](https://github.com/anomalyco/opencode).
+Haben Sie einen Agenten, den Sie gerne teilen möchten? [Reichen Sie einen PR ein](https://github.com/anomalyco/opencode).
 :::
 
 ---

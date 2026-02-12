@@ -1,16 +1,16 @@
 ---
-title: Plugins
-description: Napišite vlastite dodatke za proširenje OpenCode-a.
+title: Dodaci
+description: Napišite vlastite dodatke za proširenje OpenCode.
 ---
 
-Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode-a.
+Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode.
 Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane zajednice.
 
 ---
 
-## Koristite dodatak
+## Korištenje dodatka
 
-## Postoje dva načina za učitavanje dodataka.
+Postoje dva načina za učitavanje dodataka.
 
 ### Iz lokalnih datoteka
 
@@ -22,7 +22,7 @@ Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
 ---
 
-### Od npm
+### Iz npm-a
 
 Navedite npm pakete u vašoj konfiguracijskoj datoteci.
 
@@ -45,7 +45,7 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### Učitaj redoslijed
+### Redoslijed učitavanja
 
 Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
 
@@ -57,7 +57,7 @@ Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed u�
 
 ---
 
-## Kreirajte dodatak
+## Kreiranje dodatka
 
 Dodatak je **JavaScript/TypeScript modul** koji izvozi jedan ili više dodataka
 funkcije. Svaka funkcija prima objekt konteksta i vraća hooks objekt.
@@ -154,14 +154,14 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 - `lsp.client.diagnostics`
 - `lsp.updated`
 
-#### Poruka Događaji
+#### Događaji poruka
 
 - `message.part.removed`
 - `message.part.updated`
 - `message.removed`
 - `message.updated`
 
-#### Događaji dozvole
+#### Događaji dozvola
 
 - `permission.asked`
 - `permission.replied`
@@ -189,7 +189,7 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 - `shell.env`
 
-#### Alat Događaji
+#### Događaji alata
 
 - `tool.execute.after`
 - `tool.execute.before`
@@ -204,9 +204,9 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 ## Primjeri
 
-## Evo nekoliko primjera dodataka koje možete koristiti za proširenje otvorenog koda.
+Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
 
-### Šalji obavještenja
+### Slanje obavještenja
 
 Pošaljite obavještenja kada se dogode određeni događaji:
 
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 ```
 
 Koristimo `osascript` za pokretanje AppleScript-a na macOS-u. Ovdje ga koristimo za slanje obavještenja.
-:::napomena
+:::note
 Ako koristite desktop aplikaciju OpenCode, ona može automatski slati sistemske obavijesti kada je odgovor spreman ili kada dođe do greške u sesiji.
 :::
 
@@ -248,7 +248,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
-### Ubacite varijable okruženja
+### Ubacivanje varijabli okruženja
 
 Ubacite varijable okruženja u sva izvršavanja ljuske (AI alati i korisnički terminali):
 
@@ -299,7 +299,7 @@ Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima fun
 
 ---
 
-### Logging
+### Bilježenje
 
 Koristite `client.app.log()` umjesto `console.log` za strukturirano bilježenje:
 
@@ -316,9 +316,9 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-## Nivoi: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
+Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
 
-### Kuke za sabijanje
+### Kuke za sažimanje
 
 Prilagodite kontekst uključen kada se sesija zbije:
 

@@ -1,5 +1,5 @@
 ---
-title: komandant
+title: Komande
 description: Kreirajte prilagođene komande za zadatke koji se ponavljaju.
 ---
 
@@ -7,16 +7,15 @@ Prilagođene komande vam omogućavaju da odredite prompt koji želite da pokrene
 
 ```bash frame="none"
 /my-command
-
 ```
 
 Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saznajte više](/docs/tui#commands).
 
 ---
 
-## Kreirajte komandne fajlove
+## Kreiranje datoteka naredbi
 
-Kreirajte mardown fajlove u direktorijumu `commands/` da definišete prilagođene komande.
+Kreirajte markdown fajlove u direktorijumu `commands/` da definišete prilagođene komande.
 Kreiraj `.opencode/commands/test.md`:
 
 ```md title=".opencode/commands/test.md"
@@ -35,12 +34,11 @@ Koristite komandu tako što ćete upisati `/` nakon čega slijedi naziv komande.
 
 ```bash frame="none"
 "/test"
-
 ```
 
 ---
 
-## Konfiguriši
+## Konfiguracija
 
 Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
 
@@ -71,17 +69,16 @@ Sada možete pokrenuti ovu naredbu u TUI:
 
 ```bash frame="none"
 /test
-
 ```
 
 ---
 
 ### Markdown
 
-Također možete definirati komande koristeći mardown datoteke. Stavite ih u:
+Također možete definirati komande koristeći markdown datoteke. Stavite ih u:
 
 - Globalno: `~/.config/opencode/commands/`
-- Po projektu: `.opencode/commands/
+- Po projektu: `.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -94,17 +91,15 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Ime datoteke za označavanje postaje ime naredbe. Na primjer, `test.md` dozvoljava
-pokrećeš:
+Ime markdown datoteke postaje ime naredbe. Na primjer, `test.md` vam omogućava da pokrenete:
 
 ```bash frame="none"
 /test
-
 ```
 
 ---
 
-## Prompt config
+## Konfiguracija upita
 
 Promptovi za prilagođene komande podržavaju nekoliko posebnih čuvara mjesta i sintakse.
 
@@ -126,8 +121,7 @@ Include proper typing and basic structure.
 Pokrenite naredbu s argumentima:
 
 ```bash frame="none"
-/componentButton
-
+/component Button
 ```
 
 I `$ARGUMENTS` će biti zamijenjen sa `Button`.
@@ -137,7 +131,8 @@ Također možete pristupiti pojedinačnim argumentima koristeći pozicione param
 - `$2` - Drugi argument
 - `$3` - Treći argument
 - I tako dalje...
-  na primjer:
+
+Na primjer:
 
 ```md title=".opencode/commands/create-file.md"
 ---
@@ -152,7 +147,6 @@ Pokrenite naredbu:
 
 ```bash frame="none"
 /create-file config.json src "{ \"key\": \"value\" }"
-
 ```
 
 Ovo zamjenjuje:
@@ -163,9 +157,9 @@ Ovo zamjenjuje:
 
 ---
 
-### Izlaz ljuske
+### Shell izlaz
 
-Koristite _!`command`_ da ubacite [bash command](/docs/tui#bash-commands) izlaz u svoj prompt.
+Koristite _!`command`_ da ubacite izlaz [bash command](/docs/tui#bash-commands) u svoj prompt.
 Na primjer, da kreirate prilagođenu naredbu koja analizira pokrivenost testom:
 
 ```md title=".opencode/commands/analyze-coverage.md"
@@ -183,19 +177,20 @@ Ili da vidite nedavne promjene:
 
 ```md title=".opencode/commands/review-changes.md"
 ---
-opis: Pregledajte nedavne promjene
+description: Review recent changes
 ---
 
-Nedavna git urezivanja:
+Recent git commits:
 !`git log --oneline -10`
-Pregledajte ove promjene i predložite bilo kakva poboljšanja.
+
+Review these changes and suggest any improvements.
 ```
 
 Naredbe se pokreću u korijenskom direktoriju vašeg projekta i njihov izlaz postaje dio prompta.
 
 ---
 
-### Reference fajlova
+### Reference datoteka
 
 Uključite datoteke u svoju naredbu koristeći `@` nakon čega slijedi naziv datoteke.
 
@@ -218,15 +213,15 @@ Pogledajmo detaljno opcije konfiguracije.
 
 ---
 
-### Template
+### Šablon
 
 Opcija `template` definira prompt koji će biti poslan LLM-u kada se naredba izvrši.
 
 ```json title="opencode.json"
 {
-  "komanda": {
+  "command": {
     "test": {
-      "template": "Pokrenite kompletan testni paket sa izvještajem o pokrivenosti i pokažite sve greške.\nFokusirajte se na neuspjele testove i predložite popravke."
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
     }
   }
 }
@@ -262,8 +257,8 @@ Da onemogućite ovo ponašanje, postavite `subtask` na `false`.
 
 ```json title="opencode.json"
 {
-  "komanda": {
-    "recenzija": {
+  "command": {
+    "review": {
       "agent": "plan"
     }
   }
@@ -274,7 +269,7 @@ Ovo je **opciona** opcija konfiguracije. Ako nije navedeno, podrazumevano je va�
 
 ---
 
-### Subdatatak
+### Podzadatak
 
 Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](/docs/agents/#subagents) pozivanje.
 Ovo je korisno ako želite da naredba ne zagađuje vaš primarni kontekst i da će **primorati** agenta da djeluje kao subagent,
@@ -300,9 +295,9 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
 
 ```json title="opencode.json"
 {
-  "komanda": {
-    "analizirati": {
-      "model": "antropski/claude-3-5-sonnet-20241022"
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
     }
   }
 }
@@ -312,14 +307,10 @@ Ovo je **opciona** opcija konfiguracije.
 
 ---
 
-## Embedded
+## Ugrađene naredbe
 
-opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
-:::napomena
+OpenCode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
+:::note
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::
 Ako definirate prilagođenu naredbu s istim imenom, ona će nadjačati ugrađenu naredbu.
-
-```
-
-```

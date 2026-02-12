@@ -95,7 +95,7 @@ Vous ne voyez pas de fournisseur ici ? Soumettez un PR.
 
 ---
 
-### 302.IA
+### 302.AI
 
 1. Rendez-vous sur la [console 302.AI](https://302.ai/), créez un compte et générez une clé API.
 
@@ -122,7 +122,7 @@ Vous ne voyez pas de fournisseur ici ? Soumettez un PR.
 
 ---
 
-### Socle amazonien
+### Amazon Bedrock
 
 Pour utiliser Amazon Bedrock avec OpenCode :
 
@@ -140,21 +140,21 @@ Pour utiliser Amazon Bedrock avec OpenCode :
 Définissez l'une de ces variables d'environnement lors de l'exécution de opencode :
 
 ```bash
-# Option 1: Using AWS access keys
-AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-# Option 2: Using named AWS profile
-AWS_PROFILE=my-profile opencode
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
 
-# Option 3: Using Bedrock bearer token
-AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
 ```
 
 Ou ajoutez-les à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AWS_PROFILE=my-dev-profile
-export AWS_REGION=us-east-1
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
 ```
 
 #### Fichier de configuration (recommandé)
@@ -179,7 +179,7 @@ Pour une configuration spécifique au projet ou persistante, utilisez `opencode.
 
 - `region` - Région AWS (par exemple, `us-east-1`, `eu-west-1`)
 - `profile` - Profil nommé AWS de `~/.aws/credentials`
-- `endpoint` - Point de terminaison personnalisé URL pour les points de terminaison d'un VPC (alias pour l'option générique `baseURL`)
+- `endpoint` - URL de point de terminaison personnalisée pour les endpoints VPC (alias de l'option générique `baseURL`)
 
 :::tip
 Les options du fichier de configuration sont prioritaires sur les variables d'environnement.
@@ -255,7 +255,7 @@ Pour les profils d'inférence personnalisés, utilisez le nom du modèle et du f
 
 ---
 
-### Anthropique
+### Anthropic
 
 1. Une fois inscrit, exécutez la commande `/connect` et sélectionnez Anthropic.
 
@@ -293,7 +293,7 @@ Ou si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer ma
 
 ---
 
-### Azur OpenAI
+### Azure OpenAI
 
 :::note
 Si vous rencontrez des erreurs « Je suis désolé, mais je ne peux pas vous aider avec cette demande », essayez de modifier le filtre de contenu de **DefaultV2** à **Default** dans votre ressource Azure.
@@ -333,7 +333,7 @@ Si vous rencontrez des erreurs « Je suis désolé, mais je ne peux pas vous aid
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_RESOURCE_NAME=XXX
+   export AZURE_RESOURCE_NAME=XXX
 ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
@@ -344,7 +344,7 @@ export AZURE_RESOURCE_NAME=XXX
 
 ---
 
-### Services cognitifs Azure
+### Azure Cognitive Services
 
 1. Rendez-vous sur le [portail Azure](https://portal.azure.com/) et créez une ressource **Azure OpenAI**. Vous aurez besoin de :
    - **Nom de la ressource** : cela fait partie de votre point de terminaison API (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
@@ -380,7 +380,7 @@ export AZURE_RESOURCE_NAME=XXX
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
@@ -418,7 +418,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-### Cérébraux
+### Cerebras
 
 1. Rendez-vous sur la [console Cerebras](https://inference.cerebras.ai/), créez un compte et générez une clé API.
 
@@ -445,7 +445,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-### Passerelle IA Cloudflare
+### Cloudflare AI Gateway
 
 Cloudflare AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, Workers AI et bien plus encore via un point de terminaison unifié. Avec [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/), vous n'avez pas besoin de clés API distinctes pour chaque fournisseur.
 
@@ -476,7 +476,7 @@ Cloudflare AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, 
 Ou définissez-le comme variable d'environnement.
 
 ```bash title="~/.bash_profile"
-export CLOUDFLARE_API_TOKEN=your-api-token
+   export CLOUDFLARE_API_TOKEN=your-api-token
 ```
 
 5. Exécutez la commande `/models` pour sélectionner un modèle.
@@ -530,7 +530,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ---
 
-### Recherche profonde
+### DeepSeek
 
 1. Rendez-vous sur la [console DeepSeek](https://platform.deepseek.com/), créez un compte et cliquez sur **Créer une nouvelle clé API**.
 
@@ -557,7 +557,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ---
 
-### Infra Profond
+### Deep Infra
 
 1. Rendez-vous sur le [tableau de bord Deep Infra](https://deepinfra.com/dash), créez un compte et générez une clé API.
 
@@ -584,7 +584,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ---
 
-### Micrologiciel
+### Firmware
 
 1. Rendez-vous sur le [Tableau de bord du micrologiciel](https://app.firmware.ai/signup), créez un compte et générez une clé API.
 
@@ -611,7 +611,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ---
 
-### IA de feux d'artifice
+### Fireworks AI
 
 1. Rendez-vous sur la [console Fireworks AI](https://app.fireworks.ai/), créez un compte et cliquez sur **Créer une clé API**.
 
@@ -676,6 +676,8 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
     /models
     ```
 
+````
+
 Trois modèles basés sur Claude sont disponibles :
 
 - **duo-chat-haiku-4-5** (Par défaut) - Réponses rapides pour des tâches rapides
@@ -697,11 +699,11 @@ Fichier `opencode.json`. Il est également recommandé de désactiver le partage
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+"$schema": "https://opencode.ai/config.json",
+"small_model": "gitlab/duo-chat-haiku-4-5",
+"share": "disabled"
 }
-```
+````
 
 :::
 
@@ -847,15 +849,15 @@ Pour utiliser Google Vertex AI avec OpenCode :
 Définissez-les lors de l'exécution de opencode.
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
 ```
 
 Ou ajoutez-les à votre profil bash.
 
 ```bash title="~/.bash_profile"
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export VERTEX_LOCATION=global
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
 ```
 
 :::tip
@@ -897,7 +899,7 @@ La région `global` améliore la disponibilité et réduit les erreurs sans frai
 
 ---
 
-### Visage câlin
+### Hugging Face
 
 [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) donne accès à des modèles ouverts pris en charge par plus de 17 fournisseurs.
 
@@ -926,7 +928,7 @@ La région `global` améliore la disponibilité et réduit les erreurs sans frai
 
 ---
 
-### Hélicone
+### Helicone
 
 [Helicone](https://helicone.ai) est une plate-forme d'observabilité LLM qui fournit la journalisation, la surveillance et l'analyse de vos applications d'IA. L'Helicone AI Gateway achemine automatiquement vos demandes vers le fournisseur approprié en fonction du modèle.
 
@@ -1039,7 +1041,7 @@ Consultez le [Helicone Header Directory](https://docs.helicone.ai/helicone-heade
 
 ---
 
-### lama.cpp
+### llama.cpp
 
 Vous pouvez configurer opencode pour utiliser des modèles locaux via l'utilitaire llama-server de [llama.cpp's](https://github.com/ggml-org/llama.cpp)
 
@@ -1106,7 +1108,7 @@ IO.NET propose 17 modèles optimisés pour différents cas d'utilisation :
 
 ---
 
-### Studio LM
+### LM Studio
 
 Vous pouvez configurer opencode pour utiliser des modèles locaux via LM Studio.
 
@@ -1140,7 +1142,7 @@ Dans cet exemple :
 
 ---
 
-### IA Moonshot
+### Moonshot AI
 
 Pour utiliser Kimi K2 de Moonshot AI :
 
@@ -1196,7 +1198,7 @@ Pour utiliser Kimi K2 de Moonshot AI :
 
 ---
 
-### Usine de jetons Nebius
+### Nebius Token Factory
 
 1. Rendez-vous sur la [console Nebius Token Factory](https://tokenfactory.nebius.com/), créez un compte et cliquez sur **Ajouter une clé**.
 
@@ -1265,7 +1267,7 @@ Si les appels d'outils ne fonctionnent pas, essayez d'augmenter `num_ctx` dans O
 
 ---
 
-### Nuage Ollama
+### Ollama Cloud
 
 Pour utiliser Ollama Cloud avec OpenCode :
 
@@ -1366,7 +1368,7 @@ OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équi
 
 ---
 
-### OuvrirRouter
+### OpenRouter
 
 1. Rendez-vous sur le [tableau de bord OpenRouter](https://openrouter.ai/settings/keys), cliquez sur **Créer une clé API** et copiez la clé.
 
@@ -1430,7 +1432,7 @@ Vous pouvez également ajouter des modèles supplémentaires via votre configura
 
 ---
 
-### SAP IA Core
+### SAP AI Core
 
 SAP AI Core donne accès à plus de 40 modèles de OpenAI, Anthropic, Google, Amazon, Meta, Mistral et AI21 via une plateforme unifiée.
 
@@ -1458,13 +1460,13 @@ SAP AI Core donne accès à plus de 40 modèles de OpenAI, Anthropic, Google, Am
 Ou définissez la variable d'environnement `AICORE_SERVICE_KEY` :
 
 ```bash
-AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
 ```
 
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
 ```
 
 4. Définissez éventuellement l'ID de déploiement et le groupe de ressources :
@@ -1485,7 +1487,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### Points de terminaison IA OVHcloud
+### OVHcloud AI Endpoints
 
 1. Rendez-vous sur le [Panneau OVHcloud](https://ovh.com/manager). Accédez à la section `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` et dans l'onglet `API Keys`, cliquez sur **Créer une nouvelle clé API**.
 
@@ -1512,7 +1514,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### Échelle
+### Scaleway
 
 Pour utiliser [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) avec Opencode :
 
@@ -1541,7 +1543,7 @@ Pour utiliser [Scaleway Generative APIs](https://www.scaleway.com/en/docs/genera
 
 ---
 
-### Ensemble IA
+### Together AI
 
 1. Rendez-vous sur [Together AI console](https://api.together.ai), créez un compte et cliquez sur **Ajouter une clé**.
 
@@ -1568,7 +1570,7 @@ Pour utiliser [Scaleway Generative APIs](https://www.scaleway.com/en/docs/genera
 
 ---
 
-### Venise IA
+### Venice AI
 
 1. Rendez-vous sur la [Venice AI console](https://venice.ai), créez un compte et générez une clé API.
 
@@ -1595,7 +1597,7 @@ Pour utiliser [Scaleway Generative APIs](https://www.scaleway.com/en/docs/genera
 
 ---
 
-### Passerelle IA Vercel
+### Vercel AI Gateway
 
 Vercel AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, Google, xAI et plus encore via un point de terminaison unifié. Les modèles sont proposés au prix catalogue sans majoration.
 
@@ -1827,7 +1829,7 @@ Voici les options de configuration :
 - **npm** : package AI SDK à utiliser, `@ai-sdk/openai-compatible` pour les fournisseurs compatibles OpenAI
 - **nom** : nom à afficher dans l'interface utilisateur.
 - **modèles** : Modèles disponibles.
-- **options.baseURL** : API point de terminaison URL.
+- **options.baseURL** : URL de l'endpoint API.
 - **options.apiKey** : définissez éventuellement la clé API, si vous n'utilisez pas d'authentification.
 - **options.headers** : définissez éventuellement des en-têtes personnalisés.
 
@@ -1872,7 +1874,7 @@ Voici un exemple de définition des options `apiKey`, `headers` et modèle `limi
 Détails de configuration :
 
 - **apiKey** : défini à l'aide de la syntaxe de variable `env`, [en savoir plus](/docs/config#env-vars).
-- **en-têtes** : en-têtes personnalisés envoyés avec chaque demande.
+- **headers** : en-têtes personnalisés envoyés avec chaque requête.
 - **limit.context** : nombre maximal de jetons d'entrée acceptés par le modèle.
 - **limit.output** : nombre maximal de jetons que le modèle peut générer.
 

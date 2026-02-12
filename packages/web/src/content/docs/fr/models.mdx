@@ -15,9 +15,9 @@ En savoir plus sur [fournisseurs](/docs/providers).
 
 ---
 
-## Sélectionnez un modèle
+## Sélection d'un modèle
 
-Une fois que vous avez configuré votre fournisseur, vous pouvez sélectionner le modèle souhaité en tapant :
+Une fois que vous avez configuré votre fournisseur, vous pouvez sélectionner le modèle souhaité en tapant :
 
 ```bash frame="none"
 /models
@@ -37,19 +37,18 @@ Cependant, seuls quelques-uns d’entre eux savent à la fois générer du code 
 
 Voici plusieurs modèles qui fonctionnent bien avec OpenCode, sans ordre particulier. (Cette liste n’est pas exhaustive et n’est pas nécessairement à jour) :
 
-- GPT 5.2
-- Codex GPT 5.1
+- GPT 5.2
+- Codex GPT 5.1
 - Claude Opus 4.5
 - Claude Sonnet 4.5
 - Minimax M2.1
-- Gémeaux 3 Pro
+- Gemini 3 Pro
 
 ---
 
 ## Définir une valeur par défaut
 
-Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir la clé `model` dans votre
-OpenCode configuration.
+Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir la clé `model` dans votre configuration OpenCode.
 
 ```json title="opencode.json" {3}
 {
@@ -64,7 +63,7 @@ Si vous avez configuré un [fournisseur personnalisé](/docs/providers#custom), 
 
 ---
 
-## Configurer les modèles
+## Configuration des modèles
 
 Vous pouvez configurer globalement les options d'un modèle via le fichier config.
 
@@ -100,12 +99,12 @@ Vous pouvez configurer globalement les options d'un modèle via le fichier confi
 }
 ```
 
-Ici, nous configurons les paramètres globaux pour deux modèles intégrés : `gpt-5` lorsqu'il est accessible via le fournisseur `openai` et `claude-sonnet-4-20250514` lorsqu'il est accessible via le fournisseur `anthropic`.
+Ici, nous configurons les paramètres globaux pour deux modèles intégrés : `gpt-5` lorsqu'il est accessible via le fournisseur `openai` et `claude-sonnet-4-20250514` lorsqu'il est accessible via le fournisseur `anthropic`.
 Les noms du fournisseur intégré et des modèles peuvent être trouvés sur [Models.dev](https://models.dev).
 
 Vous pouvez également configurer ces options pour tous les agents que vous utilisez. La configuration de l'agent remplace ici toutes les options globales. [En savoir plus](/docs/agents/#additional).
 
-Vous pouvez également définir des variantes personnalisées qui étendent celles intégrées. Les variantes vous permettent de configurer différents paramètres pour le même modèle sans créer d'entrées en double :
+Vous pouvez également définir des variantes personnalisées qui étendent celles intégrées. Les variantes vous permettent de configurer différents paramètres pour le même modèle sans créer d'entrées en double :
 
 ```jsonc title="opencode.jsonc" {6-21}
 {
@@ -141,28 +140,28 @@ De nombreux modèles prennent en charge plusieurs variantes avec différentes co
 
 ### Variantes intégrées
 
-OpenCode est livré avec des variantes par défaut pour de nombreux fournisseurs :
+OpenCode est livré avec des variantes par défaut pour de nombreux fournisseurs :
 
-**Anthropique** :
+**Anthropic** :
 
 - `high` - Budget de réflexion élevé (par défaut)
 - `max` - Budget de réflexion maximum
 
-**OpenAI** :
+**OpenAI** :
 
-Varie selon le modèle mais en gros :
+Varie selon le modèle mais en gros :
 
 - `none` - Aucun raisonnement
 - `minimal` - Effort de raisonnement minimal
 - `low` - Faible effort de raisonnement
 - `medium` - Effort de raisonnement moyen
-- `high` – Effort de raisonnement élevé
+- `high` – Effort de raisonnement élevé
 - `xhigh` - Effort de raisonnement très élevé
 
 **Google**:
 
-- `low` – Budget d'effort/jetons réduit
-- `high` – Budget d'effort/de jetons plus élevé
+- `low` – Budget d'effort/jetons réduit
+- `high` – Budget d'effort/de jetons plus élevé
 
 :::tip
 Cette liste n'est pas exhaustive. De nombreux autres fournisseurs ont également des paramètres par défaut intégrés.
@@ -170,7 +169,7 @@ Cette liste n'est pas exhaustive. De nombreux autres fournisseurs ont également
 
 ### Variantes personnalisées
 
-Vous pouvez remplacer les variantes existantes ou ajouter les vôtres :
+Vous pouvez remplacer les variantes existantes ou ajouter les vôtres :
 
 ```jsonc title="opencode.jsonc" {7-18}
 {
@@ -195,7 +194,7 @@ Vous pouvez remplacer les variantes existantes ou ajouter les vôtres :
 }
 ```
 
-### Variantes de cycles
+### Cycle des variantes
 
 Utilisez le raccourci clavier `variant_cycle` pour basculer rapidement entre les variantes. [En savoir plus](/docs/keybinds).
 
@@ -203,9 +202,9 @@ Utilisez le raccourci clavier `variant_cycle` pour basculer rapidement entre les
 
 ## Chargement des modèles
 
-Lorsque OpenCode démarre, il recherche les modèles dans l'ordre de priorité suivant :
+Lorsque OpenCode démarre, il recherche les modèles dans l'ordre de priorité suivant :
 
-1. L'indicateur de ligne de commande `--model` ou `-m`. Le format est le même que dans le fichier de configuration : `provider_id/model_id`.
+1. Le flag de ligne de commande `--model` ou `-m`. Le format est le même que dans le fichier de configuration : `provider_id/model_id`.
 
 2. La liste des modèles dans la configuration OpenCode.
 

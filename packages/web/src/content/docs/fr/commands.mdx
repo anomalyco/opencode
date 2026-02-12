@@ -3,7 +3,7 @@ title: Commandes
 description: Créez des commandes personnalisées pour les tâches répétitives.
 ---
 
-Les commandes personnalisées vous permettent de spécifier une invite que vous souhaitez exécuter lorsque cette commande est exécutée dans TUI.
+Les commandes personnalisées vous permettent de spécifier un prompt que vous souhaitez exécuter lorsque cette commande est exécutée dans le TUI.
 
 ```bash frame="none"
 /my-command
@@ -17,7 +17,7 @@ Les commandes personnalisées s'ajoutent aux commandes intégrées telles que `/
 
 Créez des fichiers markdown dans le répertoire `commands/` pour définir des commandes personnalisées.
 
-Créez `.opencode/commands/test.md` :
+Créez `.opencode/commands/test.md` :
 
 ```md title=".opencode/commands/test.md"
 ---
@@ -30,7 +30,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Le frontmatter définit les propriétés de la commande. Le contenu devient le modèle.
+Le frontmatter définit les propriétés de la commande. Le contenu devient le modèle (template).
 
 Utilisez la commande en tapant `/` suivi du nom de la commande.
 
@@ -40,7 +40,7 @@ Utilisez la commande en tapant `/` suivi du nom de la commande.
 
 ---
 
-## Configurer
+## Configuration
 
 Vous pouvez ajouter des commandes personnalisées via la configuration OpenCode ou en créant des fichiers markdown dans le répertoire `commands/`.
 
@@ -48,7 +48,7 @@ Vous pouvez ajouter des commandes personnalisées via la configuration OpenCode 
 
 ### JSON
 
-Utilisez l'option `command` dans votre OpenCode [config](/docs/config) :
+Utilisez l'option `command` dans votre OpenCode [config](/docs/config) :
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -67,7 +67,7 @@ Utilisez l'option `command` dans votre OpenCode [config](/docs/config) :
 }
 ```
 
-Vous pouvez maintenant exécuter cette commande dans TUI :
+Vous pouvez maintenant exécuter cette commande dans le TUI :
 
 ```bash frame="none"
 /test
@@ -75,12 +75,12 @@ Vous pouvez maintenant exécuter cette commande dans TUI :
 
 ---
 
-### Réduction
+### Markdown
 
-Vous pouvez également définir des commandes à l'aide de fichiers markdown. Placez-les dans :
+Vous pouvez également définir des commandes à l'aide de fichiers markdown. Placez-les dans :
 
-- Mondial : `~/.config/opencode/commands/`
-- Par projet : `.opencode/commands/`
+- Global : `~/.config/opencode/commands/`
+- Par projet : `.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -93,8 +93,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Le nom du fichier markdown devient le nom de la commande. Par exemple, `test.md` permet
-tu cours :
+Le nom du fichier markdown devient le nom de la commande. Par exemple, `test.md` permet d'exécuter :
 
 ```bash frame="none"
 /test
@@ -104,7 +103,7 @@ tu cours :
 
 ## Configuration rapide
 
-Les invites pour les commandes personnalisées prennent en charge plusieurs espaces réservés et syntaxes spéciaux.
+Les prompts pour les commandes personnalisées prennent en charge plusieurs espaces réservés et syntaxes spéciaux.
 
 ---
 
@@ -121,7 +120,7 @@ Create a new React component named $ARGUMENTS with TypeScript support.
 Include proper typing and basic structure.
 ```
 
-Exécutez la commande avec des arguments :
+Exécutez la commande avec des arguments :
 
 ```bash frame="none"
 /component Button
@@ -129,7 +128,7 @@ Exécutez la commande avec des arguments :
 
 Et `$ARGUMENTS` sera remplacé par `Button`.
 
-Vous pouvez également accéder à des arguments individuels à l'aide de paramètres de position :
+Vous pouvez également accéder à des arguments individuels à l'aide de paramètres de position :
 
 - `$1` - Premier argument
 - `$2` - Deuxième argument
@@ -147,13 +146,13 @@ Create a file named $1 in the directory $2
 with the following content: $3
 ```
 
-Exécutez la commande :
+Exécutez la commande :
 
 ```bash frame="none"
 /create-file config.json src "{ \"key\": \"value\" }"
 ```
 
-Celui-ci remplace :
+Celui-ci remplace :
 
 - `$1` avec `config.json`
 - `$2` avec `src`
@@ -163,9 +162,9 @@ Celui-ci remplace :
 
 ### Sortie du shell
 
-Utilisez _!`command`_ pour injecter la sortie [bash command](/docs/tui#bash-commands) dans votre invite.
+Utilisez _!`command`_ pour injecter la sortie [bash command](/docs/tui#bash-commands) dans votre prompt.
 
-Par exemple, pour créer une commande personnalisée qui analyse la couverture des tests :
+Par exemple, pour créer une commande personnalisée qui analyse la couverture des tests :
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
@@ -178,7 +177,7 @@ Here are the current test results:
 Based on these results, suggest improvements to increase coverage.
 ```
 
-Ou pour consulter les modifications récentes :
+Ou pour consulter les modifications récentes :
 
 ```md title=".opencode/commands/review-changes.md"
 ---
@@ -191,7 +190,7 @@ Recent git commits:
 Review these changes and suggest any improvements.
 ```
 
-Les commandes s'exécutent dans le répertoire racine de votre projet et leur sortie fait partie de l'invite.
+Les commandes s'exécutent dans le répertoire racine de votre projet et leur sortie fait partie du prompt.
 
 ---
 
@@ -208,19 +207,19 @@ Review the component in @src/components/Button.tsx.
 Check for performance issues and suggest improvements.
 ```
 
-Le contenu du fichier est automatiquement inclus dans l’invite.
+Le contenu du fichier est automatiquement inclus dans le prompt.
 
 ---
 
-## Possibilités
+## Options
 
 Examinons les options de configuration en détail.
 
 ---
 
-### Modèle
+### Template
 
-L'option `template` définit l'invite qui sera envoyée au LLM lors de l'exécution de la commande.
+L'option `template` définit le prompt qui sera envoyé au LLM lors de l'exécution de la commande.
 
 ```json title="opencode.json"
 {
@@ -276,7 +275,7 @@ Il s'agit d'une option de configuration **facultative**. S’il n’est pas spé
 
 ### Sous-tâche
 
-Utilisez le booléen `subtask` pour forcer la commande à déclencher un invocation de [subagent](/docs/agents/#subagents).
+Utilisez le booléen `subtask` pour forcer la commande à déclencher une invocation de [subagent](/docs/agents/#subagents).
 Ceci est utile si vous souhaitez que la commande ne pollue pas votre contexte principal et **force** l'agent à agir en tant que sous-agent,
 même si `mode` est défini sur `primary` dans la configuration [agent](/docs/agents).
 
@@ -312,9 +311,9 @@ Il s'agit d'une option de configuration **facultative**.
 
 ---
 
-## Intégré
+## Commandes intégrées
 
-opencode comprend plusieurs commandes intégrées comme `/init`, `/undo`, `/redo`, `/share`, `/help` ; [en savoir plus](/docs/tui#commands).
+opencode comprend plusieurs commandes intégrées comme `/init`, `/undo`, `/redo`, `/share`, `/help` ; [en savoir plus](/docs/tui#commands).
 
 :::note
 Les commandes personnalisées peuvent remplacer les commandes intégrées.

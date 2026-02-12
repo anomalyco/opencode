@@ -1,32 +1,32 @@
 ---
 title: Zen
-description: Curated list of models provided by OpenCode.
+description: OpenCode가 제공하는 엄선된 모델 목록.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다.
+OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다.
 
 :::note
 OpenCode Zen은 현재 베타입니다.
 :::
 
-Zen은 OpenCode의 다른 공급자와 같이 작동합니다. OpenCode Zen에 로그인하고
+Zen은 opencode의 다른 공급자와 같이 작동합니다. OpenCode Zen에 로그인하고
 API 키. 그것은 ** 완전 옵션 ** 당신은 사용할 필요가 없습니다
-OpenCode입니다.
+opencode입니다.
 
 ---
 
 ## 배경
 
 거기에 모델의 큰 수는 있지만 몇 가지의
-이 모형은 뿐 아니라 기호화 대리인 작동합니다. 또한, 대부분의 공급자는
+이 모형은 뿐 아니라 기호화 에이전트 작동합니다. 또한, 대부분의 공급자는
 아주 다르게 형성하십시오; 그래서 당신은 아주 다른 성과 및 질을 얻습니다.
 
 :::tip
-OpenCode와 잘 작동하는 모델 및 공급자의 선택 그룹을 테스트했습니다.
+opencode와 잘 작동하는 모델 및 공급자의 선택 그룹을 테스트했습니다.
 :::
 
 OpenRouter와 같은 무언가를 통해 모델을 사용하고 있다면 결코 할 수 없습니다.
@@ -47,7 +47,7 @@ OpenCode Zen은 이 모델에 액세스 할 수있는 AI 게이트웨이입니�
 
 ## 어떻게 작동합니까?
 
-OpenCode Zen은 OpenCode의 다른 공급자와 같습니다.
+OpenCode Zen은 opencode의 다른 공급자와 같습니다.
 
 1. 로그인 **<a href={console}>OpenCode Zen</a>**, 청구 추가
    세부 사항 및 API 키 복사.
@@ -62,39 +62,39 @@ OpenCode Zen은 OpenCode의 다른 공급자와 같습니다.
 
 다음 API 엔드포인트를 통해 모델에 액세스할 수 있습니다.
 
-| 모델명              | 모델명             | 엔드포인트                                         | AI SDK Package              |
-| ------------------- | ------------------ | -------------------------------------------------- | --------------------------- | ---------- |
-| GPT 5.2             | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            | 일본       |
-| GPT 5.2 코덱        | gpt-5.2 코덱       | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1             | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            | 후쿠오카현 |
-| GPT 5.1 코덱        | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 코덱 맥스   | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 코덱 미니   | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5               | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            | 일본       |
-| GPT 5 코덱          | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 나노          | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| 클로드손넷 4.5      | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 아들넷 4     | 클로드슨넷-4       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 하이쿠 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 하이쿠 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 오푸스 4.6   | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 오푸스 4.5   | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 클로드 오푸스 4.1   | 클로드오푸스-4-1   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| 젬니 3 프로         | 젬니 3 프로        | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| 젬니 3 플래시       | 젬니 3 플래시      | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| 미니 맥스 M2.1      | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| 미니 맥스 M2.1 무료 | 미니max-m2.1-무료  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7             | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` | 일본       |
-| GLM 4.7 무료        | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.6             | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` | 일본       |
-| 김이 K2.5           | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| 김이 K2.5 무료      | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| 김이 K2 생각        | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| 김이 K2             | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3 코더 480B     | Qwen3- 코더        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| 빅클래스            | 빅클래스           | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| 모델               | 모델 ID            | 엔드포인트                                         | AI SDK 패키지               |
+| ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-OpenCode config에서 [model id](/docs/config/#models)
+opencode config에서 [model id](/docs/config/#models)
 형식 `opencode/<model-id>`를 사용합니다. 예를 들어, GPT 5.2 Codex의 경우,
 설정에서 `opencode/gpt-5.2-codex`를 사용합니다.
 
@@ -114,42 +114,41 @@ https://opencode.ai/zen/v1/models
 
 우리는 pay-as-you-go 모델을 지원합니다. 아래는 1M 토큰 \*\* 당 가격입니다.
 
-| 모델              | 입력 | 출력  | 통번역 | 통번역 |
-| ----------------- | ---- | ----- | ------ | ------ | --- | --- |
-| 빅클래스          | 무료 |       | 무료   |        |     |     |
-| MiniMax M2.1 무료 |      | 무료  |        |        |     |
-| 최소 M2.1         | 0.30 | $1.20 | 0.10   | -      |
-| GLM 4.7 무료      |      | 무료  |        |        |     |     |
-
-인포메이션 인포메이션 인포메이션 인포메이션 인포메이션
-| GLM 4.6 | $0.60 | $2.20 | 0.10 | - |
-| 김이 K2.5 무료 | | | 무료 | | | | |
-| 김이 K2.5 | $0.60 | $3.00 | $0.08 | - |
-| 김이 K2 생각 | $ 0.40 | $2.50 | - | - |
-| 김이 K2 | 0.40 | $2.50 | - | - |
-| Qwen3 코더 480B | $0.45 | $1.50 | - | - |
-| 클로드손넷 4.5(≤ 200K 토큰) | $3.00 | $15.00 | $0.30 | $3.75 |
-| 클로드손넷 4.5(> 200K 토큰) | $6.00 | $22.50 | $0.60 | $7.50 |
-| 클로드 소네넷 4(≤ 200K 토큰) | $3.00 | $15.00 | $0.30 | $3.75 |
-| 클로드 소네넷 4(> 200K 토큰) | $6.00 | $22.50 | $0.60 | $7.50 |
-| 클레어 하이쿠 4.5 | $1.00 | $5.00 | $0.10 | $1.25 |
-| 클레어 하이쿠 3.5 | $0.80 | $4.00 | $0.08 | $1.00 |
-| 클로드 오푸스 4.6 (≤ 200K 토큰) | $5.00 | $25.00 | $0.50 | $6.25 |
-| 클로드 오푸스 4.6 (> 200K 토큰) | $10.00 | $37.50 | $1.00 | $12.50 |
-| 클로드 오푸스 4.5 | $5.00 | $25.00 | $0.50 | $6.25 |
-인포메이션 인포메이션 인포메이션 인포메이션 인포메이션
-| 젬니 3 프로 (≤ 200K 토큰) | $2.00 | $12.00 | $0.20 | - |
-| 젬니 3 프로 (> 200K 토큰) | $4.00 | $18.00 | $0.40 | - |
-인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션
-인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 인포메이션 센터
-| GPT 5.2 코덱 | $1.75 | $14.00 | $0.175 | - |
-인포메이션 인포메이션 인포메이션 인포메이션 인포메이션
-| GPT 5.1 코덱 | $1.07 | $8.50 | $0.107 | - |
-| GPT 5.1 Codex Max | $10.00 | $0.125 | - |
-| GPT 5.1 코덱 미니 | $0.25 | $2.00 | $0.025 | - |
-| GPT 5 인| $1.07 | $8.50 | $0.107 | - |
-| GPT 5 코드 | $1.07 | $8.50 | $0.107 | - |
-| GPT 5 나노 | 무료 | | 무료 | | | |
+| 모델                              | 입력   | 출력   | 캐시 읽기 | 캐시 쓰기 |
+| --------------------------------- | ------ | ------ | --------- | --------- |
+| Big Pickle                        | Free   | Free   | Free      | -         |
+| MiniMax M2.1 Free                 | Free   | Free   | Free      | -         |
+| MiniMax M2.1                      | $0.30  | $1.20  | $0.10     | -         |
+| GLM 4.7 Free                      | Free   | Free   | Free      | -         |
+| GLM 4.7                           | $0.60  | $2.20  | $0.10     | -         |
+| GLM 4.6                           | $0.60  | $2.20  | $0.10     | -         |
+| Kimi K2.5 Free                    | Free   | Free   | Free      | -         |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.08     | -         |
+| Kimi K2 Thinking                  | $0.40  | $2.50  | -         | -         |
+| Kimi K2                           | $0.40  | $2.50  | -         | -         |
+| Qwen3 Coder 480B                  | $0.45  | $1.50  | -         | -         |
+| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10     | $1.25     |
+| Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08     | $1.00     |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00     | $12.50    |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50     | $18.75    |
+| Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20     | -         |
+| Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40     | -         |
+| Gemini 3 Flash                    | $0.50  | $3.00  | $0.05     | -         |
+| GPT 5.2                           | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.1                           | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125    | -         |
+| GPT 5.1 Codex Mini                | $0.25  | $2.00  | $0.025    | -         |
+| GPT 5                             | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Codex                       | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Nano                        | Free   | Free   | Free      | -         |
 
 You might notice Claude Haiku 3.5 사용 역사. 이것은 세션의 제목을 생성하는 데 사용되는 [low cost model](/docs/config/#models)입니다.
 
@@ -159,10 +158,10 @@ You might notice Claude Haiku 3.5 사용 역사. 이것은 세션의 제목을 �
 
 무료 모델:
 
-- GLM의 4.7 제한된 시간에 OpenCode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
-- 김이 K2.5 제한된 시간에 OpenCode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
-- 미니 맥스 M2.1 제한된 시간에 OpenCode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
-- Big Pickle은 제한된 시간 동안 OpenCode에서 무료 훔친 모델입니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- GLM의 4.7 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- 김이 K2.5 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- 미니 맥스 M2.1 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- Big Pickle은 제한된 시간 동안 opencode에서 무료 훔친 모델입니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
 
 <a href={email}>Contact us</a> if you have any questions.
 
@@ -196,7 +195,7 @@ You might notice Claude Haiku 3.5 사용 역사. 이것은 세션의 제목을 �
 - Kimi K2.5 무료 : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
 - MiniMax M2.1 무료 : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
 - OpenAI APIs: 요청은 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data)에 따라 30일 동안 유지됩니다.
-- Anthropic APIs : 요청은 [Anthropic's Data Policies] (https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30 일 동안 유지됩니다.
+- Anthropic APIs : 요청은 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30 일 동안 유지됩니다.
 
 ---
 
@@ -234,7 +233,7 @@ Admins는 또한 통제의 밑에 비용을 지키는 각 일원을 위한 매�
 
 ---
 
-## 자신의 열쇠를 가져옵니다
+## BYOK (Bring Your Own Key)
 
 OpenAI 또는 Anthropic API 키를 사용하여 Zen에서 다른 모델에 액세스 할 수 있습니다.
 
@@ -252,4 +251,4 @@ OpenCode Zen을 생성했습니다.
 1. **Benchmark ** 코딩 에이전트에 대한 최고의 모델 / 프로바이더.
 2. ** 고품질 ** 옵션에 액세스하고 더 싼 공급자에 고급 성능 또는 노선을 내리지 마십시오.
 3. 비용에 판매해서 ** 가격 하락 **를 따라 통과하십시오; 그래서 단지 감적은 우리의 가공 비용을 커버하는 것입니다.
-4. 잠금 해제 \*\* 다른 코딩 에이전트와 함께 사용할 수 있도록. 그리고 항상 OpenCode와 다른 모든 공급자를 사용할 수 있습니다.
+4. 잠금 해제 \*\* 다른 코딩 에이전트와 함께 사용할 수 있도록. 그리고 항상 opencode와 다른 모든 공급자를 사용할 수 있습니다.

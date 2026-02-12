@@ -1,16 +1,16 @@
 ---
-title: "Agentferdigheter"
-description: "Definer gjenbrukbar atferd via SKILL.md-definisjoner"
+title: "Agentfærdigheder"
+description: "Definer gjenbrugbar atferd via SKILL.md-definisjoner"
 ---
 
-Agentferdigheter lar OpenCode oppdage gjenbrukbare instruksjoner fra repo- eller hjemmekatalogen din.
-Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgjengelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
+Agentferdigheter lar OpenCode oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
+Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgængelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
 
 ---
 
-## Plasser filer
+## Placer filer
 
-Opprett én mappe per ferdighetsnavn og legg inn en `SKILL.md` i den.
+Opret én mappe per ferdighetsnavn og tilføj inn en `SKILL.md` i den.
 OpenCode søker etter disse stedene:
 
 - Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md`
@@ -22,16 +22,16 @@ OpenCode søker etter disse stedene:
 
 ---
 
-## Forstå oppdagelsen
+## Forstå opdagelsen
 
-For prosjektlokale stier går OpenCode opp fra din nåværende arbeidskatalog til den når git-arbeidstreet.
+For prosjektlokale stier går OpenCode opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
 Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
 
 Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
 
 ---
 
-## Skriv frontmaterie
+## Skriv frontmatter
 
 Hver `SKILL.md` må starte med YAML frontmatter.
 Bare disse feltene gjenkjennes:
@@ -46,7 +46,7 @@ Ukjente frontmatter-felter ignoreres.
 
 ---
 
-## Bekreft navn
+## Bekræft navn
 
 `name` må:
 
@@ -64,14 +64,14 @@ Ekvivalent regulært uttrykk:
 
 ---
 
-## Følg lengdereglene
+## Følg længdereglerne
 
 `description` må bestå av 1-1024 tegn.
 Hold det spesifikt nok til at agenten kan velge riktig.
 
 ---
 
-## Bruk et eksempel
+## Brug et eksempel
 
 Lag `.opencode/skills/git-release/SKILL.md` slik:
 
@@ -100,9 +100,9 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Gjenkjenne verktøybeskrivelsen
+## Genkend værktøjsbeskrivelsen
 
-OpenCode viser tilgjengelige ferdigheter i `skill` verktøybeskrivelsen.
+OpenCode viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
 Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 
 ```xml
@@ -114,7 +114,7 @@ Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 </available_skills>
 ```
 
-Agenten laster inn en ferdighet ved å kalle verktøyet:
+Agenten laster inn en ferdighet ved at kalle verktøyet:
 
 ```
 skill({ name: "git-release" })
@@ -122,9 +122,9 @@ skill({ name: "git-release" })
 
 ---
 
-## Konfigurer tillatelser
+## Konfigurer tilladelser
 
-Kontroller hvilke ferdigheter agenter har tilgang til ved å bruke mønsterbaserte tillatelser i `opencode.json`:
+Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaserte tillatelser i `opencode.json`:
 
 ```json
 {
@@ -143,13 +143,13 @@ Kontroller hvilke ferdigheter agenter har tilgang til ved å bruke mønsterbaser
 | ---------- | ------------------------------------------ |
 | `allow`    | Ferdigheter lastes umiddelbart             |
 | `deny`     | Ferdighet skjult for agent, tilgang avvist |
-| `ask`      | Bruker bedt om godkjenning før lasting     |
+| `ask`      | Bruger bedt om godkjenning før lasting     |
 
 Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `internal-tools` osv.
 
 ---
 
-## Overstyring per agent
+## Tilsidesættelse pr. agent
 
 Gi spesifikke agenter andre tillatelser enn de globale standardinnstillingene.
 
@@ -181,9 +181,9 @@ permission:
 
 ---
 
-## Deaktiver ferdighetsverktøyet
+## Deaktiver færdighedsværktøjet
 
-Deaktiver ferdigheter fullstendig for agenter som ikke bør bruke dem:
+Deaktiver ferdigheter fullstendig for agenter som ikke bør bruge dem:
 
 **For egendefinerte agenter**:
 
@@ -212,11 +212,11 @@ Når den er deaktivert, blir `<available_skills>`-delen utelatt helt.
 
 ---
 
-## Feilsøk lasting
+## Fejlfind indlæsning
 
 Hvis en ferdighet ikke vises:
 
 1. Kontroller at `SKILL.md` er stavet med store bokstaver
-2. Sjekk at frontmatter inkluderer `name` og `description`
+2. Tjek at frontmatter inkluderer `name` og `description`
 3. Sørg for at ferdighetsnavnene er unike på alle steder
-4. Sjekk tillatelser – ferdigheter med `deny` er skjult for agenter
+4. Tjek tillatelser – ferdigheter med `deny` er skjult for agenter

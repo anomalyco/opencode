@@ -3,42 +3,42 @@ title: フォーマッタ
 description: OpenCode は言語固有のフォーマッタを使用します。
 ---
 
-OpenCode は、言語固有のフォーマッタを使用してファイルを作成または編集した後、ファイルを自動的にフォーマットします。これにより、生成されるコードがプロジェクトのコード スタイルに従っていることが保証されます。
+OpenCode は、言語固有のフォーマッタを使用してファイルを作成または編集した後、ファイルを自動的にフォーマットします。これにより、生成されるコードがプロジェクトのコードスタイルに従っていることが保証されます。
 
 ---
 
-## 内蔵
+## 組み込み
 
 OpenCode には、一般的な言語およびフレームワーク用のいくつかの組み込みフォーマッタが付属しています。以下は、フォーマッタ、サポートされているファイル拡張子、および必要なコマンドまたは構成オプションのリストです。
 
-| フォーマッタ     | 拡張機能                                                                                                    | 要件                                                                                |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------- |
-| ゴーフムト       | .go                                                                                                         | `gofmt` コマンドが利用可能                                                          |
-| ミックス         | .ex、.exs、.eex、.heex、.leex、.neex、.sface                                                                | `mix` コマンドが利用可能                                                            |
-| よりきれい       | .js、.jsx、.ts、.tsx、.html、.css、.md、.json、.yaml、および [more](https://prettier.io/docs/en/index.html) | `package.json` における `prettier` の依存関係                                       |
-| バイオーム       | .js、.jsx、.ts、.tsx、.html、.css、.md、.json、.yaml、および [more](https://biomejs.dev/)                   | `biome.json(c)` 設定ファイル                                                        |
-| ジグ             | .zig、.zon                                                                                                  | `zig` コマンドが利用可能                                                            |
-| クラン形式       | .c、.cpp、.h、.hpp、.ino、および [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 設定ファイル                                                        |
-| クトリント       | .kt、.kts                                                                                                   | `ktlint` コマンドが利用可能                                                         |
-| ラフ             | .py、.pyi                                                                                                   | `ruff` コマンドは config                                                            | で使用可能です。 |
-| さびと.rs        | `rustfmt` コマンドが利用可能                                                                                |
-| カーゴフムト     | .rs                                                                                                         | `cargo fmt` コマンドが利用可能                                                      |
-| 紫外線           | .py、.pyi                                                                                                   | `uv` コマンドが利用可能                                                             |
-| ロボコップ       | .rb、.rake、.gemspec、.ru                                                                                   | `rubocop` コマンドが利用可能                                                        |
-| 標準RB           | .rb、.rake、.gemspec、.ru                                                                                   | `standardrb` コマンドが利用可能                                                     |
-| htmlビューティー | .erb、.html.erb                                                                                             | `htmlbeautifier` コマンドが利用可能                                                 |
-| 空気             | .R                                                                                                          | `air` コマンドが利用可能                                                            |
-| ダーツ           | .ダーツ                                                                                                     | `dart` コマンドが利用可能                                                           |
-| ocaml形式        | .ml、.mli                                                                                                   | 利用可能な `ocamlformat` コマンドと `.ocamlformat` 設定ファイル                     |
-| テラフォーム     | .tf、.tfvars                                                                                                | `terraform` コマンドが利用可能                                                      |
-| 輝く.gleam       | `gleam` コマンドが利用可能                                                                                  |
-| ニクスフムト     | .nix                                                                                                        | `nixfmt` コマンドが利用可能                                                         |
-| シュフムト       | .sh、.bash                                                                                                  | `shfmt` コマンドが利用可能                                                          |
-| パイント         | .php                                                                                                        | `composer.json` における `laravel/pint` の依存関係                                  |
-| oxfmt (実験的)   | .js、.jsx、.ts、.tsx                                                                                        | `package.json` の `oxfmt` 依存関係と [実験用環境変数 flag](/docs/cli/#experimental) |
-| オルモル         | .hs                                                                                                         | `ormolu` コマンドが利用可能                                                         |
+| Formatter            | Extensions                                                                                               | Requirements                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                                      | `gofmt` command available                                                                             |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | `mix` command available                                                                               |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `prettier` dependency in `package.json`                                                               |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json(c)` config file                                                                           |
+| zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
+| ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                            |
+| ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
+| rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
+| cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
+| uv                   | .py, .pyi                                                                                                | `uv` command available                                                                                |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available                                                                           |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available                                                                        |
+| htmlbeautifier       | .erb, .html.erb                                                                                          | `htmlbeautifier` command available                                                                    |
+| air                  | .R                                                                                                       | `air` command available                                                                               |
+| dart                 | .dart                                                                                                    | `dart` command available                                                                              |
+| ocamlformat          | .ml, .mli                                                                                                | `ocamlformat` command available and `.ocamlformat` config file                                        |
+| terraform            | .tf, .tfvars                                                                                             | `terraform` command available                                                                         |
+| gleam                | .gleam                                                                                                   | `gleam` command available                                                                             |
+| nixfmt               | .nix                                                                                                     | `nixfmt` command available                                                                            |
+| shfmt                | .sh, .bash                                                                                               | `shfmt` command available                                                                             |
+| pint                 | .php                                                                                                     | `laravel/pint` dependency in `composer.json`                                                          |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
 
-したがって、プロジェクトの `package.json` に `prettier` が含まれている場合、OpenCode は自動的にそれを使用します。
+したがって、プロジェクトの `prettier` に `package.json` が含まれている場合、OpenCode は自動的にそれを使用します。
 
 ---
 
@@ -47,16 +47,16 @@ OpenCode には、一般的な言語およびフレームワーク用のいく�
 OpenCode がファイルを書き込んだり編集したりすると、次のことが行われます。
 
 1. 有効なすべてのフォーマッタに対してファイル拡張子をチェックします。
-2. ファイルに対して適切なフォーマッタ コマンドを実行します。
+2. ファイルに対して適切なフォーマッタコマンドを実行します。
 3. 書式の変更を自動的に適用します。
 
-このプロセスはバックグラウンドで実行されるため、手動の手順を行わなくてもコード スタイルが維持されます。
+このプロセスはバックグラウンドで実行されるため、手動の手順を行わなくてもコードスタイルが維持されます。
 
 ---
 
-## 設定する
+## 設定
 
-OpenCode 構成の `formatter` セクションを通じてフォーマッタをカスタマイズできます。
+OpenCode 設定の `formatter` セクションを通じてフォーマッタをカスタマイズできます。
 
 ```json title="opencode.json"
 {

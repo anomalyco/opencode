@@ -15,7 +15,7 @@ Ovdje koristimo CI/CD komponentu kreiranu u zajednici za OpenCode — [nagyv/git
 
 ---
 
-### Karakteristike
+### Funkcije
 
 - **Koristite prilagođenu konfiguraciju po poslu**: Konfigurirajte OpenCode s prilagođenim konfiguracijskim direktorijem, na primjer `./config/#custom-directory` da omogućite ili onemogućite funkcionalnost po OpenCode pozivanju.
 - **Minimalno podešavanje**: CI komponenta postavlja OpenCode u pozadini, samo trebate kreirati OpenCode konfiguraciju i početnu prompt.
@@ -25,7 +25,7 @@ Ovdje koristimo CI/CD komponentu kreiranu u zajednici za OpenCode — [nagyv/git
 
 ### Podešavanje
 
-1. Sačuvajte JSON za autentifikaciju OpenCode-a kao CI varijable okruženja tipa datoteke pod **Postavke** > **CI/CD** > **Varijable**. Obavezno ih označite kao "Maskirane i skrivene".
+1. Sačuvajte JSON za autentifikaciju OpenCode kao CI varijable okruženja tipa datoteke pod **Postavke** > **CI/CD** > **Varijable**. Obavezno ih označite kao "Maskirane i skrivene".
 2. Dodajte sljedeće u svoju `.gitlab-ci.yml` datoteku.
 
 ```yaml title=".gitlab-ci.yml"
@@ -49,7 +49,7 @@ Spomenite `@opencode` u komentaru i OpenCode će izvršiti zadatke unutar vašeg
 
 ---
 
-### Karakteristike
+### Funkcije
 
 - **Problemi trijaže**: Zamolite OpenCode da ispita problem i objasni vam ga.
 - **Popravi i implementiraj**: Zamolite OpenCode da popravi problem ili implementira funkciju.
@@ -74,7 +74,7 @@ Pogledajte [**GitLab dokumente**](https://docs.gitlab.com/user/duo_agent_platfor
 
         <details>
 
-    <summary>Flow configuration</summary>
+    <summary>Konfiguracija toka</summary>
 
     ```yaml
     image: node:22-slim
@@ -155,7 +155,7 @@ Možete vidjeti [GitLab CLI agenti docs](https://docs.gitlab.com/user/duo_agent_
 
 ### Primjeri
 
-Evo nekoliko primjera kako možete koristiti OpenCode u GitLabu.
+Evo nekoliko primjera kako možete koristiti OpenCode u GitLab.
 :::tip
 Možete konfigurirati da koristite drugu frazu okidača od `@opencode`.
 :::
@@ -165,8 +165,6 @@ Možete konfigurirati da koristite drugu frazu okidača od `@opencode`.
 
 ```
   @opencode explain this issue
-
-
 ```
 
 OpenCode će pročitati problem i odgovoriti jasnim objašnjenjem.
@@ -176,8 +174,6 @@ OpenCode će pročitati problem i odgovoriti jasnim objašnjenjem.
 
 ```
   @opencode fix this
-
-
 ```
 
 OpenCode će kreirati novu granu, implementirati promjene i otvoriti zahtjev za spajanje s promjenama.
@@ -187,8 +183,6 @@ OpenCode će kreirati novu granu, implementirati promjene i otvoriti zahtjev za 
 
 ```
   @opencode review this merge request
-
-
 ```
 
 OpenCode će pregledati zahtjev za spajanje i dati povratne informacije.

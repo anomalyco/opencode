@@ -1,29 +1,29 @@
 ---
 title: GitHub
-description: Utilisez OpenCode dans les problèmes et les pull-requests GitHub.
+description: Utilisez OpenCode dans les issues et les pull-requests GitHub.
 ---
 
-OpenCode s'intègre à votre flux de travail GitHub. Mentionnez `/opencode` ou `/oc` dans votre commentaire, et OpenCode exécutera des tâches dans votre coureur d'actions GitHub.
+OpenCode s'intègre à votre flux de travail GitHub. Mentionnez `/opencode` ou `/oc` dans votre commentaire, et OpenCode exécutera des tâches dans votre runner GitHub Actions.
 
 ---
 
-## Caractéristiques
+## Fonctionnalités
 
-- **Problèmes de triage** : demandez à OpenCode d'examiner un problème et de vous l'expliquer.
-- **Réparer et implémenter** : demandez à OpenCode de résoudre un problème ou d'implémenter une fonctionnalité. Et il fonctionnera dans une nouvelle branche et soumettra un PR avec tous les changements.
-- **Sécurisé** : OpenCode court à l'intérieur des coureurs de votre GitHub.
+- **Triage des issues** : demandez à OpenCode d'examiner une issue et de vous l'expliquer.
+- **Correction et implémentation** : demandez à OpenCode de résoudre un problème ou d'implémenter une fonctionnalité. Il travaillera dans une nouvelle branche et soumettra une PR avec tous les changements.
+- **Sécurisé** : OpenCode s'exécute à l'intérieur de vos runners GitHub.
 
 ---
 
 ## Installation
 
-Exécutez la commande suivante dans un projet qui se trouve dans un dépôt GitHub :
+Exécutez la commande suivante dans un projet qui se trouve dans un dépôt GitHub :
 
 ```bash
 opencode github install
 ```
 
-Cela vous guidera dans l'installation de l'application GitHub, la création du flux de travail et la configuration des secrets.
+Cela vous guidera dans l'installation de l'application GitHub, la création du workflow et la configuration des secrets.
 
 ---
 
@@ -33,61 +33,61 @@ Ou vous pouvez le configurer manuellement.
 
 1. **Installez l'application GitHub**
 
-Rendez-vous sur [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Assurez-vous qu'il est installé sur le référentiel cible.
+Rendez-vous sur [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Assurez-vous qu'il est installé sur le dépôt cible.
 
-2. **Ajouter le flux de travail**
+2. **Ajouter le workflow**
 
-Ajoutez le fichier de workflow suivant à `.github/workflows/opencode.yml` dans votre référentiel. Assurez-vous de définir les clés `model` appropriées et API requises dans `env`.
+Ajoutez le fichier de workflow suivant à `.github/workflows/opencode.yml` dans votre dépôt. Assurez-vous de définir les clés `model` appropriées et les clés API requises dans `env`.
 
 ```yml title=".github/workflows/opencode.yml" {24,26}
-name: opencode
+   name: opencode
 
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
 
-jobs:
-  opencode:
-    if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-       - name: Checkout repository
-         uses: actions/checkout@v6
-         with:
-           fetch-depth: 1
-           persist-credentials: false
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+       steps:
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
 
-       - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        with:
-          model: anthropic/claude-sonnet-4-20250514
-          # share: true
-          # github_token: xxxx
+          - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             # share: true
+             # github_token: xxxx
 ```
 
-3. **Stockez les clés API en secret**
+3. **Stockez les clés API dans les secrets**
 
-Dans les **paramètres** de votre organisation ou de votre projet, développez **Secrets et variables** sur la gauche et sélectionnez **Actions**. Et ajoutez les clés API requises.
+Dans les **paramètres** de votre organisation ou de votre projet, développez **Secrets et variables** sur la gauche et sélectionnez **Actions**. Puis ajoutez les clés API requises.
 
 ---
 
 ## Configuration
 
-- `model` : Le modèle à utiliser avec OpenCode. Prend le format `provider/model`. Ceci est **obligatoire**.
-- `agent` : l'agent à utiliser. Doit être un agent principal. Revient à `default_agent` à partir de la configuration ou à `"build"` s'il n'est pas trouvé.
-- `share` : s'il faut partager la session OpenCode. La valeur par défaut est **true** pour les référentiels publics.
-- `prompt` : invite personnalisée facultative pour remplacer le comportement par défaut. Utilisez-le pour personnaliser la façon dont OpenCode traite les demandes.
-- `token` : jeton d'accès GitHub facultatif pour effectuer des opérations telles que la création de commentaires, la validation de modifications et l'ouverture de demandes d'extraction. Par défaut, OpenCode utilise le jeton d'accès à l'installation de l'application OpenCode GitHub, de sorte que les validations, les commentaires et les demandes d'extraction apparaissent comme provenant de l'application.
+- `model` : Le modèle à utiliser avec OpenCode. Prend le format `provider/model`. Ceci est **obligatoire**.
+- `agent` : l'agent à utiliser. Doit être un agent primaire. Revient à `default_agent` à partir de la configuration ou à `"build"` s'il n'est pas trouvé.
+- `share` : s'il faut partager la session OpenCode. La valeur par défaut est **true** pour les référentiels publics.
+- `prompt` : prompt personnalisé facultatif pour remplacer le comportement par défaut. Utilisez-le pour personnaliser la façon dont OpenCode traite les demandes.
+- `token` : jeton d'accès GitHub facultatif pour effectuer des opérations telles que la création de commentaires, le commit de modifications et l'ouverture de pull requests. Par défaut, OpenCode utilise le jeton d'accès à l'installation de l'application OpenCode GitHub, de sorte que les commits, les commentaires et les pull requests apparaissent comme provenant de l'application.
 
-Vous pouvez également utiliser le `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) intégré du GitHub Action Runner sans installer l'application OpenCode GitHub. Assurez-vous simplement d'accorder les autorisations requises dans votre flux de travail :
+Vous pouvez également utiliser le `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) intégré du runner GitHub Actions sans installer l'application OpenCode GitHub. Assurez-vous simplement d'accorder les autorisations requises dans votre workflow :
 
 ```yaml
 permissions:
@@ -97,26 +97,26 @@ permissions:
   issues: write
 ```
 
-Vous pouvez également utiliser un [jetons d'accès personnels](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) si vous préférez.
+Vous pouvez également utiliser un [jeton d'accès personnel](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) si vous préférez.
 
 ---
 
-## Événements pris en charge
+## Événements supportés
 
-OpenCode peut être déclenché par les événements GitHub suivants :
+OpenCode peut être déclenché par les événements GitHub suivants :
 
 | Type d'événement              | Déclenché par                                              | Détails                                                                                                                                                |
 | ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `issue_comment`               | Commenter un problème ou un PR                             | Mentionnez `/opencode` ou `/oc` dans votre commentaire. OpenCode lit le contexte et peut créer des branches, ouvrir des PR ou répondre.                |
-| `pull_request_review_comment` | Commentez des lignes de code spécifiques dans un PR        | Mentionnez `/opencode` ou `/oc` lors de la révision du code. OpenCode reçoit le chemin du fichier, les numéros de ligne et le contexte de comparaison. |
-| `issues`                      | Numéro ouvert ou modifié                                   | Déclenchez automatiquement OpenCode lorsque des problèmes sont créés ou modifiés. Nécessite une entrée `prompt`.                                       |
-| `pull_request`                | PR ouvert ou mis à jour                                    | Déclenchez automatiquement OpenCode lorsque les PR sont ouverts, synchronisés ou rouverts. Utile pour les avis automatisés.                            |
-| `schedule`                    | Planification basée sur Cron                               | Exécutez OpenCode selon un planning. Nécessite une entrée `prompt`. La sortie va aux journaux et aux PR (aucun problème à commenter).                  |
+| `issue_comment`               | Commentaire sur une issue ou une PR                        | Mentionnez `/opencode` ou `/oc` dans votre commentaire. OpenCode lit le contexte et peut créer des branches, ouvrir des PR ou répondre.                |
+| `pull_request_review_comment` | Commentaire sur des lignes de code spécifiques dans une PR | Mentionnez `/opencode` ou `/oc` lors de la révision du code. OpenCode reçoit le chemin du fichier, les numéros de ligne et le contexte de comparaison. |
+| `issues`                      | Issue ouverte ou modifiée                                  | Déclenchez automatiquement OpenCode lorsque des issues sont créées ou modifiées. Nécessite une entrée `prompt`.                                        |
+| `pull_request`                | PR ouverte ou mise à jour                                  | Déclenchez automatiquement OpenCode lorsque les PR sont ouvertes, synchronisées ou rouvertes. Utile pour les revues automatisées.                      |
+| `schedule`                    | Planification basée sur Cron                               | Exécutez OpenCode selon un planning. Nécessite une entrée `prompt`. La sortie va aux journaux et aux PR (pas de commentaire sur les issues).           |
 | `workflow_dispatch`           | Déclenchement manuel depuis l'interface utilisateur GitHub | Déclenchez OpenCode à la demande via l'onglet Actions. Nécessite une entrée `prompt`. La sortie va aux journaux et aux PR.                             |
 
-### Exemple d'horaire
+### Exemple de planification
 
-Exécutez OpenCode selon un planning pour effectuer des tâches automatisées :
+Exécutez OpenCode selon un planning pour effectuer des tâches automatisées :
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -154,9 +154,9 @@ Pour les événements planifiés, l'entrée `prompt` est **obligatoire** car il 
 
 ---
 
-### Exemple de demande de tirage
+### Exemple de Pull Request
 
-Examinez automatiquement les PR lorsqu'ils sont ouverts ou mis à jour :
+Examinez automatiquement les PR lorsqu'ils sont ouverts ou mis à jour :
 
 ```yaml title=".github/workflows/opencode-review.yml"
 name: opencode-review
@@ -191,13 +191,13 @@ jobs:
             - Suggest improvements
 ```
 
-Pour les événements `pull_request`, si aucun `prompt` n'est fourni, OpenCode examine par défaut la demande d'extraction.
+Pour les événements `pull_request`, si aucun `prompt` n'est fourni, OpenCode examine par défaut la pull request.
 
 ---
 
-### Exemple de tri des problèmes
+### Exemple de Triage d'Issue
 
-Triez automatiquement les nouveaux problèmes. Cet exemple filtre les comptes datant de plus de 30 jours pour réduire le spam :
+Triez automatiquement les nouvelles issues. Cet exemple filtre les comptes datant de plus de 30 jours pour réduire le spam :
 
 ```yaml title=".github/workflows/opencode-triage.yml"
 name: Issue Triage
@@ -252,7 +252,7 @@ Pour les événements `issues`, l'entrée `prompt` est **obligatoire** car il n'
 
 ## Invites personnalisées
 
-Remplacez l'invite par défaut pour personnaliser le comportement de OpenCode pour votre flux de travail.
+Remplacez l'invite par défaut pour personnaliser le comportement de OpenCode pour votre workflow.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -273,48 +273,48 @@ Ceci est utile pour appliquer des critères d’évaluation spécifiques, des no
 
 Voici quelques exemples de la façon dont vous pouvez utiliser OpenCode dans GitHub.
 
-- **Expliquez un problème**
+- **Expliquer une issue**
 
-Ajoutez ce commentaire dans un numéro GitHub.
+Ajoutez ce commentaire dans une issue GitHub.
 
 ```
-/opencode explain this issue
+  /opencode explain this issue
 ```
 
 OpenCode lira l'intégralité du fil de discussion, y compris tous les commentaires, et répondra avec une explication claire.
 
-- **Résoudre un problème**
+- **Résoudre une issue**
 
-Dans un numéro GitHub, dites :
+Dans une issue GitHub, dites :
 
 ```
-/opencode fix this
+  /opencode fix this
 ```
 
-Et OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira un PR avec les modifications.
+Et OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une PR avec les modifications.
 
 - **Examinez les PR et apportez des modifications**
 
-Laissez le commentaire suivant sur un PR GitHub.
+Laissez le commentaire suivant sur une PR GitHub.
 
 ```
-Delete the attachment from S3 when the note is removed /oc
+  Delete the attachment from S3 when the note is removed /oc
 ```
 
-OpenCode mettra en œuvre la modification demandée et la validera dans le même PR.
+OpenCode mettra en œuvre la modification demandée et la validera dans la même PR.
 
-- **Revoir des lignes de code spécifiques**
+- **Revue de lignes de code spécifiques**
 
-Laissez un commentaire directement sur les lignes de code dans l'onglet "Fichiers" du PR. OpenCode détecte automatiquement le fichier, les numéros de ligne et le contexte de comparaison pour fournir des réponses précises.
+Laissez un commentaire directement sur les lignes de code dans l'onglet "Fichiers" de la PR. OpenCode détecte automatiquement le fichier, les numéros de ligne et le contexte de comparaison pour fournir des réponses précises.
 
 ```
-[Comment on specific lines in Files tab]
-/oc add error handling here
+  [Comment on specific lines in Files tab]
+  /oc add error handling here
 ```
 
-Lorsqu'il commente des lignes spécifiques, OpenCode reçoit :
+Lorsqu'il commente des lignes spécifiques, OpenCode reçoit :
 
-- Le dossier exact en cours d'examen
+- Le fichier exact en cours d'examen
 - Les lignes de code spécifiques
 - Le contexte différentiel environnant
 - Informations sur le numéro de ligne

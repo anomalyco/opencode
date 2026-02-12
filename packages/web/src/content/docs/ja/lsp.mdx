@@ -3,52 +3,52 @@ title: LSPサーバー
 description: OpenCode は LSP サーバーと統合します。
 ---
 
-OpenCode は言語サーバー プロトコル (LSP) と統合して、LLM がコードベースと対話できるようにします。診断を使用して LLM にフィードバックを提供します。
+OpenCode は言語サーバープロトコル (LSP) と統合して、LLM がコードベースと対話できるようにします。診断を使用して LLM にフィードバックを提供します。
 
 ---
 
-## 内蔵
+## 組み込み
 
 OpenCode には、一般的な言語用のいくつかの組み込み LSP サーバーが付属しています。
 
-| LSPサーバー           | 拡張機能                                                            | 要件                                                        |
-| --------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------- |
-| アストロ              | .astro                                                              | Astro プロジェクトの自動インストール                        |
-| バッシュ              | .sh、.bash、.zsh、.ksh                                              | bash-lang-server を自動インストールします。                 |
-| クランド              | .c、.cpp、.cc、.cxx、.c++、.h、.hpp、.hh、.hxx、.h++                | C/C++ プロジェクトの自動インストール                        |
-| シーシャープ          | .cs                                                                 | `.NET SDK` がインストールされました                         |
-| clojure-lsp           | .clj、.cljs、.cljc、.edn                                            | `clojure-lsp` コマンドが利用可能                            |
-| ダーツ                | .ダーツ                                                             | `dart` コマンドが利用可能                                   |
-| デノ                  | .ts、.tsx、.js、.jsx、.mjs                                          | `deno` コマンドが利用可能 (deno.json/deno.jsonc を自動検出) |
-| エリクサーLS          | .ex、.exs                                                           | `elixir` コマンドが利用可能                                 |
-| エスリント            | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue                  | プロジェクト内の `eslint` 依存関係                          |
-| フシャープ            | .fs、.fsi、.fsx、.fsscript                                          | `.NET SDK` がインストールされました                         |
-| 輝く.gleam            | `gleam` コマンドが利用可能                                          |
-| ゴップル              | .go                                                                 | `go` コマンドが利用可能                                     |
-| HLS                   | .hs、.lhs                                                           | `haskell-language-server-wrapper` コマンドが利用可能        |
-| jdtls                 | .java                                                               | `Java SDK (version 21+)` がインストールされました           |
-| kotlin-ls             | .kt、.kts                                                           | Kotlin プロジェクトの自動インストール                       |
-| ルアール              | .lua                                                                | Lua プロジェクトの自動インストール                          |
-| ニクスド              | .nix                                                                | `nixd` コマンドが利用可能                                   |
-| ocaml-lsp             | .ml、.mli                                                           | `ocamllsp` コマンドが利用可能                               |
-| オックスリント        | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue、.astro、.svelte | プロジェクト内の `oxlint` 依存関係                          |
-| php インテルフェンス  | .php                                                                | PHP プロジェクトの自動インストール                          |
-| プリズマ              | .プリズム                                                           | `prisma` コマンドが利用可能                                 |
-| 著作権                | .py、.pyi                                                           | `pyright` 依存関係がインストールされました                  |
-| Ruby-LSP (ルボコップ) | .rb、.rake、.gemspec、.ru                                           | `ruby` および `gem` コマンドが利用可能                      |
-| さび                  | .rs                                                                 | `rust-analyzer` コマンドが利用可能                          |
-| ソースキット-lsp      | .swift、.objc、.objcpp                                              | `swift` がインストールされています (macOS では `xcode`)。   |
-| 細い                  | .svelte                                                             | Svelte プロジェクトの自動インストール                       |
-| テラフォーム          | .tf、.tfvars                                                        | GitHub リリースからの自動インストール                       |
-| タイニーミスト        | .typ、.typc                                                         | GitHub リリースからの自動インストール                       |
-| タイプスクリプト      | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts                        | プロジェクト内の `typescript` 依存関係                      |
-| ビュー                | .vue                                                                | Vue プロジェクトの自動インストール                          |
-| yaml-ls               | .yaml、.yml                                                         | Red Hat yaml-lang-server を自動インストールします。         |
-| zls                   | .zig、.zon                                                          | `zig` コマンドが利用可能                                    |
+| LSP Server         | Extensions                                                          | Requirements                                                 |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro              | .astro                                                              | Auto-installs for Astro projects                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Auto-installs bash-language-server                           |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Auto-installs for C/C++ projects                             |
+| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` command available                              |
+| dart               | .dart                                                               | `dart` command available                                     |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` command available                                   |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
+| gleam              | .gleam                                                              | `gleam` command available                                    |
+| gopls              | .go                                                                 | `go` command available                                       |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` command available          |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installed                           |
+| kotlin-ls          | .kt, .kts                                                           | Auto-installs for Kotlin projects                            |
+| lua-ls             | .lua                                                                | Auto-installs for Lua projects                               |
+| nixd               | .nix                                                                | `nixd` command available                                     |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
+| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
+| prisma             | .prisma                                                             | `prisma` command available                                   |
+| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
+| rust               | .rs                                                                 | `rust-analyzer` command available                            |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
+| svelte             | .svelte                                                             | Auto-installs for Svelte projects                            |
+| terraform          | .tf, .tfvars                                                        | Auto-installs from GitHub releases                           |
+| tinymist           | .typ, .typc                                                         | Auto-installs from GitHub releases                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
+| vue                | .vue                                                                | Auto-installs for Vue projects                               |
+| yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
+| zls                | .zig, .zon                                                          | `zig` command available                                      |
 
 上記のファイル拡張子のいずれかが検出され、要件が満たされると、LSP サーバーは自動的に有効になります。
 
-:::注記
+:::note
 `OPENCODE_DISABLE_LSP_DOWNLOAD` 環境変数を `true` に設定すると、LSP サーバーの自動ダウンロードを無効にできます。
 :::
 
@@ -56,16 +56,16 @@ OpenCode には、一般的な言語用のいくつかの組み込み LSP サー
 
 ## 仕組み
 
-opencode がファイルを開くと、次のようになります。
+OpenCode がファイルを開くと、次のようになります。
 
 1. 有効なすべての LSP サーバーに対してファイル拡張子をチェックします。
 2. 適切な LSP サーバーがまだ実行されていない場合は開始します。
 
 ---
 
-## 設定する
+## 設定
 
-Opencode 構成の `lsp` セクションを通じて LSP サーバーをカスタマイズできます。
+OpenCode 設定の `lsp` セクションを通じて LSP サーバーをカスタマイズできます。
 
 ```json title="opencode.json"
 {
@@ -126,7 +126,7 @@ LSP サーバーの起動時に `env` プロパティを使用して環境変数
 }
 ```
 
-:::注記
+:::note
 初期化オプションは LSP サーバーによって異なります。利用可能なオプションについては、LSP サーバーのドキュメントを確認してください。
 :::
 
@@ -158,7 +158,7 @@ LSP サーバーの起動時に `env` プロパティを使用して環境変数
 
 ---
 
-### カスタムLSPサーバー
+### カスタム LSP サーバー
 
 コマンドとファイル拡張子を指定して、カスタム LSP サーバーを追加できます。
 
@@ -178,11 +178,11 @@ LSP サーバーの起動時に `env` プロパティを使用して環境変数
 
 ## 追加情報
 
-### PHP インテリフェンス
+### PHP Intelephense
 
-PHP Intelephense は、ライセンス キーを通じてプレミアム機能を提供します。ライセンス キーを指定するには、次の場所にあるテキスト ファイルにキー (のみ) を配置します。
+PHP Intelephense は、ライセンスキーを通じてプレミアム機能を提供します。ライセンスキーを指定するには、次の場所にあるテキストファイルにキー (のみ) を配置します。
 
-- macOS/Linux の場合: `$HOME/intelephense/licence.txt`
-- Windows の場合: `%USERPROFILE%/intelephense/licence.txt`
+- macOS/Linux の場合: `$HOME/intelephense/license.txt`
+- Windows の場合: `%USERPROFILE%/intelephense/license.txt`
 
-ファイルにはライセンス キーのみが含まれており、追加のコンテンツは含まれていません。
+ファイルにはライセンスキーのみが含まれており、追加のコンテンツは含まれていません。
