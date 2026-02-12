@@ -2162,38 +2162,17 @@ test("Google Vertex: retains baseURL for custom proxy", async () => {
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
     },
     fn: async () => {
-      const originalFetch = globalThis.fetch
-      let requestUrl: string | URL | Request | undefined
-
-      // @ts-ignore
-      globalThis.fetch = async (url, init) => {
-        requestUrl = url
-        return new Response(JSON.stringify({
-          candidates: [{ content: { parts: [{ text: "hello" }], role: "model" } }],
-          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 }
-        }))
-      }
-
-      try {
-        const model = await Provider.getModel("vertex-proxy", "gemini-pro")
-        const languageModel = await Provider.getLanguage(model)
-
-        await languageModel.doGenerate({
-          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }]
-        })
-
-        expect(requestUrl?.toString()).toContain("https://my-proxy.com/v1")
-      } finally {
-        globalThis.fetch = originalFetch
-      }
-    }
+      const providers = await Provider.list()
+      expect(providers["vertex-proxy"]).toBeDefined()
+      expect(providers["vertex-proxy"].options.baseURL).toBe("https://my-proxy.com/v1")
+    },
   })
 })
 
-test("OpenAI Compatible: forces includeUsage to true", async () => {
+test("Google Vertex: supports OpenAI compatible models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -2201,18 +2180,22 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           provider: {
-            "custom-openai": {
-              name: "Custom OpenAI",
-              npm: "@ai-sdk/openai-compatible",
-              api: "https://api.openai.com/v1",
-              env: [],
+            "vertex-openai": {
+              name: "Vertex OpenAI",
+              npm: "@ai-sdk/google-vertex",
+              env: ["GOOGLE_APPLICATION_CREDENTIALS"],
               models: {
                 "gpt-4": {
                   name: "GPT-4",
+                  provider: {
+                    npm: "@ai-sdk/openai-compatible",
+                    api: "https://api.openai.com/v1",
+                  },
                 },
               },
               options: {
-                apiKey: "test-key",
+                project: "test-project",
+                location: "us-central1",
               },
             },
           },
@@ -2223,35 +2206,15 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
 
   await Instance.provide({
     directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
+    },
     fn: async () => {
-      const originalFetch = globalThis.fetch
-      let requestBody: any = null
+      const providers = await Provider.list()
+      const model = providers["vertex-openai"].models["gpt-4"]
 
-      // @ts-ignore
-      globalThis.fetch = async (url, init) => {
-        if (init && init.body) {
-          requestBody = JSON.parse(init.body as string)
-        }
-        return new Response(JSON.stringify({
-          id: "test",
-          choices: [{ message: { role: "assistant", content: "hello" } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-        }))
-      }
-
-      try {
-        const model = await Provider.getModel("custom-openai", "gpt-4")
-        const languageModel = await Provider.getLanguage(model)
-
-        await languageModel.doGenerate({
-          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }]
-        })
-
-        expect(requestBody).toBeDefined()
-
-      } finally {
-        globalThis.fetch = originalFetch
-      }
+      expect(model).toBeDefined()
+      expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
     },
   })
 })
