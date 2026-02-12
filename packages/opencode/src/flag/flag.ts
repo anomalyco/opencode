@@ -30,6 +30,9 @@ export namespace Flag {
   export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+  export const OPENCODE_HOT_RELOAD = truthy("OPENCODE_HOT_RELOAD")
+  export const OPENCODE_HOT_RELOAD_DEBOUNCE_MS = number("OPENCODE_HOT_RELOAD_DEBOUNCE_MS")
+  export const OPENCODE_HOT_RELOAD_COOLDOWN_MS = number("OPENCODE_HOT_RELOAD_COOLDOWN_MS")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")

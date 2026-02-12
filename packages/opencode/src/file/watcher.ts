@@ -46,7 +46,7 @@ export namespace FileWatcher {
 
   const state = Instance.state(
     async () => {
-      if (Instance.project.vcs !== "git") return {}
+      if (Instance.project.vcs !== "git" && !Flag.OPENCODE_HOT_RELOAD) return {}
       log.info("init")
       const cfg = await Config.get()
       const backend = (() => {
@@ -75,7 +75,7 @@ export namespace FileWatcher {
       const subs: ParcelWatcher.AsyncSubscription[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+      if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER || Flag.OPENCODE_HOT_RELOAD) {
         const pending = w.subscribe(Instance.directory, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
           backend,
