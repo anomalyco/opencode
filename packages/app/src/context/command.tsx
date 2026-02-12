@@ -11,6 +11,7 @@ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(na
 const PALETTE_ID = "command.palette"
 const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
+const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new"])
 
 function actionId(id: string) {
   if (!id.startsWith(SUGGESTED_PREFIX)) return id
@@ -31,6 +32,11 @@ function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, al
 
 function signatureFromEvent(event: KeyboardEvent) {
   return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+}
+
+function isAllowedEditableKeybind(id: string | undefined) {
+  if (!id) return false
+  return EDITABLE_KEYBIND_IDS.has(actionId(id))
 }
 
 export type KeybindConfig = string
@@ -305,17 +311,19 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
-      if (isEditableTarget(event.target)) return
 
       const sig = signatureFromEvent(event)
+      const isPalette = palette().has(sig)
+      const option = keymap().get(sig)
 
-      if (palette().has(sig)) {
+      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id)) return
+
+      if (isPalette) {
         event.preventDefault()
         showPalette()
         return
       }
 
-      const option = keymap().get(sig)
       if (!option) return
       event.preventDefault()
       option.onSelect?.("keybind")
