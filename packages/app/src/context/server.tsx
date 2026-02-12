@@ -22,7 +22,7 @@ export function serverDisplayName(url: string) {
 function projectsKey(url: string) {
   if (!url) return ""
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return "local"
   return url
 }
 

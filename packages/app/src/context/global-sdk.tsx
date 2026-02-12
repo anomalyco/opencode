@@ -25,6 +25,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       baseUrl: server.url,
       signal: abort.signal,
       headers: auth,
+      fetch: server.isLocal() ? undefined : platform.fetch,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
