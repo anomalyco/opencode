@@ -1,4 +1,5 @@
 import type { CommandOption } from "@/context/command"
+import { batch } from "solid-js"
 
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
@@ -27,9 +28,11 @@ export const createOpenReviewFile = (input: {
   loadFile: (path: string) => void
 }) => {
   return (path: string) => {
-    input.showAllFiles()
-    input.openTab(input.tabForPath(path))
-    input.loadFile(path)
+    batch(() => {
+      input.showAllFiles()
+      input.openTab(input.tabForPath(path))
+      input.loadFile(path)
+    })
   }
 }
 
