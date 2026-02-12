@@ -76,6 +76,66 @@ const LOCALES: readonly Locale[] = [
   "th",
 ]
 
+const LABEL_KEY: Record<Locale, keyof Dictionary> = {
+  en: "language.en",
+  zh: "language.zh",
+  zht: "language.zht",
+  ko: "language.ko",
+  de: "language.de",
+  es: "language.es",
+  fr: "language.fr",
+  da: "language.da",
+  ja: "language.ja",
+  pl: "language.pl",
+  ru: "language.ru",
+  ar: "language.ar",
+  no: "language.no",
+  br: "language.br",
+  th: "language.th",
+  bs: "language.bs",
+}
+
+const base = i18n.flatten({ ...en, ...uiEn })
+const DICT: Record<Locale, Dictionary> = {
+  en: base,
+  zh: { ...base, ...i18n.flatten({ ...zh, ...uiZh }) },
+  zht: { ...base, ...i18n.flatten({ ...zht, ...uiZht }) },
+  ko: { ...base, ...i18n.flatten({ ...ko, ...uiKo }) },
+  de: { ...base, ...i18n.flatten({ ...de, ...uiDe }) },
+  es: { ...base, ...i18n.flatten({ ...es, ...uiEs }) },
+  fr: { ...base, ...i18n.flatten({ ...fr, ...uiFr }) },
+  da: { ...base, ...i18n.flatten({ ...da, ...uiDa }) },
+  ja: { ...base, ...i18n.flatten({ ...ja, ...uiJa }) },
+  pl: { ...base, ...i18n.flatten({ ...pl, ...uiPl }) },
+  ru: { ...base, ...i18n.flatten({ ...ru, ...uiRu }) },
+  ar: { ...base, ...i18n.flatten({ ...ar, ...uiAr }) },
+  no: { ...base, ...i18n.flatten({ ...no, ...uiNo }) },
+  br: { ...base, ...i18n.flatten({ ...br, ...uiBr }) },
+  th: { ...base, ...i18n.flatten({ ...th, ...uiTh }) },
+  bs: { ...base, ...i18n.flatten({ ...bs, ...uiBs }) },
+}
+
+const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
+  { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
+  { locale: "zh", match: (language) => language.startsWith("zh") },
+  { locale: "ko", match: (language) => language.startsWith("ko") },
+  { locale: "de", match: (language) => language.startsWith("de") },
+  { locale: "es", match: (language) => language.startsWith("es") },
+  { locale: "fr", match: (language) => language.startsWith("fr") },
+  { locale: "da", match: (language) => language.startsWith("da") },
+  { locale: "ja", match: (language) => language.startsWith("ja") },
+  { locale: "pl", match: (language) => language.startsWith("pl") },
+  { locale: "ru", match: (language) => language.startsWith("ru") },
+  { locale: "ar", match: (language) => language.startsWith("ar") },
+  {
+    locale: "no",
+    match: (language) => language.startsWith("no") || language.startsWith("nb") || language.startsWith("nn"),
+  },
+  { locale: "br", match: (language) => language.startsWith("pt") },
+  { locale: "th", match: (language) => language.startsWith("th") },
+  { locale: "bs", match: (language) => language.startsWith("bs") },
+]
+
 type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
 const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
   zh,
@@ -102,28 +162,9 @@ function detectLocale(): Locale {
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
   for (const language of languages) {
     if (!language) continue
-    if (language.toLowerCase().startsWith("zh")) {
-      if (language.toLowerCase().includes("hant")) return "zht"
-      return "zh"
-    }
-    if (language.toLowerCase().startsWith("ko")) return "ko"
-    if (language.toLowerCase().startsWith("de")) return "de"
-    if (language.toLowerCase().startsWith("es")) return "es"
-    if (language.toLowerCase().startsWith("fr")) return "fr"
-    if (language.toLowerCase().startsWith("da")) return "da"
-    if (language.toLowerCase().startsWith("ja")) return "ja"
-    if (language.toLowerCase().startsWith("pl")) return "pl"
-    if (language.toLowerCase().startsWith("ru")) return "ru"
-    if (language.toLowerCase().startsWith("ar")) return "ar"
-    if (
-      language.toLowerCase().startsWith("no") ||
-      language.toLowerCase().startsWith("nb") ||
-      language.toLowerCase().startsWith("nn")
-    )
-      return "no"
-    if (language.toLowerCase().startsWith("pt")) return "br"
-    if (language.toLowerCase().startsWith("th")) return "th"
-    if (language.toLowerCase().startsWith("bs")) return "bs"
+    const normalized = language.toLowerCase()
+    const match = localeMatchers.find((entry) => entry.match(normalized))
+    if (match) return match.locale
   }
 
   return "en"
@@ -139,24 +180,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       }),
     )
 
-    const locale = createMemo<Locale>(() => {
-      if (store.locale === "zh") return "zh"
-      if (store.locale === "zht") return "zht"
-      if (store.locale === "ko") return "ko"
-      if (store.locale === "de") return "de"
-      if (store.locale === "es") return "es"
-      if (store.locale === "fr") return "fr"
-      if (store.locale === "da") return "da"
-      if (store.locale === "ja") return "ja"
-      if (store.locale === "pl") return "pl"
-      if (store.locale === "ru") return "ru"
-      if (store.locale === "ar") return "ar"
-      if (store.locale === "no") return "no"
-      if (store.locale === "br") return "br"
-      if (store.locale === "th") return "th"
-      if (store.locale === "bs") return "bs"
-      return "en"
-    })
+    const locale = createMemo<Locale>(() =>
+      LOCALES.includes(store.locale as Locale) ? (store.locale as Locale) : "en",
+    )
 
     createEffect(() => {
       const current = locale()
@@ -164,48 +190,11 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       setStore("locale", current)
     })
 
-    const base = i18n.flatten({ ...en, ...uiEn })
-    const dict = createMemo<Dictionary>(() => {
-      if (locale() === "en") return base
-      if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
-      if (locale() === "zht") return { ...base, ...i18n.flatten({ ...zht, ...uiZht }) }
-      if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
-      if (locale() === "es") return { ...base, ...i18n.flatten({ ...es, ...uiEs }) }
-      if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
-      if (locale() === "da") return { ...base, ...i18n.flatten({ ...da, ...uiDa }) }
-      if (locale() === "ja") return { ...base, ...i18n.flatten({ ...ja, ...uiJa }) }
-      if (locale() === "pl") return { ...base, ...i18n.flatten({ ...pl, ...uiPl }) }
-      if (locale() === "ru") return { ...base, ...i18n.flatten({ ...ru, ...uiRu }) }
-      if (locale() === "ar") return { ...base, ...i18n.flatten({ ...ar, ...uiAr }) }
-      if (locale() === "no") return { ...base, ...i18n.flatten({ ...no, ...uiNo }) }
-      if (locale() === "br") return { ...base, ...i18n.flatten({ ...br, ...uiBr }) }
-      if (locale() === "th") return { ...base, ...i18n.flatten({ ...th, ...uiTh }) }
-      if (locale() === "bs") return { ...base, ...i18n.flatten({ ...bs, ...uiBs }) }
-      return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
-    })
+    const dict = createMemo<Dictionary>(() => DICT[locale()])
 
     const t = i18n.translator(dict, i18n.resolveTemplate)
 
-    const labelKey: Record<Locale, keyof Dictionary> = {
-      en: "language.en",
-      zh: "language.zh",
-      zht: "language.zht",
-      ko: "language.ko",
-      de: "language.de",
-      es: "language.es",
-      fr: "language.fr",
-      da: "language.da",
-      ja: "language.ja",
-      pl: "language.pl",
-      ru: "language.ru",
-      ar: "language.ar",
-      no: "language.no",
-      br: "language.br",
-      th: "language.th",
-      bs: "language.bs",
-    }
-
-    const label = (value: Locale) => t(labelKey[value])
+    const label = (value: Locale) => t(LABEL_KEY[value])
 
     createEffect(() => {
       if (typeof document !== "object") return
