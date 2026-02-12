@@ -228,7 +228,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
           >
             <div class="flex">
-              <div class="overflow-y-auto max-h-72 session-scroller">
+              <div class="overflow-y-auto max-h-72 session-scroller w-60">
                 <div class="sticky top-0 z-10 bg-[var(--surface-raised-stronger-non-alpha)] text-11-medium text-text-weak px-3 pt-1 pb-1">{language.t("ui.sessionInfo.messages")}</div>
                 <MessageNav
                   messages={hoverMessages() ?? []}
@@ -251,7 +251,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
                 />
               </div>
               <div class="border-l border-border-weak-base my-1 ml-1" />
-              <div class="overflow-y-auto max-h-72 session-scroller">
+              <div class="overflow-y-auto max-h-72 session-scroller w-60">
                 <div class="sticky top-0 z-10 bg-[var(--surface-raised-stronger-non-alpha)] text-11-medium text-text-weak px-3 pt-1 pb-1">
                   {language.t("ui.sessionInfo.filesChanged")}
                 </div>
