@@ -1480,7 +1480,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 
 ### STACKIT
 
-STACKIT AI Model Serving provides fully managed hosting environment for AI models, focusing on large language models (LLMs) like Llama, Mistral, and Qwen, with maximum data sovereignty on European infrastructure.
+STACKIT AI Model Serving provides fully managed soverign hosting environment for AI models, focusing on LLMs like Llama, Mistral, and Qwen, with maximum data sovereignty on European infrastructure.
 
 1. Head over to [STACKIT Portal](https://portal.stackit.cloud), navigate to **AI Model Serving**, and create an auth token for your project.
 
@@ -1508,62 +1508,6 @@ STACKIT AI Model Serving provides fully managed hosting environment for AI model
    ```txt
    /models
    ```
-
-#### Available Models
-
-**Text Models:**
-
-- **Qwen3-VL 235B** - Vision-language model with 218K context, multimodal input
-- **Llama 3.3 70B** - General purpose LLM with 128K context, tool calling enabled
-- **GPT-OSS 120B** - Strong reasoning model with 131K context, tool calling enabled
-- **Gemma 3 27B** - Multimodal model with 37K context, 140+ languages
-- **Mistral-Nemo** - Multilingual LLM with 128K context, optimized for commercial use
-- **Llama 3.1 8B** - Efficient model with 128K context, tool calling enabled
-
-**Embedding Models:**
-
-- **E5 Mistral 7B** - Text embedding model (4096 dimensions)
-- **Qwen3 Vision-Language Embedding** - Multimodal embedding model for text and images
-
-:::note
-All models use OpenAI-compatible API endpoints. Rate limits apply: 200,000 TPM and 30-80 RPM for chat models, 600 RPM for embedding models.
-:::
-
-#### Custom Configuration
-
-You can also configure STACKIT manually in your `opencode.json`:
-
-```json title="opencode.json" "stackit" {5, 6, 8, 10-14}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "stackit": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "STACKIT AI Model Serving",
-      "options": {
-        "baseURL": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
-      },
-      "models": {
-        "qwen3-vl-235b": {
-          "name": "Qwen3-VL 235B",
-          "limit": {
-            "context": 218000,
-            "output": 65536
-          }
-        },
-        "llama-33-70b": {
-          "name": "Llama 3.3 70B",
-          "limit": {
-            "context": 128000,
-            "output": 65536
-          }
-        }
-      }
-    }
-  }
-}
-```
-
 ---
 
 ### OVHcloud AI Endpoints
