@@ -2,11 +2,13 @@ import { Log } from "../../util/log"
 import { ollama_probe_loaded_models, ollama_detect_provider } from "./ollama"
 import { lmstudio_probe_loaded_models, lmstudio_detect_provider } from "./lmstudio"
 import { llamacpp_probe_loaded_models, llamacpp_detect_provider } from "./llamacpp"
+import { vllm_probe_loaded_models, vllm_detect_provider } from "./vllm"
 
 export enum LocalProvider {
   Ollama = "ollama",
   LMStudio = "lmstudio",
   LlamaCPP = "llamacpp",
+  Vllm = "vllm",
 }
 
 export interface LocalModel {
@@ -44,6 +46,11 @@ export namespace LocalProvider {
       return LocalProvider.LlamaCPP
     }
 
+    if (await vllm_detect_provider(base)) {
+      log.info(`Detected vLLM provider at URL: ${base}`)
+      return LocalProvider.Vllm
+    }
+
     log.info(`No supported local provider detected at URL: ${base}`)
     return null
   }
@@ -57,6 +64,8 @@ export namespace LocalProvider {
         return await lmstudio_probe_loaded_models(base)
       case LocalProvider.LlamaCPP:
         return await llamacpp_probe_loaded_models(base)
+      case LocalProvider.Vllm:
+        return await vllm_probe_loaded_models(base)
       default:
         throw new Error(`Unsupported provider: ${provider}`)
     }
