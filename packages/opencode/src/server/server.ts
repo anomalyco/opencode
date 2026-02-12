@@ -215,9 +215,9 @@ export namespace Server {
           openAPIRouteHandler(app, {
             documentation: {
               info: {
-                title: "opencode",
+                title: "cerebras-cli",
                 version: "0.0.3",
-                description: "opencode api",
+                description: "cerebras-cli api",
               },
               openapi: "3.1.1",
             },
@@ -239,7 +239,7 @@ export namespace Server {
           "/instance/dispose",
           describeRoute({
             summary: "Dispose instance",
-            description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
+            description: "Clean up and dispose the current Cerebras CLI instance, releasing all resources.",
             operationId: "instance.dispose",
             responses: {
               200: {
@@ -262,7 +262,7 @@ export namespace Server {
           describeRoute({
             summary: "Get paths",
             description:
-              "Retrieve the current working directory and related path information for the OpenCode instance.",
+              "Retrieve the current working directory and related path information for the Cerebras CLI instance.",
             operationId: "path.get",
             responses: {
               200: {
@@ -326,7 +326,7 @@ export namespace Server {
           "/command",
           describeRoute({
             summary: "List commands",
-            description: "Get a list of all available commands in the OpenCode system.",
+            description: "Get a list of all available commands in the Cerebras CLI system.",
             operationId: "command.list",
             responses: {
               200: {
@@ -400,7 +400,7 @@ export namespace Server {
           "/agent",
           describeRoute({
             summary: "List agents",
-            description: "Get a list of all available AI agents in the OpenCode system.",
+            description: "Get a list of all available AI agents in the Cerebras CLI system.",
             operationId: "app.agents",
             responses: {
               200: {
@@ -422,7 +422,7 @@ export namespace Server {
           "/skill",
           describeRoute({
             summary: "List skills",
-            description: "Get a list of all available skills in the OpenCode system.",
+            description: "Get a list of all available skills in the Cerebras CLI system.",
             operationId: "app.skills",
             responses: {
               200: {
@@ -561,9 +561,9 @@ export namespace Server {
     const result = await generateSpecs(App() as Hono, {
       documentation: {
         info: {
-          title: "opencode",
+          title: "cerebras-cli",
           version: "1.0.0",
-          description: "opencode api",
+          description: "cerebras-cli api",
         },
         openapi: "3.1.1",
       },
