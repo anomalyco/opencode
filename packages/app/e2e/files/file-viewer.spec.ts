@@ -17,16 +17,24 @@ test("smoke file viewer renders real file content", async ({ page, gotoSession }
     .first()
   await expect(dialog).toBeVisible()
 
-  const file = "packages/app/package.json"
-
   const input = dialog.getByRole("textbox").first()
-  await input.fill(file)
+  await input.fill("package.json")
 
-  const item = dialog
-    .locator('[data-slot="list-item"]')
-    .filter({ hasText: /packages[\\/].*app[\\/].*package.json/ })
-    .first()
-  await expect(item).toBeVisible({ timeout: 30_000 })
+  const items = dialog.locator('[data-slot="list-item"][data-key^="file:"]')
+  let index = -1
+  await expect
+    .poll(
+      async () => {
+        const keys = await items.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-key") ?? ""))
+        index = keys.findIndex((key) => /packages[\\/]+app[\\/]+package\.json$/i.test(key.replace(/^file:/, "")))
+        return index >= 0
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true)
+
+  const item = items.nth(index)
+  await expect(item).toBeVisible()
   await item.click()
 
   await expect(dialog).toHaveCount(0)
@@ -37,5 +45,5 @@ test("smoke file viewer renders real file content", async ({ page, gotoSession }
 
   const code = page.locator('[data-component="code"]').first()
   await expect(code).toBeVisible()
-  await expect(code.getByText("@opencode-ai/app")).toBeVisible()
+  await expect(code.getByText(/"name"\s*:\s*"@opencode-ai\/app"/)).toBeVisible()
 })
