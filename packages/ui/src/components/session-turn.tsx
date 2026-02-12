@@ -75,7 +75,11 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 const hidden = new Set(["todowrite", "todoread"])
 
 function visible(part: PartType) {
-  if (part.type === "tool") return !hidden.has(part.tool)
+  if (part.type === "tool") {
+    if (hidden.has(part.tool)) return false
+    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    return true
+  }
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return !!part.text?.trim()
   return false

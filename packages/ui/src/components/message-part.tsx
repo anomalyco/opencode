@@ -694,7 +694,10 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ToolPart
   if (part.tool === "todowrite" || part.tool === "todoread") return null
-  if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return null
+
+  const hideQuestion = createMemo(
+    () => part.tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
+  )
 
   const permission = createMemo(() => {
     const next = data.store.permission?.[props.message.sessionID]?.[0]
@@ -763,65 +766,67 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
-    <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
-      <Switch>
-        <Match when={part.state.status === "error" && part.state.error}>
-          {(error) => {
-            const cleaned = error().replace("Error: ", "")
-            const [title, ...rest] = cleaned.split(": ")
-            return (
-              <Card variant="error">
-                <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" />
-                  <Switch>
-                    <Match when={title && title.length < 30}>
-                      <div data-slot="message-part-tool-error-content">
-                        <div data-slot="message-part-tool-error-title">{title}</div>
-                        <span data-slot="message-part-tool-error-message">{rest.join(": ")}</span>
-                      </div>
-                    </Match>
-                    <Match when={true}>
-                      <span data-slot="message-part-tool-error-message">{cleaned}</span>
-                    </Match>
-                  </Switch>
-                </div>
-              </Card>
-            )
-          }}
-        </Match>
-        <Match when={true}>
-          <Dynamic
-            component={render}
-            input={input()}
-            tool={part.tool}
-            metadata={metadata()}
-            // @ts-expect-error
-            output={part.state.output}
-            status={part.state.status}
-            hideDetails={props.hideDetails}
-            forceOpen={forceOpen()}
-            locked={showPermission() || showQuestion()}
-            defaultOpen={props.defaultOpen}
-          />
-        </Match>
-      </Switch>
-      <Show when={showPermission() && permission()}>
-        <div data-component="permission-prompt">
-          <div data-slot="permission-actions">
-            <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-              {i18n.t("ui.permission.deny")}
-            </Button>
-            <Button variant="secondary" size="small" onClick={() => respond("always")}>
-              {i18n.t("ui.permission.allowAlways")}
-            </Button>
-            <Button variant="primary" size="small" onClick={() => respond("once")}>
-              {i18n.t("ui.permission.allowOnce")}
-            </Button>
+    <Show when={!hideQuestion()}>
+      <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
+        <Switch>
+          <Match when={part.state.status === "error" && part.state.error}>
+            {(error) => {
+              const cleaned = error().replace("Error: ", "")
+              const [title, ...rest] = cleaned.split(": ")
+              return (
+                <Card variant="error">
+                  <div data-component="tool-error">
+                    <Icon name="circle-ban-sign" size="small" />
+                    <Switch>
+                      <Match when={title && title.length < 30}>
+                        <div data-slot="message-part-tool-error-content">
+                          <div data-slot="message-part-tool-error-title">{title}</div>
+                          <span data-slot="message-part-tool-error-message">{rest.join(": ")}</span>
+                        </div>
+                      </Match>
+                      <Match when={true}>
+                        <span data-slot="message-part-tool-error-message">{cleaned}</span>
+                      </Match>
+                    </Switch>
+                  </div>
+                </Card>
+              )
+            }}
+          </Match>
+          <Match when={true}>
+            <Dynamic
+              component={render}
+              input={input()}
+              tool={part.tool}
+              metadata={metadata()}
+              // @ts-expect-error
+              output={part.state.output}
+              status={part.state.status}
+              hideDetails={props.hideDetails}
+              forceOpen={forceOpen()}
+              locked={showPermission() || showQuestion()}
+              defaultOpen={props.defaultOpen}
+            />
+          </Match>
+        </Switch>
+        <Show when={showPermission() && permission()}>
+          <div data-component="permission-prompt">
+            <div data-slot="permission-actions">
+              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                {i18n.t("ui.permission.deny")}
+              </Button>
+              <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                {i18n.t("ui.permission.allowAlways")}
+              </Button>
+              <Button variant="primary" size="small" onClick={() => respond("once")}>
+                {i18n.t("ui.permission.allowOnce")}
+              </Button>
+            </div>
           </div>
-        </div>
-      </Show>
-      <Show when={showQuestion() && questionRequest()}>{(request) => <QuestionPrompt request={request()} />}</Show>
-    </div>
+        </Show>
+        <Show when={showQuestion() && questionRequest()}>{(request) => <QuestionPrompt request={request()} />}</Show>
+      </div>
+    </Show>
   )
 }
 
