@@ -8,6 +8,8 @@ export const dict = {
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
   "ui.sessionReview.change.modified": "수정됨",
+  "ui.sessionReview.largeDiff.label": "{{lines}}줄",
+  "ui.sessionReview.largeDiff.clickToExpand": "{{lines}}줄 — 다시 클릭하여 펼치기",
 
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",

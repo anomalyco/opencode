@@ -12,6 +12,8 @@ export const dict = {
   "ui.sessionReview.change.added": "已添加",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.largeDiff.label": "{{lines}} 行",
+  "ui.sessionReview.largeDiff.clickToExpand": "{{lines}} 行 — 再次点击展开",
 
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",

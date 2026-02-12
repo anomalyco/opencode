@@ -170,6 +170,20 @@
     color: var(--icon-diff-modified-base);
   }
 
+  [data-slot="session-review-large-diff-badge"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-review-large-diff-warning"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-warning, var(--icon-diff-modified-base));
+  }
+
   [data-slot="session-review-file-container"] {
     padding: 0;
   }

@@ -9,6 +9,8 @@ export const dict = {
   "ui.sessionReview.change.added": "Tilføjet",
   "ui.sessionReview.change.removed": "Fjernet",
   "ui.sessionReview.change.modified": "Ændret",
+  "ui.sessionReview.largeDiff.label": "{{lines}} linjer",
+  "ui.sessionReview.largeDiff.clickToExpand": "{{lines}} linjer — klik igen for at udvide",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",

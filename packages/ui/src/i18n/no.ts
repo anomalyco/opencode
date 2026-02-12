@@ -11,6 +11,8 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.change.added": "Lagt til",
   "ui.sessionReview.change.removed": "Fjernet",
   "ui.sessionReview.change.modified": "Endret",
+  "ui.sessionReview.largeDiff.label": "{{lines}} linjer",
+  "ui.sessionReview.largeDiff.clickToExpand": "{{lines}} linjer — klikk igjen for å utvide",
 
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",

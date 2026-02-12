@@ -10,7 +10,7 @@ import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
@@ -170,6 +170,16 @@ function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
   return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
 }
 
+const LARGE_DIFF_THRESHOLD = 500
+
+function diffLines(diff: FileDiff) {
+  return (diff.additions ?? 0) + (diff.deletions ?? 0)
+}
+
+function isLargeDiff(diff: FileDiff) {
+  return diffLines(diff) > LARGE_DIFF_THRESHOLD
+}
+
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
@@ -177,25 +187,67 @@ export const SessionReview = (props: SessionReviewProps) => {
   const diffComponent = useDiffComponent()
   const anchors = new Map<string, HTMLElement>()
   const [store, setStore] = createStore({
-    open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
+    open: props.diffs.length > 10 ? [] : props.diffs.filter((d) => !isLargeDiff(d)).map((d) => d.file),
   })
 
   const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
   const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
   const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
+  const [confirmed, setConfirmed] = createSignal<Set<string>>(new Set())
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    clearTimeout(confirmTimer)
+    const current = open()
+    if (!current || current.length === 0) return
+    const large = largeDiffs()
+    if (large.size === 0) return
+    const filtered = current.filter((f) => !large.has(f))
+    if (filtered.length === current.length) return
+    props.onOpenChange?.(filtered)
+  })
 
   const open = () => props.open ?? store.open
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => props.diffs.length > 0
 
-  const handleChange = (open: string[]) => {
-    props.onOpenChange?.(open)
+  const largeDiffs = createMemo(() => {
+    const map = new Map<string, number>()
+    for (const d of props.diffs) {
+      if (isLargeDiff(d)) map.set(d.file, diffLines(d))
+    }
+    return map
+  })
+
+  const handleChange = (next: string[]) => {
+    const current = open() ?? []
+    const added = next.filter((f) => !current.includes(f))
+    const needsConfirm = added.filter((f) => largeDiffs().has(f) && !confirmed().has(f))
+
+    if (needsConfirm.length > 0) {
+      clearTimeout(confirmTimer)
+      setConfirmed((prev: Set<string>) => {
+        const s = new Set(prev)
+        for (const f of needsConfirm) s.add(f)
+        return s
+      })
+      confirmTimer = setTimeout(() => setConfirmed(new Set()), 3000)
+      const filtered = next.filter((f) => !needsConfirm.includes(f))
+      if (filtered.length !== current.length || filtered.some((f, i) => f !== current[i])) {
+        props.onOpenChange?.(filtered)
+        if (props.open !== undefined) return
+        setStore("open", filtered)
+      }
+      return
+    }
+
+    clearTimeout(confirmTimer)
+    props.onOpenChange?.(next)
     if (props.open !== undefined) return
-    setStore("open", open)
+    setStore("open", next)
   }
 
   const handleExpandOrCollapseAll = () => {
-    const next = open().length > 0 ? [] : props.diffs.map((d) => d.file)
+    const next = open().length > 0 ? [] : props.diffs.filter((d) => !isLargeDiff(d)).map((d) => d.file)
     handleChange(next)
   }
 
@@ -537,6 +589,20 @@ export const SessionReview = (props: SessionReviewProps) => {
                             </div>
                           </div>
                           <div data-slot="session-review-trigger-actions">
+                            <Show when={isLargeDiff(diff) && confirmed().has(diff.file) && !open().includes(diff.file)}>
+                              <span data-slot="session-review-large-diff-warning">
+                                {i18n.t("ui.sessionReview.largeDiff.clickToExpand", {
+                                  lines: String(diffLines(diff)),
+                                })}
+                              </span>
+                            </Show>
+                            <Show when={isLargeDiff(diff) && !confirmed().has(diff.file)}>
+                              <span data-slot="session-review-large-diff-badge">
+                                {i18n.t("ui.sessionReview.largeDiff.label", {
+                                  lines: String(diffLines(diff)),
+                                })}
+                              </span>
+                            </Show>
                             <Switch>
                               <Match when={isAdded()}>
                                 <span data-slot="session-review-change" data-type="added">
