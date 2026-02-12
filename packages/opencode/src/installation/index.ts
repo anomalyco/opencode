@@ -6,6 +6,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
 import { Flag } from "../flag/flag"
+import { withTimeout } from "@/util/timeout"
 
 declare global {
   const OPENCODE_VERSION: string
@@ -14,6 +15,7 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const TIMEOUT = 5000
 
   export type Method = Awaited<ReturnType<typeof method>>
 
@@ -102,7 +104,13 @@ export namespace Installation {
     })
 
     for (const check of checks) {
-      const output = await check.command()
+      const output = await withTimeout<string>(check.command(), TIMEOUT).catch((error) => {
+        log.warn("package manager check failed", {
+          name: check.name,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return ""
+      })
       const installedName =
         check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
       if (output.includes(installedName)) {
@@ -215,8 +223,14 @@ export namespace Installation {
 
     if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
       const registry = await iife(async () => {
-        const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
-        const reg = r || "https://registry.npmjs.org"
+        const reg = (
+          await withTimeout<string>($`npm config get registry`.quiet().nothrow().text(), TIMEOUT).catch((error) => {
+            log.warn("npm registry check failed", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+            return ""
+          })
+        ).trim() || "https://registry.npmjs.org"
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
       const channel = CHANNEL
