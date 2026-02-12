@@ -1,0 +1,254 @@
+---
+title: Zen
+description: OpenCode가 제공하는 엄선된 모델 목록.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다.
+
+:::note
+OpenCode Zen은 현재 베타입니다.
+:::
+
+Zen은 opencode의 다른 공급자와 같이 작동합니다. OpenCode Zen에 로그인하고
+API 키. 그것은 ** 완전 옵션 ** 당신은 사용할 필요가 없습니다
+opencode입니다.
+
+---
+
+## 배경
+
+거기에 모델의 큰 수는 있지만 몇 가지의
+이 모형은 뿐 아니라 기호화 에이전트 작동합니다. 또한, 대부분의 공급자는
+아주 다르게 형성하십시오; 그래서 당신은 아주 다른 성과 및 질을 얻습니다.
+
+:::tip
+opencode와 잘 작동하는 모델 및 공급자의 선택 그룹을 테스트했습니다.
+:::
+
+OpenRouter와 같은 무언가를 통해 모델을 사용하고 있다면 결코 할 수 없습니다.
+당신이 원하는 모델의 최고의 버전을 얻는 경우.
+
+이것을 해결하기 위해, 우리는 몇 가지 일을했다 :
+
+1. 우리는 모형의 선택 그룹을 시험하고 그들의 팀에 대략 이야기했습니다
+   가장 좋은 것.
+2. 우리는 그(것)들이 봉사한 것을 확인하기 위하여 몇몇 공급자와 일했습니다
+   견적 요청
+3. 마지막으로, 우리는 model/provider의 조합을 벤치마크하고 올랐습니다
+   우리가 좋은 권고를 느끼는 목록으로.
+
+OpenCode Zen은 이 모델에 액세스 할 수있는 AI 게이트웨이입니다.
+
+---
+
+## 어떻게 작동합니까?
+
+OpenCode Zen은 opencode의 다른 공급자와 같습니다.
+
+1. 로그인 **<a href={console}>OpenCode Zen</a>**, 청구 추가
+   세부 사항 및 API 키 복사.
+2. TUI에서 `/connect` 명령을 실행하고 OpenCode Zen을 선택하고 API 키를 붙여 넣으십시오.
+3. TUI의 `/models`를 실행하여 우리가 추천하는 모델 목록을 볼 수 있습니다.
+
+요청에 따라 청구되며 계정에 크레딧을 추가 할 수 있습니다.
+
+---
+
+## 엔드포인트
+
+다음 API 엔드포인트를 통해 모델에 액세스할 수 있습니다.
+
+| 모델               | 모델 ID            | 엔드포인트                                         | AI SDK 패키지               |
+| ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+
+opencode config에서 [model id](/docs/config/#models)
+형식 `opencode/<model-id>`를 사용합니다. 예를 들어, GPT 5.2 Codex의 경우,
+설정에서 `opencode/gpt-5.2-codex`를 사용합니다.
+
+---
+
+## 모델
+
+사용할 수 있는 모델과 메타데이터의 전체 목록은 다음과 같습니다:
+
+```
+https://opencode.ai/zen/v1/models
+```
+
+---
+
+## 가격
+
+우리는 pay-as-you-go 모델을 지원합니다. 아래는 1M 토큰 \*\* 당 가격입니다.
+
+| 모델                              | 입력   | 출력   | 캐시 읽기 | 캐시 쓰기 |
+| --------------------------------- | ------ | ------ | --------- | --------- |
+| Big Pickle                        | Free   | Free   | Free      | -         |
+| MiniMax M2.1 Free                 | Free   | Free   | Free      | -         |
+| MiniMax M2.1                      | $0.30  | $1.20  | $0.10     | -         |
+| GLM 4.7 Free                      | Free   | Free   | Free      | -         |
+| GLM 4.7                           | $0.60  | $2.20  | $0.10     | -         |
+| GLM 4.6                           | $0.60  | $2.20  | $0.10     | -         |
+| Kimi K2.5 Free                    | Free   | Free   | Free      | -         |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.08     | -         |
+| Kimi K2 Thinking                  | $0.40  | $2.50  | -         | -         |
+| Kimi K2                           | $0.40  | $2.50  | -         | -         |
+| Qwen3 Coder 480B                  | $0.45  | $1.50  | -         | -         |
+| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10     | $1.25     |
+| Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08     | $1.00     |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00     | $12.50    |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50     | $18.75    |
+| Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20     | -         |
+| Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40     | -         |
+| Gemini 3 Flash                    | $0.50  | $3.00  | $0.05     | -         |
+| GPT 5.2                           | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.1                           | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125    | -         |
+| GPT 5.1 Codex Mini                | $0.25  | $2.00  | $0.025    | -         |
+| GPT 5                             | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Codex                       | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Nano                        | Free   | Free   | Free      | -         |
+
+You might notice Claude Haiku 3.5 사용 역사. 이것은 세션의 제목을 생성하는 데 사용되는 [low cost model](/docs/config/#models)입니다.
+
+:::note
+신용 카드 수수료는 비용 (4.4% + 거래 당 $0.30)에 따라 전달됩니다. 우리는 그 이상을 청구하지 않습니다.
+:::
+
+무료 모델:
+
+- GLM의 4.7 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- 김이 K2.5 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- 미니 맥스 M2.1 제한된 시간에 opencode에서 무료로 사용할 수 있습니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+- Big Pickle은 제한된 시간 동안 opencode에서 무료 훔친 모델입니다. 팀은 피드백을 수집하고 모델을 개선하기 위해이 시간을 사용합니다.
+
+<a href={email}>Contact us</a> if you have any questions.
+
+---
+
+### 자동 로드
+
+잔액이 $ 5 미만인 경우 Zen은 $ 20를 자동으로 다시로드합니다.
+
+자동로드 금액을 변경할 수 있습니다. 또한 완전히 자동 부하를 비활성화 할 수 있습니다.
+
+---
+
+## 월간 제한
+
+또한 전체 작업 공간에 대한 월간 사용 제한을 설정할 수 있습니다.
+당신의 팀의 일원.
+
+예를 들어, 매달 사용 제한을 $20로 설정하면 Zen은 사용하지 않습니다.
+한 달에 $ 20 이상. 그러나 자동 로드가 활성화되면 Zen이 종료 될 수 있습니다.
+잔액이 $5 미만인 경우 $20 이상 충전.
+
+---
+
+## 개인 정보
+
+우리의 모든 모델은 미국에서 호스팅됩니다. 우리의 공급자는 제로 보유 정책을 따르고 모형 훈련을 위한 당신의 자료를 이용하지 않습니다, 뒤에 오는 예외로:
+
+- Big Pickle : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
+- GLM 4.7 무료 : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
+- Kimi K2.5 무료 : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
+- MiniMax M2.1 무료 : 무료 기간 동안 수집 된 데이터는 모델을 개선하기 위해 사용될 수있다.
+- OpenAI APIs: 요청은 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data)에 따라 30일 동안 유지됩니다.
+- Anthropic APIs : 요청은 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30 일 동안 유지됩니다.
+
+---
+
+## 팀
+
+Zen은 팀을 위해 잘 작동합니다. 팀메이트를 초대 할 수 있습니다, 역할 할당, curate
+당신의 팀 용도 및 더 많은 모델을.
+
+:::note
+Workspaces는 현재 베타의 일부로 팀에 무료로 제공됩니다.
+:::
+
+작업 공간 관리는 현재 베타의 일부로 팀에 무료로 제공됩니다. 우리는
+가격을 곧 공유하십시오.
+
+---
+
+## 역할
+
+작업 공간에 팀메이트를 초대하고 역할 할당 할 수 있습니다.
+
+- **Admin**: 모델, 회원, API 키 및 청구
+- **회원**: 자신의 API 키만 관리
+
+Admins는 또한 통제의 밑에 비용을 지키는 각 일원을 위한 매달 지출 한계를 놓을 수 있습니다.
+
+---
+
+## 모델 접근
+
+관리자는 작업 공간에 특정 모델을 활성화하거나 비활성화 할 수 있습니다. 장애인 모델에 요청은 오류를 반환합니다.
+
+이것은 당신이 모델의 사용을 비활성화하려는 경우 유용합니다
+데이터 수집
+
+---
+
+## BYOK (Bring Your Own Key)
+
+OpenAI 또는 Anthropic API 키를 사용하여 Zen에서 다른 모델에 액세스 할 수 있습니다.
+
+자신의 키를 사용할 때, 토큰은 Zen에 의해 공급자에 의해 직접 청구됩니다.
+
+예를 들어, 조직은 이미 OpenAI 또는 Anthropic에 대한 열쇠가있을 수 있습니다.
+Zen이 제공하는 것을 대신 사용하고 싶습니다.
+
+---
+
+## 목표
+
+OpenCode Zen을 생성했습니다.
+
+1. **Benchmark ** 코딩 에이전트에 대한 최고의 모델 / 프로바이더.
+2. ** 고품질 ** 옵션에 액세스하고 더 싼 공급자에 고급 성능 또는 노선을 내리지 마십시오.
+3. 비용에 판매해서 ** 가격 하락 **를 따라 통과하십시오; 그래서 단지 감적은 우리의 가공 비용을 커버하는 것입니다.
+4. 잠금 해제 \*\* 다른 코딩 에이전트와 함께 사용할 수 있도록. 그리고 항상 opencode와 다른 모든 공급자를 사용할 수 있습니다.

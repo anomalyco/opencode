@@ -118,7 +118,7 @@ export const SortableWorkspace = (props: {
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
   const loadMore = async () => {
-    setWorkspaceStore("limit", (limit) => limit + 5)
+    setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.directory)
   }
 
@@ -368,7 +368,7 @@ export const LocalWorkspace = (props: {
   const loading = createMemo(() => !booted() && sessions().length === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
   const loadMore = async () => {
-    workspace().setStore("limit", (limit) => limit + 5)
+    workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)
   }
 
