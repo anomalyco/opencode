@@ -1,50 +1,85 @@
-import { describe, expect, test } from "bun:test"
-import { Project } from "../../src/project/project"
+import { describe, expect, mock, test } from "bun:test"
+import type { Project as ProjectNS } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { Storage } from "../../src/storage/storage"
 import { $ } from "bun"
 import path from "path"
-import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 
-async function withFakeGit(mode: "rev-list-fail" | "top-fail" | "common-dir-fail", run: () => Promise<void>) {
-  const realGit = Bun.which("git")
-  if (!realGit) throw new Error("git binary missing")
-  await using tmp = await tmpdir()
-  const bindir = path.join(tmp.path, "bin")
-  await fs.mkdir(bindir, { recursive: true })
-  const script = path.join(bindir, "git")
-  const source = `#!/usr/bin/env bash
-if [ "$1" = "rev-list" ] && [ "$2" = "--max-parents=0" ] && [ "$3" = "--all" ] && [ "${mode}" = "rev-list-fail" ]; then
-  exit 128
-fi
-if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ] && [ "${mode}" = "top-fail" ]; then
-  exit 128
-fi
-if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ] && [ "${mode}" = "common-dir-fail" ]; then
-  exit 128
-fi
-exec "${realGit}" "$@"
-`
-  await Bun.write(script, source)
-  await fs.chmod(script, 0o755)
-  const oldPath = process.env.PATH
-  process.env.PATH = `${bindir}:${oldPath ?? ""}`
+const bunModule = await import("bun")
+type Mode = "none" | "rev-list-fail" | "top-fail" | "common-dir-fail"
+let mode: Mode = "none"
+
+function render(parts: TemplateStringsArray, vals: unknown[]) {
+  return parts.reduce((acc, part, i) => `${acc}${part}${i < vals.length ? String(vals[i]) : ""}`, "")
+}
+
+function fakeShell(output: { exitCode: number; stdout: string; stderr: string }) {
+  const result = {
+    exitCode: output.exitCode,
+    stdout: Buffer.from(output.stdout),
+    stderr: Buffer.from(output.stderr),
+    text: async () => output.stdout,
+  }
+  const shell = {
+    quiet: () => shell,
+    nothrow: () => shell,
+    cwd: () => shell,
+    env: () => shell,
+    text: async () => output.stdout,
+    then: (onfulfilled: (value: typeof result) => unknown, onrejected?: (reason: unknown) => unknown) =>
+      Promise.resolve(result).then(onfulfilled, onrejected),
+    catch: (onrejected: (reason: unknown) => unknown) => Promise.resolve(result).catch(onrejected),
+    finally: (onfinally: (() => void) | undefined | null) => Promise.resolve(result).finally(onfinally),
+  }
+  return shell
+}
+
+mock.module("bun", () => ({
+  ...bunModule,
+  $: (parts: TemplateStringsArray, ...vals: unknown[]) => {
+    const cmd = render(parts, vals).replaceAll(",", " ").replace(/\s+/g, " ").trim()
+    if (
+      mode === "rev-list-fail" &&
+      cmd.includes("git rev-list") &&
+      cmd.includes("--max-parents=0") &&
+      cmd.includes("--all")
+    ) {
+      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+    }
+    if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
+      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+    }
+    if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
+      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+    }
+    return (bunModule.$ as any)(parts, ...vals)
+  },
+}))
+
+async function withMode(next: Mode, run: () => Promise<void>) {
+  const prev = mode
+  mode = next
   try {
     await run()
   } finally {
-    process.env.PATH = oldPath
+    mode = prev
   }
+}
+
+async function loadProject() {
+  return (await import("../../src/project/project")).Project
 }
 
 describe("Project.fromDirectory", () => {
   test("should handle git repository with no commits", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir()
     await $`git init`.cwd(tmp.path).quiet()
 
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await p.fromDirectory(tmp.path)
 
     expect(project).toBeDefined()
     expect(project.id).toBe("global")
@@ -57,9 +92,10 @@ describe("Project.fromDirectory", () => {
   })
 
   test("should handle git repository with commits", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await p.fromDirectory(tmp.path)
 
     expect(project).toBeDefined()
     expect(project.id).not.toBe("global")
@@ -72,11 +108,12 @@ describe("Project.fromDirectory", () => {
   })
 
   test("keeps git vcs when rev-list exits non-zero with empty output", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir()
     await $`git init`.cwd(tmp.path).quiet()
 
-    await withFakeGit("rev-list-fail", async () => {
-      const { project } = await Project.fromDirectory(tmp.path)
+    await withMode("rev-list-fail", async () => {
+      const { project } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
       expect(project.id).toBe("global")
       expect(project.worktree).toBe(tmp.path)
@@ -84,10 +121,11 @@ describe("Project.fromDirectory", () => {
   })
 
   test("keeps git vcs when show-toplevel exits non-zero with empty output", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    await withFakeGit("top-fail", async () => {
-      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+    await withMode("top-fail", async () => {
+      const { project, sandbox } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
       expect(project.worktree).toBe(tmp.path)
       expect(sandbox).toBe(tmp.path)
@@ -95,10 +133,11 @@ describe("Project.fromDirectory", () => {
   })
 
   test("keeps git vcs when git-common-dir exits non-zero with empty output", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    await withFakeGit("common-dir-fail", async () => {
-      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+    await withMode("common-dir-fail", async () => {
+      const { project, sandbox } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
       expect(project.worktree).toBe(tmp.path)
       expect(sandbox).toBe(tmp.path)
@@ -108,9 +147,10 @@ describe("Project.fromDirectory", () => {
 
 describe("Project.fromDirectory with worktrees", () => {
   test("should set worktree to root when called from root", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    const { project, sandbox } = await Project.fromDirectory(tmp.path)
+    const { project, sandbox } = await p.fromDirectory(tmp.path)
 
     expect(project.worktree).toBe(tmp.path)
     expect(sandbox).toBe(tmp.path)
@@ -118,12 +158,13 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 
   test("should set worktree to root when called from a worktree", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const worktreePath = path.join(tmp.path, "..", "worktree-test")
     await $`git worktree add ${worktreePath} -b test-branch`.cwd(tmp.path).quiet()
 
-    const { project, sandbox } = await Project.fromDirectory(worktreePath)
+    const { project, sandbox } = await p.fromDirectory(worktreePath)
 
     expect(project.worktree).toBe(tmp.path)
     expect(sandbox).toBe(worktreePath)
@@ -134,6 +175,7 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 
   test("should accumulate multiple worktrees in sandboxes", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const worktree1 = path.join(tmp.path, "..", "worktree-1")
@@ -141,8 +183,8 @@ describe("Project.fromDirectory with worktrees", () => {
     await $`git worktree add ${worktree1} -b branch-1`.cwd(tmp.path).quiet()
     await $`git worktree add ${worktree2} -b branch-2`.cwd(tmp.path).quiet()
 
-    await Project.fromDirectory(worktree1)
-    const { project } = await Project.fromDirectory(worktree2)
+    await p.fromDirectory(worktree1)
+    const { project } = await p.fromDirectory(worktree2)
 
     expect(project.worktree).toBe(tmp.path)
     expect(project.sandboxes).toContain(worktree1)
@@ -156,15 +198,16 @@ describe("Project.fromDirectory with worktrees", () => {
 
 describe("Project.discover", () => {
   test("should discover favicon.png in root", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await p.fromDirectory(tmp.path)
 
     const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
 
-    await Project.discover(project)
+    await p.discover(project)
 
-    const updated = await Storage.read<Project.Info>(["project", project.id])
+    const updated = await Storage.read<ProjectNS.Info>(["project", project.id])
     expect(updated.icon).toBeDefined()
     expect(updated.icon?.url).toStartWith("data:")
     expect(updated.icon?.url).toContain("base64")
@@ -172,14 +215,15 @@ describe("Project.discover", () => {
   })
 
   test("should not discover non-image files", async () => {
+    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await p.fromDirectory(tmp.path)
 
     await Bun.write(path.join(tmp.path, "favicon.txt"), "not an image")
 
-    await Project.discover(project)
+    await p.discover(project)
 
-    const updated = await Storage.read<Project.Info>(["project", project.id])
+    const updated = await Storage.read<ProjectNS.Info>(["project", project.id])
     expect(updated.icon).toBeUndefined()
   })
 })
