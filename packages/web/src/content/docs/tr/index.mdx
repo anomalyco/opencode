@@ -1,17 +1,17 @@
 ---
 title: Giriş
-description: opencode'u kullanmaya başlayın.
+description: opencode kullanmaya başlayın.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) açık kaynaklı bir AI coding agent'ıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**opencode**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
 ![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
-Hadi başlayalım.
+Başlayalım.
 
 ---
 
@@ -129,12 +129,12 @@ opencode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 
 ---
 
-## Yapılandır
+## Yapılandırma
 
 opencode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
 LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-opencode team tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
+opencode ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
 
 1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
@@ -157,7 +157,7 @@ Alternatif olarak diğer sağlayıcılardan birini seçebilirsiniz. [Daha fazla 
 
 ---
 
-## Başlat
+## Başlatma
 
 Artık bir sağlayıcı yapılandırdığınıza göre, bir projeye gidebilirsiniz.
 üzerinde çalışmak istiyorsun.
@@ -193,11 +193,11 @@ Bu, opencode'un proje yapısını ve kullanılan kodlama kalıplarını anlamas�
 
 Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
 
-AI kodlama agent'ı kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
+AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
 
 ---
 
-### Soru sor
+### Soru Sorma
 
 opencode'dan kod tabanını size açıklamasını isteyebilirsiniz.
 
@@ -213,18 +213,18 @@ Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı ol
 
 ---
 
-### Özellik ekle
+### Özellik Ekleme
 
 opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   opencode, değişiklik yapma özelliğini kapatan bir _Plan mode_'a sahiptir.
+   opencode, değişiklik yapma özelliğini kapatan bir \_Plan modu_na sahiptir.
    Bu modda, özelliğin nasıl uygulanacağını önerir.
 
    **Sekme** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
 
-   ```bash frame="none" title="Switch to Plan mode"
+   ```bash frame="none" title="Plan moduna geç"
    <TAB>
    ```
 
@@ -242,6 +242,9 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    :::tip
    opencode'a bol bağlam ve örnek verin.
    :::
+
+   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 2. **Planı yineleyin**
 
@@ -261,7 +264,7 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 3. **Özelliği oluşturun**
 
-   Planı yeterli bulduğunuzda **Sekme** tuşuna tekrar basarak _Build mode_'a dönün.
+   Planı yeterli bulduğunuzda **Sekme** tuşuna tekrar basarak \_Build modu_na dönün.
 
    ```bash frame="none"
    <TAB>
@@ -275,7 +278,7 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ---
 
-### Değişiklik yap
+### Değişiklik Yapma
 
 Daha basit değişikliklerde, önce planı incelemeden opencode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
@@ -289,7 +292,7 @@ opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğiniz
 
 ---
 
-### Değişiklikleri geri al
+### Değişiklikleri Geri Alma
 
 Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 
@@ -324,7 +327,7 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ---
 
-## Paylaş
+## Paylaşma
 
 opencode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
@@ -342,8 +345,8 @@ Konuşmalar varsayılan olarak paylaşılmaz.
 
 ---
 
-## Özelleştir
+## Özelleştirme
 
 İşte bu kadar! Artık opencode'u kullanma konusunda profesyonelsiniz.
 
-Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [keybind'leri özelleştirebilir](/docs/keybinds), [code formatter ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [opencode config](/docs/config) ile oynayabilirsiniz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [opencode config](/docs/config) ile oynayabilirsiniz.

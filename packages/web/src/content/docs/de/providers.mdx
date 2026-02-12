@@ -15,14 +15,14 @@ Um einen Anbieter hinzuzufügen, müssen Sie:
 
 ---
 
-### Credentials
+### Anmeldeinformationen
 
 Wenn Sie die API-Schlüssel eines Anbieters mit dem Befehl `/connect` hinzufügen, werden diese gespeichert
 in `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Konfiguration
 
 Sie können die Anbieter über den Abschnitt `provider` in Ihrem OpenCode anpassen
 config.
@@ -84,7 +84,7 @@ Es funktioniert wie jeder andere Anbieter in OpenCode und ist völlig optional.
 
 ---
 
-## Directory
+## Verzeichnis
 
 Schauen wir uns einige der Anbieter im Detail an. Wenn Sie einen Anbieter hinzufügen möchten
 Liste, zögern Sie nicht, ein PR zu öffnen.
@@ -684,7 +684,7 @@ um das Token im OpenCode-Authentifizierungsspeicher zu speichern.
 
 ##### Selbstgehostetes GitLab
 
-:::note[compliance note]
+:::note[Compliance-Hinweis]
 OpenCode verwendet ein kleines Modell für einige AI-Aufgaben wie das Generieren des Sitzungstitels.
 Es ist standardmäßig für die Verwendung von gpt-5-nano konfiguriert und wird von Zen gehostet. Zum Sperren von OpenCode
 Um nur Ihre eigene von GitLab gehostete Instanz zu verwenden, fügen Sie Folgendes zu Ihrer hinzu
@@ -748,7 +748,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Weitere Dokumentation auf der [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth)-Homepage.
 
-##### Configuration
+##### Konfiguration
 
 Anpassen über `opencode.json`:
 
@@ -1831,7 +1831,7 @@ Sie können jeden OpenAI-kompatiblen Anbieter mit OpenCode verwenden. Die meiste
 
 ---
 
-##### Example
+##### Beispiel
 
 Hier ist ein Beispiel für die Einstellung der Optionen `apiKey`, `headers` und Modell `limit`.
 
@@ -1874,7 +1874,7 @@ Mithilfe der `limit`-Felder kann OpenCode erkennen, wie viel Kontext Sie noch ha
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
 Wenn Sie Probleme beim Konfigurieren eines Anbieters haben, überprüfen Sie Folgendes:
 

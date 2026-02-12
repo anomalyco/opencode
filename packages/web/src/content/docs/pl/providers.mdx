@@ -1,5 +1,5 @@
 ---
-title: Providers
+title: Dostawcy
 description: Korzystanie z dowolnego dostawcy LLM w opencode.
 ---
 
@@ -22,7 +22,7 @@ w `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Konfiguracja
 
 Możesz dostosować dostawców za pomocą sekcji `provider` w swoim opencode
 config.
@@ -84,7 +84,7 @@ Działa jak każdy inny dostawca w opencode i jest całkowicie opcjonalny w uży
 
 ---
 
-## Directory
+## Katalog
 
 Przyjrzyjmy się szczegółowo niektórym dostawcom. Jeśli chcesz dodać dostawcę do
 listę, możesz otworzyć PR.
@@ -184,7 +184,7 @@ Aby używać Amazon Bedrock z opencode:
    Opcje z pliku konfiguracyjnego mają pierwszeństwo przed zmiennymi środowiskowymi.
    :::
 
-   #### Zaawansowane: endpointy VPC
+   #### Zaawansowane: Punkty końcowe VPC
 
    Jeśli używasz punktów końcowych VPC dla Bedrock:
 
@@ -659,7 +659,7 @@ GitLab Duo zapewnia czat agentowy oparty na sztucznej inteligencji z natywnymi m
 
    Wybierz **OAuth**, a Twoja przeglądarka otworzy się w celu autoryzacji.
 
-   #### Using Personal Access Token
+   #### Użycie osobistego tokenu dostępu
    1. Przejdź do [Ustawienia użytkownika GitLab > Tokeny dostępu](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
    3. Name: `OpenCode`, Scopes: `api`
@@ -748,7 +748,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Więcej informacji znajdziesz na stronie [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth).
 
-##### Configuration
+##### Konfiguracja
 
 Customize through `opencode.json`:
 
@@ -769,7 +769,7 @@ Customize through `opencode.json`:
 }
 ```
 
-##### GitLab API Tools (Optional, but highly recommended)
+##### Narzędzia GitLab API (opcjonalne, ale wysoce zalecane)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 
@@ -1873,7 +1873,7 @@ Pola `limit` pozwalają opencode zrozumieć, ile kontekstu pozostało. Standardo
 
 ---
 
-## Troubleshooting
+## Rozwiązywanie problemów
 
 Jeśli masz problemy z konfiguracją dostawcy, sprawdź następujące elementy:
 
