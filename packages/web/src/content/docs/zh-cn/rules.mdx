@@ -52,15 +52,15 @@ This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for 
 
 ---
 
-## 類型
+## 类型
 
 opencode 还支持从多个位置读取 `AGENTS.md` 文件。这有不同的目的。
 
-### 专案
+### 项目
 
 将 `AGENTS.md` 放置在项目根目录中以获取特定于项目的规则。这些仅适用于您在此目录或子目录中工作时。
 
-### 全球的
+### 全局
 
 您还可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局规则。这适用于所有opencode会话。
 
@@ -84,7 +84,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## 优先級
+## 优先级
 
 当opencode启动时，它会按以下顺序查找规则文件：
 
@@ -96,7 +96,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## 定制說明
+## 自定义指令
 
 您可以在 `opencode.json` 或全局 `~/.config/opencode/opencode.json` 中指定自定义指令文件。这允许您和您的团队重用现有规则，而不必将它们复制到 AGENTS.md。
 

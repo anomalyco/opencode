@@ -9,17 +9,17 @@ Ab `v1.1.1` ist die alte boolesche Konfiguration `tools` veraltet und wurde in `
 
 ---
 
-## Actions
+## Aktionen
 
 Jede Berechtigungsregel wird zu einem der folgenden aufgelöst:
 
 - `"allow"` – ohne Genehmigung ausführen
-- `"ask"` — prompt for approval
+- `"ask"` — um Genehmigung bitten
 - `"deny"` – Aktion blockieren
 
 ---
 
-## Configuration
+## Konfiguration
 
 Sie können Berechtigungen global festlegen (mit `*`) und bestimmte Tools überschreiben.
 
@@ -70,7 +70,7 @@ Bei den meisten Berechtigungen können Sie ein Objekt verwenden, um basierend au
 
 Regeln werden nach Musterübereinstimmung ausgewertet, wobei die **letzte übereinstimmende Regel gewinnt**. Ein gängiges Muster besteht darin, zuerst die Catch-All-Regel `"*"` und danach spezifischere Regeln zu platzieren.
 
-### Wildcards
+### Platzhalter
 
 Berechtigungsmuster verwenden einen einfachen Platzhalterabgleich:
 
@@ -127,7 +127,7 @@ Konzentrieren Sie sich in der Liste auf vertrauenswürdige Pfade und fügen Sie 
 
 ## Verfügbare Berechtigungen
 
-OpenCode permissions are keyed by tool name, plus a couple of safety guards:
+OpenCode-Berechtigungen basieren auf Tool-Namen sowie einigen Sicherheitsvorkehrungen:
 
 - `read` – eine Datei lesen (entspricht dem Dateipfad)
 - `edit` – alle Dateiänderungen (umfasst `edit`, `write`, `patch`, `multiedit`)
@@ -137,8 +137,8 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `bash` – Ausführen von Shell-Befehlen (entspricht analysierten Befehlen wie `git status --porcelain`)
 - `task` – Subagenten starten (entspricht dem Subagententyp)
 - `skill` – Laden einer Fertigkeit (entspricht dem Fertigkeitsnamen)
-- `lsp` — running LSP queries (currently non-granular)
-- `todoread`, `todowrite` – reading/updating die Aufgabenliste
+- `lsp` – Ausführen von LSP-Abfragen (derzeit nicht granular)
+- `todoread`, `todowrite` – lesen/aktualisieren der Aufgabenliste
 - `webfetch` – Abrufen eines URL (entspricht dem URL)
 - `websearch`, `codesearch` – web/code Suche (entspricht der Abfrage)
 - `external_directory` – wird ausgelöst, wenn ein Tool Pfade außerhalb des Projektarbeitsverzeichnisses berührt
@@ -146,13 +146,13 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 ---
 
-## Defaults
+## Standardwerte
 
 Wenn Sie nichts angeben, beginnt OpenCode mit zulässigen Standardeinstellungen:
 
 - Die meisten Berechtigungen sind standardmäßig auf `"allow"` eingestellt.
 - `doom_loop` und `external_directory` sind standardmäßig `"ask"`.
-- `read` is `"allow"`, but `.env` files are denied by default:
+- `read` ist `"allow"`, aber `.env`-Dateien werden standardmäßig verweigert:
 
 ```json title="opencode.json"
 {
@@ -173,7 +173,7 @@ Wenn Sie nichts angeben, beginnt OpenCode mit zulässigen Standardeinstellungen:
 
 Wenn OpenCode zur Genehmigung auffordert, bietet UI drei Ergebnisse:
 
-- `once` — approve just this request
+- `once` – nur diese Anfrage genehmigen
 - `always` – zukünftige Anfragen genehmigen, die den vorgeschlagenen Mustern entsprechen (für den Rest der aktuellen OpenCode-Sitzung)
 - `reject` – die Anfrage ablehnen
 
@@ -181,7 +181,7 @@ Der Satz von Mustern, die `always` genehmigen würde, wird vom Tool bereitgestel
 
 ---
 
-## Agents
+## Agenten
 
 Sie können Berechtigungen pro Agent überschreiben. Agentenberechtigungen werden mit der globalen Konfiguration zusammengeführt und Agentenregeln haben Vorrang. [Learn more](/docs/agents#permissions) über Agentenberechtigungen.
 

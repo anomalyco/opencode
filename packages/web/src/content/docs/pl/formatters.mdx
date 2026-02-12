@@ -1,62 +1,62 @@
 ---
 title: Formatery
-description: opencode używa formaterów specyficznych dla języka.
+description: OpenCode używa formaterów specyficznych dla języka.
 ---
 
-opencode automatycznie formatuje pliki po ich zapisaniu lub edycję przy użyciu formaterów przesyłanych dla języka. Dzięki temu wygenerowany kod będzie używany ze stylami kodu Twojego projektu.
+OpenCode automatycznie formatuje pliki po ich zapisaniu lub edycji przy użyciu formaterów specyficznych dla języka. Zapewnia to, że wygenerowany kod jest zgodny ze stylem kodu Twojego projektu.
 
 ---
 
-## Wbudowany
+## Wbudowane
 
-opencode zawiera kilka wbudowanych formaterów dla nauki języków i frameworków. Zawiera listę formaterów, rozszerzonych plików oraz rozszerzenia i konfiguratory, których potrzebujesz.
+OpenCode zawiera kilka wbudowanych formaterów dla popularnych języków i frameworków. Poniższa tabela zawiera listę formaterów, obsługiwanych plików oraz wymagań konfiguracyjnych.
 
-| Formater                | Rozszerzenia                                                                                            | Wymagania                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| gofmt                   | .idź                                                                                                    | Komenda `gofmt` dostępna                                                                          |
-| ryzyko                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | Komenda `mix` dostępna                                                                            |
-| ładniejsza              | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://prettier.io/docs/en/index.html) | Zależność `prettier` w `package.json`                                                             |
-| biom                    | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://biomejs.dev/)                   | `biome.json(c)` plik konfiguracyjny                                                               |
-| zyg                     | .zig, .zon                                                                                              | Komenda `zig` dostępna                                                                            |
-| formatuj brzęk          | .c, .cpp, .h, .hpp, .ino i [więcej](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` plik konfiguracyjny                                                               |
-| ktlint                  | .kt, .kts                                                                                               | Komenda `ktlint` dostępna                                                                         |
-| kryza                   | .py, .pyi                                                                                               | Komenda `ruff` dostępna w konstrukcji                                                             |
-| rustfmt                 | .rs                                                                                                     | Komenda `rustfmt` dostępna                                                                        |
-| załadunek               | .rs                                                                                                     | Komenda `cargo fmt` dostępna                                                                      |
-| UV                      | .py, .pyi                                                                                               | Komenda `uv` dostępna                                                                             |
-| rubocop                 | .rb, .rake, .gemspec, .ru                                                                               | Komenda `rubocop` dostępna                                                                        |
-| standardowe             | .rb, .rake, .gemspec, .ru                                                                               | Komenda `standardrb` dostępna                                                                     |
-| htmlupiększacz          | .erb, .html.erb                                                                                         | Komenda `htmlbeautifier` dostępna                                                                 |
-| powietrze               | .R                                                                                                      | Komenda `air` dostępna                                                                            |
-| strzałka                | .dart                                                                                                   | Komenda `dart` dostępna                                                                           |
-| formatuj ocaml          | .ml, .mli                                                                                               | Dostępna opcja `ocamlformat` i plik konfiguracyjny `.ocamlformat`                                 |
-| terraforma              | .tf, .tfvars                                                                                            | Komenda `terraform` dostępna                                                                      |
-| blask                   | .blask                                                                                                  | Komenda `gleam` dostępna                                                                          |
-| nixfmt                  | .nix                                                                                                    | Komenda `nixfmt` dostępna                                                                         |
-| shfmt                   | .sh, .bash                                                                                              | Komenda `shfmt` dostępna                                                                          |
-| kufel                   | .php                                                                                                    | Zależność `laravel/pint` w `composer.json`                                                        |
-| oxfmt (eksperymentalny) | .js, .jsx, .ts, .tsx                                                                                    | wykonanie `oxfmt` w `package.json` i [flaga eksperymentalna zmienna env](/docs/cli/#experimental) |
-| ormolu                  | .hs                                                                                                     | Komenda `ormolu` dostępna                                                                         |
+| Formater             | Rozszerzenia                                                                                            | Wymagania                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                                     | Dostępne polecenie `gofmt`                                                            |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | Dostępne polecenie `mix`                                                              |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://prettier.io/docs/en/index.html) | Zależność `prettier` w `package.json`                                                 |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://biomejs.dev/)                   | Plik konfiguracyjny `biome.json(c)`                                                   |
+| zig                  | .zig, .zon                                                                                              | Dostępne polecenie `zig`                                                              |
+| clang-format         | .c, .cpp, .h, .hpp, .ino i [więcej](https://clang.llvm.org/docs/ClangFormat.html)                       | Plik konfiguracyjny `.clang-format`                                                   |
+| ktlint               | .kt, .kts                                                                                               | Dostępne polecenie `ktlint`                                                           |
+| ruff                 | .py, .pyi                                                                                               | Dostępne polecenie `ruff`                                                             |
+| rustfmt              | .rs                                                                                                     | Dostępne polecenie `rustfmt`                                                          |
+| cargo                | .rs                                                                                                     | Dostępne polecenie `cargo fmt`                                                        |
+| uv                   | .py, .pyi                                                                                               | Dostępne polecenie `uv`                                                               |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                               | Dostępne polecenie `rubocop`                                                          |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                               | Dostępne polecenie `standardrb`                                                       |
+| htmlbeautifier       | .erb, .html.erb                                                                                         | Dostępne polecenie `htmlbeautifier`                                                   |
+| air                  | .R                                                                                                      | Dostępne polecenie `air`                                                              |
+| dart                 | .dart                                                                                                   | Dostępne polecenie `dart`                                                             |
+| ocamlformat          | .ml, .mli                                                                                               | Dostępne polecenie `ocamlformat` i plik konfiguracyjny `.ocamlformat`                 |
+| terraform            | .tf, .tfvars                                                                                            | Dostępne polecenie `terraform`                                                        |
+| gleam                | .gleam                                                                                                  | Dostępne polecenie `gleam`                                                            |
+| nixfmt               | .nix                                                                                                    | Dostępne polecenie `nixfmt`                                                           |
+| shfmt                | .sh, .bash                                                                                              | Dostępne polecenie `shfmt`                                                            |
+| pint                 | .php                                                                                                    | Zależność `laravel/pint` w `composer.json`                                            |
+| oxfmt (experimental) | .js, .jsx, .ts, .tsx                                                                                    | Zależność `oxfmt` w `package.json` i [eksperymentalna flaga](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                                     | Dostępne polecenie `ormolu`                                                           |
 
-Jeśli więc Twój projekt zawiera `prettier` w `package.json`, opencode automatycznie przejdź do podmiote.
+Jeśli więc Twój projekt zawiera `prettier` w `package.json`, OpenCode automatycznie go użyje.
 
 ---
 
 ## Jak to działa
 
-Kiedy opencode zapisuje lub edytuje plik:
+Kiedy OpenCode zapisuje lub edytuje plik:
 
-1. Badanie pliku dotyczącego wszystkich danych formaterów.
-2. Uruchamia decyzje wykonawcze formatujące na plik.
+1. Sprawdza plik pod kątem wszystkich dostępnych formaterów.
+2. Uruchamia odpowiedni formater na pliku.
 3. Automatycznie stosuje zmiany formatowania.
 
-Dziesięć procesów zachodzi w tle, konieczne jest zachowanie stylów kodu bez konieczności wykonania czynności czynnościowych.
+Ten proces odbywa się w tle, zapewniając spójność stylu kodu bez konieczności ręcznej interwencji.
 
 ---
 
-## Skonfiguruj
+## Konfiguracja
 
-Można dostosować formatery za pomocą sekcji `formatter` w konstrukcji opencode.
+Możesz dostosować formatery za pomocą sekcji `formatter` w konfiguracji OpenCode.
 
 ```json title="opencode.json"
 {
@@ -65,14 +65,14 @@ Można dostosować formatery za pomocą sekcji `formatter` w konstrukcji opencod
 }
 ```
 
-obsługiwane formatyzator Zobacz elementy:
+Każdy formater obsługuje następujące właściwości:
 
-| Nieruchomość  | Wpisz    | Opis                                                                       |
-| ------------- | -------- | -------------------------------------------------------------------------- |
-| `disabled`    | boolean  | Ustaw tę opcję na `true`, aby wyłączyć formater                            |
-| `command`     | string[] | Polecenie uruchomienia formatowania                                        |
-| `environment` | object   | Zmienne ustawienia do ustawień podczas uruchamiania programu formatującego |
-| `extensions`  | string[] | Rozszerzenia plików, które powinny opuścić ten formater                    |
+| Właściwość    | Typ      | Opis                                                     |
+| ------------- | -------- | -------------------------------------------------------- |
+| `disabled`    | boolean  | Ustaw na `true`, aby wyłączyć ten formater               |
+| `command`     | string[] | Polecenie uruchomienia formatera                         |
+| `environment` | object   | Zmienne środowiskowe ustawiane podczas uruchamiania      |
+| `extensions`  | string[] | Rozszerzenia plików, które powinny używać tego formatera |
 
 Spójrzmy na kilka przykładów.
 
@@ -106,7 +106,7 @@ Aby wyłączyć **określony** formater, ustaw `disabled` na `true`:
 
 ### Niestandardowe formatery
 
-Może wystąpić, gdyby nastąpiło nowe, uruchomienie, zmienne udostępnienie i udostępnienie plików:
+Możesz dodać niestandardowe formatery, podając polecenie, zmienne środowiskowe i rozszerzenia plików:
 
 ```json title="opencode.json" {4-14}
 {
@@ -127,4 +127,4 @@ Może wystąpić, gdyby nastąpiło nowe, uruchomienie, zmienne udostępnienie i
 }
 ```
 
-Symbol zastępczy **`$FILE`** w poleceniu pochodziony z formatowanego pliku.
+Symbol zastępczy **`$FILE`** w poleceniu jest zastępowany ścieżką do formatowanego pliku.
