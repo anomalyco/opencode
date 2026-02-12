@@ -457,7 +457,7 @@
 }
 
 [data-component="todos"] {
-  padding: 10px 12px 24px 48px;
+  padding: 10px 0 24px 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -891,7 +891,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 8px 0;
 
   [data-slot="question-answer-item"] {
     display: flex;
