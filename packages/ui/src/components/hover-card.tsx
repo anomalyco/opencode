@@ -20,7 +20,7 @@ export function HoverCard(props: HoverCardProps) {
       <Kobalte.Portal mount={local.mount}>
         <Kobalte.Content
           data-component="hover-card-content"
-          data-variant={local.size}
+          data-size={local.size}
           classList={{
             ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,

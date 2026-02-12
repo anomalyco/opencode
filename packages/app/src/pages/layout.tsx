@@ -644,7 +644,7 @@ export default function Layout(props: ParentProps) {
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
     const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
-    return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
+    const messages = retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
       .then((messages) => {
         if (prefetchToken.value !== token) return
 
@@ -700,16 +700,17 @@ export default function Layout(props: ParentProps) {
         })
       })
       .catch(() => undefined)
-      .then(async () => {
-        if (prefetchToken.value !== token) return
 
-        const diffs = await retry(() => globalSDK.client.session.diff({ directory, sessionID }).then((r) => r.data))
-
+    const diffs = retry(() => globalSDK.client.session.diff({ directory, sessionID }).then((r) => r.data))
+      .then((diffs) => {
         if (prefetchToken.value !== token) return
         if (!diffs) return
 
         setStore("session_diff", sessionID, reconcile(diffs, { key: "file" }))
       })
+      .catch(() => undefined)
+
+    await Promise.all([messages, diffs])
   }
 
   const pumpPrefetch = (directory: string) => {

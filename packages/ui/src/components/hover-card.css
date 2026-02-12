@@ -31,7 +31,7 @@
     animation: hover-card-open 0.15s ease-out;
   }
 
-  &[data-variant="large"] {
+  &[data-size="large"] {
     max-width: 520px;
   }
 
