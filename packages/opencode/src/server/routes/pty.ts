@@ -151,11 +151,18 @@ export const PtyRoutes = lazy(() =>
       validator("param", z.object({ ptyID: z.string() })),
       upgradeWebSocket((c) => {
         const id = c.req.param("ptyID")
+        const cursor = (() => {
+          const value = c.req.query("cursor")
+          if (!value) return
+          const parsed = Number(value)
+          if (!Number.isSafeInteger(parsed) || parsed < -1) return
+          return parsed
+        })()
         let handler: ReturnType<typeof Pty.connect>
         if (!Pty.get(id)) throw new Error("Session not found")
         return {
           onOpen(_event, ws) {
-            handler = Pty.connect(id, ws)
+            handler = Pty.connect(id, ws, cursor)
           },
           onMessage(event) {
             handler?.onMessage(String(event.data))

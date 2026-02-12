@@ -1,0 +1,285 @@
+---
+title: Sunucu
+description: opencode sunucusuyla HTTP uzerinden etkilesin.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+`opencode serve` komutu, opencode istemcisinin kullanabileceği bir OpenAPI endpoint'i açan headless bir HTTP sunucusu çalıştırır.
+
+---
+
+### Kullanım
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Seçenekler
+
+| Bayrak          | Açıklama                                       | Varsayılan       |
+| --------------- | ---------------------------------------------- | ---------------- |
+| `--port`        | Dinlenecek bağlantı noktası                    | `4096`           |
+| `--hostname`    | Dinlenecek ana bilgisayar adı                  | `127.0.0.1`      |
+| `--mdns`        | mDNS keşfini etkinleştir                       | `false`          |
+| `--mdns-domain` | mDNS hizmeti için özel alan adı                | `opencode.local` |
+| `--cors`        | İzin verilecek ek tarayıcı kaynakları (origin) | `[]`             |
+
+`--cors` birden fazla kez geçilebilir:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Kimlik Doğrulama
+
+Sunucuyu HTTP temel kimlik doğrulama (basic auth) ile korumak için `OPENCODE_SERVER_PASSWORD` ayarlayın. Kullanıcı adı varsayılan olarak `opencode` değeridir; değiştirmek isterseniz `OPENCODE_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `opencode serve` hem de `opencode web` için geçerlidir.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### Nasıl çalışır
+
+`opencode` çalıştırdığınızda hem TUI hem de sunucu başlar. TUI, sunucuyla konuşan istemci tarafıdır.
+Sunucu bir OpenAPI 3.1 spesifikasyon uç noktası açar. Bu uç nokta [SDK](/docs/sdk) üretiminde de kullanılır.
+
+:::tip
+opencode ile programatik etkileşim için opencode sunucusunu kullanın.
+:::
+
+Bu mimari, opencode'un birden fazla istemciyi desteklemesini ve programatik kullanımları mümkün kılmasını sağlar.
+
+`opencode serve` ile bağımsız bir sunucu başlatabilirsiniz. opencode TUI açıksa, `opencode serve` yeni bir sunucu başlatır.
+
+---
+
+#### Mevcut sunucuya bağlanın
+
+TUI başlarken rastgele bir port ve hostname atanır. Bunun yerine `--hostname` ve `--port` [bayraklarını](/docs/cli) verebilirsiniz.
+
+[`/tui`](#tui) uç noktası sunucu üzerinden TUI'yi sürmek için kullanılabilir. Örneğin bir istemi önceden doldurabilir veya çalıştırabilirsiniz. Bu kurulum opencode [IDE](/docs/ide) eklentileri tarafından kullanılır.
+
+---
+
+## Spesifikasyon
+
+Sunucu, şu adreste görülebilen bir OpenAPI 3.1 spesifikasyonu yayınlar:
+
+```
+http://<hostname>:<port>/doc
+```
+
+Örneğin `http://localhost:4096/doc`. İstemci oluşturmak, istek/yanit tiplerini incelemek veya Swagger gezgininde açmak için bu spec'i kullanın.
+
+---
+
+## API'ler
+
+opencode sunucusu aşağıdaki API'leri sunar.
+
+---
+
+### Global
+
+| Yöntem | Yol              | Açıklama                        | Yanıt                                |
+| ------ | ---------------- | ------------------------------- | ------------------------------------ |
+| `GET`  | `/global/health` | Sunucu sağlığını ve sürümünü al | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Küresel olayları al (SSE akışı) | Olay akışı                           |
+
+---
+
+### Proje
+
+| Yöntem | Yol                | Açıklama              | Yanıt                                         |
+| ------ | ------------------ | --------------------- | --------------------------------------------- |
+| `GET`  | `/project`         | Tüm projeleri listele | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Mevcut projeyi al     | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Yol & VCS
+
+| Yöntem | Yol     | Açıklama                           | Yanıt                                       |
+| ------ | ------- | ---------------------------------- | ------------------------------------------- |
+| `GET`  | `/path` | Mevcut yolu al                     | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Mevcut proje için VCS bilgisini al | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Örnek (Instance)
+
+| Yöntem | Yol                 | Açıklama                       | Yanıt     |
+| ------ | ------------------- | ------------------------------ | --------- |
+| `POST` | `/instance/dispose` | Mevcut örneği (instance) kapat | `boolean` |
+
+---
+
+### Config
+
+| Yöntem  | Yol                 | Açıklama                                      | Yanıt                                                                                    |
+| ------- | ------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Yapılandırma bilgisini al                     | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Yapılandırmayı güncelle                       | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | Sağlayıcıları ve varsayılan modelleri listele | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Sağlayıcı (Provider)
+
+| Yöntem | Yol                              | Açıklama                                     | Yanıt                                                                               |
+| ------ | -------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | Tüm sağlayıcıları listele                    | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Sağlayıcı kimlik doğrulama yöntemlerini al   | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | OAuth kullanarak bir sağlayıcıyı yetkilendir | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Bir sağlayıcı için OAuth geri çağrısını işle | `boolean`                                                                           |
+
+---
+
+### Oturumlar (Sessions)
+
+| Yöntem   | Yol                                      | Açıklama                                    | Notlar                                                                               |
+| -------- | ---------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET`    | `/session`                               | Tüm oturumları listele                      | <a href={typesUrl}><code>Session[]</code></a> döndürür                               |
+| `POST`   | `/session`                               | Yeni bir oturum oluştur                     | gövde: `{ parentID?, title? }`, <a href={typesUrl}><code>Session</code></a> döndürür |
+| `GET`    | `/session/status`                        | Tüm oturumlar için durumu al                | `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }` döndürür           |
+| `GET`    | `/session/:id`                           | Oturum ayrıntılarını al                     | <a href={typesUrl}><code>Session</code></a> döndürür                                 |
+| `DELETE` | `/session/:id`                           | Bir oturumu ve tüm verilerini sil           | `boolean` döndürür                                                                   |
+| `PATCH`  | `/session/:id`                           | Oturum özelliklerini güncelle               | gövde: `{ title? }`, <a href={typesUrl}><code>Session</code></a> döndürür            |
+| `GET`    | `/session/:id/children`                  | Bir oturumun alt oturumlarını al            | <a href={typesUrl}><code>Session[]</code></a> döndürür                               |
+| `GET`    | `/session/:id/todo`                      | Bir oturum için yapılacaklar listesini al   | <a href={typesUrl}><code>Todo[]</code></a> döndürür                                  |
+| `POST`   | `/session/:id/init`                      | Uygulamayı analiz et ve `AGENTS.md` oluştur | gövde: `{ messageID, providerID, modelID }`, `boolean` döndürür                      |
+| `POST`   | `/session/:id/fork`                      | Mevcut bir oturumu bir mesajda çatalla      | gövde: `{ messageID? }`, <a href={typesUrl}><code>Session</code></a> döndürür        |
+| `POST`   | `/session/:id/abort`                     | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                   |
+| `POST`   | `/session/:id/share`                     | Bir oturumu paylaş                          | <a href={typesUrl}><code>Session</code></a> döndürür                                 |
+| `DELETE` | `/session/:id/share`                     | Bir oturumun paylaşımını kaldır             | <a href={typesUrl}><code>Session</code></a> döndürür                                 |
+| `GET`    | `/session/:id/diff`                      | Bu oturum için farkı (diff) al              | sorgu: `messageID?`, <a href={typesUrl}><code>FileDiff[]</code></a> döndürür         |
+| `POST`   | `/session/:id/summarize`                 | Oturumu özetle                              | gövde: `{ providerID, modelID }`, `boolean` döndürür                                 |
+| `POST`   | `/session/:id/revert`                    | Bir mesajı geri al                          | gövde: `{ messageID, partID? }`, `boolean` döndürür                                  |
+| `POST`   | `/session/:id/unrevert`                  | Geri alınan tüm mesajları geri yükle        | `boolean` döndürür                                                                   |
+| `POST`   | `/session/:id/permissions/:permissionID` | Bir izin isteğine yanıt ver                 | gövde: `{ response, remember? }`, `boolean` döndürür                                 |
+
+---
+
+### Mesajlar
+
+| Yöntem | Yol                               | Açıklama                                  | Notlar                                                                                                                                                                  |
+| ------ | --------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | Bir oturumdaki mesajları listele          | sorgu: `limit?`, `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]` döndürür                                                         |
+| `POST` | `/session/:id/message`            | Bir mesaj gönder ve yanıt bekle           | gövde: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` döndürür |
+| `GET`  | `/session/:id/message/:messageID` | Mesaj ayrıntılarını al                    | `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` döndürür                                                                            |
+| `POST` | `/session/:id/prompt_async`       | Eşzamansız bir mesaj gönder (bekleme yok) | gövde: `/session/:id/message` ile aynı, `204 No Content` döndürür                                                                                                       |
+| `POST` | `/session/:id/command`            | Bir eğik çizgi (slash) komutu çalıştır    | gövde: `{ messageID?, agent?, model?, command, arguments }`, `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` döndürür               |
+| `POST` | `/session/:id/shell`              | Bir kabuk komutu çalıştır                 | gövde: `{ agent, model?, command }`, `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` döndürür                                       |
+
+---
+
+### Komutlar
+
+| Yöntem | Yol        | Açıklama              | Yanıt                                         |
+| ------ | ---------- | --------------------- | --------------------------------------------- |
+| `GET`  | `/command` | Tüm komutları listele | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Dosyalar
+
+| Yöntem | Yol                      | Açıklama                         | Yanıt                                                                                           |
+| ------ | ------------------------ | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`    | Dosyalarda metin ara             | `path`, `lines`, `line_number`, `absolute_offset`, `submatches` içeren eşleşme nesneleri dizisi |
+| `GET`  | `/find/file?query=<q>`   | Dosya ve dizinleri isme göre bul | `string[]` (yollar)                                                                             |
+| `GET`  | `/find/symbol?query=<q>` | Çalışma alanı sembollerini bul   | <a href={typesUrl}><code>Symbol[]</code></a>                                                    |
+| `GET`  | `/file?path=<path>`      | Dosya ve dizinleri listele       | <a href={typesUrl}><code>FileNode[]</code></a>                                                  |
+| `GET`  | `/file/content?path=<p>` | Bir dosyayı oku                  | <a href={typesUrl}><code>FileContent</code></a>                                                 |
+| `GET`  | `/file/status`           | İzlenen dosyalar için durumu al  | <a href={typesUrl}><code>File[]</code></a>                                                      |
+
+#### `/find/file` sorgu parametreleri
+
+- `query` (gerekli) - arama metni (bulanık eşleşme)
+- `type` (isteğe bağlı) - sonuçları `"file"` veya `"directory"` ile sınırlama
+- `directory` (isteğe bağlı) - arama için proje kökünü geçersiz kılma
+- `limit` (isteğe bağlı) - en fazla sonuç (1-200)
+- `dirs` (isteğe bağlı) - eski bayrak (`"false"` sadece dosyaları döndürür)
+
+---
+
+### Araçlar (Deneysel)
+
+| Yöntem | Yol                                         | Açıklama                                         | Yanıt                                        |
+| ------ | ------------------------------------------- | ------------------------------------------------ | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | Tüm araç kimliklerini listele                    | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Bir model için araçları JSON şemalarıyla listele | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Biçimlendiriciler & MCP
+
+| Yöntem | Yol          | Açıklama                         | Yanıt                                                    |
+| ------ | ------------ | -------------------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | LSP sunucu durumunu al           | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Biçimlendirici durumunu al       | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | MCP sunucu durumunu al           | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Dinamik olarak MCP sunucusu ekle | gövde: `{ name, config }`, MCP durum nesnesi döndürür    |
+
+---
+
+### Agent'lar
+
+| Yöntem | Yol      | Açıklama                      | Yanıt                                       |
+| ------ | -------- | ----------------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | Tüm mevcut agent'ları listele | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Günlük (Logging)
+
+| Yöntem | Yol    | Açıklama                                                         | Yanıt     |
+| ------ | ------ | ---------------------------------------------------------------- | --------- |
+| `POST` | `/log` | Günlük girdisi yaz. Gövde: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Yöntem | Yol                     | Açıklama                                                | Yanıt                  |
+| ------ | ----------------------- | ------------------------------------------------------- | ---------------------- |
+| `POST` | `/tui/append-prompt`    | İsteme metin ekle                                       | `boolean`              |
+| `POST` | `/tui/open-help`        | Yardım iletişim kutusunu aç                             | `boolean`              |
+| `POST` | `/tui/open-sessions`    | Oturum seçiciyi aç                                      | `boolean`              |
+| `POST` | `/tui/open-themes`      | Tema seçiciyi aç                                        | `boolean`              |
+| `POST` | `/tui/open-models`      | Model seçiciyi aç                                       | `boolean`              |
+| `POST` | `/tui/submit-prompt`    | Mevcut istemi gönder                                    | `boolean`              |
+| `POST` | `/tui/clear-prompt`     | İstemi temizle                                          | `boolean`              |
+| `POST` | `/tui/execute-command`  | Bir komut çalıştır (`{ command }`)                      | `boolean`              |
+| `POST` | `/tui/show-toast`       | Toast bildirimi göster (`{ title?, message, variant }`) | `boolean`              |
+| `GET`  | `/tui/control/next`     | Bir sonraki kontrol isteğini bekle                      | Kontrol isteği nesnesi |
+| `POST` | `/tui/control/response` | Bir kontrol isteğine yanıt ver (`{ body }`)             | `boolean`              |
+
+---
+
+### Kimlik Doğrulama (Auth)
+
+| Yöntem | Yol         | Açıklama                                                          | Yanıt     |
+| ------ | ----------- | ----------------------------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | Kimlik bilgilerini ayarla. Gövde sağlayıcı şemasıyla eşleşmelidir | `boolean` |
+
+---
+
+### Olaylar (Events)
+
+| Yöntem | Yol      | Açıklama                                                                                               | Yanıt                                   |
+| ------ | -------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `GET`  | `/event` | Sunucu tarafından gönderilen olay akışı (SSE). İlk olay `server.connected`, ardından veriyolu olayları | Sunucu tarafından gönderilen olay akışı |
+
+---
+
+### Dokümanlar (Docs)
+
+| Yöntem | Yol    | Açıklama                   | Yanıt                            |
+| ------ | ------ | -------------------------- | -------------------------------- |
+| `GET`  | `/doc` | OpenAPI 3.1 spesifikasyonu | OpenAPI spec içeren HTML sayfası |

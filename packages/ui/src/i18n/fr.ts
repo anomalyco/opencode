@@ -5,16 +5,17 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "Divisé",
   "ui.sessionReview.expandAll": "Tout développer",
   "ui.sessionReview.collapseAll": "Tout réduire",
-
   "ui.sessionReview.change.added": "Ajouté",
   "ui.sessionReview.change.removed": "Supprimé",
   "ui.sessionReview.change.modified": "Modifié",
+
   "ui.lineComment.label.prefix": "Commenter sur ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commentaire sur ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.submit": "Commenter",
+
   "ui.sessionTurn.steps.show": "Afficher les étapes",
   "ui.sessionTurn.steps.hide": "Masquer les étapes",
   "ui.sessionTurn.summary.response": "Réponse",

@@ -1,0 +1,680 @@
+---
+title: 設定
+description: OpenCode JSON 設定を使用します。
+---
+
+JSON 設定ファイルを使用して OpenCode を構成できます。
+
+---
+
+## 形式
+
+OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両方をサポートしています。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## ファイルの場所
+
+設定をいくつかの異なる場所に配置できます。
+優先順位が異なります。
+
+:::note
+設定ファイルは置き換えられるのではなく、**マージ**されます。設定は、次の構成場所から結合されます。後続の設定は、競合するキーに対してのみ以前の設定をオーバーライドします。すべての設定の競合しない設定は保持されます。
+:::
+
+たとえば、グローバル設定で `theme: "opencode"` と `autoupdate: true` が設定され、プロジェクト設定で `model: "anthropic/claude-sonnet-4-5"` が設定されている場合、最終的な設定には 3 つの設定がすべて含まれます。
+
+---
+
+### 優先順位
+
+設定ソースは次の順序でロードされます (後のソースは前のソースをオーバーライドします)。
+
+1. **リモート設定** (`.well-known/opencode` から) - 組織のデフォルト
+2. **グローバル設定** (`~/.config/opencode/opencode.json`) - ユーザー設定
+3. **カスタム設定** (`OPENCODE_CONFIG` 環境変数) - カスタムオーバーライド
+4. **プロジェクト設定** (プロジェクト内の `opencode.json`) - プロジェクト固有の設定
+5. **`.opencode` ディレクトリ** - エージェント、コマンド、プラグイン
+6. **インライン設定** (`OPENCODE_CONFIG_CONTENT` 環境変数) - ランタイムオーバーライド
+
+つまり、プロジェクト設定はグローバルのデフォルトをオーバーライドでき、グローバル設定はリモート組織のデフォルトをオーバーライドできます。
+
+:::note
+`.opencode` および `~/.config/opencode` ディレクトリでは、サブディレクトリに **複数名** が使用されています: `agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/`、および `themes/`。下位互換性のために、単数形の名前 (`agent/` など) もサポートされています。
+:::
+
+---
+
+### リモート
+
+組織は、`.well-known/opencode` エンドポイント経由でデフォルト設定を提供できます。これは、それをサポートするプロバイダーで認証するときに自動的に取得されます。
+
+リモート設定が最初にロードされ、基本層として機能します。他のすべての設定ソース (グローバル、プロジェクト) は、これらのデフォルトをオーバーライドできます。
+
+たとえば、組織がデフォルトで無効になっている MCP サーバーを提供している場合:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+ローカル設定で特定のサーバーを有効にすることができます。
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### グローバル
+
+グローバル OpenCode 設定を `~/.config/opencode/opencode.json` に配置します。テーマ、プロバイダー、キーバインドなどのユーザー全体の設定にはグローバル設定を使用します。
+
+グローバル設定はリモート組織のデフォルトをオーバーライドします。
+
+---
+
+### プロジェクトごと
+
+プロジェクトのルートに `opencode.json` を追加します。プロジェクト設定は、標準設定ファイルの中で最も高い優先順位を持ち、グローバル設定とリモート設定の両方をオーバーライドします。
+
+:::tip
+プロジェクト固有の設定をプロジェクトのルートに配置します。
+:::
+
+OpenCode が起動すると、現在のディレクトリで設定ファイルを検索するか、最も近い Git ディレクトリまで移動します。
+
+これは Git に安全にチェックインでき、グローバルスキーマと同じスキーマを使用します。
+
+---
+
+### カスタムパス
+
+`OPENCODE_CONFIG` 環境変数を使用してカスタム設定ファイルのパスを指定します。
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+カスタム設定は、優先順位でグローバル設定とプロジェクト設定の間にロードされます。
+
+---
+
+### カスタムディレクトリ
+
+`OPENCODE_CONFIG_DIR` を使用してカスタム設定ディレクトリを指定します。
+環境変数。このディレクトリでは、エージェント、コマンド、
+モードとプラグインは標準の `.opencode` ディレクトリと同様であり、次のようにする必要があります。
+同じ構造に従います。
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+カスタムディレクトリはグローバル config ディレクトリと `.opencode` ディレクトリの後にロードされるため、それらの設定を**オーバーライド**できます。
+
+---
+
+## スキーマ
+
+設定ファイルには、[**`opencode.ai/config.json`**](https://opencode.ai/config.json) を使用します。
+
+エディターはスキーマに基づいて検証し、オートコンプリートできる必要があります。
+
+---
+
+### TUI
+
+`tui` オプションを使用して TUI 固有の設定を構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+利用可能なオプション:
+
+- `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にします。 **`scroll_speed` よりも優先されます。**
+- `scroll_speed` - カスタムのスクロール速度乗数 (デフォルト: `3`、最小: `1`)。 `scroll_acceleration.enabled` が `true` の場合は無視されます。
+- `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列を表示します。
+
+[TUI の使用方法の詳細については、こちら](/docs/tui) をご覧ください。
+
+---
+
+### サーバー
+
+`opencode serve` オプションを使用して、`opencode web` および `server` コマンドのサーバー設定を構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+利用可能なオプション:
+
+- `port` - リッスンするポート。
+- `hostname` - リッスンするホスト名。 `mdns` が有効でホスト名が設定されていない場合、デフォルトは `0.0.0.0` になります。
+- `mdns` - mDNS サービス検出を有効にします。これにより、ネットワーク上の他のデバイスが OpenCode サーバーを検出できるようになります。
+- `mdnsDomain` - mDNS サービスのカスタムドメイン名。デフォルトは `opencode.local` です。同じネットワーク上で複数のインスタンスを実行する場合に便利です。
+- `cors` - ブラウザベースのクライアントから HTTP サーバーを使用するときに CORS を許可する追加のオリジン。値は完全なオリジン (スキーム + ホスト + オプションのポート) である必要があります (例: `https://app.example.com`)。
+
+[サーバーの詳細については、こちら](/docs/server)をご覧ください。
+
+---
+
+### ツール
+
+LLM が使用できるツールは、`tools` オプションを通じて管理できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[ツールの詳細については、こちらをご覧ください](/docs/tools)。
+
+---
+
+### モデル
+
+`provider`、`model`、および `small_model` オプションを使用して、OpenCode 設定で使用するプロバイダーとモデルを構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+`small_model` オプションは、タイトル生成などの軽量タスク用に別のモデルを構成します。デフォルトでは、OpenCode は、プロバイダーから安価なモデルが入手可能な場合は、より安価なモデルを使用しようとします。そうでない場合は、メインモデルにフォールバックします。
+
+プロバイダーオプションには、`timeout` および `setCacheKey` を含めることができます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - リクエストのタイムアウト (ミリ秒単位) (デフォルト: 300000)。無効にするには、`false` に設定します。
+- `setCacheKey` - 指定されたプロバイダーに対してキャッシュキーが常に設定されていることを確認します。
+
+[ローカルモデル](/docs/models#local). [詳細はこちら](/docs/models)。
+
+---
+
+#### プロバイダー固有のオプション
+
+一部のプロバイダーは、一般的な `timeout` および `apiKey` 設定を超える追加の構成オプションをサポートしています。
+
+##### Amazon Bedrock
+
+Amazon Bedrock は、AWS 固有の設定をサポートしています。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - Bedrock の AWS リージョン (デフォルトは `AWS_REGION` 環境変数または `us-east-1`)
+- `profile` - `~/.aws/credentials` からの AWS 名前付きプロファイル (デフォルトは `AWS_PROFILE` 環境変数)
+- `endpoint` - VPC エンドポイントのカスタムエンドポイント URL。これは、AWS 固有の用語を使用した汎用 `baseURL` オプションのエイリアスです。両方を指定した場合は、`endpoint` が優先されます。
+
+:::note
+ベアラー トークン (`AWS_BEARER_TOKEN_BEDROCK` または `/connect`) は、プロファイルベースの認証より優先されます。詳細については、「認証優先順位](/docs/providers#authentication-precedence)」を参照してください。
+:::
+
+[Amazon Bedrock 設定 ](/docs/providers#amazon-bedrock) の詳細をご覧ください。
+
+---
+
+### テーマ
+
+`theme` オプションを使用して、OpenCode 設定で使用するテーマを構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[詳細はこちら](/docs/themes)。
+
+---
+
+### エージェント
+
+`agent` オプションを使用して、特定のタスクに特化したエージェントを構成できます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+`~/.config/opencode/agents/` または `.opencode/agents/` の Markdown ファイルを使用してエージェントを定義することもできます。 [詳細はこちら](/docs/agents)。
+
+---
+
+### デフォルトエージェント
+
+`default_agent` オプションを使用してデフォルトのエージェントを設定できます。これにより、明示的に何も指定されていない場合にどのエージェントが使用されるかが決まります。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+デフォルトのエージェントはプライマリエージェントである必要があります (サブエージェントではありません)。これは、`"build"` や `"plan"` のような組み込みエージェント、または定義した[カスタムエージェント](/docs/agents) にすることができます。指定されたエージェントが存在しないか、サブエージェントである場合、OpenCode は警告とともに `"build"` にフォールバックします。
+
+この設定は、TUI、CLI (`opencode run`)、デスクトップアプリ、および GitHub Action のすべてのインターフェイスに適用されます。
+
+---
+
+### 共有
+
+`share` オプションを使用して [share](/docs/share) 機能を設定できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+これには以下が必要です:
+
+- `"manual"` - コマンドによる手動共有を許可します (デフォルト)
+- `"auto"` - 新しい会話を自動的に共有します
+- `"disabled"` - 共有を完全に無効にする
+
+デフォルトでは、共有は手動モードに設定されており、`/share` コマンドを使用して会話を明示的に共有する必要があります。
+
+---
+
+### コマンド
+
+`command` オプションを使用して、反復タスク用のカスタムコマンドを構成できます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+`~/.config/opencode/commands/` または `.opencode/commands/` の Markdown ファイルを使用してコマンドを定義することもできます。 [詳細はこちら](/docs/commands)。
+
+---
+
+### キーバインド
+
+`keybinds` オプションを使用してキーバインドをカスタマイズできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[詳細はこちら](/docs/keybinds)。
+
+---
+
+### 自動更新
+
+OpenCode は起動時に新しいアップデートを自動的にダウンロードします。 `autoupdate` オプションを使用してこれを無効にできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+更新は必要ないが、新しいバージョンが利用可能になったときに通知を受け取りたい場合は、`autoupdate` を `"notify"` に設定します。
+これは、Homebrew などのパッケージマネージャーを使用してインストールされていない場合にのみ機能することに注意してください。
+
+---
+
+### フォーマッタ
+
+`formatter` オプションを使用してコードフォーマッタを設定できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[フォーマッタの詳細については、こちら](/docs/formatters) をご覧ください。
+
+---
+
+### 権限
+
+デフォルトでは、opencode は明示的な承認を必要とせずに **すべての操作を許可**します。これは、`permission` オプションを使用して変更できます。
+
+たとえば、`edit` ツールと `bash` ツールにユーザーの承認が必要であることを確認するには、次のようにします。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[権限の詳細については、こちら](/docs/permissions)をご覧ください。
+
+---
+
+### 圧縮
+
+`compaction` オプションを使用してコンテキストの圧縮動作を制御できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - コンテキストがいっぱいのときにセッションを自動的に圧縮します (デフォルト: `true`)。
+- `prune` - 古いツールの出力を削除してトークンを保存します (デフォルト: `true`)。
+
+---
+
+### ウォッチャー
+
+`watcher` オプションを使用して、ファイルウォッチャーの無視パターンを構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+パターンは glob 構文に従います。これを使用して、ノイズの多いディレクトリをファイル監視から除外します。
+
+---
+
+### MCPサーバー
+
+`mcp` オプションを使用して、使用する MCP サーバーを構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[詳細はこちら](/docs/mcp-servers)。
+
+---
+
+### プラグイン
+
+[Plugins](/docs/plugins) は、カスタムツール、フック、統合を使用して OpenCode を拡張します。
+
+プラグインファイルを `.opencode/plugins/` または `~/.config/opencode/plugins/` に配置します。 `plugin` オプションを使用して npm からプラグインをロードすることもできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[詳細はこちら](/docs/plugins)。
+
+---
+
+### 指示
+
+`instructions` オプションを使用して、使用しているモデルの指示を構成できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+これは、指示ファイルへのパスとグロブパターンの配列を受け取ります。 [ルールについて詳しくはこちら](/docs/rules)。
+
+---
+
+### 無効なプロバイダー
+
+`disabled_providers` オプションを使用して、自動的にロードされるプロバイダーを無効にすることができます。これは、認証情報が利用可能な場合でも、特定のプロバイダーが読み込まれないようにしたい場合に便利です。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers` は `enabled_providers` よりも優先されます。
+:::
+`disabled_providers` オプションは、プロバイダー ID の配列を受け入れます。プロバイダーが無効になっている場合:
+
+- 環境変数を設定してもロードされません。
+- `/connect` コマンドで API キーを設定してもロードされません。
+- プロバイダーのモデルはモデル選択リストに表示されません。
+
+---
+
+### 有効なプロバイダー
+
+`enabled_providers` オプションを使用してプロバイダーの許可リストを指定できます。設定すると、指定されたプロバイダーのみが有効になり、その他はすべて無視されます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+これは、OpenCode を 1 つずつ無効にするのではなく、特定のプロバイダーのみを使用するように制限したい場合に便利です。
+
+:::note
+`disabled_providers` は `enabled_providers` よりも優先されます。
+:::
+プロバイダーが `enabled_providers` と `disabled_providers` の両方に表示される場合、下位互換性のために `disabled_providers` が優先されます。
+
+---
+
+### 実験的
+
+`experimental` キーには、現在開発中のオプションが含まれています。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+実験的なオプションは安定していません。予告なく変更または削除される場合があります。
+:::
+
+---
+
+## 変数
+
+設定ファイル内で変数置換を使用して、環境変数とファイルの内容を参照できます。
+
+---
+
+### 環境変数
+
+`{env:VARIABLE_NAME}` を使用して環境変数を置き換えます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+環境変数が設定されていない場合は、空の文字列に置き換えられます。
+
+---
+
+### ファイル
+
+`{file:path/to/file}` を使用してファイルの内容を置き換えます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+ファイルパスは次のとおりです。
+
+- 設定ファイルのディレクトリからの相対パス
+- または、`/` または `~` で始まる絶対パス
+
+これらは次の場合に役立ちます。
+
+- API キーなどの機密データを別のファイルに保存します。
+- 設定を乱雑にすることなく、大きな指示ファイルを含めることができます。
+- 複数の設定ファイル間で共通の設定スニペットを共有します。
