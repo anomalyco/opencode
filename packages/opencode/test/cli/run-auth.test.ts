@@ -5,32 +5,34 @@ import { createInternalFetch } from "../../src/cli/cmd/internal-fetch"
 
 test("createInternalFetch adds basic auth when configured", async () => {
   let seenAuth: string | null = null
-  const baseFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const baseFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init)
     seenAuth = req.headers.get("authorization")
     return Promise.resolve(new Response("ok"))
-  }) as typeof globalThis.fetch
+  }
 
-  const fetchWithAuth = createInternalFetch(baseFetch, {
+  const fetchWithAuth = createInternalFetch(baseFetch as typeof globalThis.fetch, {
     username: "opencode",
     password: "secret",
   })
 
   await fetchWithAuth("http://opencode.internal/health")
-  if (seenAuth === null) throw new Error("authorization header was not set")
-  const expected = `Basic ${Buffer.from("opencode:secret").toString("base64")}`
-  if (seenAuth !== expected) throw new Error(`unexpected authorization header: ${seenAuth}`)
+  const auth = seenAuth
+  if (auth === null) throw new Error("authorization header was not set")
+  if (auth !== `Basic ${Buffer.from("opencode:secret").toString("base64")}`) {
+    throw new Error(`unexpected authorization header: ${auth}`)
+  }
 })
 
 test("createInternalFetch preserves explicit authorization header", async () => {
   let seenAuth: string | null = null
-  const baseFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const baseFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init)
     seenAuth = req.headers.get("authorization")
     return Promise.resolve(new Response("ok"))
-  }) as typeof globalThis.fetch
+  }
 
-  const fetchWithAuth = createInternalFetch(baseFetch, {
+  const fetchWithAuth = createInternalFetch(baseFetch as typeof globalThis.fetch, {
     username: "opencode",
     password: "secret",
   })
@@ -41,8 +43,11 @@ test("createInternalFetch preserves explicit authorization header", async () => 
     },
   })
 
-  if (seenAuth === null) throw new Error("authorization header was not preserved")
-  if (seenAuth !== "Basic custom-token") throw new Error(`unexpected authorization header: ${seenAuth}`)
+  const auth = seenAuth
+  if (auth === null) throw new Error("authorization header was not preserved")
+  if (auth !== "Basic custom-token") {
+    throw new Error(`unexpected authorization header: ${auth}`)
+  }
 })
 
 test("internal fetch can access basic-auth protected route when env auth is set", async () => {
@@ -56,15 +61,15 @@ test("internal fetch can access basic-auth protected route when env auth is set"
     )
     .get("/session", (c) => c.json({ ok: true }))
 
-  const baseFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const baseFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init)
     return app.fetch(req)
-  }) as typeof globalThis.fetch
+  }
 
   const unauth = await baseFetch("http://opencode.internal/session")
   expect(unauth.status).toBe(401)
 
-  const fetchWithAuth = createInternalFetch(baseFetch, {
+  const fetchWithAuth = createInternalFetch(baseFetch as typeof globalThis.fetch, {
     username: "opencode",
     password: "secret",
   })

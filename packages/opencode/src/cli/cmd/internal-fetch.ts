@@ -1,17 +1,20 @@
-type LocalServerAuth = {
-  username: string
-  password: string
-}
-
-type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response
-
-export function createInternalFetch(baseFetch: FetchLike, auth?: LocalServerAuth): FetchLike {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+export function createInternalFetch(
+  base: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response,
+  auth?: {
+    username: string
+    password: string
+  },
+) {
+  const fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
     if (auth && !request.headers.has("authorization")) {
-      const encoded = Buffer.from(`${auth.username}:${auth.password}`).toString("base64")
-      request.headers.set("authorization", `Basic ${encoded}`)
+      request.headers.set(
+        "authorization",
+        `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`,
+      )
     }
-    return baseFetch(request)
+    return base(request)
   }) as typeof globalThis.fetch
+  fetch.preconnect = globalThis.fetch.preconnect.bind(globalThis.fetch)
+  return fetch
 }
