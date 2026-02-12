@@ -1,0 +1,379 @@
+---
+title: Narzędzia
+description: Zarządzaj narzędziami, z których może korzystać LLM.
+---
+
+Narzędzia umożliwiają LLM wykonywanie działań w bazie kodu. OpenCode posiada zestaw wbudowanych narzędzi, ale możesz go rozszerzyć o [narzędzia niestandardowe](/docs/custom-tools) lub [serwery MCP](/docs/mcp-servers).
+
+Domyślnie wszystkie narzędzia są **włączone** i nie wymagają zatwierdzenia przed uruchomieniem. Możesz kontrolować zachowanie narzędzi poprzez [uprawnienia](/docs/permissions).
+
+---
+
+## Konfiguracja
+
+Użyj pola `permission` do kontrolowania zachowania narzędzia. Dla każdego narzędzia możesz zezwolić (`allow`), odmówić (`deny`) lub wymagać zatwierdzenia (`ask`).
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Możesz także używać symboli wieloznacznych do kontrolowania wielu narzędzi jednocześnie. Na przykład, aby wymagać zatwierdzenia dla wszystkich narzędzi z serwera MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Dowiedz się więcej](/docs/permissions) o konfigurowaniu uprawnień.
+
+---
+
+## Wbudowane narzędzia
+
+Oto wszystkie wbudowane narzędzia dostępne w OpenCode.
+
+---
+
+### bash
+
+Wykonuj polecenia powłoki (shell) w środowisku projektu.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+To narzędzie umożliwia LLM uruchamianie poleceń terminalowych, takich jak `npm install`, `git status` lub dowolne inne polecenie powłoki.
+
+---
+
+### edit
+
+Modyfikuj istniejące pliki poprzez precyzyjne zastępowanie tekstu.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+To narzędzie umożliwia precyzyjną edycję plików poprzez zastąpienie dokładnych dopasowań tekstu. Jest to główny sposób, w jaki LLM modyfikuje kod.
+
+---
+
+### write
+
+Twórz nowe pliki lub nadpisuj istniejące.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Użyj tego, aby umożliwić LLM tworzenie nowych plików. Zastąpi istniejące pliki, jeśli już istnieją.
+
+:::note
+Narzędzie `write` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Odczytaj zawartość pliku z bazy kodu.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Narzędzie to odczytuje pliki i zwraca ich zawartość. Obsługuje czytanie określonych zakresów linii w przypadku dużych plików.
+
+---
+
+### grep
+
+Przeszukuj zawartość plików za pomocą wyrażeń regularnych.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Szybkie wyszukiwanie treści w całej bazie kodu. Obsługuje pełną składnię wyrażeń regularnych i filtrowanie wzorców plików.
+
+---
+
+### glob
+
+Znajduj pliki na podstawie wzorców.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+Szukaj plików przy użyciu wzorców glob, takich jak `**/*.js` lub `src/**/*.ts`. Zwraca pasujące ścieżki plików posortowane według czasu modyfikacji.
+
+---
+
+### list
+
+Wyświetla listę plików i katalogów w podanej ścieżce.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+To narzędzie wyświetla zawartość katalogu. Akceptuje wzorce glob do filtrowania wyników.
+
+---
+
+### LSP (eksperymentalne)
+
+Interakcja ze skonfigurowanymi serwerami LSP w celu uzyskania funkcji analizy kodu, takich jak definicje, referencje, podpowiedzi (hover) i hierarchia wywołań.
+
+:::note
+To narzędzie jest dostępne tylko wtedy, gdy `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (lub `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Obsługiwane operacje obejmują `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` i `outgoingCalls`.
+
+Aby skonfigurować, które serwery LSP są dostępne dla Twojego projektu, zobacz [Serwery LSP](/docs/lsp).
+
+---
+
+### patch
+
+Stosuj łatki (patches) do plików.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+To narzędzie stosuje pliki różnicowe (diffs) do bazy kodu. Przydatne do stosowania zmian z różnych źródeł.
+
+:::note
+Narzędzie `patch` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Załaduj [umiejętność](/docs/skills) (plik `SKILL.md`) i zwróć jej treść w rozmowie.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Zarządzaj listami zadań (todo) podczas sesji kodowania.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Tworzy i aktualizuje listy zadań w celu śledzenia postępu podczas złożonych operacji. LLM wykorzystuje to do organizowania zadań wieloetapowych.
+
+:::note
+To narzędzie jest domyślnie wyłączone dla subagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Odczytuj istniejące listy zadań (todo).
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Odczytuje bieżący stan listy rzeczy do zrobienia. Używany przez LLM do śledzenia zadań oczekujących lub ukończonych.
+
+:::note
+To narzędzie jest domyślnie wyłączone dla subagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Pobieraj treści z sieci.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+Umożliwia LLM pobieranie i odczytywanie stron internetowych. Przydatne do wyszukiwania dokumentacji lub zasobów online.
+
+---
+
+### websearch
+
+Wyszukaj informacje w Internecie.
+
+:::note
+To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy OpenCode lub gdy zmienna środowiskowa `OPENCODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
+
+Aby włączyć przy uruchamianiu OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Przeszukuje Internet za pomocą Exa AI, aby znaleźć odpowiednie informacje. Przydatne do badania tematów, znajdowania bieżących wydarzeń lub zbierania informacji wykraczających poza zbiór danych treningowych.
+
+Nie jest wymagany żaden klucz API — narzędzie łączy się bezpośrednio z usługą MCP hostowaną przez Exa AI bez uwierzytelniania.
+
+:::tip
+Użyj `websearch`, gdy chcesz znaleźć informacje (odkrywanie), i `webfetch`, gdy musisz pobrać treść z określonego adresu URL (pobieranie).
+:::
+
+---
+
+### question
+
+Zadawaj pytania użytkownikowi podczas wykonywania.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+To narzędzie umożliwia LLM zadawanie pytań użytkownikowi podczas wykonywania zadania. Jest to przydatne do:
+
+- Zbierania preferencji i wymagań użytkownika
+- Doprecyzowania niejednoznacznych instrukcji
+- Podejmowania decyzji dotyczących implementacji
+- Proponowania możliwych kierunków działania
+
+Każde pytanie zawiera nagłówek, tekst pytania i listę opcji. Użytkownicy mogą wybierać spośród dostępnych opcji lub wpisać niestandardową odpowiedź. Jeśli pytań jest wiele, użytkownicy mogą nawigować między nimi przed przesłaniem wszystkich odpowiedzi.
+
+---
+
+## Narzędzia niestandardowe
+
+Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM może wywołać. Są one zdefiniowane w pliku konfiguracyjnym i mogą wykonywać dowolny kod.
+
+[Więcej informacji](/docs/custom-tools) o tworzeniu narzędzi niestandardowych.
+
+---
+
+## Serwery MCP
+
+Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych narzędzi i usług. Obejmuje to dostęp do baz danych, integracje API i usługi stron trzecich.
+
+[Dowiedz się więcej](/docs/mcp-servers) o konfigurowaniu serwerów MCP.
+
+---
+
+## Szczegóły techniczne
+
+Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
+
+---
+
+### Ignorowanie plików
+
+Aby uwzględnić pliki, które normalnie byłyby ignorowane, utwórz plik `.ignore` w katalogu głównym projektu. Ten plik może jawnie zezwalać na określone ścieżki.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Na przykład ten plik `.ignore` pozwala ripgrepowi przeszukiwać katalogi `node_modules/`, `dist/` i `build/`, nawet jeśli są one wymienione w `.gitignore`.

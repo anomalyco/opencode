@@ -2420,6 +2420,9 @@
                       "type": "boolean"
                     }
                   },
+                  "format": {
+                    "$ref": "#/components/schemas/OutputFormat"
+                  },
                   "system": {
                     "type": "string"
                   },
@@ -2795,6 +2798,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "format": {
+                    "$ref": "#/components/schemas/OutputFormat"
                   },
                   "system": {
                     "type": "string"
@@ -3790,9 +3796,11 @@
                                   "properties": {
                                     "npm": {
                                       "type": "string"
+                                    },
+                                    "api": {
+                                      "type": "string"
                                     }
-                                  },
-                                  "required": ["npm"]
+                                  }
                                 },
                                 "variants": {
                                   "type": "object",
@@ -6070,6 +6078,52 @@
         },
         "required": ["type", "properties"]
       },
+      "OutputFormatText": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "text"
+          }
+        },
+        "required": ["type"]
+      },
+      "JSONSchema": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "OutputFormatJsonSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "json_schema"
+          },
+          "schema": {
+            "$ref": "#/components/schemas/JSONSchema"
+          },
+          "retryCount": {
+            "default": 2,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "schema"]
+      },
+      "OutputFormat": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OutputFormatText"
+          },
+          {
+            "$ref": "#/components/schemas/OutputFormatJsonSchema"
+          }
+        ]
+      },
       "FileDiff": {
         "type": "object",
         "properties": {
@@ -6116,6 +6170,9 @@
               }
             },
             "required": ["created"]
+          },
+          "format": {
+            "$ref": "#/components/schemas/OutputFormat"
           },
           "summary": {
             "type": "object",
@@ -6242,6 +6299,28 @@
         },
         "required": ["name", "data"]
       },
+      "StructuredOutputError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "StructuredOutputError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "retries": {
+                "type": "number"
+              }
+            },
+            "required": ["message", "retries"]
+          }
+        },
+        "required": ["name", "data"]
+      },
       "ContextOverflowError": {
         "type": "object",
         "properties": {
@@ -6350,6 +6429,9 @@
                 "$ref": "#/components/schemas/MessageAbortedError"
               },
               {
+                "$ref": "#/components/schemas/StructuredOutputError"
+              },
+              {
                 "$ref": "#/components/schemas/ContextOverflowError"
               },
               {
@@ -6393,6 +6475,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -6417,6 +6502,7 @@
             },
             "required": ["input", "output", "reasoning", "cache"]
           },
+          "structured": {},
           "variant": {
             "type": "string"
           },
@@ -7023,6 +7109,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -8118,6 +8207,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/MessageAbortedError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StructuredOutputError"
                   },
                   {
                     "$ref": "#/components/schemas/ContextOverflowError"
@@ -9308,9 +9400,11 @@
                   "properties": {
                     "npm": {
                       "type": "string"
+                    },
+                    "api": {
+                      "type": "string"
                     }
-                  },
-                  "required": ["npm"]
+                  }
                 },
                 "variants": {
                   "description": "Variant-specific configuration",
@@ -9894,6 +9988,12 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "reserved": {
+                "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             }
           },

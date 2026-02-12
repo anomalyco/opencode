@@ -1,0 +1,390 @@
+---
+title: TUI
+description: 使用 OpenCode 終端機使用者介面。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode 提供了一個互動式終端機介面或 TUI，供您與 LLM 一起處理專案。
+
+執行 OpenCode 會啟動當前目錄的 TUI。
+
+```bash
+opencode
+```
+
+或者您可以為特定的工作目錄啟動它。
+
+```bash
+opencode /path/to/project
+```
+
+進入 TUI 後，您可以透過訊息進行提示。
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## 檔案參考
+
+您可以使用 `@` 在訊息中引用檔案。這會在當前工作目錄中進行模糊檔案搜尋。
+
+:::tip
+您還可以使用 `@` 來引用訊息中的檔案。
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+檔案的內容會自動添加到對話中。
+
+---
+
+## Bash 指令
+
+以 `!` 開始一條訊息以執行 shell 指令。
+
+```bash frame="none"
+!ls -la
+```
+
+指令的輸出將作為工具結果添加到對話中。
+
+---
+
+## 指令
+
+使用 OpenCode TUI 時，您可以輸入 `/` 後跟指令名稱來快速執行操作。例如：
+
+```bash frame="none"
+/help
+```
+
+大多數指令也有使用 `ctrl+x` 作為 Leader 鍵的按鍵綁定，其中 `ctrl+x` 是預設的 Leader 鍵。 [了解更多](/docs/keybinds)。
+
+以下是所有可用的斜線指令：
+
+---
+
+### connect
+
+將供應商添加到 OpenCode。允許您從可用的供應商中進行選擇並添加其 API 金鑰。
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+壓縮當前工作階段。 _別名_：`/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**按鍵綁定：** `ctrl+x c`
+
+---
+
+### details
+
+切換工具執行詳細資訊。
+
+```bash frame="none"
+/details
+```
+
+**按鍵綁定：** `ctrl+x d`
+
+---
+
+### editor
+
+打開外部編輯器來撰寫訊息。使用 `EDITOR` 環境變數中設定的編輯器。 [了解更多](#editor-setup)。
+
+```bash frame="none"
+/editor
+```
+
+**按鍵綁定：** `ctrl+x e`
+
+---
+
+### exit
+
+退出 OpenCode。 _別名_：`/quit`、`/q`
+
+```bash frame="none"
+/exit
+```
+
+**按鍵綁定：** `ctrl+x q`
+
+---
+
+### export
+
+將當前對話導出到 Markdown 並在預設編輯器中打開。使用 `EDITOR` 環境變數中設定的編輯器。 [了解更多](#editor-setup)。
+
+```bash frame="none"
+/export
+```
+
+**按鍵綁定：** `ctrl+x x`
+
+---
+
+### help
+
+顯示說明對話方塊。
+
+```bash frame="none"
+/help
+```
+
+**按鍵綁定：** `ctrl+x h`
+
+---
+
+### init
+
+建立或更新 `AGENTS.md` 檔案。 [了解更多](/docs/rules)。
+
+```bash frame="none"
+/init
+```
+
+**按鍵綁定：** `ctrl+x i`
+
+---
+
+### models
+
+列出可用模型。
+
+```bash frame="none"
+/models
+```
+
+**按鍵綁定：** `ctrl+x m`
+
+---
+
+### new
+
+開始新的工作階段。 _別名_：`/clear`
+
+```bash frame="none"
+/new
+```
+
+**按鍵綁定：** `ctrl+x n`
+
+---
+
+### redo
+
+重做之前撤銷的訊息。僅在使用 `/undo` 後可用。
+
+:::tip
+任何檔案變更也將被恢復。
+:::
+
+在內部，這使用 Git 來管理檔案變更。所以你的專案**需要
+是一個 Git 儲存庫**。
+
+```bash frame="none"
+/redo
+```
+
+**按鍵綁定：** `ctrl+x r`
+
+---
+
+### sessions
+
+列出工作階段並在工作階段之間切換。 _別名_：`/resume`、`/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**按鍵綁定：** `ctrl+x l`
+
+---
+
+### share
+
+分享當前工作階段。 [了解更多](/docs/share)。
+
+```bash frame="none"
+/share
+```
+
+**按鍵綁定：** `ctrl+x s`
+
+---
+
+### themes
+
+列出可用的主題。
+
+```bash frame="none"
+/theme
+```
+
+**按鍵綁定：** `ctrl+x t`
+
+---
+
+### thinking
+
+切換對話中思考/推理區塊的可見性。啟用後，您可以看到支援擴展思考的模型的推理過程。
+
+:::note
+該指令僅控制是否**顯示** - 它不啟用或禁用模型的推理功能。要切換實際推理功能，請使用 `ctrl+t` 循環切換模型變體。
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+撤銷對話中的最後一條訊息。刪除最近的使用者訊息、所有後續回應以及任何檔案變更。
+
+:::tip
+所做的任何檔案變更也將被恢復。
+:::
+
+在內部，這使用 Git 來管理檔案變更。所以你的專案**需要
+是一個 Git 儲存庫**。
+
+```bash frame="none"
+/undo
+```
+
+**按鍵綁定：** `ctrl+x u`
+
+---
+
+### unshare
+
+取消分享當前工作階段。 [了解更多](/docs/share#un-sharing)。
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## 編輯器設定
+
+`/editor` 和 `/export` 指令都使用 `EDITOR` 環境變數中指定的編輯器。
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    To make it permanent, add this to your shell profile;
+    `~/.bashrc`, `~/.zshrc`, etc.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    To make it permanent, use **System Properties** > **Environment
+    Variables**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    To make it permanent, add this to your PowerShell profile.
+
+  </TabItem>
+</Tabs>
+
+流行的編輯器選項包括：
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim 編輯器
+- `vim` - Vim 編輯器
+- `nano` - Nano 編輯器
+- `notepad` - Windows 記事本
+- `subl` - Sublime Text
+
+:::note
+某些編輯器（例如 VS Code）需要以 `--wait` 旗標啟動。
+:::
+
+某些編輯器需要命令列參數才能在阻止模式下執行。 `--wait` 旗標使編輯器處理程序阻塞直到關閉。
+
+---
+
+## 配置
+
+您可以透過 OpenCode 設定檔自定義 TUI 行為。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### 選項
+
+- `scroll_acceleration` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動。啟用後，捲動速度會隨著快速捲動手勢而增加，並在較慢的移動時保持精確。 **此設定優先於 `scroll_speed`，並在啟用時覆寫它。**
+- `scroll_speed` - 控制使用捲動指令時 TUI 捲動的速度（最小值：`1`）。預設為 `3`。 **注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則忽略此設定。**
+
+---
+
+## 自定義
+
+您可以使用指令面板（`ctrl+x h` 或 `/help`）自定義 TUI 視圖的各個方面。這些設定在重新啟動後仍然存在。
+
+---
+
+#### 使用者名稱顯示
+
+切換您的使用者名稱是否出現在聊天訊息中。透過以下方式存取：
+
+- 指令面板：搜尋「使用者名稱」或「隱藏使用者名稱」
+- 該設定會自動保留並在 TUI 工作階段中被記住

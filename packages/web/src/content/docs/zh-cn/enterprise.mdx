@@ -1,0 +1,165 @@
+---
+title: 企业版
+description: 在您的组织中安全地使用 opencode。
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode 企业版适用于希望确保其代码和数据永远不会离开其基础设施的组织。它可以通过使用与 SSO 和内部 AI 网关集成的集中方式配置来实现此目的。
+
+:::note
+opencode 不存储您的任何代码或上下文数据。
+:::
+
+要开始使用 opencode 企业版：
+
+1. 与您的团队进行内部试用。
+2. **<a href={email}>联系我们</a>** 讨论定价和实施选项。
+
+---
+
+## 试用
+
+opencode 是开源的，不存储您的任何代码或上下文数据，因此您的开发人员只需 [开始吧](/docs/) 并进行试用。
+
+---
+
+### 数据处理
+
+**opencode 不会存储您的代码或上下文数据。** 所有处理都在本地进行或通过直接 API 调用您的 AI 提供商。
+
+这意味着只要您使用您信任的提供商或内部 AI 网关，您就可以安全使用 opencode。
+
+这里唯一需要注意的是可选的 `/share` 功能。
+
+---
+
+#### 分享对话
+
+如果用户启用 `/share` 功能，对话和关联的数据将被发送到我们用于在 opencode.ai 上托管这些共享页面的服务。
+
+数据当前通过我们的 CDN 边缘网络提供服务，并缓存在用户附近的边缘。
+
+我们建议您在试用时禁用此功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[了解更多关于分享的信息](/docs/share)。
+
+---
+
+### 代码所有权
+
+**您拥有 opencode 生成的所有代码。** 没有许可限制或所有权主张。
+
+---
+
+## 定价
+
+我们对 opencode Enterprise 使用按席位模型。如果您有自己的 LLM 网关，我们不会对使用的 Token 收取费用。有关定价和实施选项的更多详细信息，请 **<a href={email}>联系我们</a>**。
+
+---
+
+## 部署
+
+完成试用并准备好在您的组织中使用 opencode 后，您可以 **<a href={email}>联系我们</a>** 进行讨论定价和实施选项。
+
+---
+
+### 中央配置
+
+我们可以将 opencode 设置为您的整个组织使用单一的中央配置。
+
+这种集中式配置可以与您的 SSO 提供商集成，并确保所有用户仅访问您的内部 AI 网关。
+
+---
+
+### SSO 集成
+
+通过中央配置，opencode 可以与您组织的 SSO 提供商集成以进行身份验证。
+
+这使得 opencode 能够通过现有的身份管理系统获取内部 AI 网关的凭据。
+
+---
+
+### 内部 AI 网关
+
+通过中央配置，opencode 还可以配置为仅使用您的内部 AI 网关。
+
+您还可以禁用所有其他 AI 提供商，确保所有请求都通过组织批准的基础设施。
+
+---
+
+### 自托管
+
+虽然我们建议禁用共享页面以确保您的数据永远不会离开您的组织，我们还可以帮助您在您的基础设施上自行托管它们。
+
+目前这已在我们的路线图上。如果您有兴趣，**<a href={email}>让我们知道</a>**。
+
+---
+
+## 常见问题
+
+<details>
+<summary>什么是 opencode 企业版？</summary>
+
+opencode 企业版适用于希望确保其代码和数据永远不会离开其基础设施的组织。它可以通过使用与 SSO 和内部 AI 网关集成的集中方式配置来实现此目的。
+
+</details>
+
+<details>
+<summary>如何开始使用 opencode 企业版？</summary>
+
+与您的团队进行内部实验即可。opencode 默认情况下不存储您的代码或上下文数据，可以轻松上手。
+
+然后 **<a href={email}>联系我们</a>** 讨论定价和实施选项。
+
+</details>
+
+<details>
+<summary>企业定价如何运作？</summary>
+
+我们提供按席位企业定价。如果您有自己的 LLM 网关，我们不会对使用的 Token 收取费用。如需了解更多详情，请 **<a href={email}>联系我们</a>**，获取根据您组织的需求定制的报价。
+
+</details>
+
+<details>
+<summary>opencode 企业版保证我的数据安全吗？</summary>
+
+是的。opencode 不存储您的代码或上下文数据。所有处理都在本地进行或通过直接 API 调用您的 AI 提供商。通过中央配置和 SSO 集成，您的数据在组织的基础架构中保持安全。
+
+</details>
+
+<details>
+<summary>我们可以使用自己的私有 npm 注册表吗？</summary>
+
+opencode 通过 Bun 的本机 `.npmrc` 文件支持来支持私有 npm 注册表。如果您的组织使用私有注册表，例如 JFrog Artifactory、Nexus 或类似的，请确保开发人员在运行 opencode 之前经过身份验证。
+
+要使用您的私有注册表设置身份验证：
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+这将创建带有身份验证详细信息的 `~/.npmrc`。 opencode 会自动读取这个。
+
+:::caution
+在运行 opencode 之前，您必须登录私有注册表。
+:::
+
+或者，您可以手动配置 `.npmrc` 文件：
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+开发人员必须在运行 opencode 之前登录私有注册表，以确保可以从您的企业注册表安装软件包。
+
+</details>
