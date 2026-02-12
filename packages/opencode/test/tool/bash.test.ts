@@ -37,6 +37,23 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("basic without description", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo 'test'",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.description).toBe("Run shell command")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
