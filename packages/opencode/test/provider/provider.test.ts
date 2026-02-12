@@ -1407,6 +1407,175 @@ test("model headers are preserved", async () => {
   })
 })
 
+test("fromModelsDevProvider splits bedrock opus 4.6 into 200K and 1M variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    env: [],
+    models: {
+      "us.anthropic.claude-opus-4-6-v1:0": {
+        id: "us.anthropic.claude-opus-4-6-v1:0",
+        name: "Claude Opus 4.6",
+        attachment: true,
+        reasoning: true,
+        tool_call: true,
+        temperature: true,
+        release_date: "2026-02-05",
+        limit: { context: 1_000_000, output: 128_000 },
+        options: {
+          anthropicBeta: ["existing-beta"],
+        },
+      },
+    },
+  })
+
+  const base = provider.models["us.anthropic.claude-opus-4-6-v1:0"]
+  const extended = provider.models["us.anthropic.claude-opus-4-6-v1:0-1m"]
+
+  expect(base).toBeDefined()
+  expect(extended).toBeDefined()
+
+  expect(base.name).toContain("(200K)")
+  expect(extended.name).toContain("(1M Experimental)")
+
+  expect(base.limit.context).toBe(200_000)
+  expect(extended.limit.context).toBe(1_000_000)
+
+  expect(base.options.anthropicBeta).toBeUndefined()
+  expect(extended.options.anthropicBeta).toEqual(expect.arrayContaining(["existing-beta", "context-1m-2025-08-07"]))
+
+  expect(extended.api.id).toBe(base.api.id)
+  expect(extended.status).toBe("beta")
+})
+
+test("fromModelsDevProvider splits bedrock sonnet 4.5 into 200K and 1M variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    env: [],
+    models: {
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+        id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        name: "Claude Sonnet 4.5",
+        attachment: true,
+        reasoning: true,
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-09-29",
+        limit: { context: 1_000_000, output: 64_000 },
+        options: {},
+      },
+    },
+  })
+
+  const base = provider.models["us.anthropic.claude-sonnet-4-5-20250929-v1:0"]
+  const extended = provider.models["us.anthropic.claude-sonnet-4-5-20250929-v1:0-1m"]
+
+  expect(base).toBeDefined()
+  expect(extended).toBeDefined()
+
+  expect(base.name).toContain("(200K)")
+  expect(extended.name).toContain("(1M Experimental)")
+
+  expect(base.limit.context).toBe(200_000)
+  expect(extended.limit.context).toBe(1_000_000)
+
+  expect(extended.options.anthropicBeta).toEqual(["context-1m-2025-08-07"])
+  expect(extended.status).toBe("beta")
+})
+
+test("bedrock custom opus 4.6 model is not auto-split", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              models: {
+                "anthropic.claude-opus-4-6-v1:0": {
+                  name: "Claude Opus 4.6",
+                  attachment: true,
+                  reasoning: true,
+                  tool_call: true,
+                  temperature: true,
+                  limit: { context: 1_000_000, output: 64_000 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const base = providers["amazon-bedrock"].models["anthropic.claude-opus-4-6-v1:0"]
+      const extended = providers["amazon-bedrock"].models["anthropic.claude-opus-4-6-v1:0-1m"]
+
+      expect(base).toBeDefined()
+      expect(extended).toBeUndefined()
+      expect(base.name).toBe("Claude Opus 4.6")
+      expect(base.limit.context).toBe(1_000_000)
+      expect(base.options.anthropicBeta).toBeUndefined()
+    },
+  })
+})
+
+test("fromModelsDevProvider does not split non-1m bedrock models", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    env: [],
+    models: {
+      "us.anthropic.claude-haiku-4-20250414-v1:0": {
+        id: "us.anthropic.claude-haiku-4-20250414-v1:0",
+        name: "Claude Haiku 4",
+        attachment: true,
+        reasoning: false,
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-04-14",
+        limit: { context: 200_000, output: 64_000 },
+        options: {},
+      },
+    },
+  })
+
+  const models = Object.keys(provider.models)
+  expect(models).toEqual(["us.anthropic.claude-haiku-4-20250414-v1:0"])
+  expect(provider.models["us.anthropic.claude-haiku-4-20250414-v1:0-1m"]).toBeUndefined()
+})
+
+test("fromModelsDevProvider does not split non-bedrock providers", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "anthropic",
+    name: "Anthropic",
+    env: ["ANTHROPIC_API_KEY"],
+    models: {
+      "claude-opus-4-6": {
+        id: "claude-opus-4-6",
+        name: "Claude Opus 4.6",
+        attachment: true,
+        reasoning: true,
+        tool_call: true,
+        temperature: true,
+        release_date: "2026-02-05",
+        limit: { context: 200_000, output: 128_000 },
+        options: {},
+      },
+    },
+  })
+
+  const models = Object.keys(provider.models)
+  expect(models).toEqual(["claude-opus-4-6"])
+  expect(provider.models["claude-opus-4-6-1m"]).toBeUndefined()
+})
+
 test("provider env fallback - second env var used if first missing", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

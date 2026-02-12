@@ -623,6 +623,39 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
+  const BEDROCK_1M_MODELS = ["claude-opus-4-6", "claude-sonnet-4-5"]
+  const BEDROCK_1M_BETA = "context-1m-2025-08-07"
+
+  function splitBedrock1m(providerID: string, models: Record<string, Model>) {
+    if (providerID !== "amazon-bedrock") return
+
+    for (const [id, model] of Object.entries(models)) {
+      if (!BEDROCK_1M_MODELS.some((m) => model.api.id.includes(m))) continue
+      if (id.endsWith("-1m")) continue
+
+      const name = model.name.replace(/\s+\((200K|1M Experimental)\)$/i, "")
+      const opts = { ...model.options }
+      const raw = opts["anthropicBeta"]
+      const existing = (Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : []).filter(
+        (item): item is string => typeof item === "string",
+      )
+      delete opts["anthropicBeta"]
+
+      model.name = `${name} (200K)`
+      model.options = opts
+      model.limit = { ...model.limit, context: Math.min(model.limit.context, 200_000) }
+
+      models[`${id}-1m`] = {
+        ...model,
+        id: `${id}-1m`,
+        name: `${name} (1M Experimental)`,
+        status: "beta",
+        limit: { ...model.limit, context: 1_000_000 },
+        options: { ...model.options, anthropicBeta: [...new Set([...existing, BEDROCK_1M_BETA])] },
+      }
+    }
+  }
+
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
       id: model.id,
@@ -691,13 +724,16 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models = mapValues(provider.models, (model) => fromModelsDevModel(provider, model))
+    splitBedrock1m(provider.id, models)
+
     return {
       id: provider.id,
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models,
     }
   }
 
