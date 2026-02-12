@@ -302,13 +302,18 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
-        log.info("exiting loop", { sessionID })
-        break
+      if (lastAssistant?.finish && !["tool-calls", "unknown"].includes(lastAssistant.finish)) {
+        if (lastUser.id < lastAssistant.id) {
+          log.info("exiting loop", { sessionID })
+          break
+        } else {
+          log.warn("assistant finished but user message is newer", {
+            sessionID,
+            lastUserId: lastUser.id,
+            lastAssistantId: lastAssistant.id,
+            finish: lastAssistant.finish,
+          })
+        }
       }
 
       step++
@@ -650,7 +655,7 @@ export namespace SessionPrompt {
       }
       continue
     }
-    SessionCompaction.prune({ sessionID })
+    await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []

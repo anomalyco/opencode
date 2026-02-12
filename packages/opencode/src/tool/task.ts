@@ -10,6 +10,10 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { Bus } from "../bus"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "tool.task" })
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -125,22 +129,56 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
+      let promptResolved = false
+
+      // Listen for child completion signal — if the child's assistant message
+      // gets a final finish reason or error but the prompt doesn't resolve shortly
+      // after, force-cancel the child to unblock the parent.
+      const unsub = Bus.subscribe(MessageV2.Event.Updated, (event) => {
+        const msg = event.properties.info
+        if (msg.sessionID !== session.id) return
+        if (msg.role !== "assistant") return
+
+        // Detect terminal states: final finish reason OR error
+        const hasTerminalFinish =
+          "finish" in msg && msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
+        const hasError = "error" in msg && msg.error
+        if (!hasTerminalFinish && !hasError) return
+
+        setTimeout(() => {
+          if (!promptResolved) {
+            log.warn("subagent completed but prompt did not resolve, forcing cancel", {
+              sessionID: session.id,
+              finish: "finish" in msg ? msg.finish : undefined,
+              error: hasError,
+            })
+            SessionPrompt.cancel(session.id)
+          }
+        }, 3000)
       })
+
+      let result: MessageV2.WithParts
+      try {
+        result = await SessionPrompt.prompt({
+          messageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(hasTaskPermission ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        })
+        promptResolved = true
+      } finally {
+        unsub()
+      }
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
