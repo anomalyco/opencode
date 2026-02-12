@@ -208,6 +208,7 @@ export const dict = {
   "prompt.placeholder.normal": 'اسأل أي شيء... "{{example}}"',
   "prompt.placeholder.summarizeComments": "لخّص التعليقات…",
   "prompt.placeholder.summarizeComment": "لخّص التعليق…",
+  "prompt.placeholder.agent": "أنا {{name}}، {{description}}",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "esc للخروج",
   "prompt.example.1": "إصلاح TODO في قاعدة التعليمات البرمجية",

@@ -207,6 +207,7 @@ export const dict = {
   "prompt.placeholder.normal": '何でも聞いてください... "{{example}}"',
   "prompt.placeholder.summarizeComments": "コメントを要約…",
   "prompt.placeholder.summarizeComment": "コメントを要約…",
+  "prompt.placeholder.agent": "私は {{name}} です。{{description}}",
   "prompt.mode.shell": "シェル",
   "prompt.mode.shell.exit": "escで終了",
   "prompt.example.1": "コードベースのTODOを修正",

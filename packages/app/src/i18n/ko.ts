@@ -211,6 +211,7 @@ export const dict = {
   "prompt.placeholder.normal": '무엇이든 물어보세요... "{{example}}"',
   "prompt.placeholder.summarizeComments": "댓글 요약…",
   "prompt.placeholder.summarizeComment": "댓글 요약…",
+  "prompt.placeholder.agent": "저는 {{name}}입니다. {{description}}",
   "prompt.mode.shell": "셸",
   "prompt.mode.shell.exit": "종료하려면 esc",
   "prompt.example.1": "코드베이스의 TODO 수정",

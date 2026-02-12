@@ -225,6 +225,7 @@ export const dict = {
   "prompt.placeholder.normal": '隨便問點什麼... "{{example}}"',
   "prompt.placeholder.summarizeComments": "摘要評論…",
   "prompt.placeholder.summarizeComment": "摘要這則評論…",
+  "prompt.placeholder.agent": "我是 {{name}}, {{description}}",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "按 esc 退出",
 

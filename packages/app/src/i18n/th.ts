@@ -225,6 +225,7 @@ export const dict = {
   "prompt.placeholder.normal": 'ถามอะไรก็ได้... "{{example}}"',
   "prompt.placeholder.summarizeComments": "สรุปความคิดเห็น…",
   "prompt.placeholder.summarizeComment": "สรุปความคิดเห็น…",
+  "prompt.placeholder.agent": "ฉันคือ {{name}}, {{description}}",
   "prompt.mode.shell": "เชลล์",
   "prompt.mode.shell.exit": "กด esc เพื่อออก",
 

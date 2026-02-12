@@ -246,6 +246,7 @@ export const dict = {
   "prompt.placeholder.normal": '随便问点什么... "{{example}}"',
   "prompt.placeholder.summarizeComments": "总结评论…",
   "prompt.placeholder.summarizeComment": "总结该评论…",
+  "prompt.placeholder.agent": "我是 {{name}}, {{description}}",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "按 esc 退出",
   "prompt.example.1": "修复代码库中的一个 TODO",
