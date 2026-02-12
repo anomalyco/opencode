@@ -16,10 +16,7 @@ export interface GitResult {
  * carries protocol data – on Windows this causes git to deadlock.  In that
  * case we fall back to `Bun.spawn` with `stdin: "ignore"`.
  */
-export async function git(
-  args: string[],
-  opts: { cwd: string; env?: Record<string, string> },
-): Promise<GitResult> {
+export async function git(args: string[], opts: { cwd: string; env?: Record<string, string> }): Promise<GitResult> {
   if (Flag.OPENCODE_CLIENT === "acp") {
     const proc = Bun.spawn(["git", ...args], {
       stdin: "ignore",
@@ -45,10 +42,7 @@ export async function git(
   }
 
   const env = opts.env ? { ...process.env, ...opts.env } : undefined
-  let cmd = $`git ${args}`
-    .quiet()
-    .nothrow()
-    .cwd(opts.cwd)
+  let cmd = $`git ${args}`.quiet().nothrow().cwd(opts.cwd)
   if (env) cmd = cmd.env(env)
   const result = await cmd
   return {
