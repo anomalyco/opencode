@@ -4,7 +4,7 @@ import "@opencode-ai/app/index.css"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import "./styles.css"
-import { createSignal, Match, onMount } from "solid-js"
+import { createSignal, Match, onCleanup, onMount } from "solid-js"
 import { commands, events, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 import { Switch } from "solid-js"
@@ -57,15 +57,29 @@ render(() => {
                     "This could take a couple of minutes",
                   ]
                   const [textIndex, setTextIndex] = createSignal(0)
+                  const [progress, setProgress] = createSignal(0)
 
                   onMount(async () => {
+                    const listener = events.sqliteMigrationProgress.listen((e) => {
+                      if (e.payload.type === "InProgress") setProgress(e.payload.value)
+                    })
+                    onCleanup(() => listener.then((c) => c()))
+
                     await new Promise((res) => setTimeout(res, 3000))
                     setTextIndex(1)
                     await new Promise((res) => setTimeout(res, 6000))
                     setTextIndex(2)
                   })
 
-                  return <>{textItems[textIndex()]}</>
+                  return (
+                    <div class="flex flex-col items-center gap-1">
+                      <span>{textItems[textIndex()]}</span>
+                      <span>Progress: {progress()}%</span>
+                      <div class="h-2 w-48 rounded-full border border-white relative">
+                        <div class="bg-[#fff] h-full absolute left-0 inset-y-0" style={{ width: `${progress()}%` }} />
+                      </div>
+                    </div>
+                  )
                 }}
               </Match>
             </Switch>
