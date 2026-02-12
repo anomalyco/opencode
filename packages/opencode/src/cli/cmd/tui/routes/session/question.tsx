@@ -92,6 +92,44 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     setStore("selected", index)
   }
 
+  function saveCustomAnswer(tab: number, text: string) {
+    // Read previous custom value before updating
+    const prev = store.custom[tab]
+
+    // Save text to custom array
+    const inputs = [...store.custom]
+    inputs[tab] = text
+    setStore("custom", inputs)
+
+    // Get question mode
+    const question = questions()[tab]
+    const isMulti = question?.multiple === true
+
+    // Update answers based on mode
+    const answers = [...store.answers]
+
+    if (isMulti) {
+      // Multi-select: add to existing answers
+      const existing = store.answers[tab] ?? []
+      const next = [...existing]
+
+      // Remove old custom value if it existed and differs
+      if (prev && prev !== text) {
+        const oldIndex = next.indexOf(prev)
+        if (oldIndex !== -1) next.splice(oldIndex, 1)
+      }
+
+      // Add new custom value if not already present
+      if (!next.includes(text)) next.push(text)
+      answers[tab] = next
+    } else {
+      // Single-select: replace the answer entirely
+      answers[tab] = [text]
+    }
+
+    setStore("answers", answers)
+  }
+
   function selectTab(index: number) {
     // Auto-save any uncommitted custom answer before switching
     if (store.editing && textarea) {
@@ -99,35 +137,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       const prevTab = store.tab
 
       if (text) {
-        // Save the typed text to the previous tab's custom array
-        const inputs = [...store.custom]
-        inputs[prevTab] = text
-        setStore("custom", inputs)
-
-        // Get the question from the previous tab
-        const prevQuestion = questions()[prevTab]
-        const prevMulti = prevQuestion?.multiple === true
-
-        // Update answers based on mode
-        const answers = [...store.answers]
-
-        if (prevMulti) {
-          const existing = store.answers[prevTab] ?? []
-          const next = [...existing]
-          const prev = store.custom[prevTab]
-          // Remove old custom value if it existed and differs
-          if (prev && prev !== text) {
-            const oldIndex = next.indexOf(prev)
-            if (oldIndex !== -1) next.splice(oldIndex, 1)
-          }
-
-          if (!next.includes(text)) next.push(text)
-          answers[prevTab] = next
-        } else {
-          answers[prevTab] = [text]
-        }
-
-        setStore("answers", answers)
+        saveCustomAnswer(prevTab, text)
       }
     }
 
@@ -202,20 +212,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         }
 
         if (multi()) {
-          const inputs = [...store.custom]
-          inputs[store.tab] = text
-          setStore("custom", inputs)
-
-          const existing = store.answers[store.tab] ?? []
-          const next = [...existing]
-          if (prev) {
-            const index = next.indexOf(prev)
-            if (index !== -1) next.splice(index, 1)
-          }
-          if (!next.includes(text)) next.push(text)
-          const answers = [...store.answers]
-          answers[store.tab] = next
-          setStore("answers", answers)
+          saveCustomAnswer(store.tab, text)
           setStore("editing", false)
           return
         }
