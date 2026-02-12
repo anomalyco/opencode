@@ -104,22 +104,29 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         inputs[prevTab] = text
         setStore("custom", inputs)
 
-        // Also update answers if this is a new custom value
-        const existing = store.answers[prevTab] ?? []
-        const prev = store.custom[prevTab]
-        const next = [...existing]
+        // Get the question from the previous tab
+        const prevQuestion = questions()[prevTab]
+        const prevMulti = prevQuestion?.multiple === true
 
-        // Remove old custom value if it existed and differs
-        if (prev && prev !== text) {
-          const oldIndex = next.indexOf(prev)
-          if (oldIndex !== -1) next.splice(oldIndex, 1)
+        // Update answers based on mode
+        const answers = [...store.answers]
+
+        if (prevMulti) {
+          const existing = store.answers[prevTab] ?? []
+          const next = [...existing]
+          const prev = store.custom[prevTab]
+          // Remove old custom value if it existed and differs
+          if (prev && prev !== text) {
+            const oldIndex = next.indexOf(prev)
+            if (oldIndex !== -1) next.splice(oldIndex, 1)
+          }
+
+          if (!next.includes(text)) next.push(text)
+          answers[prevTab] = next
+        } else {
+          answers[prevTab] = [text]
         }
 
-        // Add new custom value if not already present
-        if (!next.includes(text)) next.push(text)
-
-        const answers = [...store.answers]
-        answers[prevTab] = next
         setStore("answers", answers)
       }
     }
