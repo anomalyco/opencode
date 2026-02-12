@@ -56,7 +56,7 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-### Remote
+### 远程
 
 组织可以通过 `.well-known/opencode` 端点提供默认配置。当您向支持的提供商进行身份验证时，会自动获取该信息。
 
@@ -92,7 +92,7 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-### Global
+### 全局
 
 将全局 opencode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来实现用户范围的首选项，例如主题、提供商或按键绑定。
 
@@ -100,7 +100,7 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-### Per Project
+### 项目级
 
 在项目根目录中添加 `opencode.json`。项目配置在标准配置文件中具有最高优先级 - 它覆盖全局配置和远程配置。
 
@@ -114,7 +114,7 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-### Custom Path
+### 自定义路径
 
 使用 `OPENCODE_CONFIG` 环境变量指定自定义配置文件路径。
 
@@ -127,7 +127,7 @@ opencode run "Hello world"
 
 ---
 
-### Custom Directory
+### 自定义目录
 
 使用 `OPENCODE_CONFIG_DIR` 环境变量指定自定义配置目录。将在该目录中搜索代理、命令、模式和插件，就像标准 `.opencode` 目录一样，并且应该遵循相同的结构。
 
@@ -175,7 +175,7 @@ opencode run "Hello world"
 
 ---
 
-### Server
+### 服务器
 
 您可以通过 `opencode serve` 选项为 `opencode web` 和 `server` 命令配置服务器设置。
 
@@ -204,7 +204,7 @@ opencode run "Hello world"
 
 ---
 
-### Tools
+### 工具
 
 您可以通过 `tools` 选项管理 LLM 可以使用的工具。
 
@@ -222,7 +222,7 @@ opencode run "Hello world"
 
 ---
 
-### Models
+### 模型
 
 您可以通过 `provider`、`model` 和 `small_model` 选项来配置要在 opencode 配置中使用的提供商和模型。
 
@@ -295,7 +295,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Theme
+### 主题
 
 您可以通过 opencode 配置中的 `theme` 选项配置要使用的主题。
 
@@ -310,7 +310,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Agents
+### 代理
 
 您可以通过 `agent` 选项为特定任务配置专用代理。
 
@@ -336,7 +336,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Default Agent
+### 默认代理
 
 您可以使用 `default_agent` 选项设置默认代理。当没有明确指定时，这将确定使用哪个代理。
 
@@ -353,7 +353,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Share
+### 分享
 
 您可以通过 `share` 选项配置 [分享](/docs/share) 功能。
 
@@ -374,7 +374,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Command
+### 命令
 
 您可以通过 `command` 选项为重复任务配置自定义命令。
 
@@ -400,7 +400,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Keybinds
+### 快捷键
 
 您可以通过 `keybinds` 选项自定义您的按键绑定。
 
@@ -415,7 +415,7 @@ Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置�
 
 ---
 
-### Autoupdate
+### 自动更新
 
 opencode 将在启动时自动下载任何新的更新。您可以使用 `autoupdate` 选项禁用此功能。
 
@@ -431,7 +431,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Formatters
+### 格式化程序
 
 您可以通过 `formatter` 选项配置代码格式化程序。
 
@@ -457,7 +457,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Permissions
+### 权限
 
 默认情况下，opencode **允许所有操作**，无需明确批准。您可以使用 `permission` 选项更改此设置。
 
@@ -477,7 +477,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Compaction
+### 压缩
 
 您可以通过 `compaction` 选项控制上下文压缩行为。
 
@@ -496,7 +496,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Watcher
+### 观察器
 
 您可以通过 `watcher` 选项配置文件观察器忽略模式。
 
@@ -513,7 +513,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### MCP Servers
+### MCP 服务器
 
 您可以通过 `mcp` 选项配置要使用的 MCP 服务器。
 
@@ -528,7 +528,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Plugins
+### 插件
 
 [Plugins](/docs/plugins) 使用自定义工具、挂钩和集成扩展 opencode。
 
@@ -545,7 +545,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Instructions
+### 指令
 
 您可以通过 `instructions` 选项配置您正在使用的模型的说明。
 
@@ -560,7 +560,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Disabled Providers
+### 禁用提供商
 
 您可以通过 `disabled_providers` 选项禁用自动加载的提供商。当您想要阻止加载某些提供商（即使其凭据可用）时，这非常有用。
 
@@ -583,7 +583,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Enabled Providers
+### 启用提供商
 
 您可以通过 `enabled_providers` 选项指定允许的提供商列表。设置后，仅启用指定的提供商，所有其他提供商将被忽略。
 
@@ -604,7 +604,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Experimental
+### 实验性功能
 
 `experimental` 键包含正在积极开发的选项。
 
@@ -621,13 +621,13 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-## Variables
+## 变量
 
 您可以在配置文件中使用变量替换来引用环境变量和文件内容。
 
 ---
 
-### Env Vars
+### 环境变量
 
 使用 `{env:VARIABLE_NAME}` 替换环境变量：
 
@@ -650,7 +650,7 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 
 ---
 
-### Files
+### 文件
 
 使用 `{file:path/to/file}` 替换文件的内容：
 
