@@ -1004,7 +1004,16 @@ export namespace Config {
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
-      theme: z.string().optional().describe("Theme name to use for the interface"),
+      theme: z
+        .union([
+          z.string(),
+          z.object({
+            light: z.string().optional().describe("Theme to use in light mode"),
+            dark: z.string().optional().describe("Theme to use in dark mode"),
+          }),
+        ])
+        .optional()
+        .describe("Theme name or per-mode theme configuration for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),

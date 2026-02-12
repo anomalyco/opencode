@@ -301,12 +301,22 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over pr
 
 ### Themes
 
-You can configure the theme you want to use in your OpenCode config through the `theme` option.
+You can configure the theme in your OpenCode config through the `theme` option. Use a string for a single theme, or an object to set different themes for dark and light mode.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "theme": "tokyonight"
+}
+```
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": {
+    "dark": "tokyonight",
+    "light": "github"
+  }
 }
 ```
 

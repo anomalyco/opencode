@@ -70,6 +70,34 @@ You can select a theme by bringing up the theme select with the `/theme` command
 }
 ```
 
+To use different themes for dark and light mode:
+
+```json title="opencode.json" {3-6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": {
+    "dark": "tokyonight",
+    "light": "github"
+  }
+}
+```
+
+---
+
+## Appearance mode
+
+OpenCode can follow your OS appearance (dark or light) and switch themes automatically.
+
+The theme dialog (`/theme` or `ctrl+x t`) includes an appearance selector at the top. Use `←`/`→` to cycle between modes:
+
+- **auto** — follows OS appearance via the terminal. When your system switches between dark and light mode, OpenCode updates instantly.
+- **dark** — always use the dark variant or dark theme.
+- **light** — always use the light variant or light theme.
+
+The default mode is `auto`. On terminals that support [Mode 2031](https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md) (Ghostty, kitty, Contour, GNOME Terminal), appearance changes are detected in real-time. On other terminals, OpenCode falls back to detecting the terminal background color at startup.
+
+Most built-in themes include both dark and light color variants. Themes without light variants (`aura`, `ayu`) are unaffected by the appearance mode — they always render the same way.
+
 ---
 
 ## Custom themes
