@@ -19,8 +19,7 @@ function openSessionContext(args: {
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
   if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
-  args.layout.fileTree.open()
-  args.layout.fileTree.setTab("all")
+  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
   args.tabs.open("context")
   args.tabs.setActive("context")
 }

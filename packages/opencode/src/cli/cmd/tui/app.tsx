@@ -180,6 +180,7 @@ export function tui(input: {
         exitOnCtrlC: false,
         useKittyKeyboard: {},
         autoFocus: false,
+        openConsoleOnError: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
