@@ -45,14 +45,6 @@ import { Installation } from "../installation"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  let recentCache: Promise<{ providerID: string; modelID: string }[]> | undefined
-  async function recentModels() {
-    return (recentCache ??= Bun.file(path.join(Global.Path.state, "model.json"))
-      .json()
-      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
-      .catch(() => [] as { providerID: string; modelID: string }[]))
-  }
-
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
     if (!match) {
@@ -1240,7 +1232,10 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = await recentModels()
+    const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
+      .json()
+      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
+      .catch(() => [])) as { providerID: string; modelID: string }[]
     for (const entry of recent) {
       const provider = providers[entry.providerID]
       if (!provider) continue
