@@ -69,7 +69,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }),
     )
 
-    const meta = { pruned: false }
+    const meta = { pruned: false, disposed: false }
 
     createEffect(() => {
       if (!ready()) return
@@ -83,6 +83,17 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     }
 
     const index = createMemo(() => buildNotificationIndex(store.list))
+
+    const lookup = (directory: string, sessionID?: string) => {
+      if (!sessionID) return Promise.resolve(undefined)
+      const [syncStore] = globalSync.child(directory, { bootstrap: false })
+      const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
+      if (match.found) return Promise.resolve(syncStore.session[match.index])
+      return globalSDK.client.session
+        .get({ directory, sessionID })
+        .then((x) => x.data)
+        .catch(() => undefined)
+    }
 
     const unsub = globalSDK.event.listen((e) => {
       const event = e.details
@@ -102,61 +113,65 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       switch (event.type) {
         case "session.idle": {
           const sessionID = event.properties.sessionID
-          const [syncStore] = globalSync.child(directory, { bootstrap: false })
-          const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-          const session = match.found ? syncStore.session[match.index] : undefined
-          if (session?.parentID) break
+          void lookup(directory, sessionID).then((session) => {
+            if (meta.disposed) return
+            if (!session) return
+            if (session.parentID) return
 
-          playSound(soundSrc(settings.sounds.agent()))
+            playSound(soundSrc(settings.sounds.agent()))
 
-          append({
-            directory,
-            time,
-            viewed: viewed(sessionID),
-            type: "turn-complete",
-            session: sessionID,
+            append({
+              directory,
+              time,
+              viewed: viewed(sessionID),
+              type: "turn-complete",
+              session: sessionID,
+            })
+
+            const href = `/${base64Encode(directory)}/session/${sessionID}`
+            if (settings.notifications.agent()) {
+              void platform.notify(
+                language.t("notification.session.responseReady.title"),
+                session.title ?? sessionID,
+                href,
+              )
+            }
           })
-
-          const href = `/${base64Encode(directory)}/session/${sessionID}`
-          if (settings.notifications.agent()) {
-            void platform.notify(
-              language.t("notification.session.responseReady.title"),
-              session?.title ?? sessionID,
-              href,
-            )
-          }
           break
         }
         case "session.error": {
           const sessionID = event.properties.sessionID
-          const [syncStore] = globalSync.child(directory, { bootstrap: false })
-          const match = sessionID ? Binary.search(syncStore.session, sessionID, (s) => s.id) : undefined
-          const session = sessionID && match?.found ? syncStore.session[match.index] : undefined
-          if (session?.parentID) break
+          void lookup(directory, sessionID).then((session) => {
+            if (meta.disposed) return
+            if (session?.parentID) return
 
-          playSound(soundSrc(settings.sounds.errors()))
+            playSound(soundSrc(settings.sounds.errors()))
 
-          const error = "error" in event.properties ? event.properties.error : undefined
-          append({
-            directory,
-            time,
-            viewed: viewed(sessionID),
-            type: "error",
-            session: sessionID ?? "global",
-            error,
+            const error = "error" in event.properties ? event.properties.error : undefined
+            append({
+              directory,
+              time,
+              viewed: viewed(sessionID),
+              type: "error",
+              session: sessionID ?? "global",
+              error,
+            })
+            const description =
+              session?.title ??
+              (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+            const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+            if (settings.notifications.errors()) {
+              void platform.notify(language.t("notification.session.error.title"), description, href)
+            }
           })
-          const description =
-            session?.title ??
-            (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-          const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
-          if (settings.notifications.errors()) {
-            void platform.notify(language.t("notification.session.error.title"), description, href)
-          }
           break
         }
       }
     })
-    onCleanup(unsub)
+    onCleanup(() => {
+      meta.disposed = true
+      unsub()
+    })
 
     return {
       ready,

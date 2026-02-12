@@ -1,0 +1,243 @@
+---
+title: Zen
+description: قائمة منتقاة من النماذج يوفّرها OpenCode.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Zen هي قائمة بالنماذج التي اختبرها فريق OpenCode وتحقّق منها.
+
+:::note
+OpenCode Zen متاح حاليا بنسخة تجريبية.
+:::
+
+يعمل Zen مثل أي مزوّد آخر في OpenCode. تسجّل الدخول إلى OpenCode Zen وتحصل على
+مفتاح API. استخدامه **اختياري بالكامل** ولا تحتاج إليه لاستخدام OpenCode.
+
+---
+
+## الخلفية
+
+توجد نماذج كثيرة جدا، لكن عددا قليلا فقط منها يعمل بشكل جيد كعوامل للبرمجة.
+بالإضافة إلى ذلك، فإن معظم المزوّدين يختلفون كثيرا في طريقة الإعداد؛ لذلك قد
+تحصل على أداء وجودة مختلفين بشكل كبير.
+
+:::tip
+اختبرنا مجموعة منتقاة من النماذج والمزوّدين الذين يعملون جيدا مع OpenCode.
+:::
+
+لذلك إذا كنت تستخدم نموذجا عبر خدمة مثل OpenRouter، فلن تكون واثقا أبدا من أنك
+تحصل على أفضل نسخة من النموذج الذي تريده.
+
+لمعالجة ذلك، قمنا بعدة أمور:
+
+1. اختبرنا مجموعة منتقاة من النماذج وتحدثنا مع فرقها حول افضل طريقة لتشغيلها.
+2. ثم عملنا مع عدد من المزوّدين للتأكد من تقديمها بشكل صحيح.
+3. أخيرا، قمنا بقياس أداء توليفة النموذج/المزوّد وخرجنا بقائمة نوصي بها بثقة.
+
+OpenCode Zen هو بوابة للذكاء الاصطناعي تتيح لك الوصول إلى هذه النماذج.
+
+---
+
+## كيف يعمل
+
+يعمل OpenCode Zen مثل أي مزوّد آخر في OpenCode.
+
+1. تسجّل الدخول إلى **<a href={console}>OpenCode Zen</a>**، وتضيف تفاصيل الفوترة، ثم تنسخ مفتاح API.
+2. تشغّل الأمر `/connect` في واجهة TUI، وتختار OpenCode Zen، ثم تلصق مفتاح API.
+3. شغّل `/models` في واجهة TUI لعرض قائمة النماذج التي نوصي بها.
+
+يتم احتساب الرسوم لكل طلب، ويمكنك إضافة رصيد إلى حسابك.
+
+---
+
+## نقاط النهاية
+
+يمكنك أيضا الوصول إلى نماذجنا عبر نقاط نهاية API التالية.
+
+| النموذج            | معرّف النموذج      | نقطة النهاية                                       | حزمة AI SDK                 |
+| ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+
+يستخدم [معرّف النموذج](/docs/config/#models) في إعدادات OpenCode الصيغة `opencode/<model-id>`.
+على سبيل المثال، بالنسبة إلى GPT 5.2 Codex ستستخدم `opencode/gpt-5.2-codex` في إعداداتك.
+
+---
+
+### النماذج
+
+يمكنك جلب القائمة الكاملة بالنماذج المتاحة وبياناتها الوصفية من:
+
+```
+https://opencode.ai/zen/v1/models
+```
+
+---
+
+## التسعير
+
+ندعم نموذج الدفع حسب الاستخدام. فيما يلي الأسعار **لكل 1M tokens**.
+
+| النموذج                           | الإدخال | الإخراج | قراءة مخزنة | كتابة مخزنة |
+| --------------------------------- | ------- | ------- | ----------- | ----------- |
+| Big Pickle                        | Free    | Free    | Free        | -           |
+| MiniMax M2.1 Free                 | Free    | Free    | Free        | -           |
+| MiniMax M2.1                      | $0.30   | $1.20   | $0.10       | -           |
+| GLM 4.7 Free                      | Free    | Free    | Free        | -           |
+| GLM 4.7                           | $0.60   | $2.20   | $0.10       | -           |
+| GLM 4.6                           | $0.60   | $2.20   | $0.10       | -           |
+| Kimi K2.5 Free                    | Free    | Free    | Free        | -           |
+| Kimi K2.5                         | $0.60   | $3.00   | $0.08       | -           |
+| Kimi K2 Thinking                  | $0.40   | $2.50   | -           | -           |
+| Kimi K2                           | $0.40   | $2.50   | -           | -           |
+| Qwen3 Coder 480B                  | $0.45   | $1.50   | -           | -           |
+| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00   | $15.00  | $0.30       | $3.75       |
+| Claude Sonnet 4.5 (> 200K tokens) | $6.00   | $22.50  | $0.60       | $7.50       |
+| Claude Sonnet 4 (≤ 200K tokens)   | $3.00   | $15.00  | $0.30       | $3.75       |
+| Claude Sonnet 4 (> 200K tokens)   | $6.00   | $22.50  | $0.60       | $7.50       |
+| Claude Haiku 4.5                  | $1.00   | $5.00   | $0.10       | $1.25       |
+| Claude Haiku 3.5                  | $0.80   | $4.00   | $0.08       | $1.00       |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00   | $25.00  | $0.50       | $6.25       |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00  | $37.50  | $1.00       | $12.50      |
+| Claude Opus 4.5                   | $5.00   | $25.00  | $0.50       | $6.25       |
+| Claude Opus 4.1                   | $15.00  | $75.00  | $1.50       | $18.75      |
+| Gemini 3 Pro (≤ 200K tokens)      | $2.00   | $12.00  | $0.20       | -           |
+| Gemini 3 Pro (> 200K tokens)      | $4.00   | $18.00  | $0.40       | -           |
+| Gemini 3 Flash                    | $0.50   | $3.00   | $0.05       | -           |
+| GPT 5.2                           | $1.75   | $14.00  | $0.175      | -           |
+| GPT 5.2 Codex                     | $1.75   | $14.00  | $0.175      | -           |
+| GPT 5.1                           | $1.07   | $8.50   | $0.107      | -           |
+| GPT 5.1 Codex                     | $1.07   | $8.50   | $0.107      | -           |
+| GPT 5.1 Codex Max                 | $1.25   | $10.00  | $0.125      | -           |
+| GPT 5.1 Codex Mini                | $0.25   | $2.00   | $0.025      | -           |
+| GPT 5                             | $1.07   | $8.50   | $0.107      | -           |
+| GPT 5 Codex                       | $1.07   | $8.50   | $0.107      | -           |
+| GPT 5 Nano                        | Free    | Free    | Free        | -           |
+
+قد تلاحظ _Claude Haiku 3.5_ في سجل الاستخدام. هذا [نموذج منخفض التكلفة](/docs/config/#models) يُستخدم لتوليد عناوين جلساتك.
+
+:::note
+يتم تمرير رسوم بطاقات الائتمان بالتكلفة الفعلية (4.4% + $0.30 لكل معاملة)؛ ولا نفرض أي رسوم إضافية غير ذلك.
+:::
+
+النماذج المجانية:
+
+- GLM 4.7 Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Kimi K2.5 Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- MiniMax M2.1 Free متاح على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+- Big Pickle نموذج خفي ومتاح مجانا على OpenCode لفترة محدودة. يستخدم الفريق هذه الفترة لجمع الملاحظات وتحسين النموذج.
+
+<a href={email}>تواصل معنا</a> إذا كانت لديك أي أسئلة.
+
+---
+
+### إعادة الشحن التلقائي
+
+إذا انخفض رصيدك عن $5، فسيقوم Zen تلقائيا بإعادة شحن $20.
+
+يمكنك تغيير مبلغ إعادة الشحن التلقائي. ويمكنك أيضا تعطيل إعادة الشحن التلقائي بالكامل.
+
+---
+
+### الحدود الشهرية
+
+يمكنك أيضا تعيين حد شهري للاستخدام لمساحة العمل بالكامل ولكل عضو في فريقك.
+
+على سبيل المثال، لنفترض أنك ضبطت حد الاستخدام الشهري على $20، فلن يتجاوز Zen مبلغ $20 خلال شهر.
+لكن إذا كانت إعادة الشحن التلقائي مفعّلة، فقد ينتهي الأمر بخصم أكثر من $20 إذا انخفض رصيدك عن $5.
+
+---
+
+## الخصوصية
+
+تتم استضافة جميع نماذجنا في الولايات المتحدة. يلتزم مزوّدونا بسياسة عدم الاحتفاظ بالبيانات (zero-retention) ولا يستخدمون بياناتك لتدريب النماذج، مع الاستثناءات التالية:
+
+- Big Pickle: خلال فترة إتاحته المجانية، قد تُستخدم البيانات المجمعة لتحسين النموذج.
+- GLM 4.7 Free: خلال فترة إتاحته المجانية، قد تُستخدم البيانات المجمعة لتحسين النموذج.
+- Kimi K2.5 Free: خلال فترة إتاحته المجانية، قد تُستخدم البيانات المجمعة لتحسين النموذج.
+- MiniMax M2.1 Free: خلال فترة إتاحته المجانية، قد تُستخدم البيانات المجمعة لتحسين النموذج.
+- OpenAI APIs: يتم الاحتفاظ بالطلبات لمدة 30 يوما وفقا لـ [سياسات بيانات OpenAI](https://platform.openai.com/docs/guides/your-data).
+- Anthropic APIs: يتم الاحتفاظ بالطلبات لمدة 30 يوما وفقا لـ [سياسات بيانات Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+
+---
+
+## للفرق
+
+يعمل Zen بشكل ممتاز للفرق أيضا. يمكنك دعوة زملاء الفريق، وتعيين الأدوار، وتنظيم
+النماذج التي يستخدمها فريقك، والمزيد.
+
+:::note
+مساحات العمل مجانية حاليا للفرق كجزء من النسخة التجريبية.
+:::
+
+إدارة مساحة العمل مجانية حاليا للفرق كجزء من النسخة التجريبية. سنشارك المزيد من التفاصيل حول التسعير قريبا.
+
+---
+
+### الأدوار
+
+يمكنك دعوة زملاء الفريق إلى مساحة عملك وتعيين الأدوار:
+
+- **Admin**: إدارة النماذج والأعضاء ومفاتيح API والفوترة
+- **Member**: إدارة مفاتيح API الخاصة به فقط
+
+يمكن للمسؤولين أيضا تعيين حدود إنفاق شهرية لكل عضو للسيطرة على التكاليف.
+
+---
+
+### صلاحيات الوصول للنماذج
+
+يمكن للمسؤولين تفعيل نماذج محددة لمساحة العمل أو تعطيلها. ستعيد الطلبات المرسلة إلى نموذج معطّل خطأ.
+
+يفيد ذلك في الحالات التي تريد فيها تعطيل استخدام نموذج يقوم بجمع البيانات.
+
+---
+
+### استخدم مفتاحك الخاص
+
+يمكنك استخدام مفاتيح API الخاصة بك لدى OpenAI أو Anthropic مع الاستمرار في الوصول إلى نماذج أخرى ضمن Zen.
+
+عند استخدام مفاتيحك الخاصة، تتم فوترة tokens مباشرة من المزوّد وليس من Zen.
+
+على سبيل المثال، قد تكون لدى مؤسستك بالفعل مفاتيح لـ OpenAI أو Anthropic وتريد استخدامها بدلا من المفتاح الذي يوفّره Zen.
+
+---
+
+## الأهداف
+
+أنشأنا OpenCode Zen من أجل:
+
+1. **قياس الأداء** لأفضل النماذج/المزوّدين لعوامل البرمجة.
+2. إتاحة خيارات **عالية الجودة** دون خفض الأداء أو توجيه الطلبات إلى مزوّدين أرخص.
+3. تمرير أي **انخفاض في الأسعار** عبر البيع بالتكلفة؛ بحيث تكون الزيادة الوحيدة لتغطية رسوم المعالجة.
+4. عدم فرض **أي ارتباط حصري (lock-in)** عبر تمكينك من استخدامه مع أي عامل برمجة آخر، مع إتاحة استخدام أي مزوّد آخر مع OpenCode أيضا.
