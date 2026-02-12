@@ -12,7 +12,7 @@ import {
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
-import { open as shellOpen } from "@tauri-apps/plugin-shell"
+import { open as shellOpen, Command } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -117,6 +117,11 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
     async openPath(path: string, app?: string) {
       const os = ostype()
       if (os === "windows") {
+        if (window.__OPENCODE__?.wsl && app) {
+          const linuxPath = await commands.wslPath(path, "linux").catch(() => path)
+          await Command.create("wsl", ["-e", app, linuxPath]).execute()
+          return
+        }
         const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
         const resolvedPath = await (async () => {
           if (window.__OPENCODE__?.wsl) {
