@@ -4,22 +4,22 @@ description: Verschiedene Modi für unterschiedliche Anwendungsfälle.
 ---
 
 :::caution
-Modi werden jetzt über die Option `agent` in der Opencode-Konfiguration konfiguriert. Der
+Modi werden jetzt über die Option `agent` in der OpenCode-Konfiguration konfiguriert. Der
 Die Option `mode` ist jetzt veraltet. [Learn more](/docs/agents).
 :::
 
-Mit den Modi in Opencode können Sie das Verhalten, die Tools und die Eingabeaufforderungen für verschiedene Anwendungsfälle anpassen.
+Mit den Modi in OpenCode können Sie das Verhalten, die Tools und die Eingabeaufforderungen für verschiedene Anwendungsfälle anpassen.
 
 Es verfügt über zwei integrierte Modi: **Build** und **Plan**. Sie können anpassen
-diese oder konfigurieren Sie Ihre eigenen über die Opencode-Konfiguration.
+diese oder konfigurieren Sie Ihre eigenen über die OpenCode-Konfiguration.
 
 Sie können während einer Sitzung zwischen den Modi wechseln oder diese in Ihrer Konfigurationsdatei konfigurieren.
 
 ---
 
-## Built-in
+## Integriert
 
-Opencode verfügt über zwei integrierte Modi.
+OpenCode verfügt über zwei integrierte Modi.
 
 ---
 
@@ -42,7 +42,7 @@ Dieser Modus ist nützlich, wenn Sie möchten, dass AI Code analysiert, Änderun
 
 ---
 
-## Switching
+## Wechseln
 
 Sie können während einer Sitzung mit der _Tab_-Taste zwischen den Modi wechseln. Oder Ihre konfigurierte `switch_mode`-Tastenkombination.
 
@@ -50,11 +50,11 @@ Siehe auch: [Formatters](/docs/formatters) für Informationen zur Codeformatieru
 
 ---
 
-## Configure
+## Konfiguration
 
 Sie können die integrierten Modi anpassen oder über die Konfiguration eigene erstellen. Modi können auf zwei Arten konfiguriert werden:
 
-### JSON Konfiguration
+### JSON-Konfiguration
 
 Konfigurieren Sie Modi in Ihrer `opencode.json`-Konfigurationsdatei:
 
@@ -132,7 +132,7 @@ Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Modus
 
 ---
 
-### Temperature
+### Temperatur
 
 Steuern Sie die Zufälligkeit und Kreativität der Antworten von AI mit der `temperature`-Konfiguration. Niedrigere Werte machen die Antworten fokussierter und deterministischer, während höhere Werte die Kreativität und Variabilität steigern.
 
@@ -173,7 +173,7 @@ Temperaturwerte liegen typischerweise zwischen 0.0 und 1.0:
 }
 ```
 
-Wenn keine Temperatur angegeben ist, verwendet Opencode modellspezifische Standardwerte (normalerweise 0 für die meisten Modelle, 0.55 für Qwen-Modelle).
+Wenn keine Temperatur angegeben ist, verwendet OpenCode modellspezifische Standardwerte (normalerweise 0 für die meisten Modelle, 0.55 für Qwen-Modelle).
 
 ---
 
@@ -192,11 +192,11 @@ Geben Sie mit der `prompt`-Konfiguration eine benutzerdefinierte Systemaufforder
 ```
 
 Dieser Pfad ist relativ zum Speicherort der Konfigurationsdatei. Das funktioniert also
-sowohl die globale Opencode-Konfiguration als auch die projektspezifische Konfiguration.
+sowohl die globale OpenCode-Konfiguration als auch die projektspezifische Konfiguration.
 
 ---
 
-### Tools
+### Werkzeuge
 
 Steuern Sie mit der `tools`-Konfiguration, welche Tools in diesem Modus verfügbar sind. Sie können bestimmte Tools aktivieren oder deaktivieren, indem Sie sie auf `true` oder `false` setzen.
 
@@ -221,7 +221,7 @@ Wenn keine Tools angegeben sind, sind alle Tools standardmäßig aktiviert.
 
 ---
 
-#### Verfügbare Werkzeuge
+#### Verfügbare Tools
 
 Hier sind alle Tools aufgeführt, die über den Konfigurationsmodus gesteuert werden können.
 

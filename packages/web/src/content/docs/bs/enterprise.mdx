@@ -1,6 +1,6 @@
 ---
-title: Enterprise
-description: Sigurno korištenje OpenCodea u vašoj organizaciji.
+title: Za preduzeća
+description: Sigurno korištenje OpenCode u vašoj organizaciji.
 ---
 
 import config from "../../../../config.mjs"
@@ -19,7 +19,7 @@ Da započnete s OpenCode Enterprise:
 
 ---
 
-## Trial
+## Proba
 
 OpenCode je otvorenog koda i ne pohranjuje vaš kod niti kontekstualne podatke, tako da vaši developeri mogu jednostavno [započeti](/docs/) i provesti probu.
 
@@ -60,19 +60,19 @@ Preporučujemo da ovo onemogućite tokom probe.
 
 ---
 
-## Pricing
+## Cijene
 
 Koristimo model naplate po sjedištu za OpenCode Enterprise. Ako imate vlastiti LLM gateway, ne naplaćujemo korištene tokene. Za više detalja o cijenama i opcijama implementacije, **<a href={email}>kontaktirajte nas</a>**.
 
 ---
 
-## Deployment
+## Postavljanje
 
 Nakon što završite probni period i spremni ste koristiti OpenCode u svojoj organizaciji, možete **<a href={email}>kontaktirati nas</a>** da razgovaramo o cijenama i opcijama implementacije.
 
 ---
 
-### Central Config
+### Centralna konfiguracija
 
 Možemo postaviti OpenCode da koristi jednu centralnu konfiguraciju za cijelu organizaciju.
 
@@ -84,7 +84,7 @@ Ta centralizovana konfiguracija može se integrisati s vašim SSO provajderom i 
 
 Kroz centralnu konfiguraciju, OpenCode se može integrisati sa SSO provajderom vaše organizacije za autentifikaciju.
 
-To omogućava OpenCodeu da dobije vjerodajnice za interni AI gateway kroz vaš postojeći sistem upravljanja identitetom.
+To omogućava OpenCode da dobije vjerodajnice za interni AI gateway kroz vaš postojeći sistem upravljanja identitetom.
 
 ---
 
@@ -96,7 +96,7 @@ Također možete onemogućiti sve druge AI provajdere, čime osiguravate da svi 
 
 ---
 
-### Self-hosting
+### Samostalno hostovanje
 
 Iako preporučujemo onemogućavanje share stranica kako biste osigurali da podaci nikada ne napuštaju vašu organizaciju, možemo vam pomoći i da ih samostalno hostujete na vlastitoj infrastrukturi.
 
@@ -104,17 +104,17 @@ Ovo je trenutno na našoj mapi puta. Ako ste zainteresovani, **<a href={email}>j
 
 ---
 
-## FAQ
+## Često postavljana pitanja
 
 <details>
-<summary>What is OpenCode Enterprise?</summary>
+<summary>Šta je OpenCode Enterprise?</summary>
 
 OpenCode Enterprise je za organizacije koje žele osigurati da njihov kod i podaci nikada ne napuštaju njihovu infrastrukturu. To omogućava centralizovana konfiguracija koja se integriše s vašim SSO-om i internim AI gateway-om.
 
 </details>
 
 <details>
-<summary>How do I get started with OpenCode Enterprise?</summary>
+<summary>Kako započeti s OpenCode Enterprise?</summary>
 
 Jednostavno započnite internu probu sa svojim timom. OpenCode po defaultu ne pohranjuje vaš kod ni kontekstualne podatke, što olakšava početak.
 
@@ -123,23 +123,23 @@ Zatim **<a href={email}>kontaktirajte nas</a>** da razgovaramo o cijenama i opci
 </details>
 
 <details>
-<summary>How does enterprise pricing work?</summary>
+<summary>Kako funkcionišu enterprise cijene?</summary>
 
 Nudimo enterprise cijene po sjedištu. Ako imate vlastiti LLM gateway, ne naplaćujemo korištene tokene. Za više detalja, **<a href={email}>kontaktirajte nas</a>** za prilagođenu ponudu prema potrebama vaše organizacije.
 
 </details>
 
 <details>
-<summary>Is my data secure with OpenCode Enterprise?</summary>
+<summary>Jesu li moji podaci sigurni uz OpenCode Enterprise?</summary>
 
 Da. OpenCode ne pohranjuje vaš kod niti kontekstualne podatke. Sva obrada se odvija lokalno ili putem direktnih API poziva vašem AI provajderu. Uz centralnu konfiguraciju i SSO integraciju, vaši podaci ostaju sigurni unutar infrastrukture vaše organizacije.
 
 </details>
 
 <details>
-<summary>Can we use our own private NPM registry?</summary>
+<summary>Možemo li koristiti vlastiti privatni NPM registar?</summary>
 
-OpenCode podržava privatne npm registre kroz Bunovu izvornu podršku za `.npmrc` datoteku. Ako vaša organizacija koristi privatni registar, kao što je JFrog Artifactory, Nexus ili slično, osigurajte da su developeri autentifikovani prije pokretanja OpenCodea.
+OpenCode podržava privatne npm registre kroz Bunovu izvornu podršku za `.npmrc` datoteku. Ako vaša organizacija koristi privatni registar, kao što je JFrog Artifactory, Nexus ili slično, osigurajte da su developeri autentifikovani prije pokretanja OpenCode.
 
 Da postavite autentifikaciju s privatnim registrom:
 
@@ -150,7 +150,7 @@ npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 Ovo kreira `~/.npmrc` s detaljima za autentifikaciju. OpenCode će to automatski prepoznati.
 
 :::caution
-Morate biti prijavljeni na privatni registar prije pokretanja OpenCodea.
+Morate biti prijavljeni na privatni registar prije pokretanja OpenCode.
 :::
 
 Alternativno, možete ručno konfigurisati `.npmrc` datoteku:
@@ -160,6 +160,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Developeri moraju biti prijavljeni na privatni registar prije pokretanja OpenCodea kako bi se paketi mogli instalirati iz vašeg enterprise registra.
+Developeri moraju biti prijavljeni na privatni registar prije pokretanja OpenCode kako bi se paketi mogli instalirati iz vašeg enterprise registra.
 
 </details>

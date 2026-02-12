@@ -1,6 +1,7 @@
 import { useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { win32FlushInputBuffer } from "../win32"
 type Exit = ((reason?: unknown) => Promise<void>) & {
   message: {
     set: (value?: string) => () => void
@@ -32,6 +33,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         // Reset window title before destroying renderer
         renderer.setTerminalTitle("")
         renderer.destroy()
+        win32FlushInputBuffer()
         await input.onExit?.()
         if (reason) {
           const formatted = FormatError(reason) ?? FormatUnknownError(reason)

@@ -1,5 +1,5 @@
 ---
-title: Konfig
+title: Konfiguration
 description: Ved at bruge OpenCode JSON konfig.
 ---
 
@@ -23,7 +23,7 @@ OpenCode understøtter både **JSON** og **JSONC** (JSON med kommentarer) format
 
 ---
 
-## Steder
+## Placeringer
 
 Du kan placere din konfiguration et par forskellige steder, og de har en
 forskellig rækkefølge.
@@ -52,12 +52,12 @@ Konfigurationskilder indlæses i denne rækkefølge (senere kilder tilsidesætte
 Dette betyder, at projektkonfigurationer kan tilsidesætte globale standardindstillinger, og globale konfigurationer kan tilsidesætte eksterne organisatoriske standarder.
 
 :::note
-`.opencode` og `~/.config/opencode` bibliotekerne bruger **flertalsnavne** for undermapper: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkelte navne (f.eks. `agent/`) understøtter også bagudkompatibilitet.
+`.opencode` og `~/.config/opencode` mapperne bruger **flertalsnavne** for undermapper: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkelte navne (f.eks. `agent/`) understøtter også bagudkompatibilitet.
 :::
 
 ---
 
-### Fjernbetjening
+### Ekstern konfiguration
 
 Organisationer kan levere standardkonfiguration via `.well-known/opencode`-slutpunktet. Dette hentes automatisk, når du godkender med en udbyder, der understøtter det.
 
@@ -101,7 +101,7 @@ Global config tilsidesætter eksterne organisatoriske standarder.
 
 ---
 
-### Pr. projekt
+### Projekt-niveau
 
 Tilføj `opencode.json` i dit projektrod. Project config har den højeste forrang blandt standard config-filer - den tilsidesætter både globale og eksterne config.
 
@@ -109,7 +109,7 @@ Tilføj `opencode.json` i dit projektrod. Project config har den højeste forran
 Placer projektspecifik konfiguration i roden af ​​dit projekt.
 :::
 
-Når OpenCode starter op, søger den efter en konfigurationsfil i det aktuelle kort eller går op til den nærmeste Git-mappe.
+Når OpenCode starter op, søger den efter en konfigurationsfil i den aktuelle mappe eller går op til den nærmeste Git-mappe.
 
 Dette er også sikkert at blive tjekket ind i Git og bruger det samme skema som det globale.
 
@@ -128,11 +128,11 @@ Brugerdefineret konfigurationsindlæses mellem globale konfigurationer og projek
 
 ---
 
-### Brugerdefineret bibliotek
+### Brugerdefineret mappe
 
 Angiv en brugerdefineret konfigurationsmappe ved hjælp af `OPENCODE_CONFIG_DIR`
 miljøvariabel. Dette kort vil blive søgt efter agenter, kommandoer,
-modes og plugins ligesom standard `.opencode` biblioteket, og bør
+modes og plugins ligesom standard `.opencode` mappen, og bør
 følge samme struktur.
 
 ```bash
@@ -140,7 +140,7 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-Den brugerdefinerede map indlæses efter den globale konfig og `.opencode` mapper, så den **kan tilsidesætte** deres indstillinger.
+Den brugerdefinerede mappe indlæses efter den globale konfig og `.opencode` mapper, så den **kan tilsidesætte** deres indstillinger.
 
 ---
 
@@ -208,7 +208,7 @@ Tilgængelige muligheder:
 
 ---
 
-### Værktøjer
+### Værktøjer (`tools`)
 
 Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tools`.
 
@@ -226,7 +226,7 @@ Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tool
 
 ---
 
-### Modeller
+### Modeller (`models`)
 
 Du kan konfigurere de udbydere og modeller, du vil bruge i din OpenCode-konfiguration, gennem mulighederne `provider`, `model` og `small_model`.
 
@@ -268,7 +268,7 @@ Du kan også konfigurere [local models](/docs/models#local). [Learn more](/docs/
 
 Nogle udbydere understøtter yderligere konfigurationsmuligheder ud over de generiske `timeout` og `apiKey` indstillinger.
 
-##### Amazonas grundfjeld
+##### Amazon Bedrock
 
 Amazon Bedrock understøtter AWS-specifik konfiguration:
 
@@ -287,19 +287,19 @@ Amazon Bedrock understøtter AWS-specifik konfiguration:
 }
 ```
 
-- `region` - AWS region for grundfjeld (standard til `AWS_REGION` env var eller `us-east-1`)
+- `region` - AWS region for Bedrock (standard til `AWS_REGION` env var eller `us-east-1`)
 - `profile` - AWS navngivet profil fra `~/.aws/credentials` (standard til `AWS_PROFILE` env var)
 - `endpoint` - Brugerdefineret slutpunkt URL for VPC-endepunkter. Dette er et alias for den generiske `baseURL`-indstilling, der bruger AWS-specifik terminologi. Hvis begge er angivet, har `endpoint` forrang.
 
 :::note
-Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](/docs/providers#authentication-precedence) for detaljer.
+Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](/docs/providers#authentication-precedence) for detaljer.
 :::
 
 [Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
 ---
 
-### Temaer
+### Temaer (`themes`)
 
 Du kan konfigurere det tema, du vil bruge i din OpenCode-konfiguration, gennem indstillingen `theme`.
 
@@ -340,7 +340,7 @@ Du kan også definere agenter ved at bruge markdown-filer i `~/.config/opencode/
 
 ---
 
-### Standardagent
+### Standardagent (`default_agent`)
 
 Du kan indstille standardagenten ved at bruge indstillingen `default_agent`. Dette bestemmer, hvilken agent der bruges, når ingen er eksplicit angivet.
 
@@ -357,7 +357,7 @@ Denne indstilling gælder på tværs af alle grænseflader: TUI, CLI (`opencode 
 
 ---
 
-### Deling
+### Deling (`share`)
 
 Du kan konfigurere funktionen [share](/docs/share) gennem indstillingen `share`.
 
@@ -378,7 +378,7 @@ Som standard er deling indstillet til manuel tilstand, hvor du eksplicit skal de
 
 ---
 
-### Kommandoer
+### Kommandoer (`command`)
 
 Du kan konfigurere brugerdefinerede kommandoer til gentagne opgaver gennem indstillingen `command`.
 
@@ -404,7 +404,7 @@ Du kan også definere kommandoer ved hjælp af markdown-filer i `~/.config/openc
 
 ---
 
-### Nøglebindinger
+### Tastebindinger (`keybinds`)
 
 Du kan tilpasse dine nøglebindinger gennem indstillingen `keybinds`.
 
@@ -419,7 +419,7 @@ Du kan tilpasse dine nøglebindinger gennem indstillingen `keybinds`.
 
 ---
 
-### Autoopdatering
+### Auto-opdatering (`autoupdate`)
 
 OpenCode vil automatisk downloade alle nye opdateringer, når den starter op. Du kan deaktivere dette med indstillingen `autoupdate`.
 
@@ -435,7 +435,7 @@ Bemærk, at dette kun virker, hvis det ikke blev installeret ved hjælp af en pa
 
 ---
 
-### Formatere
+### Formater (`formatter`)
 
 Du kan konfigurere kodeformatere gennem indstillingen `formatter`.
 
@@ -461,7 +461,7 @@ Du kan konfigurere kodeformatere gennem indstillingen `formatter`.
 
 ---
 
-### Tilladelser
+### Tilladelse (`permission`)
 
 Som standard opencode **tillader alle operationer** uden at kræve eksplicit godkendelse. Du kan ændre dette ved at bruge indstillingen `permission`.
 
@@ -481,7 +481,7 @@ For at sikre, at værktøjerne `edit` og `bash` for eksempel kræver brugergodke
 
 ---
 
-### Komprimering
+### Komprimering (`compaction`)
 
 Du kan styre kontekstkomprimeringsadfærd gennem indstillingen `compaction`.
 
@@ -500,7 +500,7 @@ Du kan styre kontekstkomprimeringsadfærd gennem indstillingen `compaction`.
 
 ---
 
-### Watcher
+### Overvågning (`watcher`)
 
 Du kan konfigurere ignoreringsmønstre for filovervåger gennem indstillingen `watcher`.
 
@@ -517,7 +517,7 @@ Mønstre følger glob-syntaks. Brug dette til at udelukke støjende mapper fra f
 
 ---
 
-### MCP servere
+### MCP
 
 Du kan konfigurere MCP-servere, som du vil bruge, gennem indstillingen `mcp`.
 
@@ -532,7 +532,7 @@ Du kan konfigurere MCP-servere, som du vil bruge, gennem indstillingen `mcp`.
 
 ---
 
-### Plugins
+### Plugin
 
 [Plugins](/docs/plugins) udvide OpenCode med brugerdefinerede værktøjer, kroge og integrationer.
 
@@ -549,7 +549,7 @@ Placer plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`. 
 
 ---
 
-### Instruktioner
+### Instruktioner (`instructions`)
 
 Du kan konfigurere brugervejledningen til den model, du kan gennem indstillingen `instructions`.
 
@@ -565,7 +565,7 @@ om regler her](/docs/rules).
 
 ---
 
-### Deaktiverede udbydere
+### Deaktiverede udbydere (`disabled_providers`)
 
 Du kan deaktivere udbydere, der indlæses automatisk gennem `disabled_providers`-indstillingen. Dette er nyttigt, når du vil forhindre visse udbydere i at blive indlæst, deres legitimationsoplysninger er tilgængelige.
 
@@ -583,12 +583,12 @@ Du kan deaktivere udbydere, der indlæses automatisk gennem `disabled_providers`
 Indstillingen `disabled_providers` accepterer en række udbyder-id'er. Når en udbyder er deaktiveret:
 
 - Det vil ikke blive indlæst, omgivelserne miljøvariabler er indstillet.
-- Den vil ikke blive indlæst, gennem API nøgler er konfigureret kommandoen `/connect`.
+- Den vil ikke blive indlæst, gennem API-nøgler er konfigureret kommandoen `/connect`.
 - Udbyderens modeller vises ikke på modelvalgslisten.
 
 ---
 
-### Aktiverede udbydere
+### Aktiverede udbydere (`enabled_providers`)
 
 Du kan angive en tilladelsesliste over udbydere gennem muligheden `enabled_providers`. Når den er indstillet, vil kun de angivne udbydere blive aktiveret, og alle andre vil blive ignoreret.
 
@@ -609,7 +609,7 @@ Hvis en udbyder optræder i både `enabled_providers` og `disabled_providers`, h
 
 ---
 
-### Eksperimentel
+### Eksperimentel (`experimental`)
 
 Nøglen `experimental` indeholder muligheder, der er under aktiv udvikling.
 
@@ -626,13 +626,13 @@ Eksperimentelle muligheder er ikke stabile. De kan ændres eller fjernes uden va
 
 ---
 
-## Variabel
+## Variabler
 
 Du kan bruge variabelsubstitution i dine konfigurationsfiler til at referere til miljøvariabler og filindhold.
 
 ---
 
-### Env vars
+### Miljøvariabler
 
 Brug `{env:VARIABLE_NAME}` til at erstatte miljøvariabler:
 
@@ -680,6 +680,6 @@ Filstier kan være:
 
 Disse er nyttige til:
 
-- Opbevaring af følsomme data som API nøgler i separate filer.
+- Opbevaring af følsomme data som API-nøgler i separate filer.
 - Inklusiv store instruktionsfiler uden at rode i din konfiguration.
 - Deling af fælles konfigurationsuddrag på tværs af flere konfigurationsfiler.

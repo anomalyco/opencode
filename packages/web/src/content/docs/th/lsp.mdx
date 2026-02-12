@@ -13,38 +13,38 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 
 | LSP เซิร์ฟเวอร์      | ส่วนขยาย                                                            | ความต้องการ                                             |
 | -------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
-| โหราศาสตร์           | .แอสโตร                                                             | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Astro                   |
-| ทุบตี                | .sh, .ทุบตี, .zsh, .ksh                                             | ติดตั้ง bash-Language-Server โดยอัตโนมัติ               |
-| เสียงดังกราว         | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | ติดตั้งอัตโนมัติสำหรับโครงการ C/C++                     |
-| ซีชาร์ป              | .ซีเอส                                                              | `.NET SDK` ติดตั้งแล้ว                                  |
+| astro                | .astro                                                              | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Astro                   |
+| bash                 | .sh, .bash, .zsh, .ksh                                              | ติดตั้ง bash-Language-Server โดยอัตโนมัติ               |
+| clang                | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | ติดตั้งอัตโนมัติสำหรับโครงการ C/C++                     |
+| csharp               | .cs                                                                 | `.NET SDK` ติดตั้งแล้ว                                  |
 | clojure-lsp          | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` คำสั่งใช้ได้                              |
-| โผ                   | .โผ                                                                 | `dart` คำสั่งใช้ได้                                     |
-| เดโน                 | .ts, .tsx, .js, .jsx, .mjs                                          | มีคำสั่ง `deno` (ตรวจจับอัตโนมัติ deno.json/deno.jsonc) |
-| น้ำอมฤต-ls           | .ex, .exs                                                           | `elixir` คำสั่งใช้ได้                                   |
-| เอสลินท์             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` การพึ่งพาในโครงการ                             |
-| เอฟชาร์ป             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` ติดตั้งแล้ว                                  |
-| เปล่งประกาย          | .แวววาว                                                             | `gleam` คำสั่งใช้ได้                                    |
-| โกปลส์               | .ไป                                                                 | `go` คำสั่งใช้ได้                                       |
-| สวัสดี               | .hs, .lhs                                                           | `haskell-language-server-wrapper` คำสั่งใช้ได้          |
+| dart                 | .dart                                                               | `dart` คำสั่งใช้ได้                                     |
+| deno                 | .ts, .tsx, .js, .jsx, .mjs                                          | มีคำสั่ง `deno` (ตรวจจับอัตโนมัติ deno.json/deno.jsonc) |
+| elixir-ls            | .ex, .exs                                                           | `elixir` คำสั่งใช้ได้                                   |
+| eslint               | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` การพึ่งพาในโครงการ                             |
+| fsharp               | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` ติดตั้งแล้ว                                  |
+| gleam                | .gleam                                                              | `gleam` คำสั่งใช้ได้                                    |
+| gopls                | .go                                                                 | `go` คำสั่งใช้ได้                                       |
+| haskell              | .hs, .lhs                                                           | `haskell-language-server-wrapper` คำสั่งใช้ได้          |
 | jdtls                | .java                                                               | `Java SDK (version 21+)` ติดตั้งแล้ว                    |
 | kotlin-ls            | .kt, .kts                                                           | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Kotlin                  |
 | lua-ls               | .lua                                                                | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Lua                     |
-| ห้าม                 | .ห้าม                                                               | `nixd` คำสั่งใช้ได้                                     |
-| ocaml-lsp            | .มล., .มลิ                                                          | `ocamllsp` คำสั่งใช้ได้                                 |
-| ออกซ์ลินท์           | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` การพึ่งพาในโครงการ                             |
+| nix                  | .nix                                                                | `nixd` คำสั่งใช้ได้                                     |
+| ocaml-lsp            | .ml, .mli                                                           | `ocamllsp` คำสั่งใช้ได้                                 |
+| oxlint               | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` การพึ่งพาในโครงการ                             |
 | php intelephense.php | .php                                                                | ติดตั้งอัตโนมัติสำหรับโครงการ PHP                       |
-| ปริซึม               | .ปริซึม                                                             | `prisma` คำสั่งใช้ได้                                   |
-| ไพไรท์               | .py, .pyi                                                           | `pyright` ติดตั้งการพึ่งพาแล้ว                          |
-| ทับทิม-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | มีคำสั่ง `ruby` และ `gem`                               |
-| สนิม                 | .อาร์เอส                                                            | `rust-analyzer` คำสั่งใช้ได้                            |
-| ซอร์สคิท-lsp         | .สวิฟท์, .objc, .objcpp                                             | ติดตั้ง `swift` (`xcode` บน macOS)                      |
-| เก๋ไก๋               | .svelte                                                             | ติดตั้งอัตโนมัติสำหรับโครงการ Svelte                    |
-| ภูมิประเทศ           | .tf, .tfvars                                                        | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
-| คนตัวเล็ก            | .พิมพ์, .พิมพ์                                                      | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
-| ตัวพิมพ์ดีด          | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` การพึ่งพาในโครงการ                         |
-| วิว                  | .vue                                                                | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Vue                     |
+| prisma               | .prisma                                                             | `prisma` คำสั่งใช้ได้                                   |
+| pyright              | .py, .pyi                                                           | `pyright` ติดตั้งการพึ่งพาแล้ว                          |
+| ruby-lsp (rubocop)   | .rb, .rake, .gemspec, .ru                                           | มีคำสั่ง `ruby` และ `gem`                               |
+| rust                 | .rs                                                                 | `rust-analyzer` คำสั่งใช้ได้                            |
+| sourcekit-lsp        | .swift, .objc, .objcpp                                              | ติดตั้ง `swift` (`xcode` บน macOS)                      |
+| svelte               | .svelte                                                             | ติดตั้งอัตโนมัติสำหรับโครงการ Svelte                    |
+| terraform            | .tf, .tfvars                                                        | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
+| tinymist             | .typ, .typst                                                        | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
+| typescript           | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` การพึ่งพาในโครงการ                         |
+| vue                  | .vue                                                                | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Vue                     |
 | yaml-ls              | .yaml, .yml                                                         | ติดตั้งเซิร์ฟเวอร์ภาษา Red Hat yaml โดยอัตโนมัติ        |
-| zls                  | .ซิก, .ซอน                                                          | `zig` คำสั่งใช้ได้                                      |
+| zls                  | .zig, .zon                                                          | `zig` คำสั่งใช้ได้                                      |
 
 เซิร์ฟเวอร์ LSP จะถูกเปิดใช้งานโดยอัตโนมัติเมื่อตรวจพบนามสกุลไฟล์ใดนามสกุลหนึ่งข้างต้นและเป็นไปตามข้อกำหนด
 
@@ -182,7 +182,7 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 PHP Intelephense นำเสนอคุณสมบัติระดับพรีเมียมผ่านรหัสลิขสิทธิ์ คุณสามารถระบุรหัสสัญญาอนุญาตได้โดยการวาง (เท่านั้น) รหัสในไฟล์ข้อความที่:
 
-- บน macOS/Linux: `$HOME/intelephense/licence.txt`
-- บนวินโดวส์: `%USERPROFILE%/intelephense/licence.txt`
+- บน macOS/Linux: `$HOME/intelephense/license.txt`
+- บน Windows: `%USERPROFILE%/intelephense/license.txt`
 
 ไฟล์ควรมีเฉพาะรหัสลิขสิทธิ์โดยไม่มีเนื้อหาเพิ่มเติม

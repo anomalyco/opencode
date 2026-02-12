@@ -192,7 +192,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 - `todo.updated`
 
-#### أحداث الصدفة
+#### أحداث shell
 
 - `shell.env`
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### حقن متغيرات البيئة
 
-احقن متغيرات البيئة في جميع عمليات تنفيذ الصدفة (أدوات الذكاء الاصطناعي وطرفيات المستخدم):
+احقن متغيرات البيئة في جميع عمليات تنفيذ shell (أدوات الذكاء الاصطناعي وterminal المستخدم):
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
