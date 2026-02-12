@@ -1,9 +1,9 @@
 ---
 title: GitLab
-description: GitLab sorunlarında ve parçalanma isteğinde opencode'u kullanın.
+description: GitLab sorunlarında ve birleştirme isteklerinde opencode'u kullanın.
 ---
 
-opencode, GitLab CI/CD ardışık düzeniniz veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
+opencode, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
 
 Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktır.
 
@@ -11,7 +11,7 @@ Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktı
 
 ## GitLab CI
 
-opencode normal bir GitLab hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir boru hattına oluşturabilirsiniz.
+opencode normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
 
 Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
@@ -25,7 +25,7 @@ Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kull
 
 ---
 
-### Setup
+### Kurulum
 
 1. opencode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
 2. Aşağıdakileri `.gitlab-ci.yml` dosyanıza ekleyin.
@@ -51,16 +51,16 @@ Bir yorumda `@opencode`'dan bahsedin; opencode, GitLab CI işlem hattınızdaki 
 
 ---
 
-### Features
+### Özellikler
 
 - **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
 - **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
-  Yeni bir şube oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
+  Yeni bir dal oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
 - **Güvenli**: opencode, GitLab çalıştırıcılarınızda çalışır.
 
 ---
 
-### Kurmak
+### Yapılandırma
 
 opencode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
 
@@ -75,7 +75,7 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
 5.  CI/CD değişkenlerini yapılandırma
 6.  Bir akış yapılandırma dosyası oluşturun; işte bir örnek:
 
-        <detaylar>
+        <details>
 
     <summary>Akış yapılandırması</summary>
 
@@ -150,13 +150,13 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
       - GITLAB_HOST
     ```
 
-        </detaylar>
+        </details>
 
 Ayrıntılı talimatlar için [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)'a başvurabilirsiniz.
 
 ---
 
-### Examples
+### Örnekler
 
 GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
@@ -164,7 +164,7 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
 `@opencode`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
 :::
 
-- **Explain an issue**
+- **Bir sorunu açıklama**
 
   Bu yorumu bir GitLab sayısına ekleyin.
 
@@ -174,7 +174,7 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
 
   opencode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
 
-- **Fix an issue**
+- **Bir sorunu düzeltme**
 
   In a GitLab issue, say:
 
@@ -182,9 +182,9 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   @opencode fix this
   ```
 
-  opencode yeni bir şube oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
+  opencode yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
 
-- **Review merge requests**
+- **Birleştirme isteklerini inceleme**
 
   GitLab birleştirme isteğine aşağıdaki yorumu bırakın.
 

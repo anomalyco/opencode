@@ -1,5 +1,5 @@
 ---
-title: Konfig
+title: Konfigurasjon
 description: Ved å bruke opencode JSON-konfigurasjonen.
 ---
 
@@ -23,7 +23,7 @@ OpenCode støtter både **JSON** og **JSONC** (JSON med kommentarer) formater.
 
 ---
 
-## Steder
+## Plasseringer
 
 Du kan plassere konfigurasjonen på et par forskjellige steder, og de har en
 annen rekkefølge.
@@ -34,16 +34,16 @@ Konfigurasjonsfiler er **slått sammen**, ikke erstattet.
 
 Konfigurasjonsfiler slås sammen, ikke erstattes. Innstillinger fra følgende konfigurasjonsplasseringer kombineres. Senere konfigurasjoner overstyrer tidligere kun for motstridende nøkler. Ikke-motstridende innstillinger fra alle konfigurasjoner er bevart.
 
-For eksempel, hvis dine globale konfigurasjonssett `theme: "opencode"` og `autoupdate: true`, og prosjektkonfigurasjonen setter `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfigurasjonen inkludere alle tre innstillingene.
+For eksempel, hvis din globale konfigurasjon setter `theme: "opencode"` og `autoupdate: true`, og prosjektkonfigurasjonen setter `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfigurasjonen inkludere alle tre innstillingene.
 
 ---
 
-### Forrangsrekkefølge
+### Prioritetsrekkefølge
 
 Konfigurasjonskilder lastes inn i denne rekkefølgen (senere kilder overstyrer tidligere):
 
-1. **Ekstern konfig** (fra `.well-known/opencode`) - organisasjonsstandarder
-2. **Global konfig** (`~/.config/opencode/opencode.json`) - brukerinnstillinger
+1. **Ekstern konfigurasjon** (fra `.well-known/opencode`) - organisasjonsstandarder
+2. **Global konfigurasjon** (`~/.config/opencode/opencode.json`) - brukerinnstillinger
 3. **Egendefinert konfigurasjon** (`OPENCODE_CONFIG` env var) - egendefinerte overstyringer
 4. **Prosjektkonfigurasjon** (`opencode.json` i prosjekt) - prosjektspesifikke innstillinger
 5. **`.opencode` kataloger** - agenter, kommandoer, plugins
@@ -52,16 +52,16 @@ Konfigurasjonskilder lastes inn i denne rekkefølgen (senere kilder overstyrer t
 Dette betyr at prosjektkonfigurasjoner kan overstyre globale standardinnstillinger, og globale konfigurasjoner kan overstyre eksterne organisasjonsstandarder.
 
 :::note
-`.opencode` og `~/.config/opencode` katalogene bruker **flertallsnavn** for underkataloger: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkeltnavn (f.eks. `agent/`) støttes også for bakoverkompatibilitet.
+`.opencode` og `~/.config/opencode` katalogene bruker **flertallsnavn** på underkataloger: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` og `themes/`. Enkeltnavn (f.eks. `agent/`) støttes også for bakoverkompatibilitet.
 :::
 
 ---
 
-### Ekstern
+### Ekstern konfigurasjon
 
-Organisasjoner kan gi standardkonfigurasjon via `.well-known/opencode`-endepunktet. Dette hentes automatisk når du autentiserer med en leverandør som støtter det.
+Organisasjoner kan tilby standardkonfigurasjon via `.well-known/opencode`-endepunktet. Dette hentes automatisk når du autentiserer med en leverandør som støtter det.
 
-Ekstern konfigurasjon lastes først, og fungerer som basislaget. Alle andre konfigurasjonskilder (global, prosjekt) kan overstyre disse standardinnstillingene.
+Ekstern konfigurasjon lastes først, og fungerer som grunnlaget. Alle andre konfigurasjonskilder (global, prosjekt) kan overstyre disse standardinnstillingene.
 
 For eksempel, hvis organisasjonen din tilbyr MCP servere som er deaktivert som standard:
 
@@ -93,9 +93,9 @@ Du kan aktivere spesifikke servere i din lokale konfigurasjon:
 
 ---
 
-### Globalt
+### Global konfigurasjon
 
-Plasser din globale OpenCode-konfigurasjon i `~/.config/opencode/opencode.json`. Bruk global konfigurasjon for brukeromfattende preferanser som temaer, leverandører eller nøkkelbindinger.
+Plasser din globale OpenCode-konfigurasjon i `~/.config/opencode/opencode.json`. Bruk global konfigurasjon for brukerspesifikke preferanser som temaer, leverandører eller nøkkelbindinger.
 
 Global konfigurasjon overstyrer eksterne organisasjonsstandarder.
 
@@ -103,7 +103,7 @@ Global konfigurasjon overstyrer eksterne organisasjonsstandarder.
 
 ### Per prosjekt
 
-Legg til `opencode.json` i prosjektroten din. Project config har den høyeste prioritet blant standard config-filer - den overstyrer både globale og eksterne konfigurasjoner.
+Legg til `opencode.json` i prosjektroten din. Prosjektkonfigurasjon har den høyeste prioritet blant standard config-filer - den overstyrer både globale og eksterne konfigurasjoner.
 
 :::tip
 Plasser prosjektspesifikk konfigurasjon i roten til prosjektet ditt.
@@ -111,7 +111,7 @@ Plasser prosjektspesifikk konfigurasjon i roten til prosjektet ditt.
 
 Når OpenCode starter opp, ser den etter en konfigurasjonsfil i gjeldende katalog eller går opp til nærmeste Git-katalog.
 
-Dette er også trygt å bli sjekket inn i Git og bruker samme skjema som det globale.
+Det er også trygt å sjekke inn dette i Git og bruker samme skjema som det globale.
 
 ---
 
@@ -179,7 +179,7 @@ Tilgjengelige alternativer:
 
 ---
 
-### Server
+### Tjener
 
 Du kan konfigurere serverinnstillinger for kommandoene `opencode serve` og `opencode web` gjennom alternativet `server`.
 
@@ -198,7 +198,7 @@ Du kan konfigurere serverinnstillinger for kommandoene `opencode serve` og `open
 
 Tilgjengelige alternativer:
 
-- `port` - Port for å lytte på.
+- `port` - Port å lytte på.
 - `hostname` - Vertsnavn å lytte på. Når `mdns` er aktivert og ingen vertsnavn er angitt, er standard `0.0.0.0`.
 - `mdns` - Aktiver mDNS-tjenesteoppdagelse. Dette lar andre enheter på nettverket oppdage OpenCode-serveren din.
 - `mdnsDomain` - Egendefinert domenenavn for mDNS-tjeneste. Standard er `opencode.local`. Nyttig for å kjøre flere forekomster på samme nettverk.
@@ -239,7 +239,7 @@ Du kan konfigurere leverandørene og modellene du vil bruke i OpenCode-konfigura
 }
 ```
 
-Alternativet `small_model` konfigurerer en egen modell for lette oppgaver som tittelgenerering. Som standard prøver OpenCode å bruke en billigere modell hvis en er tilgjengelig fra leverandøren din, ellers faller den tilbake til hovedmodellen din.
+Alternativet `small_model` konfigurerer en egen modell for lette oppgaver som tittelgenerering. Som standard prøver OpenCode å bruke en rimeligere modell hvis en er tilgjengelig fra leverandøren din, ellers faller den tilbake til hovedmodellen din.
 
 Leverandøralternativer kan inkludere `timeout` og `setCacheKey`:
 
@@ -257,8 +257,8 @@ Leverandøralternativer kan inkludere `timeout` og `setCacheKey`:
 }
 ```
 
-- `timeout` - Be om tidsavbrudd i millisekunder (standard: 300 000). Sett til `false` for å deaktivere.
-- `setCacheKey` - Sørg for at en hurtigbuffernøkkel alltid er angitt for utpekt leverandør.
+- `timeout` - Tidsavbrudd for forespørsler i millisekunder (standard: 300 000). Sett til `false` for å deaktivere.
+- `setCacheKey` - Sørg for at en hurtigbuffernøkkel alltid settes for valgt leverandør.
 
 Du kan også konfigurere [lokale modeller](/docs/models#local). [Finn ut mer](/docs/models).
 
@@ -292,7 +292,7 @@ Amazon Bedrock støtter AWS-spesifikk konfigurasjon:
 - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter. Dette er et alias for det generiske `baseURL`-alternativet som bruker AWS-spesifikk terminologi. Hvis begge er spesifisert, har `endpoint` forrang.
 
 :::note
-Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbasert autentisering. Se [godkjenningsprioritet](/docs/providers#authentication-precedence) for detaljer.
+Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbasert autentisering. Se [autentiseringsprioritet](/docs/providers#authentication-precedence) for detaljer.
 :::
 
 [Les mer om konfigurasjon av Amazon Bedrock](/docs/providers#amazon-bedrock).
@@ -340,7 +340,7 @@ Du kan også definere agenter ved å bruke markdown-filer i `~/.config/opencode/
 
 ---
 
-### Standard agent
+### Standardagent
 
 Du kan angi standard agent ved å bruke alternativet `default_agent`. Dette bestemmer hvilken agent som brukes når ingen er eksplisitt spesifisert.
 
@@ -404,9 +404,9 @@ Du kan også definere kommandoer ved å bruke markdown-filer i `~/.config/openco
 
 ---
 
-### Nøkkelbindinger
+### Tastebindinger
 
-Du kan tilpasse nøkkelbindingene dine gjennom alternativet `keybinds`.
+Du kan tilpasse tastebindingene dine gjennom alternativet `keybinds`.
 
 ```json title="opencode.json"
 {
@@ -465,7 +465,7 @@ Du kan konfigurere kodeformatere gjennom alternativet `formatter`.
 
 Som standard **tillater OpenCode alle operasjoner** uten å kreve eksplisitt godkjenning. Du kan endre dette ved å bruke alternativet `permission`.
 
-For å sikre at verktøyene `edit` og `bash` krever brukergodkjenning:
+Slik sikrer du at verktøyene `edit` og `bash` krever brukergodkjenning:
 
 ```json title="opencode.json"
 {
@@ -483,7 +483,7 @@ For å sikre at verktøyene `edit` og `bash` krever brukergodkjenning:
 
 ### Komprimering
 
-Du kan kontrollere atferden for kontekstkomprimering gjennom alternativet `compaction`.
+Du kan styre kontekstkomprimering gjennom alternativet `compaction`.
 
 ```json title="opencode.json"
 {
@@ -496,11 +496,11 @@ Du kan kontrollere atferden for kontekstkomprimering gjennom alternativet `compa
 ```
 
 - `auto` - Komprimer økten automatisk når konteksten er full (standard: `true`).
-- `prune` - Fjern gamle verktøyutganger for å lagre tokens (standard: `true`).
+- `prune` - Fjern gamle verktøyutdata for å spare tokens (standard: `true`).
 
 ---
 
-### Overvåker
+### Filovervåker
 
 Du kan konfigurere ignoreringsmønstre for filovervåking gjennom alternativet `watcher`.
 
@@ -513,7 +513,7 @@ Du kan konfigurere ignoreringsmønstre for filovervåking gjennom alternativet `
 }
 ```
 
-Mønstre følger glob-syntaks. Bruk dette for å ekskludere støyende kataloger fra filvisning.
+Mønstre følger glob-syntaks. Bruk dette for å ekskludere støyende kataloger fra filovervåking.
 
 ---
 
@@ -532,7 +532,7 @@ Du kan konfigurere MCP-servere du vil bruke gjennom alternativet `mcp`.
 
 ---
 
-### Plugins
+### Utvidelser
 
 [Plugins](/docs/plugins) utvider OpenCode med tilpassede verktøy, kroker og integrasjoner.
 
@@ -551,7 +551,7 @@ Plasser plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`.
 
 ### Instruksjoner
 
-Du kan konfigurere instruksjonene for modellen du bruker gjennom alternativet `instructions`.
+Du kan konfigurere instruksjoner for modellen du bruker gjennom alternativet `instructions`.
 
 ```json title="opencode.json"
 {
@@ -560,7 +560,7 @@ Du kan konfigurere instruksjonene for modellen du bruker gjennom alternativet `i
 }
 ```
 
-Dette krever en rekke baner og globmønstre til instruksjonsfiler. [Les mer
+Dette krever en liste med baner og globmønstre til instruksjonsfiler. [Les mer
 om regler her](/docs/rules).
 
 ---
@@ -609,7 +609,7 @@ Hvis en leverandør vises i både `enabled_providers` og `disabled_providers`, h
 
 ---
 
-### Eksperimentell
+### Eksperimentelt
 
 `experimental`-nøkkelen inneholder alternativer som er under aktiv utvikling.
 
@@ -632,7 +632,7 @@ Du kan bruke variabelerstatning i konfigurasjonsfilene dine for å referere til 
 
 ---
 
-### Env vars
+### Miljøvariabler
 
 Bruk `{env:VARIABLE_NAME}` for å erstatte miljøvariabler:
 
