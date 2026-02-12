@@ -18,10 +18,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  align-self: flex-end;
-  margin-left: auto;
-  width: fit-content;
-  max-width: min(82%, 64ch);
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
   gap: 8px;
 
   [data-slot="user-message-attachments"] {
@@ -29,7 +28,9 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
-    max-width: 100%;
+    width: fit-content;
+    max-width: min(82%, 64ch);
+    margin-left: auto;
   }
 
   [data-slot="user-message-attachment"] {
@@ -79,11 +80,16 @@
   }
 
   [data-slot="user-message-body"] {
-    width: 100%;
-    max-width: 100%;
+    width: fit-content;
+    max-width: min(82%, 64ch);
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
   }
 
   [data-slot="user-message-text"] {
+    display: inline-block;
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
@@ -120,8 +126,8 @@
     }
   }
 
-  [data-slot="user-message-body"]:hover [data-slot="user-message-copy-wrapper"],
-  [data-slot="user-message-body"]:focus-within [data-slot="user-message-copy-wrapper"] {
+  &:hover [data-slot="user-message-copy-wrapper"],
+  &:focus-within [data-slot="user-message-copy-wrapper"] {
     opacity: 1;
     pointer-events: auto;
   }
