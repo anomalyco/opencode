@@ -265,6 +265,67 @@ export namespace Auth {
   }
 
   /**
+   * Check if an error is a rate-limit error (429).
+   */
+  export function isRateLimitError(error: unknown): boolean {
+    if (!error) return false
+    
+    const errorObj = error as any
+    const status = errorObj?.status || errorObj?.statusCode
+    
+    if (status === 429) return true
+    
+    // Check for common rate-limit messages
+    const message = errorObj?.message || String(error)
+    const lowerMessage = message.toLowerCase()
+    return lowerMessage.includes("rate limit") || 
+           lowerMessage.includes("too many requests") ||
+           lowerMessage.includes("rate_limit") ||
+           lowerMessage.includes("429")
+  }
+
+  /**
+   * Execute a function with automatic account rotation on rate-limit.
+   * Returns the result if successful, or throws if all accounts are exhausted.
+   */
+  export async function withRetry<T>(
+    providerID: string,
+    fn: (info: Info) => Promise<T>,
+    maxRetries?: number
+  ): Promise<T> {
+    const max = maxRetries ?? 10
+    let lastError: unknown
+    
+    for (let i = 0; i < max; i++) {
+      const info = await get(providerID)
+      if (!info) {
+        throw new Error(`No credentials found for provider ${providerID}`)
+      }
+      
+      try {
+        return await fn(info)
+      } catch (error) {
+        lastError = error
+        
+        if (!isRateLimitError(error)) {
+          // Not a rate-limit error, throw immediately
+          throw error
+        }
+        
+        // Rate-limit error - try next account
+        console.log(`[auth] Rate limited on ${providerID}, switching account...`)
+        
+        const next = await getNextAccount(providerID)
+        if (!next) {
+          throw new Error(`Rate limited and no more accounts available for ${providerID}`)
+        }
+      }
+    }
+    
+    throw lastError
+  }
+
+  /**
    * Legacy compatibility: convert old format to new.
    */
   async function migrateIfNeeded(store: AccountStore): Promise<AccountStore> {
