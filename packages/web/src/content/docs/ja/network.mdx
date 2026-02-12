@@ -1,0 +1,55 @@
+---
+title: ネットワーク
+description: プロキシとカスタム証明書を構成します。
+---
+
+OpenCode は、エンタープライズネットワーク環境の標準プロキシ環境変数とカスタム証明書をサポートしています。
+
+---
+
+## プロキシ
+
+OpenCode は標準のプロキシ環境変数を尊重します。
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI はローカル HTTP サーバーと通信します。ルーティングループを防ぐには、この接続のプロキシをバイパスする必要があります。
+:::
+[CLI フラグ](/docs/cli#run) を使用して、サーバーのポートとホスト名を構成できます。
+
+---
+
+### 認証
+
+プロキシで基本認証が必要な場合は、URL に認証情報を含めます。
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+パスワードのハードコーディングは避けてください。環境変数または安全な認証情報ストレージを使用します。
+:::
+NTLM や Kerberos などの高度な認証を必要とするプロキシの場合は、認証方法をサポートする LLM ゲートウェイの使用を検討してください。
+
+---
+
+## カスタム証明書
+
+企業が HTTPS 接続にカスタム CA を使用している場合は、それらを信頼するように OpenCode を構成します。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+これは、プロキシ接続と直接 API アクセスの両方で機能します。

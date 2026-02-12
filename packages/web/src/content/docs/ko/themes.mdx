@@ -1,0 +1,368 @@
+---
+title: 테마
+description: 내장 테마를 선택하거나 자신만의 테마를 정의하세요.
+---
+
+opencode를 사용하면 여러 내장 테마 중 하나에서 선택할 수 있으며 terminal 테마에 적응하는 테마를 사용하거나 사용자 정의 테마를 정의 할 수 있습니다.
+
+기본적으로 opencode는 자체 `opencode` 테마를 사용합니다.
+
+---
+
+## 터미널 요구 사항
+
+자신의 풀 컬러 팔레트로 올바르게 표시하려면 terminal을 지원해야합니다 ** truecolor** (24 비트 색상). 대부분의 현대 terminal은 기본적으로 이것을 지원합니다, 그러나 당신은 그것을 가능하게 할 필요가 있을지도 모릅니다:
+
+-**체크 지원**: `echo $COLORTERM` - 그것은 `truecolor` 또는 `24bit`를 출력해야 합니다
+
+- ** truecolor 사용 가능**: shell 프로파일에서 환경 변수 `COLORTERM=truecolor`를 설정
+- **Terminal 호환성 **: terminal 에뮬레이터 지원 24 비트 색상 (iTerm2, Alacritty, Kitty, Windows Terminal 및 GNOME Terminal의 최신 버전)
+
+truecolor 지원 없이, 테마는 감소된 색깔 정확도로 나타날지도 모릅니다 또는 가장 가까운 256 색깔 대류로 뒤떨어질지도 모릅니다.
+
+---
+
+## 내장 테마
+
+opencode는 여러 내장 테마와 함께 제공됩니다.
+
+| 이름                   | 설명                                                                |
+| ---------------------- | ------------------------------------------------------------------- |
+| `system`               | terminal 배경 색상에 맞춰 자동으로 조정됨                           |
+| `tokyonight`           | [Tokyonight](https://github.com/folke/tokyonight.nvim) 테마 기반    |
+| `everforest`           | [Everforest](https://github.com/sainnhe/everforest) 테마 기반       |
+| `ayu`                  | [Ayu](https://github.com/ayu-theme) 다크 테마 기반                  |
+| `catppuccin`           | [Catppuccin](https://github.com/catppuccin) 테마 기반               |
+| `catppuccin-macchiato` | [Catppuccin](https://github.com/catppuccin) 테마 기반               |
+| `gruvbox`              | [Gruvbox](https://github.com/morhetz/gruvbox) 테마 기반             |
+| `kanagawa`             | [Kanagawa](https://github.com/rebelot/kanagawa.nvim) 테마 기반      |
+| `nord`                 | [Nord](https://github.com/nordtheme/nord) 테마 기반                 |
+| `matrix`               | 검은 배경에 녹색 텍스트의 해커 스타일 테마                          |
+| `one-dark`             | [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark 테마 기반 |
+
+그리고 더, 우리는 끊임없이 새로운 테마를 추가하고 있습니다.
+
+---
+
+## 시스템 테마
+
+`system` 테마는 terminal의 색깔 계획에 자동적으로 적응시키기 위하여 디자인됩니다. 고정 색상을 사용하는 전통적인 테마와 달리, system 테마:
+
+- **그레이스케일**: terminal의 배경 색상을 기반으로 사용자 정의 회색 가늠자를 만들고 최적의 대조를 보장합니다.
+- ** ANSI 색상 사용 ** : terminal의 색상 팔레트를 존중하는 구문 강조 및 UI 요소에 대한 표준 ANSI 색상 (0-15).
+- ** terminal 기본 사항**: `none` 텍스트 및 배경 색상을 사용하여 terminal의 네이티브 외관을 유지합니다.
+
+시스템 테마는 사용자를위한 것입니다 :
+
+- opencode가 terminal의 외관과 일치해야 합니다.
+- 사용자 정의 terminal 색상 구성
+- 모든 terminal 응용 분야의 일관된 모습
+
+---
+
+## 테마 사용
+
+테마를 `/theme` 명령어로 선택하여 테마를 선택할 수 있습니다. 또는 [config](/docs/config)에서 지정할 수 있습니다.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## 사용자 정의 테마
+
+opencode는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON 기반 테마 시스템을 지원합니다.
+
+---
+
+##### 계층 구조
+
+테마는 다음과 같은 순서에서 여러 디렉토리에서로드됩니다. 나중에 감독은 이전 것을 무시합니다.
+
+1.**Built-in themes** - 이것은 바이너리에 내장되어 있습니다. 2. **사용자 설정 디렉토리 ** - `~/.config/opencode/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에서 정의 3. ** 루트 디렉토리 ** - `<project-root>/.opencode/themes/*.json`에서 정의 4. **현재 작업 디렉토리 ** - `./.opencode/themes/*.json`에서 정의
+
+여러 디렉토리가 같은 이름을 가진 테마를 포함한다면, 더 높은 우선 순위를 가진 디렉토리의 테마가 사용됩니다.
+
+---
+
+### 테마 만들기
+
+사용자 정의 테마를 만들려면 테마 디렉토리 중 하나에서 JSON 파일을 만듭니다.
+
+사용자 넓은 테마:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+프로젝트 별 테마.
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### JSON 형식
+
+테마는 유연한 JSON 형식을 사용하여 지원:
+
+-**Hex 색상**: `"#ffffff"`
+
+- ** ANSI 색상**: `3` (0-255)
+- ** 색상 참조 ** : `"primary"` 또는 사용자 정의 정의
+- ** 어두운 / 조명 변형 ** : `{"dark": "#000", "light": "#fff"}`
+- ** 색상 없음 ** : `"none"` - terminal의 기본 색상 또는 투명 사용
+
+---
+
+### 색상 정의
+
+`defs` 단면도는 선택적이고 당신은 주제에서 참조될 수 있는 재사용할 수 있는 색깔을 정의할 수 있습니다.
+
+---
+
+## 터미널 기본값
+
+특별한 가치 `"none"`는 terminal의 기본 색깔을 상속하기 위하여 어떤 색깔든지를 위해 사용될 수 있습니다. 이것은 특히 당신의 terminal의 색깔 계획과 이음새가 없는 혼합 테마 창조를 위해 유용합니다:
+
+- `"text": "none"` - terminal의 기본 전경 색상 사용
+- `"background": "none"` - terminal의 기본 배경 색상 사용
+
+---
+
+### 예제
+
+사용자 정의 테마의 예입니다 :
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```
