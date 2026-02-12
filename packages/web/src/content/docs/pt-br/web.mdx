@@ -1,13 +1,13 @@
 ---
 title: Web
-description: Usando opencode no seu navegador.
+description: Usando o opencode no seu navegador.
 ---
 
-opencode pode ser executado como uma aplicação web no seu navegador, proporcionando a mesma poderosa experiência de codificação com IA sem precisar de um terminal.
+O opencode pode ser executado como uma aplicação web no seu navegador, proporcionando a mesma poderosa experiência de codificação com IA sem precisar de um terminal.
 
 ![opencode Web - Nova Sessão](../../../assets/web/web-homepage-new-session.png)
 
-## Começando
+## Primeiros passos
 
 Inicie a interface web executando:
 
@@ -50,8 +50,8 @@ opencode web --hostname 0.0.0.0
 Ao usar `0.0.0.0`, o opencode exibirá endereços locais e de rede:
 
 ```
-  Acesso local:       http://localhost:4096
-  Acesso à rede:     http://192.168.1.100:4096
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
 ```
 
 ### Descoberta mDNS
@@ -113,10 +113,10 @@ Clique em "Ver Servidores" para visualizar os servidores conectados e seu status
 Você pode anexar um terminal TUI a um servidor web em execução:
 
 ```bash
-# Inicie o servidor web
+# Start the web server
 opencode web --port 4096
 
-# Em outro terminal, anexe o TUI
+# In another terminal, attach the TUI
 opencode attach http://localhost:4096
 ```
 

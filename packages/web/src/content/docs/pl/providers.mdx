@@ -1,5 +1,5 @@
 ---
-title: Providers
+title: Dostawcy
 description: Korzystanie z dowolnego dostawcy LLM w opencode.
 ---
 
@@ -22,7 +22,7 @@ w `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Konfiguracja
 
 Możesz dostosować dostawców za pomocą sekcji `provider` w swoim opencode
 config.
@@ -84,7 +84,7 @@ Działa jak każdy inny dostawca w opencode i jest całkowicie opcjonalny w uży
 
 ---
 
-## Directory
+## Katalog
 
 Przyjrzyjmy się szczegółowo niektórym dostawcom. Jeśli chcesz dodać dostawcę do
 listę, możesz otworzyć PR.
@@ -184,7 +184,7 @@ Aby używać Amazon Bedrock z opencode:
    Opcje z pliku konfiguracyjnego mają pierwszeństwo przed zmiennymi środowiskowymi.
    :::
 
-   #### Zaawansowane: endpointy VPC
+   #### Zaawansowane: Punkty końcowe VPC
 
    Jeśli używasz punktów końcowych VPC dla Bedrock:
 
@@ -583,15 +583,15 @@ Cloudflare AI Gateway umożliwia dostęp do modeli z OpenAI, Anthropic, Workers 
 
 ### Firmware
 
-1. Przejdź do [panelu oprogramowania sprzętowego](https://app.firmware.ai/signup), utwórz konto i wygeneruj klucz API.
+1. Przejdź do [Firmware dashboard](https://app.firmware.ai/signup), utwórz konto i wygeneruj klucz API.
 
-2. Uruchom polecenie `/connect` i wyszukaj **Oprogramowanie sprzętowe**.
+2. Uruchom polecenie `/connect` i wyszukaj **Firmware**.
 
    ```txt
    /connect
    ```
 
-3. Wprowadź klucz API oprogramowania układowego.
+3. Wprowadź klucz API Firmware.
 
    ```txt
    ┌ API key
@@ -659,7 +659,7 @@ GitLab Duo zapewnia czat agentowy oparty na sztucznej inteligencji z natywnymi m
 
    Wybierz **OAuth**, a Twoja przeglądarka otworzy się w celu autoryzacji.
 
-   #### Using Personal Access Token
+   #### Użycie osobistego tokenu dostępu
    1. Przejdź do [Ustawienia użytkownika GitLab > Tokeny dostępu](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
    3. Name: `OpenCode`, Scopes: `api`
@@ -748,7 +748,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Więcej informacji znajdziesz na stronie [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth).
 
-##### Configuration
+##### Konfiguracja
 
 Customize through `opencode.json`:
 
@@ -769,7 +769,7 @@ Customize through `opencode.json`:
 }
 ```
 
-##### GitLab API Tools (Optional, but highly recommended)
+##### Narzędzia GitLab API (opcjonalne, ale wysoce zalecane)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 
@@ -1194,7 +1194,7 @@ Aby użyć Kimi K2 z Moonshot AI:
 
 1. Przejdź do [konsoli Nebius Token Factory](https://tokenfactory.nebius.com/), utwórz konto i kliknij **Dodaj klucz**.
 
-2. Uruchom komendę `/connect` i wyszukaj **Fabrykę tokenów Nebius**.
+2. Uruchom komendę `/connect` i wyszukaj **Nebius Token Factory**.
 
    ```txt
    /connect
@@ -1802,7 +1802,7 @@ Możesz użyć dowolnego dostawcy kompatybilnego z OpenAI z opencode. Większoś
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI Provider Display Name",
+         "name": "My AI ProviderDisplay Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -1840,7 +1840,7 @@ Oto przykład ustawienia opcji `apiKey`, `headers` i modelu `limit`.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI Provider Display Name",
+      "name": "My AI ProviderDisplay Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",
@@ -1866,14 +1866,14 @@ Szczegóły konfiguracji:
 
 - **apiKey**: Ustaw przy użyciu składni zmiennej `env`, [dowiedz się więcej](/docs/config#env-vars).
 - **nagłówki**: niestandardowe nagłówki wysyłane z każdym żądaniem.
-- **limit.context**: Maksymalna liczba żetonów wejściowych akceptowanych przez model.
+- **limit.context**: Maksymalna liczba tokenów wejściowych akceptowanych przez model.
 - **limit.output**: Maksymalna liczba tokenów, które model może wygenerować.
 
 Pola `limit` pozwalają opencode zrozumieć, ile kontekstu pozostało. Standardowi dostawcy pobierają je automatycznie z models.dev.
 
 ---
 
-## Troubleshooting
+## Rozwiązywanie problemów
 
 Jeśli masz problemy z konfiguracją dostawcy, sprawdź następujące elementy:
 

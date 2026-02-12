@@ -3,22 +3,22 @@ title: Rede
 description: Configure proxies e certificados personalizados.
 ---
 
-opencode suporta variáveis de ambiente de proxy padrão e certificados personalizados para ambientes de rede corporativa.
+O opencode suporta variáveis de ambiente de proxy padrão e certificados personalizados para ambientes de rede corporativa.
 
 ---
 
 ## Proxy
 
-opencode respeita variáveis de ambiente de proxy padrão.
+O opencode respeita variáveis de ambiente de proxy padrão.
 
 ```bash
-# Proxy HTTPS (recomendado)
+# HTTPS proxy (recommended)
 export HTTPS_PROXY=https://proxy.example.com:8080
 
-# Proxy HTTP (se HTTPS não estiver disponível)
+# HTTP proxy (if HTTPS not available)
 export HTTP_PROXY=http://proxy.example.com:8080
 
-# Ignorar proxy para servidor local (obrigatório)
+# Bypass proxy for local server (required)
 export NO_PROXY=localhost,127.0.0.1
 ```
 
@@ -30,7 +30,7 @@ Você pode configurar a porta e o nome do host do servidor usando [flags da CLI]
 
 ---
 
-### Autenticar
+### Autenticação
 
 Se o seu proxy requer autenticação básica, inclua as credenciais na URL.
 

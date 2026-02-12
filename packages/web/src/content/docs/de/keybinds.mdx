@@ -105,19 +105,19 @@ OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die Op
 
 ---
 
-## Führungsschlüssel
+## Leader Key
 
-OpenCode verwendet für die meisten Tastenkombinationen einen `leader`-Schlüssel. Dies vermeidet Konflikte in Ihrem Terminal.
+OpenCode verwendet für die meisten Keybinds einen `leader`-Schlüssel. Dies vermeidet Konflikte in Ihrem Terminal.
 
-Standardmäßig ist `ctrl+x` die Führungstaste und bei den meisten Aktionen müssen Sie zuerst die Führungstaste und dann die Tastenkombination drücken. Um beispielsweise eine neue Sitzung zu starten, drücken Sie zuerst `ctrl+x` und dann `n`.
+Standardmäßig ist `ctrl+x` der Leader Key und bei den meisten Aktionen müssen Sie zuerst den Leader Key und dann die Tastenkombination drücken. Um beispielsweise eine neue Sitzung zu starten, drücken Sie zuerst `ctrl+x` und dann `n`.
 
-Sie müssen für Ihre Tastenkombinationen keine Führungstaste verwenden, wir empfehlen jedoch, dies zu tun.
+Sie müssen für Ihre Keybinds keinen Leader Key verwenden, wir empfehlen jedoch, dies zu tun.
 
 ---
 
-## Tastenkombination deaktivieren
+## Keybind deaktivieren
 
-Sie können eine Tastenkombination deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu Ihrer Konfiguration hinzufügen.
+Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu Ihrer Konfiguration hinzufügen.
 
 ```json title="opencode.json"
 {
@@ -130,33 +130,33 @@ Sie können eine Tastenkombination deaktivieren, indem Sie den Schlüssel mit de
 
 ---
 
-## Verknüpfungen zur Desktop-Eingabeaufforderung
+## Desktop-Prompt-Shortcuts
 
 Die Eingabeaufforderungseingabe der OpenCode-Desktop-App unterstützt gängige Readline/Emacs-style-Verknüpfungen zum Bearbeiten von Text. Diese sind integriert und derzeit nicht über `opencode.json` konfigurierbar.
 
-| Verknüpfung | Aktion                                                |
-| ----------- | ----------------------------------------------------- |
-| `ctrl+a`    | Zum Anfang der aktuellen Zeile gehen                  |
-| `ctrl+e`    | Zum Ende der aktuellen Zeile gehen                    |
-| `ctrl+b`    | Cursor um ein Zeichen zurückbewegen                   |
-| `ctrl+f`    | Cursor um ein Zeichen vorwärts bewegen                |
-| `alt+b`     | Cursor um ein Wort zurückbewegen                      |
-| `alt+f`     | Bewegen Sie den Cursor ein Wort vorwärts              |
-| `ctrl+d`    | Zeichen unter dem Cursor löschen                      |
-| `ctrl+k`    | Bis zum Zeilenende töten                              |
-| `ctrl+u`    | Bis zum Zeilenanfang töten                            |
-| `ctrl+w`    | Vorheriges Wort töten                                 |
-| `alt+d`     | Nächstes Wort töten                                   |
-| `ctrl+t`    | Zeichen transponieren                                 |
-| `ctrl+g`    | Popovers abbrechen / Ausführung der Antwort abbrechen |
+| Keybind  | Aktion                                                |
+| -------- | ----------------------------------------------------- |
+| `ctrl+a` | Zum Anfang der aktuellen Zeile gehen                  |
+| `ctrl+e` | Zum Ende der aktuellen Zeile gehen                    |
+| `ctrl+b` | Cursor um ein Zeichen zurückbewegen                   |
+| `ctrl+f` | Cursor um ein Zeichen vorwärts bewegen                |
+| `alt+b`  | Cursor um ein Wort zurückbewegen                      |
+| `alt+f`  | Bewegen Sie den Cursor ein Wort vorwärts              |
+| `ctrl+d` | Zeichen unter dem Cursor löschen                      |
+| `ctrl+k` | Bis zum Zeilenende löschen (Kill)                     |
+| `ctrl+u` | Bis zum Zeilenanfang löschen (Kill)                   |
+| `ctrl+w` | Vorheriges Wort löschen (Kill)                        |
+| `alt+d`  | Nächstes Wort löschen (Kill)                          |
+| `ctrl+t` | Zeichen transponieren                                 |
+| `ctrl+g` | Popovers abbrechen / Ausführung der Antwort abbrechen |
 
 ---
 
-## Umschalt+Eingabetaste
+## Shift+Enter
 
 Einige Terminals senden standardmäßig keine Zusatztasten mit der Eingabetaste. Möglicherweise müssen Sie Ihr Terminal so konfigurieren, dass es `Shift+Enter` als Escape-Sequenz sendet.
 
-### Windows-Terminal
+### Windows Terminal
 
 Öffnen Sie Ihr `settings.json` unter:
 

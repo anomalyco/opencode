@@ -3,7 +3,7 @@ title: Agents
 description: Configurez et utilisez des agents spécialisés.
 ---
 
-Les agents sont des assistants IA spécialisés qui peuvent être configurés pour des tâches et des flux de travail spécifiques. Ils vous permettent de créer des outils ciblés avec des invites, des modèles et un accès aux outils personnalisés.
+Les agents sont des assistants IA spécialisés qui peuvent être configurés pour des tâches et des flux de travail spécifiques. Ils vous permettent de créer des outils ciblés avec des prompts, des modèles et un accès aux outils personnalisés.
 
 :::tip
 Utilisez l'agent de plan pour analyser le code et examiner les suggestions sans apporter de modifications au code.
@@ -15,112 +15,112 @@ Vous pouvez basculer entre les agents au cours d'une session ou les appeler avec
 
 ## Types
 
-Il existe deux types d'agents dans OpenCode ; agents primaires et sous-agents.
+Il existe deux types d'agents dans OpenCode ; agents primaires et sous-agents.
 
 ---
 
 ### Agents primaires
 
-Les agents principaux sont les principaux assistants avec lesquels vous interagissez directement. Vous pouvez les parcourir à l'aide de la touche **Tab** ou de votre combinaison de touches `switch_agent` configurée. Ces agents gèrent votre conversation principale. L'accès aux outils est configuré via les autorisations : par exemple, Build a tous les outils activés tandis que Plan est restreint.
+Les agents primaires sont les principaux assistants avec lesquels vous interagissez directement. Vous pouvez les parcourir à l'aide de la touche **Tab** ou de votre combinaison de touches `switch_agent` configurée. Ces agents gèrent votre conversation principale. L'accès aux outils est configuré via les autorisations : par exemple, Build a tous les outils activés tandis que Plan est restreint.
 
 :::tip
-Vous pouvez utiliser la touche **Tab** pour basculer entre les agents principaux au cours d'une session.
+Vous pouvez utiliser la touche **Tab** pour basculer entre les agents primaires au cours d'une session.
 :::
 
-OpenCode est livré avec deux agents principaux intégrés, **Build** et **Plan**. Bien
-regardez-les ci-dessous.
+OpenCode est livré avec deux agents primaires intégrés, **Build** et **Plan**.
+Nous les verrons ci-dessous.
 
 ---
 
 ### Sous-agents
 
-Les sous-agents sont des assistants spécialisés que les agents principaux peuvent appeler pour des tâches spécifiques. Vous pouvez également les invoquer manuellement en **@ les mentionnant** dans vos messages.
+Les sous-agents sont des assistants spécialisés que les agents primaires peuvent appeler pour des tâches spécifiques. Vous pouvez également les invoquer manuellement en **@ les mentionnant** dans vos messages.
 
-OpenCode est livré avec deux sous-agents intégrés, **Général** et **Explore**. Nous verrons cela ci-dessous.
-
----
-
-## Intégré
-
-OpenCode est livré avec deux agents principaux intégrés et deux sous-agents intégrés.
+OpenCode est livré avec deux sous-agents intégrés, **General** et **Explore**. Nous verrons cela ci-dessous.
 
 ---
 
-### Utiliser la construction
+## Agents intégrés
 
-*Mode* : `primary`
-
-Build est l'agent principal **par défaut** avec tous les outils activés. Il s'agit de l'agent standard pour les travaux de développement où vous avez besoin d'un accès complet aux opérations sur les fichiers et aux commandes système.
+OpenCode est livré avec deux agents primaires intégrés et deux sous-agents intégrés.
 
 ---
 
-### Utiliser le forfait
+### Agent Build
 
-*Mode* : `primary`
+_Mode_ : `primary`
+
+Build est l'agent primaire **par défaut** avec tous les outils activés. Il s'agit de l'agent standard pour les travaux de développement où vous avez besoin d'un accès complet aux opérations sur les fichiers et aux commandes système.
+
+---
+
+### Agent Plan
+
+_Mode_ : `primary`
 
 Un agent restreint conçu pour la planification et l'analyse. Nous utilisons un système d'autorisation pour vous donner plus de contrôle et empêcher toute modification involontaire.
-Par défaut, tous les éléments suivants sont définis sur `ask` :
+Par défaut, tous les éléments suivants sont définis sur `ask` :
 
-- `file edits` : toutes les écritures, correctifs et modifications
-- `bash` : toutes les commandes bash
+- `file edits` : toutes les écritures, correctifs et modifications
+- `bash` : toutes les commandes bash
 
-Cet agent est utile lorsque vous souhaitez que LLM analyse le code, suggère des modifications ou crée des plans sans apporter de modifications réelles à votre base de code.
-
----
-
-### Utiliser général
-
-*Mode* : `subagent`
-
-Un agent polyvalent pour rechercher des questions complexes et exécuter des tâches en plusieurs étapes. Dispose d'un accès complet aux outils (sauf todo), il peut donc apporter des modifications aux fichiers en cas de besoin. Utilisez-le pour exécuter plusieurs unités de travail en parallèle.
+Cet agent est utile lorsque vous souhaitez que le LLM analyse le code, suggère des modifications ou crée des plans sans apporter de modifications réelles à votre base de code.
 
 ---
 
-### Utiliser explorer
+### Agent General
 
-*Mode* : `subagent`
+_Mode_ : `subagent`
+
+Un agent polyvalent pour traiter des questions complexes et exécuter des tâches en plusieurs étapes. Dispose d'un accès complet aux outils (sauf todo), il peut donc apporter des modifications aux fichiers en cas de besoin. Utilisez-le pour exécuter plusieurs unités de travail en parallèle.
+
+---
+
+### Agent Explore
+
+_Mode_ : `subagent`
 
 Un agent rapide en lecture seule pour explorer les bases de code. Impossible de modifier les fichiers. Utilisez-le lorsque vous avez besoin de rechercher rapidement des fichiers par modèles, de rechercher du code par mots-clés ou de répondre à des questions sur la base de code.
 
 ---
 
-### Utiliser le compactage
+### Agent Compaction
 
-*Mode* : `primary`
+_Mode_ : `primary`
 
 Agent système caché qui compacte un contexte long en un résumé plus petit. Il s'exécute automatiquement en cas de besoin et n'est pas sélectionnable dans l'interface utilisateur.
 
 ---
 
-### Utiliser le titre
+### Agent Title
 
-*Mode* : `primary`
+_Mode_ : `primary`
 
 Agent système caché qui génère des titres de session courts. Il s'exécute automatiquement et n'est pas sélectionnable dans l'interface utilisateur.
 
 ---
 
-### Utiliser le résumé
+### Agent Summary
 
-*Mode* : `primary`
+_Mode_ : `primary`
 
 Agent système caché qui crée des résumés de session. Il s'exécute automatiquement et n'est pas sélectionnable dans l'interface utilisateur.
 
 ---
 
-## Usage
+## Utilisation
 
-1. Pour les agents principaux, utilisez la touche **Tab** pour les parcourir au cours d'une session. Vous pouvez également utiliser votre raccourci clavier `switch_agent` configuré.
+1. Pour les agents primaires, utilisez la touche **Tab** pour les parcourir au cours d'une session. Vous pouvez également utiliser votre raccourci clavier `switch_agent` configuré.
 
-2. Les sous-agents peuvent être invoqués :
-   - **Automatiquement** par les agents principaux pour des tâches spécialisées en fonction de leurs descriptions.
-   - Manuellement en **@ mentionnant** un sous-agent dans votre message. Par exemple.
+2. Les sous-agents peuvent être invoqués :
+   - **Automatiquement** par les agents primaires pour des tâches spécialisées en fonction de leurs descriptions.
+   - Manuellement en **@ mentionnant** un sous-agent dans votre message. Par exemple :
 
      ```txt frame="none"
      @general help me search for this function
      ```
 
-3. **Navigation entre les sessions** : lorsque les sous-agents créent leurs propres sessions enfants, vous pouvez naviguer entre la session parent et toutes les sessions enfants en utilisant :
+3. **Navigation entre les sessions** : lorsque les sous-agents créent leurs propres sessions enfants, vous pouvez naviguer entre la session parent et toutes les sessions enfants en utilisant :
    - **\<Leader>+Right** (ou votre combinaison de touches `session_child_cycle` configurée) pour avancer via parent → enfant1 → enfant2 → ... → parent
    - **\<Leader>+Left** (ou votre combinaison de touches `session_child_cycle_reverse` configurée) pour revenir en arrière dans parent ← enfant1 ← enfant2 ← ... ← parent
 
@@ -128,15 +128,15 @@ Cela vous permet de basculer en toute transparence entre la conversation princip
 
 ---
 
-## Configurer
+## Configuration
 
-Vous pouvez personnaliser les agents intégrés ou créer les vôtres via la configuration. Les agents peuvent être configurés de deux manières :
+Vous pouvez personnaliser les agents intégrés ou créer les vôtres via la configuration. Les agents peuvent être configurés de deux manières :
 
 ---
 
 ### JSON
 
-Configurez les agents dans votre fichier de configuration `opencode.json` :
+Configurez les agents dans votre fichier de configuration `opencode.json` :
 
 ```json title="opencode.json"
 {
@@ -179,10 +179,10 @@ Configurez les agents dans votre fichier de configuration `opencode.json` :
 
 ### Markdown
 
-Vous pouvez également définir des agents à l'aide de fichiers markdown. Placez-les dans :
+Vous pouvez également définir des agents à l'aide de fichiers markdown. Placez-les dans :
 
-- Mondial : `~/.config/opencode/agents/`
-- Par projet : `.opencode/agents/`
+- Global : `~/.config/opencode/agents/`
+- Par projet : `.opencode/agents/`
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
@@ -253,11 +253,11 @@ Des valeurs faibles rendent les réponses plus ciblées et déterministes, tandi
 }
 ```
 
-Les valeurs de température varient généralement de 0,0 à 1,0 :
+Les valeurs de température varient généralement de 0,0 à 1,0 :
 
-- **0,0-0,2** : réponses très ciblées et déterministes, idéales pour l'analyse et la planification du code
-- **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
-- **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
+- **0,0-0,2** : réponses très ciblées et déterministes, idéales pour l'analyse et la planification du code
+- **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
+- **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
 
 ```json title="opencode.json"
 {
@@ -277,13 +277,13 @@ Les valeurs de température varient généralement de 0,0 à 1,0 :
 }
 ```
 
-Si aucune température n'est spécifiée, OpenCode utilise les valeurs par défaut spécifiques au modèle ; généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen.
+Si aucune température n'est spécifiée, OpenCode utilise les valeurs par défaut spécifiques au modèle ; généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen.
 
 ---
 
-### Pas maximum
+### Étapes maximum
 
-Contrôlez le nombre maximum d'itérations agents qu'un agent peut effectuer avant d'être obligé de répondre avec du texte uniquement. Cela permet aux utilisateurs qui souhaitent contrôler les coûts de fixer une limite aux actions agents.
+Contrôlez le nombre maximum d'itérations que l'agent peut effectuer avant d'être obligé de répondre avec du texte uniquement. Cela permet aux utilisateurs qui souhaitent contrôler les coûts de fixer une limite aux actions agents.
 
 Si cela n'est pas défini, l'agent continuera à itérer jusqu'à ce que le modèle choisisse de s'arrêter ou que l'utilisateur interrompe la session.
 
@@ -299,7 +299,7 @@ Si cela n'est pas défini, l'agent continuera à itérer jusqu'à ce que le mod�
 }
 ```
 
-Lorsque la limite est atteinte, l'agent reçoit une invite système spéciale lui demandant de répondre avec un résumé de son travail et des tâches restantes recommandées.
+Lorsque la limite est atteinte, l'agent reçoit un prompt système spécial lui demandant de répondre avec un résumé de son travail et des tâches restantes recommandées.
 
 :::caution
 L’ancien champ `maxSteps` est obsolète. Utilisez plutôt `steps`.
@@ -323,9 +323,9 @@ Définissez sur `true` pour désactiver l'agent.
 
 ---
 
-### Prompt
+### Invite
 
-Spécifiez un fichier d'invite système personnalisé pour cet agent avec la configuration `prompt`. Le fichier d'invite doit contenir des instructions spécifiques à l'objectif de l'agent.
+Spécifiez un fichier de prompt système personnalisé pour cet agent avec la configuration `prompt`. Le fichier de prompt doit contenir des instructions spécifiques à l'objectif de l'agent.
 
 ```json title="opencode.json"
 {
@@ -346,7 +346,7 @@ Ce chemin est relatif à l'emplacement du fichier de configuration. Cela fonctio
 Utilisez la configuration `model` pour remplacer le modèle de cet agent. Utile pour utiliser différents modèles optimisés pour différentes tâches. Par exemple, un modèle de planification plus rapide, un modèle de mise en œuvre plus performant.
 
 :::tip
-Si vous ne spécifiez pas de modèle, les agents principaux utilisent le [modèle globalement configuré](/docs/config#models) tandis que les sous-agents utiliseront le modèle de l'agent principal qui a appelé le sous-agent.
+Si vous ne spécifiez pas de modèle, les agents primaires utilisent le [modèle globalement configuré](/docs/config#models) tandis que les sous-agents utiliseront le modèle de l'agent primaire qui a appelé le sous-agent.
 :::
 
 ```json title="opencode.json"
@@ -389,7 +389,7 @@ Contrôlez quels outils sont disponibles dans cet agent avec la configuration `t
 La configuration spécifique à l'agent remplace la configuration globale.
 :::
 
-Vous pouvez également utiliser des caractères génériques pour contrôler plusieurs outils à la fois. Par exemple, pour désactiver tous les outils d'un serveur MCP :
+Vous pouvez également utiliser des caractères génériques pour contrôler plusieurs outils à la fois. Par exemple, pour désactiver tous les outils d'un serveur MCP :
 
 ```json title="opencode.json"
 {
@@ -412,11 +412,11 @@ Vous pouvez également utiliser des caractères génériques pour contrôler plu
 
 ### Autorisations
 
-Vous pouvez configurer des autorisations pour gérer les actions qu'un agent peut effectuer. Actuellement, les autorisations pour les outils `edit`, `bash` et `webfetch` peuvent être configurées pour :
+Vous pouvez configurer des autorisations pour gérer les actions qu'un agent peut effectuer. Actuellement, les autorisations pour les outils `edit`, `bash` et `webfetch` peuvent être configurées pour :
 
 - `"ask"` — Demander l'approbation avant d'exécuter l'outil
 - `"allow"` — Autoriser toutes les opérations sans approbation
-- `"deny"` – Désactiver l'outil
+- `"deny"` – Désactiver l'outil
 
 ```json title="opencode.json"
 {
@@ -482,7 +482,7 @@ Vous pouvez définir des autorisations pour des commandes bash spécifiques.
 }
 ```
 
-Cela peut prendre un modèle global.
+Cela peut prendre un pattern glob.
 
 ```json title="opencode.json" {7}
 {
@@ -540,7 +540,7 @@ L'option `mode` peut être définie sur `primary`, `subagent` ou `all`. Si aucun
 
 ---
 
-### Caché
+### Masqué
 
 Masquez un sous-agent du menu de saisie semi-automatique `@` avec `hidden: true`. Utile pour les sous-agents internes qui ne doivent être invoqués que par programme par d'autres agents via l'outil Tâche.
 
@@ -565,7 +565,7 @@ S'applique uniquement aux agents `mode: subagent`.
 
 ### Autorisations de tâches
 
-Contrôlez quels sous-agents un agent peut appeler via l'outil Tâche avec `permission.task`. Utilise des modèles globaux pour une correspondance flexible.
+Contrôlez quels sous-agents un agent peut appeler via l'outil Tâche avec `permission.task`. Utilise des patterns glob pour une correspondance flexible.
 
 ```json title="opencode.json"
 {
@@ -600,7 +600,7 @@ Les utilisateurs peuvent toujours appeler n'importe quel sous-agent directement 
 
 Personnalisez l'apparence visuelle de l'agent dans l'interface utilisateur avec l'option `color`. Cela affecte la façon dont l'agent apparaît dans l'interface.
 
-Utilisez une couleur hexadécimale valide (par exemple, `#FF5733`) ou une couleur de thème : `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+Utilisez une couleur hexadécimale valide (par exemple, `#FF5733`) ou une couleur de thème : `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
 ```json title="opencode.json"
 {
@@ -635,11 +635,11 @@ Les valeurs vont de 0,0 à 1,0. Les valeurs inférieures sont plus ciblées, les
 
 ---
 
-### Supplémentaire
+### Options supplémentaires
 
 Toutes les autres options que vous spécifiez dans la configuration de votre agent seront **transmises directement** au fournisseur en tant qu'options de modèle. Cela vous permet d'utiliser des fonctionnalités et des paramètres spécifiques au fournisseur.
 
-Par exemple, avec les modèles de raisonnement de OpenAI, vous pouvez contrôler l'effort de raisonnement :
+Par exemple, avec les modèles de raisonnement d'OpenAI, vous pouvez contrôler l'effort de raisonnement :
 
 ```json title="opencode.json" {6,7}
 {
@@ -662,21 +662,21 @@ Exécutez `opencode models` pour voir une liste des modèles disponibles.
 
 ---
 
-## Créer des agents
+## Création d'agents
 
-Vous pouvez créer de nouveaux agents à l'aide de la commande suivante :
+Vous pouvez créer de nouveaux agents à l'aide de la commande suivante :
 
 ```bash
 opencode agent create
 ```
 
-Cette commande interactive va :
+Cette commande interactive va :
 
-1. Demandez où enregistrer l'agent ; global ou spécifique à un projet.
-2. Description de ce que l'agent doit faire.
-3. Générez une invite système et un identifiant appropriés.
-4. Vous permet de sélectionner les outils auxquels l'agent peut accéder.
-5. Enfin, créez un fichier markdown avec la configuration de l'agent.
+1. Demander où enregistrer l'agent ; global ou spécifique à un projet.
+2. Demander une description de ce que l'agent doit faire.
+3. Générer un prompt système et un identifiant appropriés.
+4. Vous permettre de sélectionner les outils auxquels l'agent peut accéder.
+5. Enfin, créer un fichier markdown avec la configuration de l'agent.
 
 ---
 
@@ -684,11 +684,11 @@ Cette commande interactive va :
 
 Voici quelques cas d’utilisation courants pour différents agents.
 
-- **Agent de build** : travail de développement complet avec tous les outils activés
-- **Agent de plan** : analyse et planification sans apporter de modifications
-- **Agent de révision** : révision de code avec accès en lecture seule et outils de documentation
-- **Agent de débogage** : axé sur l'investigation avec les outils bash et read activés
-- **Agent Docs** : écriture de documentation avec des opérations sur les fichiers mais pas de commandes système
+- **Agent de build** : travail de développement complet avec tous les outils activés
+- **Agent de plan** : analyse et planification sans apporter de modifications
+- **Agent de révision** : révision de code avec accès en lecture seule et outils de documentation
+- **Agent de débogage** : axé sur l'investigation avec les outils bash et read activés
+- **Agent Docs** : écriture de documentation avec des opérations sur les fichiers mais pas de commandes système
 
 ---
 

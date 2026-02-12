@@ -13,7 +13,7 @@ Comandos personalizados são adicionais aos comandos integrados como `/init`, `/
 
 ---
 
-## Criar arquivos de comando
+## Criando arquivos de comando
 
 Crie arquivos markdown no diretório `commands/` para definir comandos personalizados.
 
@@ -27,7 +27,7 @@ model: anthropic/claude-3-5-sonnet-20241022
 ---
 
 Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
-Concentre-se nos testes que falharam e sugira correções.
+Concentre-se nos testes com falha e sugira correções.
 ```
 
 O frontmatter define as propriedades do comando. O conteúdo se torna o template.
@@ -40,7 +40,7 @@ Use o comando digitando `/` seguido pelo nome do comando.
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode adicionar comandos personalizados através da configuração do opencode ou criando arquivos markdown no diretório `commands/`.
 
@@ -54,11 +54,11 @@ Use a opção `command` na sua [configuração](/docs/config) do opencode:
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
-    // Este se torna o nome do comando
+    // Isso se torna o nome do comando
     "test": {
       // Este é o prompt que será enviado ao LLM
-      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes que falharam e sugira correções.",
-      // Este é exibido como a descrição no TUI
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções.",
+      // Isso é exibido como a descrição no TUI
       "description": "Execute testes com cobertura",
       "agent": "build",
       "model": "anthropic/claude-3-5-sonnet-20241022"
@@ -90,7 +90,7 @@ model: anthropic/claude-3-5-sonnet-20241022
 ---
 
 Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
-Concentre-se nos testes que falharam e sugira correções.
+Concentre-se nos testes com falha e sugira correções.
 ```
 
 O nome do arquivo markdown se torna o nome do comando. Por exemplo, `test.md` permite que você execute:
@@ -162,13 +162,13 @@ Isso substitui:
 
 ### Saída do shell
 
-Use _!`comando`_ para injetar a saída do [comando bash](/docs/tui#bash-commands) no seu prompt.
+Use _!`command`_ para injetar a saída do [comando bash](/docs/tui#bash-commands) no seu prompt.
 
 Por exemplo, para criar um comando personalizado que analisa a cobertura de testes:
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
-description: Analise a cobertura de testes
+description: Analise cobertura de testes
 ---
 
 Aqui estão os resultados atuais dos testes:
@@ -184,7 +184,7 @@ Ou para revisar alterações recentes:
 description: Revise alterações recentes
 ---
 
-Commits git recentes:
+Commits recentes do git:
 !`git log --oneline -10`
 
 Revise essas alterações e sugira quaisquer melhorias.
@@ -225,7 +225,7 @@ A opção `template` define o prompt que será enviado ao LLM quando o comando f
 {
   "command": {
     "test": {
-      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes que falharam e sugira correções."
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções."
     }
   }
 }
@@ -311,7 +311,7 @@ Esta é uma opção de configuração **opcional**.
 
 ---
 
-## Integrado
+## Integrados
 
 opencode inclui vários comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [saiba mais](/docs/tui#commands).
 

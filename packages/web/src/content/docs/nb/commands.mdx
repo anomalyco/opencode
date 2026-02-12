@@ -40,15 +40,15 @@ Bruk kommandoen ved å skrive `/` etterfulgt av kommandonavnet.
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
-Du kan legge til egendefinerte kommandoer gjennom opencode-konfigurasjonen eller ved å lage markdown-filer i katalogen `commands/`.
+Du kan legge til egendefinerte kommandoer gjennom OpenCode-konfigurasjonen eller ved å lage markdown-filer i katalogen `commands/`.
 
 ---
 
 ### JSON
 
-Bruk alternativet `command` i opencode [config](/docs/config):
+Bruk alternativet `command` i OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -94,7 +94,7 @@ Focus on the failing tests and suggest fixes.
 ```
 
 Markdown-filnavnet blir kommandonavnet. For eksempel lar `test.md`
-du løper:
+deg kjøre:
 
 ```bash frame="none"
 /test
@@ -102,9 +102,9 @@ du løper:
 
 ---
 
-## Spør config
+## Ledetekstkonfigurasjon
 
-Spørringene for de egendefinerte kommandoene støtter flere spesielle plassholdere og syntaks.
+Ledetekstene for de egendefinerte kommandoene støtter flere spesielle plassholdere og syntaks.
 
 ---
 
@@ -161,7 +161,7 @@ Dette erstatter:
 
 ---
 
-### Shell-utgang
+### Shell-utdata
 
 Bruk _!`command`_ for å injisere [bash-kommando](/docs/tui#bash-commands)-utdata i ledeteksten.
 
@@ -270,13 +270,13 @@ For å deaktivere denne virkemåten, sett `subtask` til `false`.
 }
 ```
 
-Dette er et **valgfritt** konfigurasjonsalternativ. Hvis det ikke er spesifisert, brukes din nåværende agent som standard.
+Denne kommandoen vil veilede deg gjennom å lage en ny agent med en tilpasset systemmelding og verktøykonfigurasjon.
 
 ---
 
-### Deloppgave
+### Underoppgave
 
-Bruk `subtask` boolsk for å tvinge kommandoen til å utløse en [subagent](/docs/agents/#subagents) påkalling.
+Bruk `subtask` for å tvinge kommandoen til å utløse en [subagent](/docs/agents/#subagents) påkalling.
 Dette er nyttig hvis du vil at kommandoen ikke skal forurense din primære kontekst og vil **tvinge** agenten til å fungere som en underagent,
 selv om `mode` er satt til `primary` på [agent](/docs/agents) konfigurasjonen.
 
@@ -314,7 +314,7 @@ Dette er et **valgfritt** konfigurasjonsalternativ.
 
 ## Innebygd
 
-opencode inkluderer flere innebygde kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [finn ut mer](/docs/tui#commands).
+OpenCode inkluderer flere innebygde kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [finn ut mer](/docs/tui#commands).
 
 :::note
 Egendefinerte kommandoer kan overstyre innebygde kommandoer.
