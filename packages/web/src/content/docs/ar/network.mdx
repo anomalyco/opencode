@@ -12,13 +12,13 @@ description: إعداد الوكلاء والشهادات المخصصة.
 يتبع OpenCode متغيرات بيئة الوكيل القياسية.
 
 ```bash
-# وكيل HTTPS (موصى به)
+# HTTPS proxy (recommended)
 export HTTPS_PROXY=https://proxy.example.com:8080
 
-# وكيل HTTP (إذا لم يتوفر HTTPS)
+# HTTP proxy (if HTTPS not available)
 export HTTP_PROXY=http://proxy.example.com:8080
 
-# تجاوز الوكيل للخادم المحلي (مطلوب)
+# Bypass proxy for local server (required)
 export NO_PROXY=localhost,127.0.0.1
 ```
 

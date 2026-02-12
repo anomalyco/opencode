@@ -5,13 +5,13 @@ description: opencode'u genişletmek için kendi eklentilerinizi yazın.
 
 Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek opencode'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya opencode'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
 
-Örnekler için topluluk tarafından oluşturulan [eklentilere](/docs/ecosystem#plugins) göz atın.
+Örnekler için topluluk tarafından oluşturulan [plugins](/docs/ecosystem#plugins)'a göz atın.
 
 ---
 
-## Eklenti kullanımı
+## Bir eklenti kullanın
 
-Eklentileri yüklemenin iki yolu vardır.
+There are two ways to load plugins.
 
 ---
 
@@ -39,7 +39,7 @@ Yapılandırma dosyanızda npm paketlerini belirtin.
 
 Hem normal hem de kapsamlı npm paketleri desteklenir.
 
-[Ekosistem](/docs/ecosystem#plugins)'deki mevcut eklentilere göz atın.
+[ecosystem](/docs/ecosystem#plugins)'daki mevcut eklentilere göz atın.
 
 ---
 
@@ -47,11 +47,11 @@ Hem normal hem de kapsamlı npm paketleri desteklenir.
 
 **npm eklentileri** başlangıçta Bun kullanılarak otomatik olarak yüklenir. Paketler ve bağımlılıkları `~/.cache/opencode/node_modules/`'da önbelleğe alınır.
 
-**Yerel eklentiler** doğrudan eklenti dizininden yüklenir. Harici paketleri kullanmak için, sisteminizin dizininde bir `package.json` oluşturmanız (bkz. [Bağımlılıklar](#dependencies)) veya eklentiyi npm ve [add it to your config](/docs/config#plugins)'de yayınlamanız gerekir.
+**Yerel eklentiler** doğrudan eklenti dizininden yüklenir. Harici paketleri kullanmak için, sisteminizin dizininde bir `package.json` oluşturmanız (bkz. [Dependencies](#dependencies)) veya eklentiyi npm ve [add it to your config](/docs/config#plugins)'de yayınlamanız gerekir.
 
 ---
 
-### Yükleme sırası
+### Load order
 
 Eklentiler tüm kaynaklardan yüklenir ve tüm kancalar sırayla çalışır. Yükleme sırası şöyledir:
 
@@ -64,14 +64,14 @@ Aynı ad ve sürüme sahip yinelenen npm paketleri bir kez yüklenir. Ancak benz
 
 ---
 
-## Eklenti oluşturma
+## Eklenti oluştur
 
 Eklenti, bir veya daha fazla eklentiyi dışa aktaran bir **JavaScript/TypeScript modülüdür**
 işlevler. Her işlev bir bağlam nesnesi alır ve bir kanca nesnesi döndürür.
 
 ---
 
-### Bağımlılıklar
+### Dependencies
 
 Yerel eklentiler ve özel araçlar harici npm paketlerini kullanabilir. İhtiyacınız olan bağımlılıkları içeren config dizininize bir `package.json` ekleyin.
 
@@ -152,32 +152,32 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 - `file.edited`
 - `file.watcher.updated`
 
-#### Kurulum Olayları
+#### Kurulum Etkinlikleri
 
 - `installation.updated`
 
-#### LSP Olayları
+#### LSP Etkinlikler
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
 
-#### Mesaj Olayları
+#### Mesaj Etkinlikleri
 
 - `message.part.removed`
 - `message.part.updated`
 - `message.removed`
 - `message.updated`
 
-#### İzin Olayları
+#### İzin Etkinlikleri
 
 - `permission.asked`
 - `permission.replied`
 
-#### Sunucu Olayları
+#### Sunucu Etkinlikleri
 
 - `server.connected`
 
-#### Oturum Olayları
+#### Oturum Etkinlikleri
 
 - `session.created`
 - `session.compacted`
@@ -188,11 +188,11 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 - `session.status`
 - `session.updated`
 
-#### Yapılacaklar Olayları
+#### Yapılacak Etkinlikler
 
 - `todo.updated`
 
-#### Kabuk Olayları
+#### Kabuk Etkinlikleri
 
 - `shell.env`
 
@@ -201,7 +201,7 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI Olayları
+#### TUI Etkinlikler
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -209,13 +209,13 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 
 ---
 
-## Örnekler
+## Examples
 
 opencode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
 
 ---
 
-### Bildirim Gönderme
+### Bildirim gönder
 
 Belirli olaylar meydana geldiğinde bildirim gönderin:
 
@@ -240,7 +240,7 @@ opencode masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda ve
 
 ---
 
-### .env Koruması
+### .env protection
 
 opencode'un `.env` dosyalarını okumasını önleyin:
 
@@ -275,7 +275,7 @@ export const InjectEnvPlugin = async () => {
 
 ---
 
-### Özel araçlar
+### Custom tools
 
 Eklentiler ayrıca opencode'a özel araçlar da ekleyebilir:
 
@@ -331,7 +331,7 @@ Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK documentati
 
 ---
 
-### Sıkıştırma kancaları
+### Compaction hooks
 
 Bir oturum sıkıştırıldığında içerilen bağlamı özelleştirin:
 

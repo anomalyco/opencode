@@ -3,13 +3,13 @@ title: การรองรับ ACP
 description: ใช้ OpenCode ในโปรแกรมแก้ไขที่รองรับ ACP
 ---
 
-OpenCode รองรับ [Agent Client Protocol](https://agentclientprotocol.com) (ACP) ซึ่งช่วยให้สามารถทำงานร่วมกับ editor และ IDE ต่างๆ ได้โดยตรง
+OpenCode ที่แสดง [Agent Client Protocol](https://agentclientprotocol.com) หรือ (ACP) ซึ่งสามารถช่วยได้โดยตรงในการแก้ไขและ IDE ที่หน่วยความจำ
 
 :::tip
-สำหรับรายชื่อเครื่องมือที่รองรับ ACP สามารถดูได้ที่ [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)
+สำหรับรายชื่อและเครื่องมือที่รองรับ ACPรายงานที่[ACP รายงาน](https://zed.dev/blog/acp-progress-report#available-now)
 :::
 
-ACP เป็นมาตรฐานเปิดสำหรับการสื่อสารระหว่างโปรแกรมแก้ไขโค้ดและ AI agent
+ACP เป็นแบบเปิดมาตรฐานการสื่อสารระหว่างโปรแกรมแก้ไขโค้ดและตัวแทน AI
 
 ---
 
@@ -17,7 +17,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
 
-คำสั่งนี้จะเริ่ม OpenCode เป็น process ย่อยที่รองรับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ทาง stdio
+คำสั่งนี้จะเริ่ม OpenCode เป็นกระบวนการย่อยที่เข้ากันได้กับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ผ่าน stdio
 
 นี่คือตัวอย่างสำหรับโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
 
@@ -25,7 +25,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ### Zed
 
-สำหรับ [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+อดทนต่อไป [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -38,9 +38,9 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 }
 ```
 
-สิ่งนี้จะเปิดใช้ `agent: new thread` ใน **Command Palette**
+สิ่งนั้นเปิดใช้สำหรับ `agent: new thread` ใน **Command Palette**
 
-คุณต้องตั้งค่า keybinding ใน `keymap.json` ของคุณ:
+คุณต้องผูกมัดอย่างหนักเพื่อแก้ไข `keymap.json` ของคุณ:
 
 ```json title="keymap.json"
 [
@@ -101,7 +101,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 }
 ```
 
-หากคุณต้องการส่งผ่าน environment variables (เช่น `OPENCODE_API_KEY`) คุณต้องระบุใน `env`:
+จะต้องส่งผ่านวันพรุ่งนี้:
 
 ```lua {6-8}
 {

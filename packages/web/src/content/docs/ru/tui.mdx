@@ -69,7 +69,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### connect
+### соединять
 
 Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
@@ -79,7 +79,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### compact
+### компактный
 
 Сжать текущий сеанс. _Псевдоним_: `/summarize`
 
@@ -91,7 +91,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### details
+### подробности
 
 Переключить детали выполнения инструмента.
 
@@ -103,7 +103,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### editor
+### редактор
 
 Открыть внешний редактор для составления сообщений. Использует редактор, установленный в переменной среды `EDITOR`. [Подробнее ](#editor-setup).
 
@@ -115,7 +115,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### exit
+### Выход
 
 Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
 
@@ -127,7 +127,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### export
+### экспорт
 
 Экспортируйте текущий разговор в Markdown и откройте его в редакторе по умолчанию. Использует редактор, установленный в переменной среды `EDITOR`. [Подробнее ](#editor-setup).
 
@@ -139,7 +139,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### help
+### помощь
 
 Показать диалоговое окно помощи.
 
@@ -151,7 +151,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### init
+### инициализация
 
 Создайте или обновите файл `AGENTS.md`. [Подробнее ](/docs/rules).
 
@@ -163,7 +163,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### models
+### модели
 
 Перечислите доступные модели.
 
@@ -175,7 +175,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### new
+### новый
 
 Начать новый сеанс. _Псевдоним_: `/clear`
 
@@ -187,7 +187,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### redo
+### переделывать
 
 Повторить ранее отмененное сообщение. Доступно только после использования `/undo`.
 
@@ -206,7 +206,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### sessions
+### сессии
 
 Составляйте список и переключайтесь между сеансами. _Псевдонимы_: `/resume`, `/continue`
 
@@ -218,7 +218,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### share
+### делиться
 
 Поделиться текущим сеансом. [Подробнее](/docs/share).
 
@@ -230,7 +230,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### theme
+### темы
 
 Список доступных тем.
 
@@ -242,7 +242,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### thinking
+### мышление
 
 Переключить видимость блоков мышления/рассуждения в разговоре. Если этот параметр включен, вы можете увидеть процесс рассуждения модели для моделей, поддерживающих расширенное мышление.
 
@@ -256,7 +256,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### undo
+### отменить
 
 Отменить последнее сообщение в разговоре. Удаляет самое последнее сообщение пользователя, все последующие ответы и любые изменения файлов.
 
@@ -275,7 +275,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### unshare
+### отменить совместное использование
 
 Отменить общий доступ к текущему сеансу. [Подробнее](/docs/share#un-sharing).
 
@@ -343,7 +343,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `vim` — редактор Vim
 - `nano` — Нано-редактор
 - `notepad` — Блокнот Windows
-- `subl` — Sublime Text
+- `subl` – возвышенный текст
 
 :::note
 Некоторые редакторы, такие как VS Code, необходимо запускать с флагом `--wait`.
@@ -353,7 +353,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-## Настройка
+## Настроить
 
 Вы можете настроить поведение TUI через файл конфигурации opencode.
 

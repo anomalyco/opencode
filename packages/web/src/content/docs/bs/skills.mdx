@@ -1,5 +1,5 @@
 ---
-title: Vještine agenata
+title: "Skills agenata"
 description: "Definisite ponasanje koje se moze ponovo koristiti"
 ---
 
@@ -31,7 +31,7 @@ Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.m
 
 ---
 
-## Pisanje frontmatter-a
+## Napisite frontmatter
 
 Svaki `SKILL.md` mora poceti YAML frontmatter-om.
 Prepoznaju se samo ova polja:
@@ -64,14 +64,14 @@ Ekvivalentni regex:
 
 ---
 
-## Pravila dužine
+## Pratite pravila duzine
 
 `description` mora imati 1-1024 karaktera.
 Neka bude dovoljno precizan da agent moze pravilno odabrati.
 
 ---
 
-## Primjer
+## Koristite primjer
 
 Kreirajte `.opencode/skills/git-release/SKILL.md` ovako:
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Opis alata
+## Prepoznajte opis alata
 
 OpenCode navodi dostupne skills u opisu `skill` alata.
 Svaki unos sadrzi naziv i opis skill-a:
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## Konfiguracija dozvola
+## Konfigurisite dozvole
 
 Kontrolisite kojim skills agenti mogu pristupiti pomocu dozvola baziranih na obrascima u `opencode.json`:
 
@@ -149,7 +149,7 @@ Obrasci podrzavaju wildcard znakove: `internal-*` poklapa `internal-docs`, `inte
 
 ---
 
-## Nadjačavanje po agentu
+## Nadjacajte po agentu
 
 Dajte odredenim agentima drugacije dozvole od globalnih defaulta.
 
@@ -181,7 +181,7 @@ permission:
 
 ---
 
-## Isključivanje skill alata
+## Iskljucite skill alat
 
 Potpuno iskljucite skills za agente koji ih ne bi trebali koristiti:
 
@@ -212,7 +212,7 @@ Kada je iskljuceno, sekcija `<available_skills>` se potpuno izostavlja.
 
 ---
 
-## Rješavanje problema s učitavanjem
+## Rjesavanje problema s ucitavanjem
 
 Ako se skill ne pojavi:
 

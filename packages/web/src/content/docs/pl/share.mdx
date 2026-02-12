@@ -1,5 +1,5 @@
 ---
-title: Udostępnianie
+title: Share
 description: Udostępnij swoje rozmowy dotyczące opencode.
 ---
 
@@ -11,7 +11,7 @@ Udostępnione konwersacje są publicznie dostępne dla każdej osoby mającej li
 
 ---
 
-## Jak to działa
+## How it works
 
 Kiedy udostępniasz rozmowę, opencode:
 
@@ -21,13 +21,13 @@ Kiedy udostępniasz rozmowę, opencode:
 
 ---
 
-## Udostępnianie
+## Sharing
 
 opencode obsługuje trzy tryby udostępniania, które kontrolują sposób udostępniania rozmów:
 
 ---
 
-### Ręczne (domyślne)
+### Ręczny (domyślny)
 
 Domyślnie opencode korzysta z ręcznego trybu udostępniania. Sesje nie są udostępniane automatycznie, ale możesz je udostępnić ręcznie za pomocą polecenia `/share`:
 
@@ -48,7 +48,7 @@ Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
 
 ---
 
-### Automatyczne udostępnianie
+### Auto-share
 
 Możesz włączyć automatyczne udostępnianie dla wszystkich nowych rozmów, ustawiając opcję `share` na `"auto"` w [pliku konfiguracyjnym] (./config):
 
@@ -63,7 +63,7 @@ Po włączeniu automatycznego udostępniania każda nowa rozmowa będzie automat
 
 ---
 
-### Wyłączone
+### Disabled
 
 Możesz całkowicie wyłączyć udostępnianie, ustawiając opcję `share` na `"disabled"` w [pliku konfiguracyjnym] (./config):
 
@@ -78,7 +78,7 @@ Aby wymusić to w całym zespole dla danego projektu, dodaj go do `opencode.json
 
 ---
 
-## Cofnięcie udostępnienia
+## Un-sharing
 
 Aby zatrzymać udostępnianie rozmowy i usunąć ją z dostępu publicznego:
 
@@ -90,28 +90,28 @@ Spowoduje to usunięcie łącza udostępniania i danych związanych z rozmową.
 
 ---
 
-## Prywatność
+## Privacy
 
-Podczas udostępniania rozmowy należy pamiętać o kilku rzeczach.
+There are a few things to keep in mind when sharing a conversation.
 
 ---
 
-### Przechowywanie danych
+### Data retention
 
 Udostępnione rozmowy pozostają dostępne, dopóki wyraźnie ich nie udostępnisz. Ten
 includes:
 
-- Pełna historia rozmów
+- Full conversation history
 - Wszystkie wiadomości i odpowiedzi
 - Metadane sesji
 
 ---
 
-### Zalecenia
+### Recommendations
 
 - Udostępniaj tylko rozmowy, które nie zawierają poufnych informacji.
-- Przejrzyj treść rozmowy przed udostępnieniem.
-- Cofnij udostępnianie rozmów po zakończeniu współpracy.
+- Review conversation content before sharing.
+- Unshare conversations when collaboration is complete.
 - Unikaj udostępniania rozmów zawierających zastrzeżony kod lub poufne dane.
 - W przypadku wrażliwych projektów całkowicie wyłącz udostępnianie.
 

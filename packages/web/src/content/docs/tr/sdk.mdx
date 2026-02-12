@@ -1,21 +1,21 @@
 ---
 title: SDK
-description: opencode sunucusu için type-safe JS istemcisi.
+description: opencode serveri icin type-safe JS istemcisi.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK, sunucu ile etkileşmek için type-safe bir istemci sağlar.
-opencode'u programatik olarak kontrol etmek ve entegrasyonlar oluşturmak için kullanabilirsiniz.
+opencode JS/TS SDK, sunucu ile etkilesmek icin type-safe bir istemci saglar.
+opencode'u programatik olarak kontrol etmek ve entegrasyonlar olusturmak icin kullanabilirsiniz.
 
-[Sunucu](/docs/server) sayfasında nasıl çalıştığını görebilir, örnekler için topluluğun oluşturduğu [projeler](/docs/ecosystem#projects) bölümüne bakabilirsiniz.
+[Sunucu](/docs/server) sayfasinda nasil calistigini gorebilir, ornekler icin toplulugun olusturdugu [projects](/docs/ecosystem#projects) bolumune bakabilirsiniz.
 
 ---
 
-## Kurulum
+## Install
 
-SDK'yı npm'den yükleyin:
+Install the SDK from npm:
 
 ```bash
 npm install @opencode-ai/sdk
@@ -23,9 +23,9 @@ npm install @opencode-ai/sdk
 
 ---
 
-## İstemci Oluşturma
+## Create client
 
-Bir opencode örneği oluşturun:
+Create an instance of opencode:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -33,23 +33,23 @@ import { createOpencode } from "@opencode-ai/sdk"
 const { client } = await createOpencode()
 ```
 
-Bu, hem bir sunucu hem de bir istemci başlatır
+This starts both a server and a client
 
-#### Seçenekler
+#### Options
 
-| Seçenek    | Tip           | Açıklama                                      | Varsayılan  |
-| ---------- | ------------- | --------------------------------------------- | ----------- |
-| `hostname` | `string`      | Sunucu ana bilgisayar adı                     | `127.0.0.1` |
-| `port`     | `number`      | Sunucu bağlantı noktası                       | `4096`      |
-| `signal`   | `AbortSignal` | İptal için durdurma sinyali                   | `undefined` |
-| `timeout`  | `number`      | Sunucu başlatma için ms cinsinden zaman aşımı | `5000`      |
-| `config`   | `Config`      | Yapılandırma nesnesi                          | `{}`        |
+| Option     | Type          | Description                    | Default     |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
+| `config`   | `Config`      | Configuration object           | `{}`        |
 
 ---
 
-## Yapılandırma
+## Config
 
-Davranışı özelleştirmek için bir yapılandırma nesnesi iletebilirsiniz. Örnek yine de `opencode.json` dosyanızı alır, ancak yapılandırmayı satır içi olarak geçersiz kılabilir veya ekleyebilirsiniz:
+You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -67,9 +67,9 @@ console.log(`Server running at ${opencode.server.url}`)
 opencode.server.close()
 ```
 
-## Yalnızca istemci
+## Client only
 
-Halihazırda çalışan bir opencode örneğiniz varsa, ona bağlanmak için bir istemci örneği oluşturabilirsiniz:
+If you already have a running instance of opencode, you can create a client instance to connect to it:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -79,33 +79,33 @@ const client = createOpencodeClient({
 })
 ```
 
-#### Seçenekler
+#### Options
 
-| Seçenek         | Tip        | Açıklama                          | Varsayılan              |
-| --------------- | ---------- | --------------------------------- | ----------------------- |
-| `baseUrl`       | `string`   | Sunucunun URL'si                  | `http://localhost:4096` |
-| `fetch`         | `function` | Özel fetch uygulaması             | `globalThis.fetch`      |
-| `parseAs`       | `string`   | Yanıt ayrıştırma yöntemi          | `auto`                  |
-| `responseStyle` | `string`   | Dönüş stili: `data` veya `fields` | `fields`                |
-| `throwOnError`  | `boolean`  | Dönüş yerine hata fırlat          | `false`                 |
+| Option          | Type       | Description                      | Default                 |
+| --------------- | ---------- | -------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
 
 ---
 
-## Türler
+## Types
 
-SDK, tüm API türleri için TypeScript tanımlarını içerir. Bunları doğrudan içe aktarın:
+The SDK includes TypeScript definitions for all API types. Import them directly:
 
 ```typescript
 import type { Session, Message, Part } from "@opencode-ai/sdk"
 ```
 
-Tüm tipler, sunucunun OpenAPI spesifikasyonundan oluşturulur ve <a href={typesUrl}>tipler dosyasında</a> mevcuttur.
+All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
 
 ---
 
-## Hatalar
+## Errors
 
-SDK, yakalayabileceğiniz ve işleyebileceğiniz hatalar fırlatabilir:
+The SDK can throw errors that you can catch and handle:
 
 ```typescript
 try {
@@ -117,21 +117,21 @@ try {
 
 ---
 
-## API'ler
+## APIs
 
-SDK, tüm sunucu API'lerini type-safe bir istemci aracılığıyla sunar.
+The SDK exposes all server APIs through a type-safe client.
 
 ---
 
 ### Global
 
-| Yöntem            | Açıklama                                | Yanıt                                |
-| ----------------- | --------------------------------------- | ------------------------------------ |
-| `global.health()` | Sunucu sağlığını ve sürümünü kontrol et | `{ healthy: true, version: string }` |
+| Method            | Description                     | Response                             |
+| ----------------- | ------------------------------- | ------------------------------------ |
+| `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 const health = await client.global.health()
@@ -142,14 +142,14 @@ console.log(health.data.version)
 
 ### App
 
-| Yöntem         | Açıklama                      | Yanıt                                       |
-| -------------- | ----------------------------- | ------------------------------------------- |
-| `app.log()`    | Bir günlük girdisi yaz        | `boolean`                                   |
-| `app.agents()` | Tüm mevcut agent'ları listele | <a href={typesUrl}><code>Agent[]</code></a> |
+| Method         | Description               | Response                                    |
+| -------------- | ------------------------- | ------------------------------------------- |
+| `app.log()`    | Write a log entry         | `boolean`                                   |
+| `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Write a log entry
@@ -169,14 +169,14 @@ const agents = await client.app.agents()
 
 ### Project
 
-| Yöntem              | Açıklama              | Yanıt                                         |
-| ------------------- | --------------------- | --------------------------------------------- |
-| `project.list()`    | Tüm projeleri listele | <a href={typesUrl}><code>Project[]</code></a> |
-| `project.current()` | Mevcut projeyi al     | <a href={typesUrl}><code>Project</code></a>   |
+| Method              | Description         | Response                                      |
+| ------------------- | ------------------- | --------------------------------------------- |
+| `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // List all projects
@@ -190,13 +190,13 @@ const currentProject = await client.project.current()
 
 ### Path
 
-| Yöntem       | Açıklama       | Yanıt                                    |
-| ------------ | -------------- | ---------------------------------------- |
-| `path.get()` | Mevcut yolu al | <a href={typesUrl}><code>Path</code></a> |
+| Method       | Description      | Response                                 |
+| ------------ | ---------------- | ---------------------------------------- |
+| `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Get current path information
@@ -207,14 +207,14 @@ const pathInfo = await client.path.get()
 
 ### Config
 
-| Yöntem               | Açıklama                                      | Yanıt                                                                                                 |
-| -------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `config.get()`       | Yapılandırma bilgisini al                     | <a href={typesUrl}><code>Config</code></a>                                                            |
-| `config.providers()` | Sağlayıcıları ve varsayılan modelleri listele | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+| Method               | Description                       | Response                                                                                              |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 const config = await client.config.get()
@@ -224,33 +224,33 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### Oturumlar
+### Sessions
 
-| Yöntem                                                     | Açıklama                                    | Notlar                                                                                                                                                    |
-| ---------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | Oturumları listele                          | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
-| `session.get({ path })`                                    | Oturum al                                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.children({ path })`                               | Alt oturumları listele                      | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
-| `session.create({ body })`                                 | Oturum oluştur                              | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.delete({ path })`                                 | Oturum sil                                  | `boolean` döndürür                                                                                                                                        |
-| `session.update({ path, body })`                           | Oturum özelliklerini güncelle               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.init({ path, body })`                             | Uygulamayı analiz et ve `AGENTS.md` oluştur | `boolean` döndürür                                                                                                                                        |
-| `session.abort({ path })`                                  | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                                                                                        |
-| `session.share({ path })`                                  | Oturum paylaş                               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.unshare({ path })`                                | Oturum paylaşımını kaldır                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.summarize({ path, body })`                        | Oturumu özetle                              | `boolean` döndürür                                                                                                                                        |
-| `session.messages({ path })`                               | Oturumdaki mesajları listele                | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` döndürür                                  |
-| `session.message({ path })`                                | Mesaj ayrıntılarını al                      | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                                    |
-| `session.prompt({ path, body })`                           | İstem mesajı gönder                         | `body.noReply: true` UserMessage (yalnızca bağlam) döndürür. Varsayılan olarak AI yanıtıyla <a href={typesUrl}><code>AssistantMessage</code></a> döndürür |
-| `session.command({ path, body })`                          | Oturuma komut gönder                        | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                           |
-| `session.shell({ path, body })`                            | Bir kabuk komutu çalıştır                   | <a href={typesUrl}><code>AssistantMessage</code></a> döndürür                                                                                             |
-| `session.revert({ path, body })`                           | Bir mesajı geri al                          | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.unrevert({ path })`                               | Geri alınan mesajları geri yükle            | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Bir izin isteğine yanıt ver                 | `boolean` döndürür                                                                                                                                        |
+| Method                                                     | Description                        | Notes                                                                                                                                          |
+| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.children({ path })`                               | List child sessions                | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.create({ body })`                                 | Create session                     | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.delete({ path })`                                 | Delete session                     | Returns `boolean`                                                                                                                              |
+| `session.update({ path, body })`                           | Update session properties          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.init({ path, body })`                             | Analyze app and create `AGENTS.md` | Returns `boolean`                                                                                                                              |
+| `session.abort({ path })`                                  | Abort a running session            | Returns `boolean`                                                                                                                              |
+| `session.share({ path })`                                  | Share session                      | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unshare({ path })`                                | Unshare session                    | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.summarize({ path, body })`                        | Summarize session                  | Returns `boolean`                                                                                                                              |
+| `session.messages({ path })`                               | List messages in a session         | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
+| `session.message({ path })`                                | Get message details                | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
+| `session.prompt({ path, body })`                           | Send prompt message                | `body.noReply: true` returns UserMessage (context only). Default returns <a href={typesUrl}><code>AssistantMessage</code></a> with AI response |
+| `session.command({ path, body })`                          | Send command to session            | Returns `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
+| `session.shell({ path, body })`                            | Run a shell command                | Returns <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                   |
+| `session.revert({ path, body })`                           | Revert a message                   | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unrevert({ path })`                               | Restore reverted messages          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request    | Returns `boolean`                                                                                                                              |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Create and manage sessions
@@ -281,25 +281,25 @@ await client.session.prompt({
 
 ---
 
-### Dosyalar
+### Files
 
-| Yöntem                    | Açıklama                         | Yanıt                                                                                           |
-| ------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `find.text({ query })`    | Dosyalarda metin ara             | `path`, `lines`, `line_number`, `absolute_offset`, `submatches` içeren eşleşme nesneleri dizisi |
-| `find.files({ query })`   | Dosya ve dizinleri isme göre bul | `string[]` (yollar)                                                                             |
-| `find.symbols({ query })` | Çalışma alanı sembollerini bul   | <a href={typesUrl}><code>Symbol[]</code></a>                                                    |
-| `file.read({ query })`    | Bir dosyayı oku                  | `{ type: "raw" \| "patch", content: string }`                                                   |
-| `file.status({ query? })` | İzlenen dosyalar için durumu al  | <a href={typesUrl}><code>File[]</code></a>                                                      |
+| Method                    | Description                        | Response                                                                                    |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
-`find.files` birkaç isteğe bağlı sorgu alanını destekler:
+`find.files` supports a few optional query fields:
 
-- `type`: `"file"` veya `"directory"`
-- `directory`: arama için proje kökünü geçersiz kılma
-- `limit`: maksimum sonuç (1-200)
+- `type`: `"file"` or `"directory"`
+- `directory`: override the project root for the search
+- `limit`: max results (1-200)
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Search and read files
@@ -324,21 +324,21 @@ const content = await client.file.read({
 
 ### TUI
 
-| Yöntem                         | Açıklama                    | Yanıt     |
-| ------------------------------ | --------------------------- | --------- |
-| `tui.appendPrompt({ body })`   | İsteme metin ekle           | `boolean` |
-| `tui.openHelp()`               | Yardım iletişim kutusunu aç | `boolean` |
-| `tui.openSessions()`           | Oturum seçiciyi aç          | `boolean` |
-| `tui.openThemes()`             | Tema seçiciyi aç            | `boolean` |
-| `tui.openModels()`             | Model seçiciyi aç           | `boolean` |
-| `tui.submitPrompt()`           | Mevcut istemi gönder        | `boolean` |
-| `tui.clearPrompt()`            | İstemi temizle              | `boolean` |
-| `tui.executeCommand({ body })` | Bir komut çalıştır          | `boolean` |
-| `tui.showToast({ body })`      | Toast bildirimi göster      | `boolean` |
+| Method                         | Description               | Response  |
+| ------------------------------ | ------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
+| `tui.openHelp()`               | Open the help dialog      | `boolean` |
+| `tui.openSessions()`           | Open the session selector | `boolean` |
+| `tui.openThemes()`             | Open the theme selector   | `boolean` |
+| `tui.openModels()`             | Open the model selector   | `boolean` |
+| `tui.submitPrompt()`           | Submit the current prompt | `boolean` |
+| `tui.clearPrompt()`            | Clear the prompt          | `boolean` |
+| `tui.executeCommand({ body })` | Execute a command         | `boolean` |
+| `tui.showToast({ body })`      | Show toast notification   | `boolean` |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Control TUI interface
@@ -355,13 +355,13 @@ await client.tui.showToast({
 
 ### Auth
 
-| Yöntem              | Açıklama                  | Yanıt     |
-| ------------------- | ------------------------- | --------- |
-| `auth.set({ ... })` | Kimlik bilgilerini ayarla | `boolean` |
+| Method              | Description                    | Response  |
+| ------------------- | ------------------------------ | --------- |
+| `auth.set({ ... })` | Set authentication credentials | `boolean` |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 await client.auth.set({
@@ -372,15 +372,15 @@ await client.auth.set({
 
 ---
 
-### Olaylar
+### Events
 
-| Yöntem              | Açıklama                                | Yanıt                                   |
-| ------------------- | --------------------------------------- | --------------------------------------- |
-| `event.subscribe()` | Sunucu tarafından gönderilen olay akışı | Sunucu tarafından gönderilen olay akışı |
+| Method              | Description               | Response                  |
+| ------------------- | ------------------------- | ------------------------- |
+| `event.subscribe()` | Server-sent events stream | Server-sent events stream |
 
 ---
 
-#### Örnekler
+#### Examples
 
 ```javascript
 // Listen to real-time events

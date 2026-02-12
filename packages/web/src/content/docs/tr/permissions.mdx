@@ -1,6 +1,6 @@
 ---
 title: İzinler
-description: Hangi işlemlerin çalıştırılması için onay sürecini kontrol edin.
+description: Hangi işlemlerin çalıştırılması için onay işlemini kontrol edin.
 ---
 
 opencode, belirli bir eylemin otomatik olarak mı çalıştırılacağına, size sorulacağına veya engelleneceğine karar vermek için `permission` yapılandırmasını kullanır.
@@ -9,9 +9,9 @@ opencode, belirli bir eylemin otomatik olarak mı çalıştırılacağına, size
 
 ---
 
-## Eylemler
+## Actions
 
-Her izin kuralı şunlardan birine çözümlenir:
+Each permission rule resolves to one of:
 
 - `"allow"` — onay olmadan çalıştır
 - `"ask"` — onay istemi
@@ -45,7 +45,7 @@ Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
 
 ---
 
-## Ayrıntılı Kurallar (Nesne Sözdizimi)
+## Granular Rules (Object Syntax)
 
 Çoğu izin için, araç girişine bağlı olarak farklı eylemleri uygulamak için bir nesneyi kullanabilirsiniz.
 
@@ -70,13 +70,13 @@ Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
 
 Kurallar, **son eşleşen kuralın kazanması** ile kalıp eşleşmesine göre değerlendirilir. Yaygın bir model, tümünü yakala `"*"` kuralını ilk sıraya koymak ve daha spesifik kuralları ondan sonra koymaktır.
 
-### Joker Karakterler
+### Wildcards
 
 İzin kalıpları basit joker karakter eşleştirmesini kullanır:
 
 - `*` herhangi bir karakterin sıfır veya daha fazlasıyla eşleşir
-- `?` tam olarak bir karakterle eşleşir
-- Diğer tüm karakterler birebir eşleşir
+- `?` matches exactly one character
+- All other characters match literally
 
 ### Ana Dizin Genişletme
 
@@ -86,7 +86,7 @@ Ana dizininize referans vermek için bir modelin başlangıcında `~` veya `$HOM
 - `$HOME/projects/*` -> `/Users/username/projects/*`
 - `~` -> `/Users/username`
 
-### Harici Dizinler
+### Dış Dizinler
 
 opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `list`, `glob`, `grep` ve birçok `bash` komutu).
 
@@ -127,7 +127,7 @@ Listeyi güvenilir yollara odaklı tutun ve diğer araçlar için gereken ekstra
 
 ## Mevcut İzinler
 
-opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanır:
+opencode izinleri araç adına ve birkaç güvenlik görevlisine göre anahtarlanır:
 
 - `read` — bir dosyayı okumak (dosya yoluyla eşleşir)
 - `edit` — tüm dosya değişiklikleri (`edit`, `write`, `patch`, `multiedit`'yi kapsar)
@@ -135,12 +135,12 @@ opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanı
 - `grep` — içerik arama (regex modeliyle eşleşir)
 - `list` — bir dizideki dosyaları listeleme (dizin yoluyla eşleşir)
 - `bash` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
-- `task` — alt agent'ların başlatılması (alt agent türüyle eşleşir)
-- `skill` — bir skill yükleniyor (skill adıyla eşleşir)
+- `task` — alt aracıların başlatılması (alt aracı türüyle eşleşir)
+- `skill` — bir beceri yükleniyor (beceri adıyla eşleşir)
 - `lsp` — LSP sorgularını çalıştırıyor (şu anda ayrıntılı değil)
-- `todoread`, `todowrite` — yapılacaklar listesini okuma/güncelleme
+- `todoread`, `todowrite` — reading/updating yapılacaklar listesi
 - `webfetch` — URL getiriliyor (URL ile eşleşiyor)
-- `websearch`, `codesearch` — web/kod arama (sorguyla eşleşir)
+- `websearch`, `codesearch` — web/code arama (sorguyla eşleşir)
 - `external_directory` — bir araç proje çalışma dizini dışındaki yollara dokunduğunda tetiklenir
 - `doom_loop` — aynı araç çağrısı aynı girdiyle 3 kez tekrarlandığında tetiklenir
 
@@ -152,7 +152,7 @@ Hiçbir şey belirtmezseniz opencode izin verilen varsayılanlardan başlar:
 
 - Çoğu izin varsayılan olarak `"allow"` şeklindedir.
 - `doom_loop` ve `external_directory` varsayılan olarak `"ask"`'dir.
-- `read`, `"allow"`'dır, ancak `.env` dosyaları varsayılan olarak reddedilir:
+- `read`, `"allow"`'dir, ancak `.env` dosyaları varsayılan olarak reddedilir:
 
 ```json title="opencode.json"
 {
@@ -181,12 +181,12 @@ opencode onay istediğinde kullanıcı arayüzü üç sonuç sunar:
 
 ---
 
-## Agent'lar
+## Agents
 
 Agent bazında izinleri geçersiz kılabilirsiniz. Agent izinleri global yapılandırmayla birleştirilir ve agent kuralları önceliklidir. [Daha fazla bilgi](/docs/agents#permissions).
 
 :::note
-Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı kurallar (nesne söz dizimi)](#granular-rules-object-syntax) bölümüne bakın.
+Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı kurallar (obje söz dizimi)](#granular-rules-object-syntax) bölümüne bakın.
 :::
 
 ```json title="opencode.json"
@@ -217,7 +217,7 @@ Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı 
 }
 ```
 
-Agent izinlerini Markdown'da da yapılandırabilirsiniz:
+Aracı izinlerini Markdown'da da yapılandırabilirsiniz:
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---

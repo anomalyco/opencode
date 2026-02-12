@@ -1,13 +1,13 @@
 ---
-title: LSP Sunucuları
+title: LSP Sunucular
 description: opencode, LSP sunucularınızla bütünleşir.
 ---
 
-opencode, LLM'in kod tabanınızla etkileşime girmesine yardımcı olmak için Dil Sunucusu Protokolünüzle (LSP) bütünleşir. LLM'ye geri bildirim sağlamak için tanılamayı kullanır.
+opencode, LLM'nin kod tabanınızla etkileşime girmesine yardımcı olmak için Dil Sunucusu Protokolünüzle (LSP) bütünleşir. LLM'ye geri bildirim sağlamak için tanılamayı kullanır.
 
 ---
 
-## Yerleşik
+## Built-in
 
 opencode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte gelir:
 
@@ -63,7 +63,7 @@ Opencode bir dosyayı açtığında:
 
 ---
 
-## Yapılandırma
+## Yapılandır
 
 LSP sunucularını, opencode yapılandırmanızdaki `lsp` bölümü aracılığıyla özelleştirebilirsiniz.
 
@@ -76,7 +76,7 @@ LSP sunucularını, opencode yapılandırmanızdaki `lsp` bölümü aracılığ�
 
 Her LSP sunucusu aşağıdakileri destekler:
 
-| Özellik          | Tip      | Açıklama                                                             |
+| Property         | Type     | Açıklama                                                             |
 | ---------------- | -------- | -------------------------------------------------------------------- |
 | `disabled`       | boolean  | LSP sunucusunu devre dışı bırakmak için bunu `true` olarak ayarlayın |
 | `command`        | string[] | LSP sunucusunu başlatma komutu                                       |
@@ -107,7 +107,7 @@ LSP sunucusunu başlatırken ortam değişkenlerini ayarlamak için `env` özell
 
 ---
 
-### Başlatma seçenekleri
+### Initialization options
 
 Başlatma seçeneklerini LSP sunucusuna iletmek için `initialization` özelliğini kullanın. Bunlar LSP `initialize` isteği sırasında gönderilen sunucuya özel ayarlardır:
 

@@ -9,7 +9,7 @@ Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for å kj�
 
 ---
 
-## Konfigurasjon
+## Konfigurer
 
 Bruk feltet `permission` for å kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
 
@@ -47,7 +47,7 @@ Her er alle de innebygde verktøyene som er tilgjengelige i OpenCode.
 
 ### bash
 
-Utfør skallkommandoer i prosjektmiljøet ditt.
+Utfør shell-kommandoer i prosjektmiljøet ditt.
 
 ```json title="opencode.json" {4}
 {
@@ -58,7 +58,7 @@ Utfør skallkommandoer i prosjektmiljøet ditt.
 }
 ```
 
-Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen skallkommando.
+Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen shell-kommando.
 
 ---
 
@@ -168,9 +168,9 @@ Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for å filtr
 
 ---
 
-### lsp (eksperimentell)
+### lsp (experimental)
 
-Samhandle med dine konfigurerte LSP-servere for å få kodeintelligens-funksjoner som definisjoner, referanser, hover-informasjon og kallhierarki.
+Samhandle med dine konfigurerte LSP-servere for å få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
 
 :::note
 Dette verktøyet er bare tilgjengelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
@@ -204,7 +204,7 @@ Bruk patcher på filer.
 }
 ```
 
-Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påføre diffs og patcher fra forskjellige kilder.
+Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påføre diff og lapper fra forskjellige kilder.
 
 :::note
 `patch`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
@@ -291,7 +291,7 @@ Lar LLM hente og lese nettsider. Nyttig for å slå opp dokumentasjon eller fors
 Søk på nettet for informasjon.
 
 :::note
-Dette verktøyet er bare tilgjengelig når du bruker OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sann verdi (f.eks. `true` eller `1`).
+Dette verktøyet er bare tilgjengelig når du bruker OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
 
 Slik aktiverer du når du starter OpenCode:
 
@@ -362,7 +362,7 @@ MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjen
 
 ## Internaler
 
-Internt bruker verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) i bakgrunnen. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og oppføringer.
+Internt bruker verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og oppføringer.
 
 ---
 

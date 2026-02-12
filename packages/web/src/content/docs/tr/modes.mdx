@@ -17,13 +17,13 @@ Bir oturum sırasında modlar arasında geçiş yapabilir veya bunları yapılan
 
 ---
 
-## Yerleşik
+## Built-in
 
 opencode iki yerleşik modla birlikte gelir.
 
 ---
 
-### Build
+### İnşa etmek
 
 Derleme, tüm araçların etkin olduğu **varsayılan** moddur. Bu, dosya işlemlerine ve sistem komutlarına tam erişime ihtiyaç duyduğunuz geliştirme çalışmaları için standart moddur.
 
@@ -35,14 +35,14 @@ Planlama ve analiz için tasarlanmış sınırlı bir mod. Plan modunda aşağı
 
 - `write` - Yeni dosyalar oluşturulamıyor
 - `edit` - Planın kendisini detaylandırmak için `.opencode/plans/*.md` adresinde bulunan dosyalar dışında mevcut dosyalar değiştirilemez
-- `patch` - Yamalar uygulanamaz
+- `patch` - Cannot apply patches
 - `bash` - Kabuk komutları yürütülemiyor
 
 Bu mod, yapay zekanın kod tabanınızda herhangi bir gerçek değişiklik yapmadan kodu analiz etmesini, değişiklik önermesini veya plan oluşturmasını istediğinizde kullanışlıdır.
 
 ---
 
-## Geçiş
+## Anahtarlama
 
 Bir oturum sırasında _Tab_ tuşunu kullanarak modlar arasında geçiş yapabilirsiniz. Veya yapılandırılmış `switch_mode` tuş bağlantınız.
 
@@ -50,11 +50,11 @@ Ayrıca bkz.: Kod biçimlendirme yapılandırması hakkında bilgi için [Format
 
 ---
 
-## Yapılandırma
+## Yapılandır
 
 Yerleşik modları özelleştirebilir veya yapılandırma aracılığıyla kendinizinkini oluşturabilirsiniz. Modlar iki şekilde yapılandırılabilir:
 
-### JSON Yapılandırması
+### JSON Configuration
 
 `opencode.json` yapılandırma dosyanızdaki modları yapılandırın:
 
@@ -83,7 +83,7 @@ Yerleşik modları özelleştirebilir veya yapılandırma aracılığıyla kendi
 }
 ```
 
-### Markdown Yapılandırması
+### Markdown Configuration
 
 Markdown dosyalarını kullanarak modları da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
 
@@ -112,13 +112,13 @@ Provide constructive feedback without making direct changes.
 
 Markdown dosyası adı mod adı olur (örneğin, `review.md` bir `review` modu oluşturur).
 
-Bu yapılandırma seçeneklerine ayrıntılı olarak bakalım.
+Let's look at these configuration options in detail.
 
 ---
 
-### Model
+### Modeli
 
-Bu modun varsayılan modelini geçersiz kılmak için `model` ayarını kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
+Bu modun varsayılan standardı geçersiz için `model` kontrolünü kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
 
 ```json title="opencode.json"
 {
@@ -132,7 +132,7 @@ Bu modun varsayılan modelini geçersiz kılmak için `model` ayarını kullanı
 
 ---
 
-### Sıcaklık
+### Temperature
 
 `temperature` yapılandırmasıyla yapay zekanın yanıtlarının rastgeleliğini ve yaratıcılığını kontrol edin. Düşük değerler yanıtları daha odaklı ve belirleyici hale getirirken, yüksek değerler yaratıcılığı ve değişkenliği artırır.
 
@@ -177,9 +177,9 @@ Sıcaklık belirtilmezse, opencode modele özgü varsayılanları kullanır (ço
 
 ---
 
-### İstem
+### Çabuk
 
-`prompt` yapılandırmasıyla bu mod için özel bir sistem bilgi istemi dosyası belirtin. Bilgi istemi dosyası, modun amacına özel talimatlar içermelidir.
+`prompt` analiziyle bu mod için özel bir sistem bilgi istemi dosyası destekleniyor. Bilgi istemi şeması, modun amacına özel talimatlar içermelidir.
 
 ```json title="opencode.json"
 {
@@ -196,7 +196,7 @@ hem global opencode yapılandırması hem de projeye özel yapılandırma.
 
 ---
 
-### Araçlar
+### Tools
 
 `tools` yapılandırmasıyla bu modda hangi araçların kullanılabileceğini kontrol edin. Belirli araçları `true` veya `false` olarak ayarlayarak etkinleştirebilir veya devre dışı bırakabilirsiniz.
 
@@ -225,27 +225,27 @@ Hiçbir araç belirtilmezse tüm araçlar varsayılan olarak etkindir.
 
 İşte mod yapılandırması aracılığıyla kontrol edilebilecek tüm araçlar.
 
-| Araç        | Açıklama                       |
-| ----------- | ------------------------------ |
-| `bash`      | Kabuk komutlarını yürütün      |
-| `edit`      | Mevcut dosyaları değiştirin    |
-| `write`     | Yeni dosyalar oluştur          |
-| `read`      | Dosya içeriğini oku            |
-| `grep`      | Dosya içeriğini ara            |
-| `glob`      | Dosyaları desene göre bul      |
-| `list`      | Dizinin içeriğini listele      |
-| `patch`     | Dosyalara yama uygula          |
-| `todowrite` | Yapılacaklar listelerini yönet |
-| `todoread`  | Yapılacaklar listelerini oku   |
-| `webfetch`  | Web içeriğini getir            |
+| Alet        | Tanım                           |
+| ----------- | ------------------------------- |
+| `bash`      | Kabuk komutlarını yürütün       |
+| `edit`      | Mevcut dosyaları değiştirin     |
+| `write`     | Yeni dosyalar oluştur           |
+| `read`      | Dosya içeriğini oku             |
+| `grep`      | Dosya içeriğini arayın          |
+| `glob`      | Dosyaları desene göre bulun     |
+| `list`      | Dizinin içeriği listele         |
+| `patch`     | Dosyalara yama uygulama         |
+| `todowrite` | Yapılacaklar listelerini yönet  |
+| `todoread`  | Yapılacaklar listelerini okuyun |
+| `webfetch`  | Web içeriğini getir             |
 
 ---
 
-## Özel modlar
+## Custom modes
 
 Yapılandırmaya ekleyerek kendi özel modlarınızı oluşturabilirsiniz. Her iki yaklaşımın kullanıldığı örnekler aşağıda verilmiştir:
 
-### JSON yapılandırması kullanma
+### JSON yapılandırmasını kullanma
 
 ```json title="opencode.json" {4-14}
 {
@@ -266,7 +266,7 @@ Yapılandırmaya ekleyerek kendi özel modlarınızı oluşturabilirsiniz. Her i
 }
 ```
 
-### Markdown dosyaları kullanma
+### Markdown dosyalarını kullanma
 
 Projeye özel modlar için `.opencode/modes/` veya genel modlar için `~/.config/opencode/modes/`'de mod dosyaları oluşturun:
 
@@ -318,9 +318,9 @@ Priorities:
 
 ---
 
-### Kullanım Senaryoları
+### Kullanım durumları
 
-Farklı modlar için bazı yaygın kullanım senaryoları aşağıda verilmiştir.
+Farklı modlar için bazı yaygın kullanım durumları aşağıda verilmiştir.
 
 - **Derleme modu**: Tüm araçların etkinleştirildiği tam geliştirme çalışması
 - **Plan modu**: Değişiklik yapmadan analiz ve planlama

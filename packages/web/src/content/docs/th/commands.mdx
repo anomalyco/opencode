@@ -1,9 +1,9 @@
 ---
 title: คำสั่ง
-description: คำสั่งที่กำหนดเองสำหรับงานที่ทำซ้ำๆ
+description: คำสั่งสร้างคำสั่งอีกครั้งที่ซ้ำกัน
 ---
 
-คำสั่งช่วยให้คุณกำหนดชุดของพรอมต์ที่ใช้บ่อย เพื่อให้สามารถเรียกใช้งานได้อย่างรวดเร็วใน TUI
+คำสั่งดังกล่าวระบุพรอมต์จำเป็นต้องร้องขอเมื่อคำสั่งนั้นถูกดำเนินการใน TUI
 
 ```bash frame="none"
 /my-command
@@ -13,9 +13,9 @@ description: คำสั่งที่กำหนดเองสำหรั�
 
 ---
 
-## การสร้างคำสั่ง
+## สร้างไฟล์คำสั่ง
 
-สร้างไฟล์ Markdown ในไดเร็กทอรี `commands/` เพื่อกำหนดคำสั่งของคุณ
+สร้างไฟล์ Markdown ในไดเร็กทอรี `commands/` เพื่อกำหนดคำสั่งทำตาม
 
 สร้าง `.opencode/commands/test.md`:
 
@@ -30,9 +30,9 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Frontmatter กำหนดคุณสมบัติของคำสั่ง และเนื้อหาคือพรอมต์ที่จะส่งไปยัง LLM
+frontmatter กำหนดคุณสมบัติคำสั่งเนื้อหาโดยละเอียด
 
-ใช้คำสั่งโดยพิมพ์ `/` ตามด้วยชื่อไฟล์ (ไม่รวมนามสกุล) ใน TUI:
+ใช้คำสั่งโดยพิมพ์ `/` คำสั่งคำสั่ง
 
 ```bash frame="none"
 "/test"
@@ -40,15 +40,15 @@ Frontmatter กำหนดคุณสมบัติของคำสั่�
 
 ---
 
-## วิธีการกำหนด
+## เม็กซิโก
 
-คุณสามารถกำหนดคำสั่งได้สองวิธี: ผ่านการกำหนดค่า JSON หรือโดยการสร้างไฟล์ Markdown
+คำสั่งนี้จะผ่าน OpenCode หรือโดยการดำเนินการไฟล์ Markdown ในไดเร็กทอรี `commands/`
 
 ---
 
 ### JSON
 
-ใช้ส่วน `command` ในไฟล์ [config](/docs/config) ของ OpenCode:
+ใช้ส่วน `command` ใน OpenCode ของคุณ [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -77,10 +77,10 @@ Frontmatter กำหนดคุณสมบัติของคำสั่�
 
 ### Markdown
 
-หากต้องการกำหนดคำสั่งด้วยไฟล์ Markdown ให้วางไฟล์ไว้ใน:
+หากต้องการกำหนดคำสั่งของไฟล์ Markdown ได้คุณจะต้องดำเนินการใน:
 
-- ระดับผู้ใช้ (Global): `~/.config/opencode/commands/`
-- ระดับโปรเจ็กต์: `.opencode/commands/`
+- ทั่วโลก: `~/.config/opencode/commands/`
+- ต่อโครงการ: `.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -93,7 +93,8 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-ชื่อไฟล์ Markdown จะกลายเป็นชื่อคำสั่ง เช่น `test.md` ให้คุณเรียกใช้:
+ชื่อไฟล์ Markdown ในชื่อคำสั่งเช่น `test.md` ให้
+คุณวิ่ง:
 
 ```bash frame="none"
 /test
@@ -101,15 +102,15 @@ Focus on the failing tests and suggest fixes.
 
 ---
 
-## อาร์กิวเมนต์และการแทนที่
+## เรามีพร้อมท์
 
-คำสั่งรองรับอาร์กิวเมนต์ตามตำแหน่งและการแทนที่ค่าพิเศษหลายรายการ
+พร้อมรองรับคำสั่งรองรับตามตำแหน่งและพิเศษหลายรายการ
 
 ---
 
-### อาร์กิวเมนต์
+### บทความโทรทัศน์
 
-คุณสามารถส่งผ่านอาร์กิวเมนต์ไปยังคำสั่งของคุณได้โดยใช้ `$ARGUMENTS`
+ส่งผ่านข้อเขียนไปยังคำสั่งของวงดนตรี `$ARGUMENTS`
 
 ```md title=".opencode/commands/component.md"
 ---
@@ -126,16 +127,16 @@ Include proper typing and basic structure.
 /component Button
 ```
 
-และ `$ARGUMENTS` จะถูกแทนที่ด้วย `Button`
+และ `$ARGUMENTS` จะเป็นอย่างไร `Button`
 
-คุณยังสามารถเข้าถึงแต่ละอาร์กิวเมนต์แยกกันได้:
+เราสามารถเข้าถึงแต่ละจุดได้ตามความต้องการตามหลัก:
 
-- `$1` - อาร์กิวเมนต์แรก
-- `$2` - อาร์กิวเมนต์ที่สอง
-- `$3` - อาร์กิวเมนต์ที่สาม
-- และอื่นๆ...
+- `$1` - ​​​​อาร์กิวเมนต์แรก
+- `$2` - ​​​​อาร์กิวเมนต์ที่สอง
+- `$3` - ​​​​อาร์กิวเมนต์ที่สาม
+- นั่น...
 
-ตัวอย่าง:
+เช่น:
 
 ```md title=".opencode/commands/create-file.md"
 ---
@@ -152,19 +153,19 @@ with the following content: $3
 /create-file config.json src "{ \"key\": \"value\" }"
 ```
 
-ผลลัพธ์ที่ได้:
+คุณจะรู้สึกได้ถึงความสูง:
 
-- `$1` แทนด้วย `config.json`
-- `$2` แทนด้วย `src`
-- `$3` แทนด้วย `{ "key": "value" }`
+- `$1` กับ `config.json`
+- `$2` กับ `src`
+- `$3` กับ `{ "key": "value" }`
 
 ---
 
-### คำสั่ง Shell
+### ส่วนเชล
 
 ใช้ _!`command`_ เพื่อแทรกเอาต์พุตของ [คำสั่ง bash](/docs/tui#bash-commands) ใดๆ ลงในพรอมต์ของคุณ
 
-ตัวอย่างเช่น การรันชุดทดสอบและรวมผลลัพธ์:
+เพื่อเป็นคำสั่งสร้างความพยายามเพื่อวิเคราะห์การทดสอบของการทดสอบ:
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
@@ -177,7 +178,7 @@ Here are the current test results:
 Based on these results, suggest improvements to increase coverage.
 ```
 
-หรือตรวจสอบการเปลี่ยนแปลงล่าสุดใน git:
+หรือตรวจสอบการเปลี่ยนแปลงล่าสุด:
 
 ```md title=".opencode/commands/review-changes.md"
 ---
@@ -190,13 +191,13 @@ Recent git commits:
 Review these changes and suggest any improvements.
 ```
 
-คำสั่งจะถูกดำเนินการในไดเร็กทอรีรากของโปรเจ็กต์
+คำสั่งไดเร็กทอรีรากของโปรเจ็กต์การปฏิบัติตามคำสั่งพร้อมท์
 
 ---
 
-### การอ้างอิงไฟล์
+### อ้างถึงไฟล์
 
-คุณสามารถรวมเนื้อหาไฟล์ในคำสั่งของคุณโดยใช้ `@` นำหน้าชื่อไฟล์
+รวมไฟล์ในคำสั่งของคุณ `@` ในชื่อไฟล์
 
 ```md title=".opencode/commands/review-component.md"
 ---
@@ -207,19 +208,19 @@ Review the component in @src/components/Button.tsx.
 Check for performance issues and suggest improvements.
 ```
 
-เนื้อหาของไฟล์จะถูกอ่านและรวมเข้าไปในพรอมต์ที่ส่งไปยัง LLM
+เนื้อหาไฟล์จะถูกรวมไว้ด้วยการประกาศอย่างเป็นทางการ
 
 ---
 
 ## ตัวเลือก
 
-มาดูรายละเอียดของตัวเลือกการกำหนดค่าต่างๆ
+มาดูรายละเอียดเพิ่มเติมกัน
 
 ---
 
-### Template (เทมเพลต)
+### Template
 
-`template` กำหนดพรอมต์ที่จะถูกส่งไปยัง LLM เมื่อเรียกใช้คำสั่ง
+`template` กำหนดพรอมต์ที่จะเป็นไปได้ LLM จะดำเนินการคำสั่ง
 
 ```json title="opencode.json"
 {
@@ -231,11 +232,11 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-ฟิลด์นี้ **จำเป็น** สำหรับการกำหนดค่าแบบ JSON (ใน Markdown คือส่วนเนื้อหา)
+รายการไม่จำเป็น **จำเป็น**
 
 ---
 
-### Description (คำอธิบาย)
+### คำอธิบาย
 
 ใช้ตัวเลือก `description` เพื่อให้คำอธิบายโดยย่อเกี่ยวกับสิ่งที่คำสั่งทำ
 
@@ -249,13 +250,15 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-คำอธิบายนี้จะแสดงในรายการเติมคำอัตโนมัติของ TUI เมื่อคุณพิมพ์คำสั่ง
+คำอธิบายที่เป็นคำอธิบายใน TUI คุณต้องการเขียนคำสั่ง
 
 ---
 
-### Agent (เอเจนต์)
+### ตัวแทน
 
-ใช้ `agent` เพื่อระบุว่า [เอเจนต์](/docs/agents) ใดควรดำเนินการคำสั่งนี้
+ใช้ `agent` เพื่อระบุทางเลือกว่า [ตัวแทน](/docs/agents) ใดควรดำเนินการคำสั่งนี้
+นี่คือ [ตัวแทนย่อย](/docs/agents/#subagents) คำสั่งจะไม่จำเป็นต้องทำการย่อยตัวแทนย่อยตาม...
+เหตุผลที่ทำให้สิ่งนี้เป็นไปได้ `subtask` เป็น `false`
 
 ```json title="opencode.json"
 {
@@ -267,15 +270,15 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-นี่คือ **ทางเลือก** หากไม่ได้ระบุ จะใช้เอเจนต์ปัจจุบันของคุณ
+ขึ้นอยู่กับ ** ตัวเลือก** หากไม่ได้ระบุเหตุผลว่าเป็นเอเจนต์ปัจจุบันของคุณ
 
 ---
 
-### Subtask (งานย่อย)
+### งานย่อย
 
-ใช้ `subtask` (บูลีน) เพื่อระบุว่าคำสั่งควรทำงานเป็น [subagent](/docs/agents/#subagents) หรือไม่
-
-การตั้งค่านี้จะป้องกันไม่ให้คำสั่งรบกวนบริบทหลักของเซสชัน และจะ **บังคับ** ให้เอเจนต์ใช้โหมดที่เหมาะสม
+ใช้ `subtask` บูลีนเพื่อไม่จำเป็นต้องทำอะไรเลย [subagent](/docs/agents/#subagents)
+เพราะเหตุใดจะช่วยให้คำสั่งไม่ทำให้ระบบหลักของคุณเสียหาย และจะ **บังคับ** เอเจนต์ให้ความเห็นตัวแทนย่อย
+โปรดดู `mode` เพื่อดูการตั้งค่าเป็น `primary` ในคืนนี้ [agent](/docs/agents) แขก
 
 ```json title="opencode.json"
 {
@@ -291,9 +294,9 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Model (โมเดล)
+### Model
 
-ใช้ `model` เพื่อกำหนดโมเดลเฉพาะสำหรับคำสั่งนี้
+ใช้ `model` ไปจนถึงโมเดลเริ่มต้นสำหรับคำสั่งนี้
 
 ```json title="opencode.json"
 {
@@ -309,12 +312,12 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Built-ins (ในตัว)
+## บิวท์อิน
 
-OpenCode มีคำสั่งในตัวหลายคำสั่ง เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
+opencode มีคำสั่งในคำสั่งหลายเช่น `/init`, `/undo`, `/redo`, `/share`, `/help`; [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
 
 :::note
-คุณสามารถเขียนทับคำสั่งในตัวได้โดยกำหนดคำสั่งที่กำหนดเองด้วยชื่อเดียวกัน
+คำสั่งนี้สามารถดำเนินการได้ในขั้นตอนนี้
 :::
 
-อย่างไรก็ตาม เราไม่แนะนำให้ทำเช่นนั้น เว้นแต่คุณจะมีเหตุผลที่เฉพาะเจาะจง
+บันทึกคำสั่งด้วยชื่อเดียวกันคำสั่งย้ำคำสั่งใน
