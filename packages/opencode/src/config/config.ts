@@ -90,7 +90,10 @@ export namespace Config {
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
         result = mergeConfigConcatArrays(
           result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+          await load(JSON.stringify(remoteConfig), {
+            configDir: path.dirname(`${key}/.well-known/opencode`),
+            configPath: `${key}/.well-known/opencode`,
+          }),
         )
         log.debug("loaded remote config from well-known", { url: key })
       }
@@ -175,8 +178,8 @@ export namespace Config {
     }
 
     // Inline config content overrides all non-managed config sources.
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+    if (process.env.OPENCODE_CONFIG_CONTENT) {
+      result = mergeConfigConcatArrays(result, await load(process.env.OPENCODE_CONFIG_CONTENT, { configDir: Instance.directory }))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -1236,10 +1239,10 @@ export namespace Config {
         throw new JsonError({ path: filepath }, { cause: err })
       })
     if (!text) return {}
-    return load(text, filepath)
+    return load(text, { configDir: path.dirname(filepath), configPath: filepath })
   }
 
-  async function load(text: string, configFilepath: string) {
+  async function load(text: string, options: { configDir: string; configPath?: string }) {
     const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
@@ -1247,7 +1250,6 @@ export namespace Config {
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configFilepath)
       const lines = text.split("\n")
 
       for (const match of fileMatches) {
@@ -1259,7 +1261,7 @@ export namespace Config {
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.configDir, filePath)
         const fileContent = (
           await Bun.file(resolvedPath)
             .text()
@@ -1268,13 +1270,13 @@ export namespace Config {
               if (error.code === "ENOENT") {
                 throw new InvalidError(
                   {
-                    path: configFilepath,
+                    path: options.configPath ?? "<inline>",
                     message: errMsg + ` ${resolvedPath} does not exist`,
                   },
                   { cause: error },
                 )
               }
-              throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
+              throw new InvalidError({ path: options.configPath ?? "<inline>", message: errMsg }, { cause: error })
             })
         ).trim()
         // escape newlines/quotes, strip outer quotes
@@ -1301,25 +1303,25 @@ export namespace Config {
         .join("\n")
 
       throw new JsonError({
-        path: configFilepath,
+        path: options.configPath ?? "<inline>",
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
-      if (!parsed.data.$schema) {
+      if (!parsed.data.$schema && options.configPath) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(options.configPath, updated).catch(() => {})
       }
       const data = parsed.data
-      if (data.plugin) {
+      if (data.plugin && options.configPath) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
+            data.plugin[i] = import.meta.resolve!(plugin, options.configPath)
           } catch (err) {}
         }
       }
@@ -1327,7 +1329,7 @@ export namespace Config {
     }
 
     throw new InvalidError({
-      path: configFilepath,
+      path: options.configPath ?? "<inline>",
       issues: parsed.error.issues,
     })
   }
