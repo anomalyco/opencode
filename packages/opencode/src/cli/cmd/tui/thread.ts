@@ -9,6 +9,7 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -77,99 +78,111 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
-    if (args.fork && !args.continue && !args.session) {
-      UI.error("--fork requires --continue or --session")
-      process.exit(1)
-    }
-
-    // Resolve relative paths against PWD to preserve behavior when using --cwd flag
-    const baseCwd = process.env.PWD ?? process.cwd()
-    const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
-    const localWorker = new URL("./worker.ts", import.meta.url)
-    const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
-    const workerPath = await iife(async () => {
-      if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
-      if (await Bun.file(distWorker).exists()) return distWorker
-      return localWorker
-    })
+    // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
+    // (Important when running under `bun run` wrappers on Windows.)
+    const unguard = win32InstallCtrlCGuard()
     try {
-      process.chdir(cwd)
-    } catch (e) {
-      UI.error("Failed to change directory to " + cwd)
-      return
+      // Must be the very first thing — disables CTRL_C_EVENT before any Worker
+      // spawn or async work so the OS cannot kill the process group.
+      win32DisableProcessedInput()
+
+      if (args.fork && !args.continue && !args.session) {
+        UI.error("--fork requires --continue or --session")
+        process.exitCode = 1
+        return
+      }
+
+      // Resolve relative paths against PWD to preserve behavior when using --cwd flag
+      const baseCwd = process.env.PWD ?? process.cwd()
+      const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+      const localWorker = new URL("./worker.ts", import.meta.url)
+      const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
+      const workerPath = await iife(async () => {
+        if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
+        if (await Bun.file(distWorker).exists()) return distWorker
+        return localWorker
+      })
+      try {
+        process.chdir(cwd)
+      } catch (e) {
+        UI.error("Failed to change directory to " + cwd)
+        return
+      }
+
+      const worker = new Worker(workerPath, {
+        env: Object.fromEntries(
+          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        ),
+      })
+      worker.onerror = (e) => {
+        Log.Default.error(e)
+      }
+      const client = Rpc.client<typeof rpc>(worker)
+      process.on("uncaughtException", (e) => {
+        Log.Default.error(e)
+      })
+      process.on("unhandledRejection", (e) => {
+        Log.Default.error(e)
+      })
+      process.on("SIGUSR2", async () => {
+        await client.call("reload", undefined)
+      })
+
+      const prompt = await iife(async () => {
+        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+        if (!args.prompt) return piped
+        return piped ? piped + "\n" + args.prompt : args.prompt
+      })
+
+      // Check if server should be started (port or hostname explicitly set in CLI or config)
+      const networkOpts = await resolveNetworkOptions(args)
+      const shouldStartServer =
+        process.argv.includes("--port") ||
+        process.argv.includes("--hostname") ||
+        process.argv.includes("--mdns") ||
+        networkOpts.mdns ||
+        networkOpts.port !== 0 ||
+        networkOpts.hostname !== "127.0.0.1"
+
+      let url: string
+      let customFetch: typeof fetch | undefined
+      let events: EventSource | undefined
+
+      if (shouldStartServer) {
+        // Start HTTP server for external access
+        const server = await client.call("server", networkOpts)
+        url = server.url
+      } else {
+        // Use direct RPC communication (no HTTP)
+        url = "http://opencode.internal"
+        customFetch = createWorkerFetch(client)
+        events = createEventSource(client)
+      }
+
+      const tuiPromise = tui({
+        url,
+        fetch: customFetch,
+        events,
+        args: {
+          continue: args.continue,
+          sessionID: args.session,
+          agent: args.agent,
+          model: args.model,
+          prompt,
+          fork: args.fork,
+        },
+        onExit: async () => {
+          await client.call("shutdown", undefined)
+        },
+      })
+
+      setTimeout(() => {
+        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+      }, 1000)
+
+      await tuiPromise
+    } finally {
+      unguard?.()
     }
-
-    const worker = new Worker(workerPath, {
-      env: Object.fromEntries(
-        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-      ),
-    })
-    worker.onerror = (e) => {
-      Log.Default.error(e)
-    }
-    const client = Rpc.client<typeof rpc>(worker)
-    process.on("uncaughtException", (e) => {
-      Log.Default.error(e)
-    })
-    process.on("unhandledRejection", (e) => {
-      Log.Default.error(e)
-    })
-    process.on("SIGUSR2", async () => {
-      await client.call("reload", undefined)
-    })
-
-    const prompt = await iife(async () => {
-      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
-      if (!args.prompt) return piped
-      return piped ? piped + "\n" + args.prompt : args.prompt
-    })
-
-    // Check if server should be started (port or hostname explicitly set in CLI or config)
-    const networkOpts = await resolveNetworkOptions(args)
-    const shouldStartServer =
-      process.argv.includes("--port") ||
-      process.argv.includes("--hostname") ||
-      process.argv.includes("--mdns") ||
-      networkOpts.mdns ||
-      networkOpts.port !== 0 ||
-      networkOpts.hostname !== "127.0.0.1"
-
-    let url: string
-    let customFetch: typeof fetch | undefined
-    let events: EventSource | undefined
-
-    if (shouldStartServer) {
-      // Start HTTP server for external access
-      const server = await client.call("server", networkOpts)
-      url = server.url
-    } else {
-      // Use direct RPC communication (no HTTP)
-      url = "http://opencode.internal"
-      customFetch = createWorkerFetch(client)
-      events = createEventSource(client)
-    }
-
-    const tuiPromise = tui({
-      url,
-      fetch: customFetch,
-      events,
-      args: {
-        continue: args.continue,
-        sessionID: args.session,
-        agent: args.agent,
-        model: args.model,
-        prompt,
-        fork: args.fork,
-      },
-      onExit: async () => {
-        await client.call("shutdown", undefined)
-      },
-    })
-
-    setTimeout(() => {
-      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-    }, 1000)
-
-    await tuiPromise
   },
 })
