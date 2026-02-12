@@ -1,0 +1,5 @@
+https://github.com/scikit-learn/scikit-learn
+https://github.com/pallets/flask
+https://github.com/psf/requests
+https://github.com/huggingface/transformers
+https://github.com/pandas-dev/pandas

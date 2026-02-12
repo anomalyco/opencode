@@ -27,3 +27,5 @@ target
 opencode-dev
 logs/
 *.bun-build
+dataset/repos/
+dataset/kgs/
