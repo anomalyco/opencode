@@ -109,7 +109,8 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const totalMatches = matches.length
+    const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
     let currentFile = ""
     for (const match of finalMatches) {
@@ -127,7 +128,9 @@ export const GrepTool = Tool.define("grep", {
 
     if (truncated) {
       outputLines.push("")
-      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+      outputLines.push(
+        `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+      )
     }
 
     if (hasErrors) {
