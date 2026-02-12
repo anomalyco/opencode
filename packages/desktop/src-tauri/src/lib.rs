@@ -169,6 +169,7 @@ fn check_windows_app(app_name: &str) -> bool {
 
 #[cfg(target_os = "windows")]
 fn resolve_windows_app_path(app_name: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
     use std::path::{Path, PathBuf};
 
     fn expand_env(value: &str) -> String {
@@ -319,6 +320,7 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
 
         for key in keys {
             let Some(output) = Command::new("reg")
+                .creation_flags(0x08000000)
                 .args(["query", &key, "/ve"])
                 .output()
                 .ok()
@@ -419,7 +421,11 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
     };
 
     let resolve_where = |query: &str| -> Option<String> {
-        let output = Command::new("where").arg(query).output().ok()?;
+        let output = Command::new("where")
+            .creation_flags(0x08000000)
+            .arg(query)
+            .output()
+            .ok()?;
         if !output.status.success() {
             return None;
         }
