@@ -6,7 +6,7 @@ runs:
     - name: Mount Bun Cache
       uses: useblacksmith/stickydisk@v1
       with:
-        key: ${{ github.repository }}-bun-cache
+        key: ${{ github.repository }}-bun-cache-${{ runner.os }}
         path: ~/.bun
 
     - name: Setup Bun

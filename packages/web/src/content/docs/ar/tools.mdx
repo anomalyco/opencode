@@ -1,0 +1,379 @@
+---
+title: الأدوات
+description: إدارة الأدوات التي يمكن لـ LLM استخدامها.
+---
+
+تتيح الأدوات لـ LLM تنفيذ إجراءات داخل قاعدة الشفرة الخاصة بك. يأتي OpenCode مع مجموعة من الأدوات المدمجة، لكن يمكنك توسيعه عبر [أدوات مخصصة](/docs/custom-tools) أو [خوادم MCP](/docs/mcp-servers).
+
+افتراضيا، تكون جميع الأدوات **مفعلة** ولا تحتاج إلى إذن للتشغيل. يمكنك التحكم في سلوك الأدوات عبر [الأذونات](/docs/permissions).
+
+---
+
+## التهيئة
+
+استخدم الحقل `permission` للتحكم في سلوك الأدوات. يمكنك السماح أو الرفض أو طلب الموافقة لكل أداة.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+يمكنك أيضا استخدام أحرف البدل للتحكم في عدة أدوات دفعة واحدة. على سبيل المثال، لطلب الموافقة على جميع الأدوات القادمة من خادم MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[اعرف المزيد](/docs/permissions) حول تهيئة الأذونات.
+
+---
+
+## المدمجة
+
+فيما يلي جميع الأدوات المدمجة المتاحة في OpenCode.
+
+---
+
+### bash
+
+نفذ أوامر shell في بيئة مشروعك.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+تتيح هذه الأداة لـ LLM تشغيل أوامر terminal مثل `npm install` و`git status` أو أي أمر shell آخر.
+
+---
+
+### edit
+
+عدّل الملفات الموجودة باستخدام استبدال نصي مطابق تماما.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+تجري هذه الأداة تعديلات دقيقة على الملفات عبر استبدال مقاطع نصية متطابقة. وهي الطريقة الأساسية التي يعدّل بها LLM الشفرة.
+
+---
+
+### write
+
+أنشئ ملفات جديدة أو اكتب فوق الملفات الموجودة.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+استخدم هذا للسماح لـ LLM بإنشاء ملفات جديدة. سيكتب فوق الملفات الموجودة إذا كانت موجودة بالفعل.
+
+:::note
+تُدار أداة `write` عبر إذن `edit`، والذي يشمل جميع تعديلات الملفات (`edit` و`write` و`patch` و`multiedit`).
+:::
+
+---
+
+### read
+
+اقرأ محتويات الملفات من قاعدة الشفرة الخاصة بك.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+تقرأ هذه الأداة الملفات وتعيد محتوياتها. وتدعم قراءة نطاقات محددة من الأسطر للملفات الكبيرة.
+
+---
+
+### grep
+
+ابحث في محتوى الملفات باستخدام التعابير النمطية (Regex).
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+بحث سريع في المحتوى عبر قاعدة الشفرة الخاصة بك. يدعم صياغة Regex الكاملة وتصفية الملفات عبر أنماط المسارات.
+
+---
+
+### glob
+
+اعثر على الملفات عبر مطابقة الأنماط.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+ابحث عن الملفات باستخدام أنماط glob مثل `**/*.js` أو `src/**/*.ts`. يعيد مسارات الملفات المطابقة مرتبة حسب وقت التعديل.
+
+---
+
+### list
+
+اعرض قائمة بالملفات والمجلدات في مسار محدد.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+تعرض هذه الأداة محتويات المجلد. وتقبل أنماط glob لتصفية النتائج.
+
+---
+
+### lsp (experimental)
+
+تفاعل مع خوادم LSP التي قمت بتهيئتها للحصول على ميزات ذكاء الشفرة مثل التعاريف والمراجع ومعلومات التحويم وتسلسل الاستدعاءات.
+
+:::note
+هذه الأداة متاحة فقط عند ضبط `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (أو `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+تتضمن العمليات المدعومة: `goToDefinition` و`findReferences` و`hover` و`documentSymbol` و`workspaceSymbol` و`goToImplementation` و`prepareCallHierarchy` و`incomingCalls` و`outgoingCalls`.
+
+لتهيئة خوادم LSP المتاحة لمشروعك، راجع [خوادم LSP](/docs/lsp).
+
+---
+
+### patch
+
+طبّق الرقع (Patches) على الملفات.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+تطبق هذه الأداة ملفات الرقع على قاعدة الشفرة الخاصة بك. وهي مفيدة لتطبيق الفروقات (Diffs) والرقع من مصادر متعددة.
+
+:::note
+تُدار أداة `patch` عبر إذن `edit`، والذي يشمل جميع تعديلات الملفات (`edit` و`write` و`patch` و`multiedit`).
+:::
+
+---
+
+### skill
+
+حمّل [مهارة](/docs/skills) (ملف `SKILL.md`) وأعد محتواها ضمن المحادثة.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+أدِر قوائم المهام أثناء جلسات البرمجة.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+تنشئ هذه الأداة قوائم المهام وتحدّثها لتتبع التقدم أثناء العمليات المعقدة. يستخدمها LLM لتنظيم المهام متعددة الخطوات.
+
+:::note
+هذه الأداة معطلة للوكلاء الفرعيين افتراضيا، لكن يمكنك تفعيلها يدويا. [اعرف المزيد](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+اقرأ قوائم المهام الموجودة.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+تقرأ هذه الأداة الحالة الحالية لقائمة المهام. يستخدمها LLM لتتبع المهام المعلقة أو المكتملة.
+
+:::note
+هذه الأداة معطلة للوكلاء الفرعيين افتراضيا، لكن يمكنك تفعيلها يدويا. [اعرف المزيد](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+اجلب محتوى الويب.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+تتيح هذه الأداة لـ LLM جلب صفحات الويب وقراءتها. وهي مفيدة للبحث عن التوثيق أو لاستكشاف موارد عبر الإنترنت.
+
+---
+
+### websearch
+
+ابحث في الويب عن معلومات.
+
+:::note
+هذه الأداة متاحة فقط عند استخدام مزود OpenCode أو عند ضبط متغير البيئة `OPENCODE_ENABLE_EXA` على أي قيمة منطقية صحيحة (مثل `true` أو `1`).
+
+للتفعيل عند تشغيل OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+تجري عمليات بحث على الويب باستخدام Exa AI للعثور على معلومات ذات صلة عبر الإنترنت. وهي مفيدة للبحث في المواضيع، والعثور على أحداث جارية، أو جمع معلومات تتجاوز حد بيانات التدريب.
+
+لا يلزم مفتاح API - إذ تتصل الأداة مباشرة بخدمة MCP المستضافة لدى Exa AI دون مصادقة.
+
+:::tip
+استخدم `websearch` عندما تحتاج إلى العثور على معلومات (Discovery)، واستخدم `webfetch` عندما تحتاج إلى جلب محتوى من رابط محدد (Retrieval).
+:::
+
+---
+
+### question
+
+اطرح على المستخدم أسئلة أثناء التنفيذ.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+تتيح هذه الأداة لـ LLM طرح أسئلة على المستخدم أثناء المهمة. وهي مفيدة من أجل:
+
+- جمع تفضيلات المستخدم أو متطلباته
+- توضيح التعليمات غير الواضحة
+- الحصول على قرارات حول خيارات التنفيذ
+- تقديم خيارات حول الاتجاه الذي يجب اتباعه
+
+يتضمن كل سؤال عنوانا ونص السؤال وقائمة بالخيارات. يمكن للمستخدمين الاختيار من الخيارات المتاحة أو كتابة إجابة مخصصة. وعند وجود عدة أسئلة، يمكن للمستخدمين التنقل بينها قبل إرسال جميع الإجابات.
+
+---
+
+## أدوات مخصصة
+
+تتيح لك الأدوات المخصصة تعريف دوالك الخاصة التي يمكن لـ LLM استدعاؤها. تُعرّف هذه الأدوات في ملف التهيئة ويمكنها تنفيذ شفرة عشوائية.
+
+[اعرف المزيد](/docs/custom-tools) حول إنشاء أدوات مخصصة.
+
+---
+
+## خوادم MCP
+
+تتيح لك خوادم MCP (Model Context Protocol) دمج أدوات وخدمات خارجية. يشمل ذلك الوصول إلى قواعد البيانات وتكاملات API وخدمات الجهات الخارجية.
+
+[اعرف المزيد](/docs/mcp-servers) حول تهيئة خوادم MCP.
+
+---
+
+## التفاصيل الداخلية
+
+داخليا، تستخدم أدوات مثل `grep` و`glob` و`list` أداة [ripgrep](https://github.com/BurntSushi/ripgrep) في الخلفية. افتراضيا، يحترم ripgrep أنماط `.gitignore`، ما يعني أن الملفات والمجلدات المدرجة في `.gitignore` ستُستبعد من عمليات البحث وعرض القوائم.
+
+---
+
+### أنماط التجاهل
+
+لتضمين ملفات يتم تجاهلها عادة، أنشئ ملف `.ignore` في جذر المشروع. يمكن لهذا الملف السماح صراحة بمسارات محددة.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+على سبيل المثال، يسمح ملف `.ignore` هذا لـ ripgrep بالبحث داخل مجلدات `node_modules/` و`dist/` و`build/` حتى لو كانت مدرجة في `.gitignore`.

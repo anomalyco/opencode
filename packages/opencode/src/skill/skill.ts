@@ -11,6 +11,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
 import { Session } from "@/session"
+import { Discovery } from "./discovery"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -148,6 +149,22 @@ export namespace Skill {
         followSymlinks: true,
       })) {
         await addSkill(match)
+      }
+    }
+
+    // Download and load skills from URLs
+    for (const url of config.skills?.urls ?? []) {
+      const list = await Discovery.pull(url)
+      for (const dir of list) {
+        dirs.add(dir)
+        for await (const match of SKILL_GLOB.scan({
+          cwd: dir,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+        })) {
+          await addSkill(match)
+        }
       }
     }
 

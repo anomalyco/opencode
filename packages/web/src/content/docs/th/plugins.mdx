@@ -1,0 +1,385 @@
+---
+title: ปลั๊กอิน
+description: เขียนปลั๊กอินของคุณเองเพื่อขยาย OpenCode
+---
+
+ปลั๊กอินช่วยให้คุณสามารถขยาย OpenCode ได้โดยเชื่อมโยงกับเหตุการณ์ต่างๆ และปรับแต่งลักษณะการทำงาน คุณสามารถสร้างปลั๊กอินเพื่อเพิ่มคุณสมบัติใหม่ บูรณาการกับบริการภายนอก หรือแก้ไขการทำงานเริ่มต้นของ OpenCode
+
+ตัวอย่างเช่น ลองดู [ปลั๊กอิน](/docs/ecosystem#ปลั๊กอิน) ที่สร้างโดยชุมชน
+
+---
+
+## ใช้ปลั๊กอิน
+
+มีสองวิธีในการโหลดปลั๊กอิน
+
+---
+
+### จากไฟล์ในเครื่อง
+
+วางไฟล์ JavaScript หรือ TypeScript ในไดเร็กทอรีปลั๊กอิน
+
+- `.opencode/plugins/` - ​​ปลั๊กอินระดับโครงการ
+- `~/.config/opencode/plugins/` - ​​ปลั๊กอินทั่วโลก
+
+ไฟล์ในไดเร็กทอรีเหล่านี้จะถูกโหลดโดยอัตโนมัติเมื่อเริ่มต้นระบบ
+
+---
+
+### จาก npm
+
+ระบุแพ็คเกจ npm ในไฟล์ปรับแต่งของคุณ
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+รองรับแพ็คเกจ npm ทั้งแบบปกติและแบบกำหนดขอบเขต
+
+เรียกดูปลั๊กอินที่มีอยู่ใน [ระบบนิเวศ](/docs/ecosystem#plugins)
+
+---
+
+### วิธีการติดตั้งปลั๊กอิน
+
+**ปลั๊กอิน npm** ได้รับการติดตั้งโดยอัตโนมัติโดยใช้ Bun เมื่อเริ่มต้น แพ็คเกจและการขึ้นต่อกันถูกแคชไว้ใน `~/.cache/opencode/node_modules/`
+
+**ปลั๊กอินท้องถิ่น** โหลดโดยตรงจากไดเร็กทอรีปลั๊กอิน หากต้องการใช้แพ็คเกจภายนอก คุณต้องสร้าง `package.json` ภายในไดเร็กทอรีการกำหนดค่าของคุณ (ดู [การพึ่งพา](#dependencies)) หรือเผยแพร่ปลั๊กอินไปที่ npm และ [เพิ่มลงในการกำหนดค่าของคุณ](/docs/config#plugins)
+
+---
+
+### โหลดออเดอร์
+
+ปลั๊กอินถูกโหลดจากทุกแหล่งและ hooks ทั้งหมดทำงานตามลำดับ ลำดับการโหลดคือ:
+
+1. การกำหนดค่าส่วนกลาง (`~/.config/opencode/opencode.json`)
+2. การกำหนดค่าโครงการ (`opencode.json`)
+3. ไดเร็กทอรีปลั๊กอินสากล (`~/.config/opencode/plugins/`)
+4. ไดเรกทอรีปลั๊กอินโครงการ (`.opencode/plugins/`)
+
+แพ็กเกจ npm ที่ซ้ำกันซึ่งมีชื่อและเวอร์ชันเดียวกันจะถูกโหลดหนึ่งครั้ง อย่างไรก็ตาม ทั้งปลั๊กอินในเครื่องและปลั๊กอิน npm ที่มีชื่อคล้ายกันจะโหลดแยกกัน
+
+---
+
+## สร้างปลั๊กอิน
+
+ปลั๊กอินคือ **JavaScript/TypeScript module** ที่ส่งออกปลั๊กอินอย่างน้อยหนึ่งรายการ
+ฟังก์ชั่น แต่ละฟังก์ชันได้รับวัตถุบริบทและส่งกลับวัตถุ hooks
+
+---
+
+### การพึ่งพาอาศัยกัน
+
+ปลั๊กอินท้องถิ่นและเครื่องมือแบบกำหนดเองสามารถใช้แพ็คเกจ npm ภายนอกได้ เพิ่ม `package.json` ลงในไดเร็กทอรี config ของคุณด้วยการอ้างอิงที่คุณต้องการ
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode รัน `bun install` เมื่อเริ่มต้นเพื่อติดตั้งสิ่งเหล่านี้ ปลั๊กอินและเครื่องมือของคุณสามารถนำเข้าได้
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### โครงสร้างพื้นฐาน
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+ฟังก์ชั่นปลั๊กอินได้รับ:
+
+- `project`: ข้อมูลโครงการปัจจุบัน
+- `directory`: ไดเร็กทอรีการทำงานปัจจุบัน
+- `worktree`: เส้นทางเวิร์กทรีคอมไพล์
+- `client`: ไคลเอนต์ opencode SDK สำหรับการโต้ตอบกับ AI
+- `$`: [shell API](https://bun.com/docs/runtime/shell) ของ Bun สำหรับการดำเนินการคำสั่ง
+
+---
+
+### รองรับ TypeScript
+
+สำหรับปลั๊กอิน TypeScript คุณสามารถนำเข้าประเภทจากแพ็คเกจปลั๊กอินได้:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### กิจกรรม
+
+ปลั๊กอินสามารถสมัครรับกิจกรรมได้ดังที่แสดงด้านล่างในส่วนตัวอย่าง นี่คือรายการกิจกรรมต่างๆ ที่มี
+
+#### เหตุการณ์คำสั่ง
+
+- `command.executed`
+
+#### ไฟล์เหตุการณ์
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### เหตุการณ์การติดตั้ง
+
+- `installation.updated`
+
+#### LSP กิจกรรม
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### เหตุการณ์ข้อความ
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### เหตุการณ์การอนุญาต
+
+- `permission.asked`
+- `permission.replied`
+
+#### เหตุการณ์เซิร์ฟเวอร์
+
+- `server.connected`
+
+#### กิจกรรมเซสชั่น
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### เหตุการณ์ที่ต้องทำ
+
+- `todo.updated`
+
+#### กิจกรรมของ shell
+
+- `shell.env`
+
+#### เหตุการณ์เครื่องมือ
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUI กิจกรรม
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## ตัวอย่าง
+
+นี่คือตัวอย่างบางส่วนของปลั๊กอินที่คุณสามารถใช้เพื่อขยาย opencode
+
+---
+
+### ส่งการแจ้งเตือน
+
+ส่งการแจ้งเตือนเมื่อมีเหตุการณ์บางอย่างเกิดขึ้น:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+เรากำลังใช้ `osascript` เพื่อเรียกใช้ AppleScript บน macOS ที่นี่เราใช้มันเพื่อส่งการแจ้งเตือน
+
+:::note
+หากคุณใช้แอปเดสก์ท็อป OpenCode แอปสามารถส่งการแจ้งเตือนของระบบโดยอัตโนมัติเมื่อมีการตอบกลับพร้อมหรือเมื่อเซสชันเกิดข้อผิดพลาด
+:::
+
+---
+
+### การป้องกัน .env
+
+ป้องกันไม่ให้ opencode อ่านไฟล์ `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### ฉีดตัวแปรสภาพแวดล้อม
+
+แทรกตัวแปรสภาพแวดล้อมลงในการดำเนินการ shell ทั้งหมด (เครื่องมือ AI และ terminal ผู้ใช้):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### เครื่องมือที่กำหนดเอง
+
+ปลั๊กอินยังสามารถเพิ่มเครื่องมือที่กำหนดเองให้กับ opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+ตัวช่วย `tool` สร้างเครื่องมือแบบกำหนดเองที่สามารถเรียกใช้ opencode ได้ ใช้ฟังก์ชัน Zod schema และส่งกลับคำจำกัดความของเครื่องมือด้วย:
+
+- `description`: เครื่องมือนี้ทำอะไร
+- `args`: Zod schema สำหรับข้อโต้แย้งของเครื่องมือ
+- `execute`: ฟังก์ชั่นที่ทำงานเมื่อมีการเรียกใช้เครื่องมือ
+
+เครื่องมือที่คุณกำหนดเองจะพร้อมใช้งานสำหรับ opencode ควบคู่ไปกับเครื่องมือในตัว
+
+---
+
+### การบันทึก
+
+ใช้ `client.app.log()` แทน `console.log` สำหรับการบันทึกแบบมีโครงสร้าง:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+ระดับ: `debug`, `info`, `warn`, `error` ดู[SDKเอกสารประกอบ](https://opencode.ai/docs/sdk)สำหรับรายละเอียด
+
+---
+
+### Hooks สำหรับการกระชับข้อมูล
+
+ปรับแต่งบริบทที่รวมไว้เมื่อมีการกระชับเซสชัน:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+`experimental.session.compacting` hook เริ่มทำงานก่อนที่ LLM จะสร้างข้อมูลสรุปต่อเนื่อง ใช้เพื่อแทรกบริบทเฉพาะโดเมนที่พรอมต์การบีบอัดข้อมูลเริ่มต้นอาจพลาดไป
+
+คุณยังสามารถแทนที่พรอมต์การกระชับข้อมูลทั้งหมดได้โดยตั้งค่า `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+เมื่อตั้งค่า `output.prompt` มันจะแทนที่พร้อมท์การกระชับค่าเริ่มต้นโดยสมบูรณ์ อาร์เรย์ `output.context` จะถูกละเว้นในกรณีนี้

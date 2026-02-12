@@ -211,7 +211,12 @@ export namespace Provider {
 
       const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
+      const containerCreds = Boolean(
+        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+      )
+
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+        return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
@@ -457,6 +462,29 @@ export namespace Provider {
         },
       }
     },
+    "cloudflare-workers-ai": async (input) => {
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      if (!accountId) return { autoload: false }
+
+      const apiKey = await iife(async () => {
+        const envToken = Env.get("CLOUDFLARE_API_KEY")
+        if (envToken) return envToken
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })
+
+      return {
+        autoload: !!apiKey,
+        options: {
+          apiKey,
+          baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+        },
+        async getModel(sdk: any, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+      }
+    },
     "cloudflare-ai-gateway": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
@@ -601,7 +629,7 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: provider.api!,
+        url: model.provider?.api ?? provider.api!,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -753,7 +781,7 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -1148,8 +1176,32 @@ export namespace Provider {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
-        for (const model of Object.keys(provider.models)) {
-          if (model.includes(item)) return getModel(providerID, model)
+        if (providerID === "amazon-bedrock") {
+          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
+
+          // Model selection priority:
+          // 1. global. prefix (works everywhere)
+          // 2. User's region prefix (us., eu.)
+          // 3. Unprefixed model
+          const globalMatch = candidates.find((m) => m.startsWith("global."))
+          if (globalMatch) return getModel(providerID, globalMatch)
+
+          const region = provider.options?.region
+          if (region) {
+            const regionPrefix = region.split("-")[0]
+            if (regionPrefix === "us" || regionPrefix === "eu") {
+              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return getModel(providerID, regionalMatch)
+            }
+          }
+
+          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
+          if (unprefixed) return getModel(providerID, unprefixed)
+        } else {
+          for (const model of Object.keys(provider.models)) {
+            if (model.includes(item)) return getModel(providerID, model)
+          }
         }
       }
     }

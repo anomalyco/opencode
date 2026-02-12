@@ -38,7 +38,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     if (params.oldString === params.newString) {
-      throw new Error("oldString and newString must be different")
+      throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
@@ -617,7 +617,7 @@ export function trimDiff(diff: string): string {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
-    throw new Error("oldString and newString must be different")
+    throw new Error("No changes to apply: oldString and newString are identical.")
   }
 
   let notFound = true
@@ -647,9 +647,9 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
-    throw new Error("oldString not found in content")
+    throw new Error(
+      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+    )
   }
-  throw new Error(
-    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
-  )
+  throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
 }

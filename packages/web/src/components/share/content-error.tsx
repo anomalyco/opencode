@@ -1,6 +1,6 @@
 import style from "./content-error.module.css"
 import { type JSX, createSignal } from "solid-js"
-import { createOverflow } from "./common"
+import { createOverflow, useShareMessages } from "./common"
 
 interface Props extends JSX.HTMLAttributes<HTMLDivElement> {
   expand?: boolean
@@ -8,6 +8,7 @@ interface Props extends JSX.HTMLAttributes<HTMLDivElement> {
 export function ContentError(props: Props) {
   const [expanded, setExpanded] = createSignal(false)
   const overflow = createOverflow()
+  const messages = useShareMessages()
 
   return (
     <div class={style.root} data-expanded={expanded() || props.expand === true ? true : undefined}>
@@ -16,7 +17,7 @@ export function ContentError(props: Props) {
       </div>
       {((!props.expand && overflow.status) || expanded()) && (
         <button type="button" data-element-button-text onClick={() => setExpanded((e) => !e)}>
-          {expanded() ? "Show less" : "Show more"}
+          {expanded() ? messages.show_less : messages.show_more}
         </button>
       )}
     </div>
