@@ -560,9 +560,14 @@ async fn initialize(app: AppHandle) {
 
     tracing::info!("Main and loading windows created");
 
+    // SQLite migration handling:
+    // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it
+    // First, we spawn a task that listens for SqliteMigrationProgress events that can
+    // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
+    // Then in the loading task, we wait for sqlite migration to complete before
+    // starting our health check against the server, otherwise long migrations could result in a timeout.
     let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
-    let sqlite_done_rx = (sqlite_enabled && !sqlite_file_exists()).then(|| {
-        let (sqlite_done_tx, sqlite_done_rx) = oneshot::channel::<()>();
+    let sqlite_done = (sqlite_enabled && !sqlite_file_exists()).then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
@@ -584,12 +589,8 @@ async fn initialize(app: AppHandle) {
 
         let app = app.clone();
         tokio::spawn(done_rx.map(async move |_| {
-            let _ = sqlite_done_tx.send(());
-
             app.unlisten(id);
-        }));
-
-        sqlite_done_rx
+        }))
     });
 
     let loading_task = tokio::spawn({
@@ -657,7 +658,7 @@ async fn initialize(app: AppHandle) {
             tracing::info!("server connection started");
 
             if let Some(cli_health_check) = cli_health_check {
-                if let Some(sqlite_done_rx) = sqlite_done_rx {
+                if let Some(sqlite_done_rx) = sqlite_done {
                     let _ = sqlite_done_rx.await;
                 }
                 tokio::spawn(cli_health_check);
