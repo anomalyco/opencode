@@ -346,29 +346,66 @@ export function AssistantMessageDisplay(props: {
   parts: PartType[]
   showAssistantCopyPartID?: string
 }) {
-  const grouped = createMemo(() =>
-    props.parts.reduce<({ type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] })[]>((acc, part) => {
-      if (!isContextGroupTool(part)) {
-        acc.push({ type: "part", part })
-        return acc
+  const grouped = createMemo(() => {
+    const keys: string[] = []
+    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
+    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
+      keys.push(key)
+      items[key] = item
+    }
+
+    const parts = props.parts
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.id}:${last.id}`, {
+        type: "context",
+        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((part, index) => {
+      if (isContextGroupTool(part)) {
+        if (start < 0) start = index
+        return
       }
 
-      const last = acc[acc.length - 1]
-      if (last && last.type === "context") {
-        last.parts.push(part)
-        return acc
-      }
+      flush(index - 1)
+      push(`part:${part.id}`, { type: "part", part })
+    })
 
-      acc.push({ type: "context", parts: [part] })
-      return acc
-    }, []),
-  )
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
 
   return (
-    <For each={grouped()}>
-      {(item) => {
-        if (item.type === "context") return <ContextToolGroup parts={item.parts} />
-        return <Part part={item.part} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+    <For each={grouped().keys}>
+      {(key) => {
+        const item = createMemo(() => grouped().items[key])
+        return (
+          <Show when={item()}>
+            {(value) => {
+              const entry = value()
+              if (entry.type === "context") return <ContextToolGroup parts={entry.parts} />
+              return (
+                <Part
+                  part={entry.part}
+                  message={props.message}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                />
+              )
+            }}
+          </Show>
+        )
       }}
     </For>
   )
