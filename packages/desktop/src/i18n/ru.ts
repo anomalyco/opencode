@@ -11,11 +11,11 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Не удалось проверить обновления",
   "desktop.updater.checkFailed.message": "Не удалось проверить обновления",
   "desktop.updater.none.title": "Обновлений нет",
-  "desktop.updater.none.message": "Вы уже используете последнюю версию OpenCode",
+  "desktop.updater.none.message": "Вы уже используете последнюю версию OpenSec",
   "desktop.updater.downloadFailed.title": "Обновление не удалось",
   "desktop.updater.downloadFailed.message": "Не удалось скачать обновление",
   "desktop.updater.downloaded.title": "Обновление загружено",
-  "desktop.updater.downloaded.prompt": "Версия OpenCode {{version}} загружена. Хотите установить и перезапустить?",
+  "desktop.updater.downloaded.prompt": "Версия OpenSec {{version}} загружена. Хотите установить и перезапустить?",
   "desktop.updater.installFailed.title": "Обновление не удалось",
   "desktop.updater.installFailed.message": "Не удалось установить обновление",
 

@@ -1,15 +1,15 @@
 ---
 title: Config
-description: Using the OpenCode JSON config.
+description: Using the OpenSec JSON config.
 ---
 
-You can configure OpenCode using a JSON config file.
+You can configure OpenSec using a JSON config file.
 
 ---
 
 ## Format
 
-OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
+OpenSec supports both **JSON** and **JSONC** (JSON with Comments) formats.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -95,7 +95,7 @@ You can enable specific servers in your local config:
 
 ### Global
 
-Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use global config for user-wide preferences like themes, providers, or keybinds.
+Place your global OpenSec config in `~/.config/opencode/opencode.json`. Use global config for user-wide preferences like themes, providers, or keybinds.
 
 Global config overrides remote organizational defaults.
 
@@ -109,7 +109,7 @@ Add `opencode.json` in your project root. Project config has the highest precede
 Place project specific config in the root of your project.
 :::
 
-When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+When OpenSec starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
@@ -200,7 +200,7 @@ Available options:
 
 - `port` - Port to listen on.
 - `hostname` - Hostname to listen on. When `mdns` is enabled and no hostname is set, defaults to `0.0.0.0`.
-- `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenCode server.
+- `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenSec server.
 - `mdnsDomain` - Custom domain name for mDNS service. Defaults to `opencode.local`. Useful for running multiple instances on the same network.
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
 
@@ -228,7 +228,7 @@ You can manage the tools an LLM can use through the `tools` option.
 
 ### Models
 
-You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
+You can configure the providers and models you want to use in your OpenSec config through the `provider`, `model` and `small_model` options.
 
 ```json title="opencode.json"
 {
@@ -239,7 +239,7 @@ You can configure the providers and models you want to use in your OpenCode conf
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenSec tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 Provider options can include `timeout` and `setCacheKey`:
 
@@ -301,7 +301,7 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over pr
 
 ### Themes
 
-You can configure the theme you want to use in your OpenCode config through the `theme` option.
+You can configure the theme you want to use in your OpenSec config through the `theme` option.
 
 ```json title="opencode.json"
 {
@@ -351,7 +351,7 @@ You can set the default agent using the `default_agent` option. This determines 
 }
 ```
 
-The default agent must be a primary agent (not a subagent). This can be a built-in agent like `"build"` or `"plan"`, or a [custom agent](/docs/agents) you've defined. If the specified agent doesn't exist or is a subagent, OpenCode will fall back to `"build"` with a warning.
+The default agent must be a primary agent (not a subagent). This can be a built-in agent like `"build"` or `"plan"`, or a [custom agent](/docs/agents) you've defined. If the specified agent doesn't exist or is a subagent, OpenSec will fall back to `"build"` with a warning.
 
 This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop app, and GitHub Action.
 
@@ -421,7 +421,7 @@ You can customize your keybinds through the `keybinds` option.
 
 ### Autoupdate
 
-OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+OpenSec will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
 
 ```json title="opencode.json"
 {
@@ -534,7 +534,7 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 ### Plugins
 
-[Plugins](/docs/plugins) extend OpenCode with custom tools, hooks, and integrations.
+[Plugins](/docs/plugins) extend OpenSec with custom tools, hooks, and integrations.
 
 Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You can also load plugins from npm through the `plugin` option.
 
@@ -599,7 +599,7 @@ You can specify an allowlist of providers through the `enabled_providers` option
 }
 ```
 
-This is useful when you want to restrict OpenCode to only use specific providers rather than disabling them one by one.
+This is useful when you want to restrict OpenSec to only use specific providers rather than disabling them one by one.
 
 :::note
 The `disabled_providers` takes priority over `enabled_providers`.

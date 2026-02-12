@@ -18,6 +18,7 @@
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
+    "opensec": "./bin/opencode",
     "opencode": "./bin/opencode"
   },
   "randomField": "this-is-a-random-value-12345",

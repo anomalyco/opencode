@@ -814,7 +814,7 @@ export namespace ProviderTransform {
   export function error(providerID: string, error: APICallError) {
     let message = error.message
     if (providerID.includes("github-copilot") && error.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
+      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenSec."
     }
     if (providerID.includes("github-copilot") && message.includes("The requested model is not supported")) {
       return (

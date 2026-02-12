@@ -80,7 +80,7 @@ export namespace Server {
         .use((c, next) => {
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
-          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opensec"
           return basicAuth({ username, password })(c, next)
         })
         .use(async (c, next) => {
@@ -231,7 +231,7 @@ export namespace Server {
           "/instance/dispose",
           describeRoute({
             summary: "Dispose instance",
-            description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
+            description: "Clean up and dispose the current OpenSec instance, releasing all resources.",
             operationId: "instance.dispose",
             responses: {
               200: {
@@ -254,7 +254,7 @@ export namespace Server {
           describeRoute({
             summary: "Get paths",
             description:
-              "Retrieve the current working directory and related path information for the OpenCode instance.",
+              "Retrieve the current working directory and related path information for the OpenSec instance.",
             operationId: "path.get",
             responses: {
               200: {
@@ -318,7 +318,7 @@ export namespace Server {
           "/command",
           describeRoute({
             summary: "List commands",
-            description: "Get a list of all available commands in the OpenCode system.",
+            description: "Get a list of all available commands in the OpenSec system.",
             operationId: "command.list",
             responses: {
               200: {
@@ -392,7 +392,7 @@ export namespace Server {
           "/agent",
           describeRoute({
             summary: "List agents",
-            description: "Get a list of all available AI agents in the OpenCode system.",
+            description: "Get a list of all available AI agents in the OpenSec system.",
             operationId: "app.agents",
             responses: {
               200: {
@@ -414,7 +414,7 @@ export namespace Server {
           "/skill",
           describeRoute({
             summary: "List skills",
-            description: "Get a list of all available skills in the OpenCode system.",
+            description: "Get a list of all available skills in the OpenSec system.",
             operationId: "app.skills",
             responses: {
               200: {

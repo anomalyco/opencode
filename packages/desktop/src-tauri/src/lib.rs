@@ -327,7 +327,7 @@ async fn initialize(app: AppHandle) {
                             else {
                                 let _ = child.kill();
                                 return Err(format!(
-                                    "Failed to spawn OpenCode Server. Logs:\n{}",
+                                    "Failed to spawn OpenSec Server. Logs:\n{}",
                                     get_logs(app.clone()).await.unwrap()
                                 ));
                             };

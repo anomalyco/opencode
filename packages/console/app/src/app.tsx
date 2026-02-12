@@ -20,7 +20,7 @@ export default function App() {
           <I18nProvider>
             <MetaProvider>
               <Title>opencode</Title>
-              <Meta name="description" content="OpenCode - The open source coding agent." />
+              <Meta name="description" content="OpenSec - The open source coding agent." />
               <Favicon />
               <Font />
               <Suspense>{props.children}</Suspense>

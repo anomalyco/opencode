@@ -13,7 +13,7 @@ export const PtyRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "List PTY sessions",
-        description: "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
+        description: "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenSec.",
         operationId: "pty.list",
         responses: {
           200: {

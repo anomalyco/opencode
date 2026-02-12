@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Write your own plugins to extend OpenCode.
+description: Write your own plugins to extend OpenSec.
 ---
 
-Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
+Plugins allow you to extend OpenSec by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenSec's default behavior.
 
 For examples, check out the [plugins](/docs/ecosystem#plugins) created by the community.
 
@@ -83,7 +83,7 @@ Local plugins and custom tools can use external npm packages. Add a `package.jso
 }
 ```
 
-OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+OpenSec runs `bun install` at startup to install these. Your plugins and tools can then import them.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
 
 :::note
-If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
+If you’re using the OpenSec desktop app, it can send system notifications automatically when a response is ready or when a session errors.
 :::
 
 ---

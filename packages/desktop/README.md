@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# OpenSec Desktop
 
-Native OpenCode desktop app, built with Tauri v2.
+Native OpenSec desktop app, built with Tauri v2.
 
 ## Development
 

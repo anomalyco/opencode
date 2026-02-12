@@ -25,7 +25,7 @@ Always try to assign an issue, if in doubt, assign rekram1-node to it.
 
 Dax is responsible for managing core parts of the application, for large feature requests, api changes, or things that require significant changes to the codebase assign him.
 
-This relates to OpenCode server primarily but has overlap with just about anything
+This relates to OpenSec server primarily but has overlap with just about anything
 
 ### adamdotdevin
 
@@ -34,7 +34,7 @@ Adam is responsible for managing the Desktop/Web app. If there is an issue relat
 
 ### fwang
 
-Frank is responsible for managing Zen, if you see complaints about OpenCode Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
+Frank is responsible for managing Zen, if you see complaints about OpenSec Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
 
 ### jayair
 
@@ -42,7 +42,7 @@ Jay is responsible for documentation. If there is an issue relating to documenta
 
 ### kommander
 
-Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenCode's TUI is built with OpenTUI. If there are issues about:
+Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenSec's TUI is built with OpenTUI. If there are issues about:
 - random characters on screen
 - keybinds not working on different terminals
 - general terminal stuff
@@ -77,7 +77,7 @@ Anything related to `opencode web` command or the desktop app should have a desk
 
 ### zen
 
-Anything related to OpenCode Zen, billing, or model quality from Zen should have a zen label
+Anything related to OpenSec Zen, billing, or model quality from Zen should have a zen label
 
 ### docs
 

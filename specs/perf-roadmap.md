@@ -191,6 +191,6 @@ This roadmap ties together:
 
 ### Open questions
 
-- What are acceptable defaults for storage caps and cache sizes for typical OpenCode usage?
+- What are acceptable defaults for storage caps and cache sizes for typical OpenSec usage?
 - Does the SDK support `AbortSignal` end-to-end for cancellation, or do we rely on stale-result dropping?
 - Should web and desktop persistence semantics be aligned (even if desktop has async storage available)?

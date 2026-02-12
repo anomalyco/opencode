@@ -57,7 +57,7 @@ export function DialogStatus() {
           <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc</text>
         </box>
       </box>
-      <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
+      <text fg={theme.textMuted}>OpenSec v{Installation.VERSION}</text>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
@@ -88,7 +88,7 @@ export function DialogStatus() {
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (run: opencode mcp auth {key})
+                        Needs authentication (run: opensec mcp auth {key})
                       </Match>
                       <Match when={(item.status as string) === "needs_client_registration" && item}>
                         {(val) => (val() as { error: string }).error}

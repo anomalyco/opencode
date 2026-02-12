@@ -41,7 +41,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
+      - name: Install OpenSec
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai
 

@@ -31,7 +31,7 @@ export default defineConfig({
     configSchema(),
     solidJs(),
     starlight({
-      title: "OpenCode",
+      title: "OpenSec",
       favicon: "/favicon-v3.svg",
       head: [
         {

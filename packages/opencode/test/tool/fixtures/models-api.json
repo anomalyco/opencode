@@ -20978,7 +20978,7 @@
     "env": ["OPENCODE_API_KEY"],
     "npm": "@ai-sdk/openai-compatible",
     "api": "https://opencode.ai/zen/v1",
-    "name": "OpenCode Zen",
+    "name": "OpenSec Zen",
     "doc": "https://opencode.ai/docs/zen",
     "models": {
       "glm-4.7": {

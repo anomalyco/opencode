@@ -16,7 +16,7 @@ export async function createMenu(trigger: (id: string) => void) {
   const menu = await Menu.new({
     items: [
       await Submenu.new({
-        text: "OpenCode",
+        text: "OpenSec",
         items: [
           await PredefinedMenuItem.new({
             item: { About: null },
@@ -160,7 +160,7 @@ export async function createMenu(trigger: (id: string) => void) {
           // missing native macos search
           await MenuItem.new({
             action: () => openUrl("https://opencode.ai/docs"),
-            text: "OpenCode Documentation",
+            text: "OpenSec Documentation",
           }),
           await MenuItem.new({
             action: () => openUrl("https://discord.com/invite/opencode"),

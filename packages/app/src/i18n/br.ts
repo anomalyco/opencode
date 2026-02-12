@@ -103,7 +103,7 @@ export const dict = {
   "dialog.model.manage": "Gerenciar modelos",
   "dialog.model.manage.description": "Personalizar quais modelos aparecem no seletor de modelos.",
 
-  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos fornecidos pelo OpenCode",
+  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos fornecidos pelo OpenSec",
   "dialog.model.unpaid.addMore.title": "Adicionar mais modelos de provedores populares",
 
   "dialog.provider.viewAll": "Ver mais provedores",
@@ -116,12 +116,12 @@ export const dict = {
   "provider.connect.status.waiting": "Aguardando autorização...",
   "provider.connect.status.failed": "Autorização falhou: {{error}}",
   "provider.connect.apiKey.description":
-    "Digite sua chave de API do {{provider}} para conectar sua conta e usar modelos do {{provider}} no OpenCode.",
+    "Digite sua chave de API do {{provider}} para conectar sua conta e usar modelos do {{provider}} no OpenSec.",
   "provider.connect.apiKey.label": "Chave de API do {{provider}}",
   "provider.connect.apiKey.placeholder": "Chave de API",
   "provider.connect.apiKey.required": "A chave de API é obrigatória",
   "provider.connect.opencodeZen.line1":
-    "OpenCode Zen oferece acesso a um conjunto selecionado de modelos confiáveis otimizados para agentes de código.",
+    "OpenSec Zen oferece acesso a um conjunto selecionado de modelos confiáveis otimizados para agentes de código.",
   "provider.connect.opencodeZen.line2":
     "Com uma única chave de API você terá acesso a modelos como Claude, GPT, Gemini, GLM e mais.",
   "provider.connect.opencodeZen.visit.prefix": "Visite ",
@@ -130,7 +130,7 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Visite ",
   "provider.connect.oauth.code.visit.link": "este link",
   "provider.connect.oauth.code.visit.suffix":
-    " para obter seu código de autorização e conectar sua conta para usar modelos do {{provider}} no OpenCode.",
+    " para obter seu código de autorização e conectar sua conta para usar modelos do {{provider}} no OpenSec.",
   "provider.connect.oauth.code.label": "Código de autorização {{method}}",
   "provider.connect.oauth.code.placeholder": "Código de autorização",
   "provider.connect.oauth.code.required": "O código de autorização é obrigatório",
@@ -138,7 +138,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Visite ",
   "provider.connect.oauth.auto.visit.link": "este link",
   "provider.connect.oauth.auto.visit.suffix":
-    " e digite o código abaixo para conectar sua conta e usar modelos do {{provider}} no OpenCode.",
+    " e digite o código abaixo para conectar sua conta e usar modelos do {{provider}} no OpenSec.",
   "provider.connect.oauth.auto.confirmationCode": "Código de confirmação",
   "provider.connect.toast.connected.title": "{{provider}} conectado",
   "provider.connect.toast.connected.description": "Modelos do {{provider}} agora estão disponíveis para uso.",
@@ -250,7 +250,7 @@ export const dict = {
   "dialog.directory.empty": "Nenhuma pasta encontrada",
 
   "dialog.server.title": "Servidores",
-  "dialog.server.description": "Trocar para qual servidor OpenCode este aplicativo se conecta.",
+  "dialog.server.description": "Trocar para qual servidor OpenSec este aplicativo se conecta.",
   "dialog.server.search.placeholder": "Buscar servidores",
   "dialog.server.empty": "Nenhum servidor ainda",
   "dialog.server.add.title": "Adicionar um servidor",
@@ -358,7 +358,7 @@ export const dict = {
   "toast.session.listFailed.title": "Falha ao carregar sessões para {{project}}",
 
   "toast.update.title": "Atualização disponível",
-  "toast.update.description": "Uma nova versão do OpenCode ({{version}}) está disponível para instalação.",
+  "toast.update.description": "Uma nova versão do OpenSec ({{version}}) está disponível para instalação.",
   "toast.update.action.installRestart": "Instalar e reiniciar",
   "toast.update.action.notYet": "Agora não",
 
@@ -369,7 +369,7 @@ export const dict = {
   "error.page.action.checking": "Verificando...",
   "error.page.action.checkUpdates": "Verificar atualizações",
   "error.page.action.updateTo": "Atualizar para {{version}}",
-  "error.page.report.prefix": "Por favor, reporte este erro para a equipe do OpenCode",
+  "error.page.report.prefix": "Por favor, reporte este erro para a equipe do OpenSec",
   "error.page.report.discord": "no Discord",
   "error.page.version": "Versão: {{version}}",
 
@@ -387,7 +387,7 @@ export const dict = {
   "error.chain.didYouMean": "Você quis dizer: {{suggestions}}",
   "error.chain.modelNotFound": "Modelo não encontrado: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Verifique os nomes de provedor/modelo na sua configuração (opencode.json)",
-  "error.chain.mcpFailed": 'Servidor MCP "{{name}}" falhou. Nota: OpenCode ainda não suporta autenticação MCP.',
+  "error.chain.mcpFailed": 'Servidor MCP "{{name}}" falhou. Nota: OpenSec ainda não suporta autenticação MCP.',
   "error.chain.providerAuthFailed": "Autenticação do provedor falhou ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Falha ao inicializar provedor "{{provider}}". Verifique credenciais e configuração.',
@@ -498,12 +498,12 @@ export const dict = {
   "sidebar.workspaces.enable": "Habilitar espaços de trabalho",
   "sidebar.workspaces.disable": "Desabilitar espaços de trabalho",
   "sidebar.gettingStarted.title": "Começando",
-  "sidebar.gettingStarted.line1": "OpenCode inclui modelos gratuitos para você começar imediatamente.",
+  "sidebar.gettingStarted.line1": "OpenSec inclui modelos gratuitos para você começar imediatamente.",
   "sidebar.gettingStarted.line2": "Conecte qualquer provedor para usar modelos, incluindo Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Sessões recentes",
   "sidebar.project.viewAllSessions": "Ver todas as sessões",
 
-  "app.name.desktop": "OpenCode Desktop",
+  "app.name.desktop": "OpenSec Desktop",
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Servidor",
   "settings.tab.general": "Geral",
@@ -515,11 +515,11 @@ export const dict = {
   "settings.general.section.sounds": "Efeitos sonoros",
 
   "settings.general.row.language.title": "Idioma",
-  "settings.general.row.language.description": "Alterar o idioma de exibição do OpenCode",
+  "settings.general.row.language.description": "Alterar o idioma de exibição do OpenSec",
   "settings.general.row.appearance.title": "Aparência",
-  "settings.general.row.appearance.description": "Personalize como o OpenCode aparece no seu dispositivo",
+  "settings.general.row.appearance.description": "Personalize como o OpenSec aparece no seu dispositivo",
   "settings.general.row.theme.title": "Tema",
-  "settings.general.row.theme.description": "Personalize como o OpenCode é tematizado.",
+  "settings.general.row.theme.description": "Personalize como o OpenSec é tematizado.",
   "settings.general.row.font.title": "Fonte",
   "settings.general.row.font.description": "Personalize a fonte monoespaçada usada em blocos de código",
 
@@ -527,13 +527,13 @@ export const dict = {
   "settings.general.row.releaseNotes.description": 'Mostrar pop-ups de "Novidades" após atualizações',
 
   "settings.updates.row.startup.title": "Verificar atualizações ao iniciar",
-  "settings.updates.row.startup.description": "Verificar atualizações automaticamente quando o OpenCode iniciar",
+  "settings.updates.row.startup.description": "Verificar atualizações automaticamente quando o OpenSec iniciar",
   "settings.updates.row.check.title": "Verificar atualizações",
   "settings.updates.row.check.description": "Verificar atualizações manualmente e instalar se houver",
   "settings.updates.action.checkNow": "Verificar agora",
   "settings.updates.action.checking": "Verificando...",
   "settings.updates.toast.latest.title": "Você está atualizado",
-  "settings.updates.toast.latest.description": "Você está usando a versão mais recente do OpenCode.",
+  "settings.updates.toast.latest.description": "Você está usando a versão mais recente do OpenSec.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

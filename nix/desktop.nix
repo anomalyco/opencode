@@ -86,12 +86,12 @@ rustPlatform.buildRustPackage (finalAttrs: {
   # should be removed once binary is renamed or decided otherwise
   # darwin output is a .app bundle so no conflict
   postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
-    mv $out/bin/OpenCode $out/bin/opencode-desktop
-    sed -i 's|^Exec=OpenCode$|Exec=opencode-desktop|' $out/share/applications/OpenCode.desktop
+    mv $out/bin/OpenSec $out/bin/opencode-desktop
+    sed -i 's|^Exec=OpenSec$|Exec=opencode-desktop|' $out/share/applications/OpenSec.desktop
   '';
 
   meta = {
-    description = "OpenCode Desktop App";
+    description = "OpenSec Desktop App";
     homepage = "https://opencode.ai";
     license = lib.licenses.mit;
     mainProgram = "opencode-desktop";

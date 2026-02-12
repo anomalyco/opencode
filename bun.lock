@@ -261,6 +261,7 @@
       "name": "opencode",
       "version": "1.1.53",
       "bin": {
+        "opensec": "./bin/opencode",
         "opencode": "./bin/opencode",
       },
       "dependencies": {

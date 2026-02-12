@@ -59,7 +59,7 @@ export const dict = {
   "common.faq": "FAQ",
   "common.learnMore": "Mas informacion",
 
-  "home.title": "OpenCode | El agente de codificacion con IA de codigo abierto",
+  "home.title": "OpenSec | El agente de codificacion con IA de codigo abierto",
 
   "home.banner.badge": "Nuevo",
   "home.banner.text": "App de escritorio disponible en beta",
@@ -73,9 +73,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Opciones de instalacion",
 
-  "home.what.title": "Que es OpenCode?",
+  "home.what.title": "Que es OpenSec?",
   "home.what.body":
-    "OpenCode es un agente de codigo abierto que te ayuda a escribir codigo en tu terminal, IDE o escritorio.",
+    "OpenSec es un agente de codigo abierto que te ayuda a escribir codigo en tu terminal, IDE o escritorio.",
   "home.what.lsp.title": "LSP habilitado",
   "home.what.lsp.body": "Carga automaticamente los LSP correctos para el LLM",
   "home.what.multiSession.title": "Multi-sesion",
@@ -94,43 +94,43 @@ export const dict = {
 
   "home.growth.title": "El agente de codificacion con IA de codigo abierto",
   "home.growth.body":
-    "Con mas de <strong>{{stars}}</strong> estrellas en GitHub, <strong>{{contributors}}</strong> colaboradores y mas de <strong>{{commits}}</strong> commits, OpenCode es usado y confiado por mas de <strong>{{monthlyUsers}}</strong> desarrolladores cada mes.",
+    "Con mas de <strong>{{stars}}</strong> estrellas en GitHub, <strong>{{contributors}}</strong> colaboradores y mas de <strong>{{commits}}</strong> commits, OpenSec es usado y confiado por mas de <strong>{{monthlyUsers}}</strong> desarrolladores cada mes.",
   "home.growth.githubStars": "Estrellas de GitHub",
   "home.growth.contributors": "Colaboradores",
   "home.growth.monthlyDevs": "Devs mensuales",
 
   "home.privacy.title": "Creado para la privacidad primero",
   "home.privacy.body":
-    "OpenCode no almacena tu codigo ni datos de contexto, para poder operar en entornos sensibles a la privacidad.",
+    "OpenSec no almacena tu codigo ni datos de contexto, para poder operar en entornos sensibles a la privacidad.",
   "home.privacy.learnMore": "Mas informacion sobre",
   "home.privacy.link": "privacidad",
 
-  "home.faq.q1": "Que es OpenCode?",
+  "home.faq.q1": "Que es OpenSec?",
   "home.faq.a1":
-    "OpenCode es un agente de codigo abierto que te ayuda a escribir y ejecutar codigo con cualquier modelo de IA. Esta disponible como interfaz de terminal, app de escritorio o extension de IDE.",
-  "home.faq.q2": "Como uso OpenCode?",
+    "OpenSec es un agente de codigo abierto que te ayuda a escribir y ejecutar codigo con cualquier modelo de IA. Esta disponible como interfaz de terminal, app de escritorio o extension de IDE.",
+  "home.faq.q2": "Como uso OpenSec?",
   "home.faq.a2.before": "La forma mas facil de empezar es leer la",
   "home.faq.a2.link": "introduccion",
-  "home.faq.q3": "Necesito suscripciones extra de IA para usar OpenCode?",
+  "home.faq.q3": "Necesito suscripciones extra de IA para usar OpenSec?",
   "home.faq.a3.p1":
-    "No necesariamente: OpenCode incluye un conjunto de modelos gratis que puedes usar sin crear una cuenta.",
+    "No necesariamente: OpenSec incluye un conjunto de modelos gratis que puedes usar sin crear una cuenta.",
   "home.faq.a3.p2.beforeZen": "Ademas, puedes usar modelos populares para codigo creando una cuenta de",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Aunque alentamos a los usuarios a usar Zen, OpenCode tambien funciona con los proveedores populares como OpenAI, Anthropic, xAI, etc.",
+    "Aunque alentamos a los usuarios a usar Zen, OpenSec tambien funciona con los proveedores populares como OpenAI, Anthropic, xAI, etc.",
   "home.faq.a3.p4.beforeLocal": "Incluso puedes conectar tus",
   "home.faq.a3.p4.localLink": "modelos locales",
-  "home.faq.q4": "Puedo usar mis suscripciones de IA existentes con OpenCode?",
+  "home.faq.q4": "Puedo usar mis suscripciones de IA existentes con OpenSec?",
   "home.faq.a4.p1":
-    "Si, OpenCode admite planes de suscripcion de los principales proveedores. Puedes usar Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
-  "home.faq.q5": "Solo puedo usar OpenCode en la terminal?",
-  "home.faq.a5.beforeDesktop": "Ya no! OpenCode ahora esta disponible como una app para",
+    "Si, OpenSec admite planes de suscripcion de los principales proveedores. Puedes usar Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
+  "home.faq.q5": "Solo puedo usar OpenSec en la terminal?",
+  "home.faq.a5.beforeDesktop": "Ya no! OpenSec ahora esta disponible como una app para",
   "home.faq.a5.desktop": "escritorio",
   "home.faq.a5.and": "y",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "Cuanto cuesta OpenCode?",
+  "home.faq.q6": "Cuanto cuesta OpenSec?",
   "home.faq.a6":
-    "OpenCode es 100% gratis. Tambien incluye modelos gratuitos. Puede haber costos adicionales si conectas otro proveedor.",
+    "OpenSec es 100% gratis. Tambien incluye modelos gratuitos. Puede haber costos adicionales si conectas otro proveedor.",
   "home.faq.q7": "Y sobre datos y privacidad?",
   "home.faq.a7.p1":
     "Tus datos e informacion solo se almacenan cuando usas nuestros modelos gratis o creas enlaces compartibles.",
@@ -138,8 +138,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "nuestros modelos",
   "home.faq.a7.p2.and": "y",
   "home.faq.a7.p2.shareLink": "paginas para compartir",
-  "home.faq.q8": "OpenCode es de codigo abierto?",
-  "home.faq.a8.p1": "Si, OpenCode es totalmente open source. El codigo fuente es publico en",
+  "home.faq.q8": "OpenSec es de codigo abierto?",
+  "home.faq.a8.p1": "Si, OpenSec es totalmente open source. El codigo fuente es publico en",
   "home.faq.a8.p2": "bajo la",
   "home.faq.a8.mitLicense": "Licencia MIT",
   "home.faq.a8.p3":
@@ -147,25 +147,25 @@ export const dict = {
 
   "home.zenCta.title": "Accede a modelos confiables y optimizados para agentes de codigo",
   "home.zenCta.body":
-    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y benchmarkeado especificamente para agentes de codigo. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores: usa modelos validados que funcionan.",
+    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenSec ha probado y benchmarkeado especificamente para agentes de codigo. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores: usa modelos validados que funcionan.",
   "home.zenCta.link": "Aprende sobre Zen",
 
-  "download.title": "OpenCode | Descargar",
+  "download.title": "OpenSec | Descargar",
 
-  "zen.title": "OpenCode Zen | Un conjunto seleccionado de modelos confiables y optimizados para agentes de codigo",
+  "zen.title": "OpenSec Zen | Un conjunto seleccionado de modelos confiables y optimizados para agentes de codigo",
   "zen.hero.title": "Accede a modelos confiables y optimizados para agentes de codigo",
   "zen.hero.body":
-    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y benchmarkeado especificamente para agentes de codigo. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores: usa modelos validados que funcionan.",
+    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenSec ha probado y benchmarkeado especificamente para agentes de codigo. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores: usa modelos validados que funcionan.",
 
-  "zen.faq.q1": "Que es OpenCode Zen?",
+  "zen.faq.q1": "Que es OpenSec Zen?",
   "zen.faq.a1":
-    "Zen es un conjunto seleccionado de modelos de IA probados y benchmarkeados para agentes de codigo, creado por el equipo detras de OpenCode.",
+    "Zen es un conjunto seleccionado de modelos de IA probados y benchmarkeados para agentes de codigo, creado por el equipo detras de OpenSec.",
   "zen.faq.q2": "Que hace a Zen mas preciso?",
   "zen.faq.a2":
     "Zen solo ofrece modelos que han sido probados y benchmarkeados especificamente para agentes de codigo. No usarias un cuchillo de mantequilla para cortar un filete; no uses malos modelos para programar.",
   "zen.faq.q3": "Zen es mas barato?",
   "zen.faq.a3":
-    "Zen no tiene fines de lucro. Zen traslada los costos de los proveedores de modelos directamente a ti. Cuanto mas uso tenga Zen, mas puede OpenCode negociar mejores tarifas y trasladartelas.",
+    "Zen no tiene fines de lucro. Zen traslada los costos de los proveedores de modelos directamente a ti. Cuanto mas uso tenga Zen, mas puede OpenSec negociar mejores tarifas y trasladartelas.",
   "zen.faq.q4": "Cuanto cuesta Zen?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "cobra por solicitud",
@@ -173,7 +173,7 @@ export const dict = {
   "zen.faq.a4.p2.beforeAccount": "Tu costo total depende del uso, y puedes establecer limites de gasto mensuales en tu",
   "zen.faq.a4.p2.accountLink": "cuenta",
   "zen.faq.a4.p3":
-    "Para cubrir costos, OpenCode solo agrega una pequena tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
+    "Para cubrir costos, OpenSec solo agrega una pequena tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
   "zen.faq.q5": "Y sobre datos y privacidad?",
   "zen.faq.a5.beforeExceptions":
     "Todos los modelos de Zen estan alojados en EE. UU. Los proveedores siguen una politica de cero retencion y no usan tus datos para entrenar modelos, con las",
@@ -184,7 +184,7 @@ export const dict = {
   "zen.faq.a7": "Si, puedes desactivar la facturacion en cualquier momento y usar tu saldo restante.",
   "zen.faq.q8": "Puedo usar Zen con otros agentes de codigo?",
   "zen.faq.a8":
-    "Aunque Zen funciona muy bien con OpenCode, puedes usar Zen con cualquier agente. Sigue las instrucciones de configuracion en tu agente preferido.",
+    "Aunque Zen funciona muy bien con OpenSec, puedes usar Zen con cualquier agente. Sigue las instrucciones de configuracion en tu agente preferido.",
   "zen.cta.start": "Comience con Zen",
   "zen.pricing.title": "Agregue $20 de saldo de pago por uso",
   "zen.pricing.fee": "(+$1.23 tarifa de procesamiento de tarjeta)",
@@ -192,12 +192,12 @@ export const dict = {
   "zen.problem.title": "¿Qué problema está resolviendo Zen?",
   "zen.problem.body":
     "Hay muchos modelos disponibles, pero sólo unos pocos funcionan bien con agentes codificadores. La mayoría de los proveedores los configuran de manera diferente con resultados variables.",
-  "zen.problem.subtitle": "Estamos solucionando este problema para todos, no solo para los usuarios de OpenCode.",
+  "zen.problem.subtitle": "Estamos solucionando este problema para todos, no solo para los usuarios de OpenSec.",
   "zen.problem.item1": "Probar modelos seleccionados y consultar a sus equipos.",
   "zen.problem.item2": "Trabajar con proveedores para garantizar que se entreguen correctamente.",
   "zen.problem.item3": "Comparación de todas las combinaciones de modelo y proveedor que recomendamos",
   "zen.how.title": "Cómo funciona Zen",
-  "zen.how.body": "Si bien le sugerimos que utilice Zen con OpenCode, puede utilizar Zen con cualquier agente.",
+  "zen.how.body": "Si bien le sugerimos que utilice Zen con OpenSec, puede utilizar Zen con cualquier agente.",
   "zen.how.step1.title": "Regístrese y agregue un saldo de $20",
   "zen.how.step1.beforeLink": "sigue el",
   "zen.how.step1.link": "instrucciones de configuración",
@@ -210,14 +210,14 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Todos los modelos Zen están alojados en EE. UU. Los proveedores siguen una política de retención cero y no utilizan sus datos para la capacitación de modelos, con la",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
-  "download.meta.description": "Descarga OpenCode para macOS, Windows y Linux",
-  "download.hero.title": "Descargar OpenCode",
+  "download.meta.description": "Descarga OpenSec para macOS, Windows y Linux",
+  "download.hero.title": "Descargar OpenSec",
   "download.hero.subtitle": "Disponible en Beta para macOS, Windows y Linux",
   "download.hero.button": "Descargar para {{os}}",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
-  "download.section.extensions": "Extensiones de OpenCode",
-  "download.section.integrations": "Integraciones de OpenCode",
+  "download.section.terminal": "OpenSec Terminal",
+  "download.section.desktop": "OpenSec Desktop (Beta)",
+  "download.section.extensions": "Extensiones de OpenSec",
+  "download.section.integrations": "Integraciones de OpenSec",
   "download.action.download": "Descargar",
   "download.action.install": "Instalar",
 
@@ -228,26 +228,26 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "No necesariamente, pero probablemente. Necesitaras una suscripcion de IA si quieres conectar OpenCode a un proveedor de pago, aunque puedes trabajar con",
+    "No necesariamente, pero probablemente. Necesitaras una suscripcion de IA si quieres conectar OpenSec a un proveedor de pago, aunque puedes trabajar con",
   "download.faq.a3.localLink": "modelos locales",
   "download.faq.a3.afterLocal.beforeZen": "gratis. Aunque animamos a los usuarios a usar",
   "download.faq.a3.afterZen":
-    ", OpenCode funciona con todos los proveedores populares como OpenAI, Anthropic, xAI, etc.",
+    ", OpenSec funciona con todos los proveedores populares como OpenAI, Anthropic, xAI, etc.",
 
-  "download.faq.a5.p1": "OpenCode es 100% gratis.",
+  "download.faq.a5.p1": "OpenSec es 100% gratis.",
   "download.faq.a5.p2.beforeZen":
-    "Cualquier costo adicional vendra de tu suscripcion a un proveedor de modelos. Aunque OpenCode funciona con cualquier proveedor de modelos, recomendamos usar",
+    "Cualquier costo adicional vendra de tu suscripcion a un proveedor de modelos. Aunque OpenSec funciona con cualquier proveedor de modelos, recomendamos usar",
   "download.faq.a5.p2.afterZen": ".",
 
-  "download.faq.a6.p1": "Tus datos e informacion solo se almacenan cuando creas enlaces compartibles en OpenCode.",
+  "download.faq.a6.p1": "Tus datos e informacion solo se almacenan cuando creas enlaces compartibles en OpenSec.",
   "download.faq.a6.p2.beforeShare": "Mas informacion sobre",
   "download.faq.a6.shareLink": "paginas para compartir",
 
-  "enterprise.title": "OpenCode | Soluciones empresariales para tu organizacion",
-  "enterprise.meta.description": "Contacta a OpenCode para soluciones empresariales",
+  "enterprise.title": "OpenSec | Soluciones empresariales para tu organizacion",
+  "enterprise.meta.description": "Contacta a OpenSec para soluciones empresariales",
   "enterprise.hero.title": "Tu codigo es tuyo",
   "enterprise.hero.body1":
-    "OpenCode opera de forma segura dentro de tu organizacion sin almacenar datos ni contexto, y sin restricciones de licencia ni reclamaciones de propiedad. Inicia una prueba con tu equipo y luego despliegalo en toda tu organizacion integrandolo con tu SSO y tu gateway interno de IA.",
+    "OpenSec opera de forma segura dentro de tu organizacion sin almacenar datos ni contexto, y sin restricciones de licencia ni reclamaciones de propiedad. Inicia una prueba con tu equipo y luego despliegalo en toda tu organizacion integrandolo con tu SSO y tu gateway interno de IA.",
   "enterprise.hero.body2": "Cuentanos como podemos ayudar.",
   "enterprise.form.name.label": "Nombre completo",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -261,28 +261,28 @@ export const dict = {
   "enterprise.form.sending": "Enviando...",
   "enterprise.form.success": "Mensaje enviado, nos pondremos en contacto pronto.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "Que es OpenCode Enterprise?",
+  "enterprise.faq.q1": "Que es OpenSec Enterprise?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise es para organizaciones que quieren asegurarse de que su codigo y datos nunca salgan de su infraestructura. Puede lograrlo mediante una configuracion centralizada que se integra con tu SSO y tu gateway interno de IA/LLM.",
-  "enterprise.faq.q2": "Como empiezo con OpenCode Enterprise?",
+    "OpenSec Enterprise es para organizaciones que quieren asegurarse de que su codigo y datos nunca salgan de su infraestructura. Puede lograrlo mediante una configuracion centralizada que se integra con tu SSO y tu gateway interno de IA/LLM.",
+  "enterprise.faq.q2": "Como empiezo con OpenSec Enterprise?",
   "enterprise.faq.a2":
-    "Empieza con una prueba interna con tu equipo. OpenCode por defecto no almacena tu codigo ni datos de contexto, lo que facilita comenzar. Despues, contactanos para hablar sobre precios y opciones de implementacion.",
+    "Empieza con una prueba interna con tu equipo. OpenSec por defecto no almacena tu codigo ni datos de contexto, lo que facilita comenzar. Despues, contactanos para hablar sobre precios y opciones de implementacion.",
   "enterprise.faq.q3": "Como funciona el precio para empresas?",
   "enterprise.faq.a3":
     "Ofrecemos precios enterprise por asiento. Si tienes tu propio gateway de LLM, no cobramos por los tokens usados. Para mas detalles, contactanos para una cotizacion personalizada segun las necesidades de tu organizacion.",
-  "enterprise.faq.q4": "Mis datos estan seguros con OpenCode Enterprise?",
+  "enterprise.faq.q4": "Mis datos estan seguros con OpenSec Enterprise?",
   "enterprise.faq.a4":
-    "Si. OpenCode no almacena tu codigo ni datos de contexto. Todo el procesamiento ocurre localmente o mediante llamadas directas a la API de tu proveedor de IA. Con configuracion centralizada e integracion SSO, tus datos permanecen seguros dentro de la infraestructura de tu organizacion.",
+    "Si. OpenSec no almacena tu codigo ni datos de contexto. Todo el procesamiento ocurre localmente o mediante llamadas directas a la API de tu proveedor de IA. Con configuracion centralizada e integracion SSO, tus datos permanecen seguros dentro de la infraestructura de tu organizacion.",
 
-  "brand.title": "OpenCode | Marca",
-  "brand.meta.description": "Guia de marca de OpenCode",
+  "brand.title": "OpenSec | Marca",
+  "brand.meta.description": "Guia de marca de OpenSec",
   "brand.heading": "Guia de marca",
-  "brand.subtitle": "Recursos y materiales para ayudarte a trabajar con la marca OpenCode.",
+  "brand.subtitle": "Recursos y materiales para ayudarte a trabajar con la marca OpenSec.",
   "brand.downloadAll": "Descargar todos los recursos",
-  "changelog.title": "OpenCode | Registro de cambios",
-  "changelog.meta.description": "Notas de version y registro de cambios de OpenCode",
+  "changelog.title": "OpenSec | Registro de cambios",
+  "changelog.meta.description": "Notas de version y registro de cambios de OpenSec",
   "changelog.hero.title": "Registro de cambios",
-  "changelog.hero.subtitle": "Nuevas actualizaciones y mejoras de OpenCode",
+  "changelog.hero.subtitle": "Nuevas actualizaciones y mejoras de OpenSec",
   "changelog.empty": "No se encontraron entradas en el registro de cambios.",
   "changelog.viewJson": "Ver JSON",
   "workspace.nav.zen": "zen",
@@ -451,15 +451,15 @@ export const dict = {
   "workspace.black.time.minutes": "minutos",
   "workspace.black.time.fewSeconds": "unos segundos",
   "workspace.black.subscription.title": "Suscripción",
-  "workspace.black.subscription.message": "Estás suscrito a OpenCode Black por ${{plan}} al mes.",
+  "workspace.black.subscription.message": "Estás suscrito a OpenSec Black por ${{plan}} al mes.",
   "workspace.black.subscription.manage": "Administrar suscripción",
   "workspace.black.subscription.rollingUsage": "Uso de 5 horas",
   "workspace.black.subscription.weeklyUsage": "Uso semanal",
   "workspace.black.subscription.resetsIn": "Se reinicia en",
   "workspace.black.subscription.useBalance": "Utilice su saldo disponible después de alcanzar los límites de uso",
   "workspace.black.waitlist.title": "Lista de espera",
-  "workspace.black.waitlist.joined": "Estás en la lista de espera para el plan Black de ${{plan}} por mes OpenCode.",
-  "workspace.black.waitlist.ready": "Estamos listos para inscribirlo en el plan Black de ${{plan}} por mes OpenCode.",
+  "workspace.black.waitlist.joined": "Estás en la lista de espera para el plan Black de ${{plan}} por mes OpenSec.",
+  "workspace.black.waitlist.ready": "Estamos listos para inscribirlo en el plan Black de ${{plan}} por mes OpenSec.",
   "workspace.black.waitlist.leave": "Salir de la lista de espera",
   "workspace.black.waitlist.leaving": "Partida...",
   "workspace.black.waitlist.left": "Izquierda",

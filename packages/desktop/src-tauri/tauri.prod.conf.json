@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode",
+  "productName": "OpenSec",
   "identifier": "ai.opencode.desktop",
   "bundle": {
     "createUpdaterArtifacts": true,

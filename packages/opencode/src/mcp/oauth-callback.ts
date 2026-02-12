@@ -6,7 +6,7 @@ const log = Log.create({ service: "mcp.oauth-callback" })
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
 <head>
-  <title>OpenCode - Authorization Successful</title>
+  <title>OpenSec - Authorization Successful</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
     .container { text-align: center; padding: 2rem; }
@@ -17,7 +17,7 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 <body>
   <div class="container">
     <h1>Authorization Successful</h1>
-    <p>You can close this window and return to OpenCode.</p>
+    <p>You can close this window and return to OpenSec.</p>
   </div>
   <script>setTimeout(() => window.close(), 2000);</script>
 </body>
@@ -26,7 +26,7 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
 <head>
-  <title>OpenCode - Authorization Failed</title>
+  <title>OpenSec - Authorization Failed</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
     .container { text-align: center; padding: 2rem; }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
+  "name": "opensec",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",

@@ -59,7 +59,7 @@ export const dict = {
   "common.faq": "SSS",
   "common.learnMore": "Daha fazla bilgi",
 
-  "home.title": "OpenCode | Acik kaynakli yapay zeka kodlama ajani",
+  "home.title": "OpenSec | Acik kaynakli yapay zeka kodlama ajani",
 
   "home.banner.badge": "Yeni",
   "home.banner.text": "Masaustu uygulamasi beta olarak kullanilabilir",
@@ -73,9 +73,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Kurulum secenekleri",
 
-  "home.what.title": "OpenCode nedir?",
+  "home.what.title": "OpenSec nedir?",
   "home.what.body":
-    "OpenCode, terminalinizde, IDE'nizde veya masaustunde kod yazmaniza yardim eden acik kaynakli bir ajandir.",
+    "OpenSec, terminalinizde, IDE'nizde veya masaustunde kod yazmaniza yardim eden acik kaynakli bir ajandir.",
   "home.what.lsp.title": "LSP etkin",
   "home.what.lsp.body": "LLM icin dogru LSP'leri otomatik olarak yukler",
   "home.what.multiSession.title": "Coklu oturum",
@@ -94,41 +94,41 @@ export const dict = {
 
   "home.growth.title": "Acik kaynakli yapay zeka kodlama ajani",
   "home.growth.body":
-    "GitHub'da <strong>{{stars}}</strong>+ yildiz, <strong>{{contributors}}</strong> katilimci ve <strong>{{commits}}</strong>+ commit ile OpenCode, her ay <strong>{{monthlyUsers}}</strong>+ gelistirici tarafindan kullaniliyor ve guveniliyor.",
+    "GitHub'da <strong>{{stars}}</strong>+ yildiz, <strong>{{contributors}}</strong> katilimci ve <strong>{{commits}}</strong>+ commit ile OpenSec, her ay <strong>{{monthlyUsers}}</strong>+ gelistirici tarafindan kullaniliyor ve guveniliyor.",
   "home.growth.githubStars": "GitHub yildizlari",
   "home.growth.contributors": "Katilimcilar",
   "home.growth.monthlyDevs": "Aylik gelistiriciler",
 
   "home.privacy.title": "Once gizlilik icin tasarlandi",
   "home.privacy.body":
-    "OpenCode kodunuzu veya baglam verilerinizi saklamaz; bu sayede gizlilige duyarli ortamlarda calisabilir.",
+    "OpenSec kodunuzu veya baglam verilerinizi saklamaz; bu sayede gizlilige duyarli ortamlarda calisabilir.",
   "home.privacy.learnMore": "Hakkinda daha fazla bilgi:",
   "home.privacy.link": "gizlilik",
 
-  "home.faq.q1": "OpenCode nedir?",
+  "home.faq.q1": "OpenSec nedir?",
   "home.faq.a1":
-    "OpenCode, herhangi bir AI modeliyle kod yazmaniza ve calistirmaniza yardim eden acik kaynakli bir ajandir. Terminal arayuzu, masaustu uygulamasi veya IDE uzantisi olarak kullanilabilir.",
-  "home.faq.q2": "OpenCode'u nasil kullanirim?",
+    "OpenSec, herhangi bir AI modeliyle kod yazmaniza ve calistirmaniza yardim eden acik kaynakli bir ajandir. Terminal arayuzu, masaustu uygulamasi veya IDE uzantisi olarak kullanilabilir.",
+  "home.faq.q2": "OpenSec'u nasil kullanirim?",
   "home.faq.a2.before": "Baslamanin en kolay yolu",
   "home.faq.a2.link": "girisi okumaktir",
-  "home.faq.q3": "OpenCode icin ek AI aboneliklerine ihtiyacim var mi?",
-  "home.faq.a3.p1": "Sart degil. OpenCode, hesap acmadan kullanabileceginiz ucretsiz modellerle gelir.",
+  "home.faq.q3": "OpenSec icin ek AI aboneliklerine ihtiyacim var mi?",
+  "home.faq.a3.p1": "Sart degil. OpenSec, hesap acmadan kullanabileceginiz ucretsiz modellerle gelir.",
   "home.faq.a3.p2.beforeZen": "Bunun disinda, populer kodlama modellerini kullanmak icin bir",
   "home.faq.a3.p2.afterZen": " hesabi olusturabilirsiniz.",
-  "home.faq.a3.p3": "Zen'i oneriyoruz, ancak OpenCode OpenAI, Anthropic, xAI gibi populer saglayicilarla da calisir.",
+  "home.faq.a3.p3": "Zen'i oneriyoruz, ancak OpenSec OpenAI, Anthropic, xAI gibi populer saglayicilarla da calisir.",
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi baglayabilirsiniz",
-  "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
+  "home.faq.q4": "Mevcut AI aboneliklerimi OpenSec ile kullanabilir miyim?",
   "home.faq.a4.p1":
-    "Evet. OpenCode tum buyuk saglayicilarin aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
-  "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
-  "home.faq.a5.beforeDesktop": "Artik hayir! OpenCode simdi",
+    "Evet. OpenSec tum buyuk saglayicilarin aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
+  "home.faq.q5": "OpenSec'u sadece terminalde mi kullanabilirim?",
+  "home.faq.a5.beforeDesktop": "Artik hayir! OpenSec simdi",
   "home.faq.a5.desktop": "masaustu",
   "home.faq.a5.and": "ve",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "OpenCode ne kadar?",
+  "home.faq.q6": "OpenSec ne kadar?",
   "home.faq.a6":
-    "OpenCode %100 ucretsizdir. Ayrica ucretsiz model setiyle gelir. Baska bir saglayici baglarsaniz ek maliyetler olabilir.",
+    "OpenSec %100 ucretsizdir. Ayrica ucretsiz model setiyle gelir. Baska bir saglayici baglarsaniz ek maliyetler olabilir.",
   "home.faq.q7": "Veri ve gizlilik ne olacak?",
   "home.faq.a7.p1":
     "Verileriniz yalnizca ucretsiz modellerimizi kullandiginizda veya paylasilabilir baglantilar olusturdugunuzda saklanir.",
@@ -136,8 +136,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "modellerimiz",
   "home.faq.a7.p2.and": "ve",
   "home.faq.a7.p2.shareLink": "paylasim sayfalari",
-  "home.faq.q8": "OpenCode acik kaynak mi?",
-  "home.faq.a8.p1": "Evet, OpenCode tamamen acik kaynaktir. Kaynak kodu",
+  "home.faq.q8": "OpenSec acik kaynak mi?",
+  "home.faq.a8.p1": "Evet, OpenSec tamamen acik kaynaktir. Kaynak kodu",
   "home.faq.a8.p2": "altinda",
   "home.faq.a8.mitLicense": "MIT Lisansi",
   "home.faq.a8.p3":
@@ -145,25 +145,25 @@ export const dict = {
 
   "home.zenCta.title": "Kodlama ajanlari icin guvenilir, optimize modeller",
   "home.zenCta.body":
-    "Zen, OpenCode'un kodlama ajanlari icin ozel olarak test edip benchmark ettigi secilmis AI modellerine erisim saglar. Saglayicilar arasinda tutarsiz performans ve kalite konusunda endiselenmeyin; calisan, dogrulanmis modelleri kullanin.",
+    "Zen, OpenSec'un kodlama ajanlari icin ozel olarak test edip benchmark ettigi secilmis AI modellerine erisim saglar. Saglayicilar arasinda tutarsiz performans ve kalite konusunda endiselenmeyin; calisan, dogrulanmis modelleri kullanin.",
   "home.zenCta.link": "Zen hakkinda",
 
-  "download.title": "OpenCode | Indir",
+  "download.title": "OpenSec | Indir",
 
-  "zen.title": "OpenCode Zen | Kodlama ajanlari icin guvenilir, optimize edilmis modellerin secilmis seti",
+  "zen.title": "OpenSec Zen | Kodlama ajanlari icin guvenilir, optimize edilmis modellerin secilmis seti",
   "zen.hero.title": "Kodlama ajanlari icin guvenilir, optimize modeller",
   "zen.hero.body":
-    "Zen, OpenCode'un kodlama ajanlari icin ozel olarak test edip benchmark ettigi secilmis AI modellerine erisim saglar. Saglayicilar arasinda tutarsiz performans ve kalite konusunda endiselenmeyin; calisan, dogrulanmis modelleri kullanin.",
+    "Zen, OpenSec'un kodlama ajanlari icin ozel olarak test edip benchmark ettigi secilmis AI modellerine erisim saglar. Saglayicilar arasinda tutarsiz performans ve kalite konusunda endiselenmeyin; calisan, dogrulanmis modelleri kullanin.",
 
-  "zen.faq.q1": "OpenCode Zen nedir?",
+  "zen.faq.q1": "OpenSec Zen nedir?",
   "zen.faq.a1":
-    "Zen, OpenCode ekibi tarafindan olusturulan ve kodlama ajanlari icin test edilip benchmark edilen secilmis bir AI model setidir.",
+    "Zen, OpenSec ekibi tarafindan olusturulan ve kodlama ajanlari icin test edilip benchmark edilen secilmis bir AI model setidir.",
   "zen.faq.q2": "Zen'i daha dogru yapan nedir?",
   "zen.faq.a2":
     "Zen yalnizca kodlama ajanlari icin ozel olarak test edilip benchmark edilmis modelleri sunar. Biftek kesmek icin tereyag bicagi kullanmazsin; kodlama icin kotu modeller kullanma.",
   "zen.faq.q3": "Zen daha ucuz mu?",
   "zen.faq.a3":
-    "Zen kar amacli degildir. Zen, model saglayicilarinin maliyetlerini size yansitir. Zen'in kullanimi arttikca OpenCode daha iyi fiyatlar pazarlayabilir ve bunlari size yansitabilir.",
+    "Zen kar amacli degildir. Zen, model saglayicilarinin maliyetlerini size yansitir. Zen'in kullanimi arttikca OpenSec daha iyi fiyatlar pazarlayabilir ve bunlari size yansitabilir.",
   "zen.faq.q4": "Zen ne kadar?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "istek basi ucret alir",
@@ -172,7 +172,7 @@ export const dict = {
   "zen.faq.a4.p2.beforeAccount": "Toplam maliyetiniz kullanim miktarina baglidir ve aylik harcama limitlerini",
   "zen.faq.a4.p2.accountLink": "hesabinizda ayarlayabilirsiniz",
   "zen.faq.a4.p3":
-    "Maliyetleri karsilamak icin OpenCode, $20 bakiye yuklemesi basina yalnizca $1.23 tutarinda kucuk bir odeme isleme ucreti ekler.",
+    "Maliyetleri karsilamak icin OpenSec, $20 bakiye yuklemesi basina yalnizca $1.23 tutarinda kucuk bir odeme isleme ucreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
   "zen.faq.a5.beforeExceptions":
     "Tum Zen modelleri ABD'de barindirilir. Saglayicilar sifir-retention politikasini uygular ve verilerinizi model egitimi icin kullanmaz; su",
@@ -184,7 +184,7 @@ export const dict = {
     "Evet, istediginiz zaman faturalandirmayi devre disi birakabilir ve kalan bakiyenizi kullanabilirsiniz.",
   "zen.faq.q8": "Zen'i diger kodlama ajanlariyla kullanabilir miyim?",
   "zen.faq.a8":
-    "Zen OpenCode ile harika calisir, ama Zen'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiginiz kodlama ajaninda kurulum talimatlarini izleyin.",
+    "Zen OpenSec ile harika calisir, ama Zen'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiginiz kodlama ajaninda kurulum talimatlarini izleyin.",
   "zen.cta.start": "Zen'yi kullanmaya başlayın",
   "zen.pricing.title": "20$ ekle Kullandıkça öde bakiyesi",
   "zen.pricing.fee": "(+1,23$ kart işlem ücreti)",
@@ -193,12 +193,12 @@ export const dict = {
   "zen.problem.title": "Zen hangi sorunu çözüyor?",
   "zen.problem.body":
     "Pek çok model mevcut ancak yalnızca birkaçı kodlama aracılarıyla iyi çalışıyor. Çoğu sağlayıcı, bunları değişen sonuçlarla farklı şekilde yapılandırır.",
-  "zen.problem.subtitle": "Bu sorunu yalnızca OpenCode kullanıcıları için değil, herkes için düzeltiyoruz.",
+  "zen.problem.subtitle": "Bu sorunu yalnızca OpenSec kullanıcıları için değil, herkes için düzeltiyoruz.",
   "zen.problem.item1": "Seçilen modelleri test etme ve ekiplerine danışmanlık yapma",
   "zen.problem.item2": "Düzgün bir şekilde teslim edildiklerinden emin olmak için sağlayıcılarla birlikte çalışmak",
   "zen.problem.item3": "Önerdiğimiz tüm model-sağlayıcı kombinasyonlarının karşılaştırılması",
   "zen.how.title": "Zen nasıl çalışır?",
-  "zen.how.body": "Zen'yi OpenCode ile kullanmanızı önersek de, Zen'yi herhangi bir aracıyla kullanabilirsiniz.",
+  "zen.how.body": "Zen'yi OpenSec ile kullanmanızı önersek de, Zen'yi herhangi bir aracıyla kullanabilirsiniz.",
   "zen.how.step1.title": "Kaydolun ve 20$ bakiye ekleyin",
   "zen.how.step1.beforeLink": "takip et",
   "zen.how.step1.link": "kurulum talimatları",
@@ -211,14 +211,14 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
-  "download.meta.description": "OpenCode'u macOS, Windows ve Linux icin indir",
-  "download.hero.title": "OpenCode'u indir",
+  "download.meta.description": "OpenSec'u macOS, Windows ve Linux icin indir",
+  "download.hero.title": "OpenSec'u indir",
   "download.hero.subtitle": "macOS, Windows ve Linux icin Beta olarak sunuluyor",
   "download.hero.button": "{{os}} icin indir",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
-  "download.section.extensions": "OpenCode Eklentileri",
-  "download.section.integrations": "OpenCode Entegrasyonlari",
+  "download.section.terminal": "OpenSec Terminal",
+  "download.section.desktop": "OpenSec Desktop (Beta)",
+  "download.section.extensions": "OpenSec Eklentileri",
+  "download.section.integrations": "OpenSec Entegrasyonlari",
   "download.action.download": "Indir",
   "download.action.install": "Kur",
 
@@ -229,27 +229,27 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Tam olarak degil, ama muhtemelen. OpenCode'u ucretli bir saglayiciya baglamak istiyorsaniz bir AI aboneligi gerekir, ancak",
+    "Tam olarak degil, ama muhtemelen. OpenSec'u ucretli bir saglayiciya baglamak istiyorsaniz bir AI aboneligi gerekir, ancak",
   "download.faq.a3.localLink": "yerel modeller",
   "download.faq.a3.afterLocal.beforeZen": "ile ucretsiz calisabilirsiniz. Kullanicilari",
   "download.faq.a3.afterZen":
-    " kullanmaya tesvik ediyoruz, ancak OpenCode OpenAI, Anthropic, xAI vb. gibi tum populer saglayicilarla calisir.",
+    " kullanmaya tesvik ediyoruz, ancak OpenSec OpenAI, Anthropic, xAI vb. gibi tum populer saglayicilarla calisir.",
 
-  "download.faq.a5.p1": "OpenCode %100 ucretsizdir.",
+  "download.faq.a5.p1": "OpenSec %100 ucretsizdir.",
   "download.faq.a5.p2.beforeZen":
-    "Ek maliyetler, bir model saglayicisina olan aboneliginizden gelir. OpenCode herhangi bir model saglayicisiyla calisir, ancak",
+    "Ek maliyetler, bir model saglayicisina olan aboneliginizden gelir. OpenSec herhangi bir model saglayicisiyla calisir, ancak",
   "download.faq.a5.p2.afterZen": " kullanmanizi oneririz.",
 
   "download.faq.a6.p1":
-    "Verileriniz ve bilginiz yalnizca OpenCode'da paylasilabilir baglantilar olusturdugunuzda saklanir.",
+    "Verileriniz ve bilginiz yalnizca OpenSec'da paylasilabilir baglantilar olusturdugunuzda saklanir.",
   "download.faq.a6.p2.beforeShare": "Daha fazla bilgi:",
   "download.faq.a6.shareLink": "paylasim sayfalari",
 
-  "enterprise.title": "OpenCode | Kurumunuz icin kurumsal cozumler",
-  "enterprise.meta.description": "Kurumsal cozumler icin OpenCode ile iletisime gecin",
+  "enterprise.title": "OpenSec | Kurumunuz icin kurumsal cozumler",
+  "enterprise.meta.description": "Kurumsal cozumler icin OpenSec ile iletisime gecin",
   "enterprise.hero.title": "Kodunuz size aittir",
   "enterprise.hero.body1":
-    "OpenCode, hicbir veri veya baglam saklamadan ve lisans kisitlamalari ya da sahiplik iddialari olmadan kurulusunuzun icinde guvenli sekilde calisir. Ekibinizle bir deneme baslatin, ardindan SSO'nuz ve dahili AI gecidiniz ile entegre ederek tum kurulusunuzda devreye alin.",
+    "OpenSec, hicbir veri veya baglam saklamadan ve lisans kisitlamalari ya da sahiplik iddialari olmadan kurulusunuzun icinde guvenli sekilde calisir. Ekibinizle bir deneme baslatin, ardindan SSO'nuz ve dahili AI gecidiniz ile entegre ederek tum kurulusunuzda devreye alin.",
   "enterprise.hero.body2": "Nasil yardimci olabilecegimizi bize soyleyin.",
   "enterprise.form.name.label": "Ad soyad",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -263,28 +263,28 @@ export const dict = {
   "enterprise.form.sending": "Gonderiliyor...",
   "enterprise.form.success": "Mesaj gonderildi, yakinda size donus yapacagiz.",
   "enterprise.faq.title": "SSS",
-  "enterprise.faq.q1": "OpenCode Enterprise nedir?",
+  "enterprise.faq.q1": "OpenSec Enterprise nedir?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise, kodunuzun ve verilerinizin asla altyapinizi terk etmemesini saglamak isteyen kurumlar icindir. Bunu, SSO'nuz ve dahili AI gecidiniz ile entegre olan merkezilestirilmis bir konfigurasyonla saglar.",
-  "enterprise.faq.q2": "OpenCode Enterprise'a nasil baslarim?",
+    "OpenSec Enterprise, kodunuzun ve verilerinizin asla altyapinizi terk etmemesini saglamak isteyen kurumlar icindir. Bunu, SSO'nuz ve dahili AI gecidiniz ile entegre olan merkezilestirilmis bir konfigurasyonla saglar.",
+  "enterprise.faq.q2": "OpenSec Enterprise'a nasil baslarim?",
   "enterprise.faq.a2":
-    "Ekibinizle dahili bir deneme ile baslayin. OpenCode varsayilan olarak kodunuzu veya baglam verilerinizi saklamaz, bu da baslamayi kolaylastirir. Ardindan fiyatlandirma ve uygulama seceneklerini gorusmek icin bize ulasin.",
+    "Ekibinizle dahili bir deneme ile baslayin. OpenSec varsayilan olarak kodunuzu veya baglam verilerinizi saklamaz, bu da baslamayi kolaylastirir. Ardindan fiyatlandirma ve uygulama seceneklerini gorusmek icin bize ulasin.",
   "enterprise.faq.q3": "Kurumsal fiyatlandirma nasil calisir?",
   "enterprise.faq.a3":
     "Kullanici basi (per-seat) kurumsal fiyatlandirma sunuyoruz. Kendi LLM gecidiniz varsa, kullanilan tokenlar icin ucret almiyoruz. Daha fazla bilgi icin, kurumunuzun ihtiyaclarina gore ozel bir teklif icin bize ulasin.",
-  "enterprise.faq.q4": "OpenCode Enterprise ile verilerim guvende mi?",
+  "enterprise.faq.q4": "OpenSec Enterprise ile verilerim guvende mi?",
   "enterprise.faq.a4":
-    "Evet. OpenCode kodunuzu veya baglam verilerinizi saklamaz. Tum isleme yerel olarak ya da AI saglayiciniza dogrudan API cagirilari ile gerceklestirilir. Merkezilestirilmis konfigurasyon ve SSO entegrasyonu ile verileriniz kurumunuzun altyapisi icinde guvende kalir.",
+    "Evet. OpenSec kodunuzu veya baglam verilerinizi saklamaz. Tum isleme yerel olarak ya da AI saglayiciniza dogrudan API cagirilari ile gerceklestirilir. Merkezilestirilmis konfigurasyon ve SSO entegrasyonu ile verileriniz kurumunuzun altyapisi icinde guvende kalir.",
 
-  "brand.title": "OpenCode | Marka",
-  "brand.meta.description": "OpenCode marka kilavuzu",
+  "brand.title": "OpenSec | Marka",
+  "brand.meta.description": "OpenSec marka kilavuzu",
   "brand.heading": "Marka kilavuzu",
-  "brand.subtitle": "OpenCode markasi ile calismaniza yardimci olacak kaynaklar ve varliklar.",
+  "brand.subtitle": "OpenSec markasi ile calismaniza yardimci olacak kaynaklar ve varliklar.",
   "brand.downloadAll": "Tum varliklari indir",
-  "changelog.title": "OpenCode | Degisiklik gunlugu",
-  "changelog.meta.description": "OpenCode surum notlari ve degisiklik gunlugu",
+  "changelog.title": "OpenSec | Degisiklik gunlugu",
+  "changelog.meta.description": "OpenSec surum notlari ve degisiklik gunlugu",
   "changelog.hero.title": "Degisiklik gunlugu",
-  "changelog.hero.subtitle": "OpenCode icin yeni guncellemeler ve iyilestirmeler",
+  "changelog.hero.subtitle": "OpenSec icin yeni guncellemeler ve iyilestirmeler",
   "changelog.empty": "Degisiklik gunlugu kaydi bulunamadi.",
   "changelog.viewJson": "JSON'u goruntule",
   "workspace.nav.zen": "Zen",
@@ -451,15 +451,15 @@ export const dict = {
   "workspace.black.time.minutes": "dakika",
   "workspace.black.time.fewSeconds": "birkaç saniye",
   "workspace.black.subscription.title": "Abonelik",
-  "workspace.black.subscription.message": "Aylık {{plan}} karşılığında OpenCode Black'e abonesiniz.",
+  "workspace.black.subscription.message": "Aylık {{plan}} karşılığında OpenSec Black'e abonesiniz.",
   "workspace.black.subscription.manage": "Aboneliği Yönet",
   "workspace.black.subscription.rollingUsage": "5 Saatlik Kullanım",
   "workspace.black.subscription.weeklyUsage": "Haftalık Kullanım",
   "workspace.black.subscription.resetsIn": "Sıfırlama süresi",
   "workspace.black.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
   "workspace.black.waitlist.title": "Bekleme listesi",
-  "workspace.black.waitlist.joined": "Aylık ${{plan}} OpenCode Black planı için bekleme listesindesiniz.",
-  "workspace.black.waitlist.ready": "Sizi ayda {{plan}} $ tutarındaki OpenCode Black planına kaydetmeye hazırız.",
+  "workspace.black.waitlist.joined": "Aylık ${{plan}} OpenSec Black planı için bekleme listesindesiniz.",
+  "workspace.black.waitlist.ready": "Sizi ayda {{plan}} $ tutarındaki OpenSec Black planına kaydetmeye hazırız.",
   "workspace.black.waitlist.leave": "Bekleme Listesinden Ayrıl",
   "workspace.black.waitlist.leaving": "Ayrılıyorum...",
   "workspace.black.waitlist.left": "Sol",

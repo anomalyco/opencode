@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Using the OpenSec terminal user interface.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+OpenSec provides an interactive terminal interface or TUI for working on your projects with an LLM.
 
-Running OpenCode starts the TUI for the current directory.
+Running OpenSec starts the TUI for the current directory.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ The output of the command is added to the conversation as a tool result.
 
 ## Commands
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+When using the OpenSec TUI, you can type `/` followed by a command name to quickly execute actions. For example:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Here are all available slash commands:
 
 ### connect
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Add a provider to OpenSec. Allows you to select from available providers and add their API keys.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Open external editor for composing messages. Uses the editor set in your `EDITOR
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Exit OpenSec. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -355,7 +355,7 @@ Some editors need command-line arguments to run in blocking mode. The `--wait` f
 
 ## Configure
 
-You can customize TUI behavior through your OpenCode config file.
+You can customize TUI behavior through your OpenSec config file.
 
 ```json title="opencode.json"
 {

@@ -22,8 +22,8 @@ body:
   - type: input
     id: opencode-version
     attributes:
-      label: OpenCode version
-      description: What version of OpenCode are you using?
+      label: OpenSec version
+      description: What version of OpenSec are you using?
     validations:
       required: false
 

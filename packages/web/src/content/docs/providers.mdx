@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in OpenSec.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
+OpenSec uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using the `/connect` command.
-2. Configure the provider in your OpenCode config.
+2. Configure the provider in your OpenSec config.
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-You can customize the providers through the `provider` section in your OpenCode
+You can customize the providers through the `provider` section in your OpenSec
 config.
 
 ---
@@ -48,13 +48,13 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## OpenCode Zen
+## OpenSec Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+OpenSec Zen is a list of models provided by the OpenSec team that have been
+tested and verified to work well with OpenSec. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+If you are new, we recommend starting with OpenSec Zen.
 :::
 
 1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
@@ -80,7 +80,7 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode and is completely optional to use.
+It works like any other provider in OpenSec and is completely optional to use.
 
 ---
 
@@ -124,7 +124,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with OpenCode:
+To use Amazon Bedrock with OpenSec:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -279,7 +279,7 @@ For custom inference profiles, use the model and provider name in the key and se
    ```
 
 :::info
-Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
+Using your Claude Pro/Max subscription in OpenSec is not officially supported by [Anthropic](https://anthropic.com).
 :::
 
 ##### Using API keys
@@ -662,7 +662,7 @@ GitLab Duo provides AI-powered agentic chat with native tool calling capabilitie
    #### Using Personal Access Token
    1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
-   3. Name: `OpenCode`, Scopes: `api`
+   3. Name: `OpenSec`, Scopes: `api`
    4. Copy the token (starts with `glpat-`)
    5. Enter it in the terminal
 
@@ -685,8 +685,8 @@ to store token in opencode auth storage.
 ##### Self-Hosted GitLab
 
 :::note[compliance note]
-OpenCode uses a small model for some AI tasks like generating the session title.
-It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
+OpenSec uses a small model for some AI tasks like generating the session title.
+It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenSec
 to only use your own GitLab-hosted instance, add the following to your
 `opencode.json` file. It is also recommended to disable session sharing.
 
@@ -823,7 +823,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ### Google Vertex AI
 
-To use Google Vertex AI with OpenCode:
+To use Google Vertex AI with OpenSec:
 
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
@@ -1005,7 +1005,7 @@ Helicone supports custom headers for features like caching, user tracking, and s
 
 ##### Session tracking
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenSec conversation as a session in Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1019,7 +1019,7 @@ Add it to your config.
 }
 ```
 
-The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenSec conversation listed as a separate session.
 
 ##### Common Helicone headers
 
@@ -1223,7 +1223,7 @@ To use Kimi K2 from Moonshot AI:
 You can configure opencode to use local models through Ollama.
 
 :::tip
-Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
+Ollama can automatically configure itself for OpenSec. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1262,13 +1262,13 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ### Ollama Cloud
 
-To use Ollama Cloud with OpenCode:
+To use Ollama Cloud with OpenSec:
 
 1. Head over to [https://ollama.com/](https://ollama.com/) and sign in or create an account.
 
 2. Navigate to **Settings** > **Keys** and click **Add API Key** to generate a new API key.
 
-3. Copy the API key for use in OpenCode.
+3. Copy the API key for use in OpenSec.
 
 4. Run the `/connect` command and search for **Ollama Cloud**.
 
@@ -1285,7 +1285,7 @@ To use Ollama Cloud with OpenCode:
    └ enter
    ```
 
-6. **Important**: Before using cloud models in OpenCode, you must pull the model information locally:
+6. **Important**: Before using cloud models in OpenSec, you must pull the model information locally:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1332,19 +1332,19 @@ If you already have an API key, you can select **Manually enter API Key** and pa
 
 ---
 
-### OpenCode Zen
+### OpenSec Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+OpenSec Zen is a list of tested and verified models provided by the OpenSec team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>OpenSec Zen</a>** and click **Create API Key**.
 
-2. Run the `/connect` command and search for **OpenCode Zen**.
+2. Run the `/connect` command and search for **OpenSec Zen**.
 
    ```txt
    /connect
    ```
 
-3. Enter your OpenCode API key.
+3. Enter your OpenSec API key.
 
    ```txt
    ┌ API key
@@ -1870,7 +1870,7 @@ Configuration details:
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
 
-The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+The `limit` fields allow OpenSec to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 

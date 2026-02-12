@@ -3,7 +3,7 @@ title: MCP servers
 description: Add local and remote MCP tools.
 ---
 
-You can add external tools to OpenCode using the _Model Context Protocol_, or MCP. OpenCode supports both local and remote servers.
+You can add external tools to OpenSec using the _Model Context Protocol_, or MCP. OpenSec supports both local and remote servers.
 
 Once added, MCP tools are automatically available to the LLM alongside built-in tools.
 
@@ -23,7 +23,7 @@ Certain MCP servers, like the GitHub MCP server, tend to add a lot of tokens and
 
 ## Enable
 
-You can define MCP servers in your [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Add each MCP with a unique name. You can refer to that MCP by name when prompting the LLM.
+You can define MCP servers in your [OpenSec Config](https://opencode.ai/docs/config/) under `mcp`. Add each MCP with a unique name. You can refer to that MCP by name when prompting the LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 
 ## OAuth
 
-OpenCode automatically handles OAuth authentication for remote MCP servers. When a server requires authentication, OpenCode will:
+OpenSec automatically handles OAuth authentication for remote MCP servers. When a server requires authentication, OpenSec will:
 
 1. Detect the 401 response and initiate the OAuth flow
 2. Use **Dynamic Client Registration (RFC 7591)** if supported by the server
@@ -189,7 +189,7 @@ For most OAuth-enabled MCP servers, no special configuration is needed. Just con
 }
 ```
 
-If the server requires authentication, OpenCode will prompt you to authenticate when you first try to use it. If not, you can [manually trigger the flow](#authenticating) with `opencode mcp auth <server-name>`.
+If the server requires authentication, OpenSec will prompt you to authenticate when you first try to use it. If not, you can [manually trigger the flow](#authenticating) with `opencode mcp auth <server-name>`.
 
 ---
 
@@ -238,7 +238,7 @@ Remove stored credentials:
 opencode mcp logout my-oauth-server
 ```
 
-The `mcp auth` command will open your browser for authorization. After you authorize, OpenCode will store the tokens securely in `~/.local/share/opencode/mcp-auth.json`.
+The `mcp auth` command will open your browser for authorization. After you authorize, OpenSec will store the tokens securely in `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
@@ -291,7 +291,7 @@ The `mcp debug` command shows the current auth status, tests HTTP connectivity, 
 
 ## Manage
 
-Your MCPs are available as tools in OpenCode, alongside built-in tools. So you can manage them through the OpenCode config like any other tool.
+Your MCPs are available as tools in OpenSec, alongside built-in tools. So you can manage them through the OpenSec config like any other tool.
 
 ---
 
@@ -423,7 +423,7 @@ After adding the configuration, authenticate with Sentry:
 opencode mcp auth sentry
 ```
 
-This will open a browser window to complete the OAuth flow and connect OpenCode to your Sentry account.
+This will open a browser window to complete the OAuth flow and connect OpenSec to your Sentry account.
 
 Once authenticated, you can use Sentry tools in your prompts to query issues, projects, and error data.
 

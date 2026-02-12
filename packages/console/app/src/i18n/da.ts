@@ -59,7 +59,7 @@ export const dict = {
   "common.faq": "FAQ",
   "common.learnMore": "Laes mere",
 
-  "home.title": "OpenCode | Den open source AI-kodningsagent",
+  "home.title": "OpenSec | Den open source AI-kodningsagent",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgaengelig i beta",
@@ -73,9 +73,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Installationsmuligheder",
 
-  "home.what.title": "Hvad er OpenCode?",
+  "home.what.title": "Hvad er OpenSec?",
   "home.what.body":
-    "OpenCode er en open source agent, der hjelper dig med at skrive kode i din terminal, IDE eller desktop.",
+    "OpenSec er en open source agent, der hjelper dig med at skrive kode i din terminal, IDE eller desktop.",
   "home.what.lsp.title": "LSP aktiveret",
   "home.what.lsp.body": "Indlaeser automatisk de rigtige LSP'er til LLM'en",
   "home.what.multiSession.title": "Multi-session",
@@ -94,51 +94,51 @@ export const dict = {
 
   "home.growth.title": "Den open source AI-kodningsagent",
   "home.growth.body":
-    "Med over <strong>{{stars}}</strong> GitHub-stjerner, <strong>{{contributors}}</strong> bidragsydere og over <strong>{{commits}}</strong> commits bruges OpenCode af over <strong>{{monthlyUsers}}</strong> udviklere hver maaned.",
+    "Med over <strong>{{stars}}</strong> GitHub-stjerner, <strong>{{contributors}}</strong> bidragsydere og over <strong>{{commits}}</strong> commits bruges OpenSec af over <strong>{{monthlyUsers}}</strong> udviklere hver maaned.",
   "home.growth.githubStars": "GitHub-stjerner",
   "home.growth.contributors": "Bidragsydere",
   "home.growth.monthlyDevs": "Maanedlige devs",
 
   "home.privacy.title": "Bygget med privatliv forst",
   "home.privacy.body":
-    "OpenCode gemmer ikke din kode eller kontekstdata, sa den kan bruges i privatlivsfomlsomme miljoer.",
+    "OpenSec gemmer ikke din kode eller kontekstdata, sa den kan bruges i privatlivsfomlsomme miljoer.",
   "home.privacy.learnMore": "Laes mere om",
   "home.privacy.link": "privatliv",
 
-  "home.faq.q1": "Hvad er OpenCode?",
+  "home.faq.q1": "Hvad er OpenSec?",
   "home.faq.a1":
-    "OpenCode er en open source agent, der hjelper dig med at skrive og kore kode med enhver AI-model. Den er tilgengelig som terminal-interface, desktop-app eller IDE-udvidelse.",
-  "home.faq.q2": "Hvordan bruger jeg OpenCode?",
+    "OpenSec er en open source agent, der hjelper dig med at skrive og kore kode med enhver AI-model. Den er tilgengelig som terminal-interface, desktop-app eller IDE-udvidelse.",
+  "home.faq.q2": "Hvordan bruger jeg OpenSec?",
   "home.faq.a2.before": "Den nemmeste made at komme i gang pa er at laese",
   "home.faq.a2.link": "introen",
-  "home.faq.q3": "Skal jeg have ekstra AI-abonnementer for at bruge OpenCode?",
+  "home.faq.q3": "Skal jeg have ekstra AI-abonnementer for at bruge OpenSec?",
   "home.faq.a3.p1":
-    "Ikke nodvendigvis. OpenCode kommer med gratis modeller, som du kan bruge uden at oprette en konto.",
+    "Ikke nodvendigvis. OpenSec kommer med gratis modeller, som du kan bruge uden at oprette en konto.",
   "home.faq.a3.p2.beforeZen": "Derudover kan du bruge populære kodningsmodeller ved at oprette en",
   "home.faq.a3.p2.afterZen": " konto.",
   "home.faq.a3.p3":
-    "Vi opfordrer til at bruge Zen, men OpenCode virker ogsa med populære udbydere som OpenAI, Anthropic, xAI osv.",
+    "Vi opfordrer til at bruge Zen, men OpenSec virker ogsa med populære udbydere som OpenAI, Anthropic, xAI osv.",
   "home.faq.a3.p4.beforeLocal": "Du kan endda forbinde dine",
   "home.faq.a3.p4.localLink": "lokale modeller",
-  "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenCode?",
+  "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenSec?",
   "home.faq.a4.p1":
-    "Ja. OpenCode understotter abonnementer fra alle store udbydere. Du kan bruge Claude Pro/Max, ChatGPT Plus/Pro eller GitHub Copilot.",
-  "home.faq.q5": "Kan jeg kun bruge OpenCode i terminalen?",
-  "home.faq.a5.beforeDesktop": "Ikke længere! OpenCode er nu tilgengelig som en app til",
+    "Ja. OpenSec understotter abonnementer fra alle store udbydere. Du kan bruge Claude Pro/Max, ChatGPT Plus/Pro eller GitHub Copilot.",
+  "home.faq.q5": "Kan jeg kun bruge OpenSec i terminalen?",
+  "home.faq.a5.beforeDesktop": "Ikke længere! OpenSec er nu tilgengelig som en app til",
   "home.faq.a5.desktop": "desktop",
   "home.faq.a5.and": "og",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "Hvad koster OpenCode?",
+  "home.faq.q6": "Hvad koster OpenSec?",
   "home.faq.a6":
-    "OpenCode er 100% gratis at bruge. Det kommer ogsa med et saet gratis modeller. Der kan vare ekstra omkostninger, hvis du forbinder en anden udbyder.",
+    "OpenSec er 100% gratis at bruge. Det kommer ogsa med et saet gratis modeller. Der kan vare ekstra omkostninger, hvis du forbinder en anden udbyder.",
   "home.faq.q7": "Hvad med data og privatliv?",
   "home.faq.a7.p1": "Dine data gemmes kun, nar du bruger vores gratis modeller eller opretter delbare links.",
   "home.faq.a7.p2.beforeModels": "Laes mere om",
   "home.faq.a7.p2.modelsLink": "vores modeller",
   "home.faq.a7.p2.and": "og",
   "home.faq.a7.p2.shareLink": "delingssider",
-  "home.faq.q8": "Er OpenCode open source?",
-  "home.faq.a8.p1": "Ja, OpenCode er fuldt open source. Kildekoden er offentlig pa",
+  "home.faq.q8": "Er OpenSec open source?",
+  "home.faq.a8.p1": "Ja, OpenSec er fuldt open source. Kildekoden er offentlig pa",
   "home.faq.a8.p2": "under",
   "home.faq.a8.mitLicense": "MIT-licensen",
   "home.faq.a8.p3":
@@ -146,25 +146,25 @@ export const dict = {
 
   "home.zenCta.title": "Fa adgang til palidelige, optimerede modeller til kodningsagenter",
   "home.zenCta.body":
-    "Zen giver dig adgang til et handplukket sæt AI-modeller, som OpenCode har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet pa tværs af udbydere: brug validerede modeller, der virker.",
+    "Zen giver dig adgang til et handplukket sæt AI-modeller, som OpenSec har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet pa tværs af udbydere: brug validerede modeller, der virker.",
   "home.zenCta.link": "Laes om Zen",
 
-  "download.title": "OpenCode | Download",
+  "download.title": "OpenSec | Download",
 
-  "zen.title": "OpenCode Zen | Et kurateret saet af palidelige, optimerede modeller til kodningsagenter",
+  "zen.title": "OpenSec Zen | Et kurateret saet af palidelige, optimerede modeller til kodningsagenter",
   "zen.hero.title": "Fa adgang til palidelige, optimerede modeller til kodningsagenter",
   "zen.hero.body":
-    "Zen giver dig adgang til et handplukket sæt AI-modeller, som OpenCode har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet pa tværs af udbydere: brug validerede modeller, der virker.",
+    "Zen giver dig adgang til et handplukket sæt AI-modeller, som OpenSec har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet pa tværs af udbydere: brug validerede modeller, der virker.",
 
-  "zen.faq.q1": "Hvad er OpenCode Zen?",
+  "zen.faq.q1": "Hvad er OpenSec Zen?",
   "zen.faq.a1":
-    "Zen er et kurateret saet AI-modeller testet og benchmarked til kodningsagenter, skabt af teamet bag OpenCode.",
+    "Zen er et kurateret saet AI-modeller testet og benchmarked til kodningsagenter, skabt af teamet bag OpenSec.",
   "zen.faq.q2": "Hvad gor Zen mere praecis?",
   "zen.faq.a2":
     "Zen tilbyder kun modeller, der er testet og benchmarked specifikt til kodningsagenter. Du ville ikke bruge en smorkniv til at skare steak; brug ikke darlige modeller til kodning.",
   "zen.faq.q3": "Er Zen billigere?",
   "zen.faq.a3":
-    "Zen er ikke for profit. Zen viderefakturerer omkostningerne fra modeludbyderne til dig. Jo mere Zen bruges, desto mere kan OpenCode forhandle bedre priser og give dem videre til dig.",
+    "Zen er ikke for profit. Zen viderefakturerer omkostningerne fra modeludbyderne til dig. Jo mere Zen bruges, desto mere kan OpenSec forhandle bedre priser og give dem videre til dig.",
   "zen.faq.q4": "Hvad koster Zen?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "opkraever per request",
@@ -172,7 +172,7 @@ export const dict = {
   "zen.faq.a4.p2.beforeAccount": "Din samlede pris afhanger af brug, og du kan saette manedlige udgiftsgraenser i din",
   "zen.faq.a4.p2.accountLink": "konto",
   "zen.faq.a4.p3":
-    "For at daekke omkostninger tilfojer OpenCode kun et lille betalingsgebyr pa $1.23 per $20 saldo-opfyldning.",
+    "For at daekke omkostninger tilfojer OpenSec kun et lille betalingsgebyr pa $1.23 per $20 saldo-opfyldning.",
   "zen.faq.q5": "Hvad med data og privatliv?",
   "zen.faq.a5.beforeExceptions":
     "Alle Zen-modeller hostes i USA. Udbydere folger en zero-retention-policy og bruger ikke dine data til modeltraening, med de",
@@ -183,7 +183,7 @@ export const dict = {
   "zen.faq.a7": "Ja, du kan deaktivere betaling nar som helst og bruge din resterende saldo.",
   "zen.faq.q8": "Kan jeg bruge Zen med andre kodningsagenter?",
   "zen.faq.a8":
-    "Selvom Zen fungerer godt med OpenCode, kan du bruge Zen med enhver agent. Folg opsaetningsinstruktionerne i din foretrukne kodningsagent.",
+    "Selvom Zen fungerer godt med OpenSec, kan du bruge Zen med enhver agent. Folg opsaetningsinstruktionerne i din foretrukne kodningsagent.",
   "zen.cta.start": "Kom godt i gang med Zen",
   "zen.pricing.title": "Tilføj $20 Pay as you go-saldo",
   "zen.pricing.fee": "(+$1,23 kortbehandlingsgebyr)",
@@ -191,12 +191,12 @@ export const dict = {
   "zen.problem.title": "Hvilket problem løser Zen?",
   "zen.problem.body":
     "Der er så mange modeller tilgængelige, men kun få fungerer godt med kodningsmidler. De fleste udbydere konfigurerer dem anderledes med forskellige resultater.",
-  "zen.problem.subtitle": "Vi løser dette for alle, ikke kun OpenCode-brugere.",
+  "zen.problem.subtitle": "Vi løser dette for alle, ikke kun OpenSec-brugere.",
   "zen.problem.item1": "Test af udvalgte modeller og høring af deres teams",
   "zen.problem.item2": "Samarbejde med udbydere for at sikre, at de bliver leveret korrekt",
   "zen.problem.item3": "Benchmarking af alle model-udbyder kombinationer, vi anbefaler",
   "zen.how.title": "Hvordan Zen virker",
-  "zen.how.body": "Selvom vi foreslår, at du bruger Zen med OpenCode, kan du bruge Zen med enhver agent.",
+  "zen.how.body": "Selvom vi foreslår, at du bruger Zen med OpenSec, kan du bruge Zen med enhver agent.",
   "zen.how.step1.title": "Tilmeld dig og tilføj saldo på $20",
   "zen.how.step1.beforeLink": "følg",
   "zen.how.step1.link": "opsætningsinstruktioner",
@@ -209,14 +209,14 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Alle Zen-modeller er hostet i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
-  "download.meta.description": "Download OpenCode til macOS, Windows og Linux",
-  "download.hero.title": "Download OpenCode",
+  "download.meta.description": "Download OpenSec til macOS, Windows og Linux",
+  "download.hero.title": "Download OpenSec",
   "download.hero.subtitle": "Tilgengelig i beta til macOS, Windows og Linux",
   "download.hero.button": "Download til {{os}}",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
-  "download.section.extensions": "OpenCode Extensions",
-  "download.section.integrations": "OpenCode Integrations",
+  "download.section.terminal": "OpenSec Terminal",
+  "download.section.desktop": "OpenSec Desktop (Beta)",
+  "download.section.extensions": "OpenSec Extensions",
+  "download.section.integrations": "OpenSec Integrations",
   "download.action.download": "Download",
   "download.action.install": "Installer",
 
@@ -227,25 +227,25 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Ikke nodvendigvis, men sandsynligvis. Du skal bruge et AI-abonnement hvis du vil forbinde OpenCode til en betalt udbyder, men du kan arbejde med",
+    "Ikke nodvendigvis, men sandsynligvis. Du skal bruge et AI-abonnement hvis du vil forbinde OpenSec til en betalt udbyder, men du kan arbejde med",
   "download.faq.a3.localLink": "lokale modeller",
   "download.faq.a3.afterLocal.beforeZen": "gratis. Selvom vi opfordrer brugere til at bruge",
-  "download.faq.a3.afterZen": ", fungerer OpenCode med alle populære udbydere som OpenAI, Anthropic, xAI osv.",
+  "download.faq.a3.afterZen": ", fungerer OpenSec med alle populære udbydere som OpenAI, Anthropic, xAI osv.",
 
-  "download.faq.a5.p1": "OpenCode er 100% gratis at bruge.",
+  "download.faq.a5.p1": "OpenSec er 100% gratis at bruge.",
   "download.faq.a5.p2.beforeZen":
-    "Eventuelle ekstra omkostninger kommer fra dit abonnement hos en modeludbyder. Selvom OpenCode fungerer med enhver modeludbyder, anbefaler vi at bruge",
+    "Eventuelle ekstra omkostninger kommer fra dit abonnement hos en modeludbyder. Selvom OpenSec fungerer med enhver modeludbyder, anbefaler vi at bruge",
   "download.faq.a5.p2.afterZen": ".",
 
-  "download.faq.a6.p1": "Dine data og oplysninger gemmes kun når du opretter delbare links i OpenCode.",
+  "download.faq.a6.p1": "Dine data og oplysninger gemmes kun når du opretter delbare links i OpenSec.",
   "download.faq.a6.p2.beforeShare": "Laes mere om",
   "download.faq.a6.shareLink": "delingssider",
 
-  "enterprise.title": "OpenCode | Enterprise-løsninger til din organisation",
-  "enterprise.meta.description": "Kontakt OpenCode for enterprise-løsninger",
+  "enterprise.title": "OpenSec | Enterprise-løsninger til din organisation",
+  "enterprise.meta.description": "Kontakt OpenSec for enterprise-løsninger",
   "enterprise.hero.title": "Din kode er din egen",
   "enterprise.hero.body1":
-    "OpenCode fungerer sikkert inde i din organisation uden at lagre data eller kontekst og uden licensbegrænsninger eller ejerskabskrav. Start en prøveperiode med dit team, og udrul det derefter i hele din organisation ved at integrere det med dit SSO og din interne AI-gateway.",
+    "OpenSec fungerer sikkert inde i din organisation uden at lagre data eller kontekst og uden licensbegrænsninger eller ejerskabskrav. Start en prøveperiode med dit team, og udrul det derefter i hele din organisation ved at integrere det med dit SSO og din interne AI-gateway.",
   "enterprise.hero.body2": "Fortæl os, hvordan vi kan hjælpe.",
   "enterprise.form.name.label": "Fulde navn",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -259,28 +259,28 @@ export const dict = {
   "enterprise.form.sending": "Sender...",
   "enterprise.form.success": "Besked sendt, vi vender tilbage snart.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "Hvad er OpenCode Enterprise?",
+  "enterprise.faq.q1": "Hvad er OpenSec Enterprise?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise er til organisationer, der vil sikre, at deres kode og data aldrig forlader deres infrastruktur. Det kan gøres med en central konfiguration, der integrerer med dit SSO og din interne AI-gateway.",
-  "enterprise.faq.q2": "Hvordan kommer jeg i gang med OpenCode Enterprise?",
+    "OpenSec Enterprise er til organisationer, der vil sikre, at deres kode og data aldrig forlader deres infrastruktur. Det kan gøres med en central konfiguration, der integrerer med dit SSO og din interne AI-gateway.",
+  "enterprise.faq.q2": "Hvordan kommer jeg i gang med OpenSec Enterprise?",
   "enterprise.faq.a2":
-    "Start blot med en intern prøveperiode med dit team. OpenCode gemmer som standard ikke din kode eller kontekstdata, hvilket gør det nemt at komme i gang. Kontakt os derefter for at tale om priser og implementeringsmuligheder.",
+    "Start blot med en intern prøveperiode med dit team. OpenSec gemmer som standard ikke din kode eller kontekstdata, hvilket gør det nemt at komme i gang. Kontakt os derefter for at tale om priser og implementeringsmuligheder.",
   "enterprise.faq.q3": "Hvordan fungerer enterprise-priser?",
   "enterprise.faq.a3":
     "Vi tilbyder enterprise-priser pr. bruger. Hvis du har din egen LLM-gateway, opkræver vi ikke for brugte tokens. Kontakt os for flere detaljer og et tilbud tilpasset din organisations behov.",
-  "enterprise.faq.q4": "Er mine data sikre med OpenCode Enterprise?",
+  "enterprise.faq.q4": "Er mine data sikre med OpenSec Enterprise?",
   "enterprise.faq.a4":
-    "Ja. OpenCode gemmer ikke din kode eller kontekstdata. Al behandling sker lokalt eller via direkte API-kald til din AI-udbyder. Med central konfiguration og SSO-integration forbliver dine data sikre inden for din organisations infrastruktur.",
+    "Ja. OpenSec gemmer ikke din kode eller kontekstdata. Al behandling sker lokalt eller via direkte API-kald til din AI-udbyder. Med central konfiguration og SSO-integration forbliver dine data sikre inden for din organisations infrastruktur.",
 
-  "brand.title": "OpenCode | Brand",
-  "brand.meta.description": "OpenCode brandretningslinjer",
+  "brand.title": "OpenSec | Brand",
+  "brand.meta.description": "OpenSec brandretningslinjer",
   "brand.heading": "Brandretningslinjer",
-  "brand.subtitle": "Ressourcer og assets, der hjelper dig med at arbejde med OpenCode-brandet.",
+  "brand.subtitle": "Ressourcer og assets, der hjelper dig med at arbejde med OpenSec-brandet.",
   "brand.downloadAll": "Download alle assets",
-  "changelog.title": "OpenCode | Changelog",
-  "changelog.meta.description": "OpenCode versionsnoter og changelog",
+  "changelog.title": "OpenSec | Changelog",
+  "changelog.meta.description": "OpenSec versionsnoter og changelog",
   "changelog.hero.title": "Changelog",
-  "changelog.hero.subtitle": "Nye opdateringer og forbedringer til OpenCode",
+  "changelog.hero.subtitle": "Nye opdateringer og forbedringer til OpenSec",
   "changelog.empty": "Ingen changelog-indlaeg fundet.",
   "changelog.viewJson": "Se JSON",
   "workspace.nav.zen": "Zen",
@@ -447,15 +447,15 @@ export const dict = {
   "workspace.black.time.minutes": "minutter",
   "workspace.black.time.fewSeconds": "et par sekunder",
   "workspace.black.subscription.title": "Abonnement",
-  "workspace.black.subscription.message": "Du abonnerer på OpenCode Black for ${{plan}} om måneden.",
+  "workspace.black.subscription.message": "Du abonnerer på OpenSec Black for ${{plan}} om måneden.",
   "workspace.black.subscription.manage": "Administrer abonnement",
   "workspace.black.subscription.rollingUsage": "5-timers brug",
   "workspace.black.subscription.weeklyUsage": "Ugentlig brug",
   "workspace.black.subscription.resetsIn": "Nulstiller i",
   "workspace.black.subscription.useBalance": "Brug din tilgængelige saldo, når du har nået forbrugsgrænserne",
   "workspace.black.waitlist.title": "Venteliste",
-  "workspace.black.waitlist.joined": "Du er på ventelisten for ${{plan}} per måned OpenCode Black plan.",
-  "workspace.black.waitlist.ready": "Vi er klar til at tilmelde dig ${{plan}} per måned OpenCode Black plan.",
+  "workspace.black.waitlist.joined": "Du er på ventelisten for ${{plan}} per måned OpenSec Black plan.",
+  "workspace.black.waitlist.ready": "Vi er klar til at tilmelde dig ${{plan}} per måned OpenSec Black plan.",
   "workspace.black.waitlist.leave": "Forlad venteliste",
   "workspace.black.waitlist.leaving": "Forlader...",
   "workspace.black.waitlist.left": "Venstre",

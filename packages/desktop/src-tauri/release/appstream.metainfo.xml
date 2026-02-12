@@ -5,7 +5,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
 
-  <name>OpenCode</name>
+  <name>OpenSec</name>
   <summary>Open source AI coding agent</summary>
 
   <developer id="ly.anoma">
@@ -14,7 +14,7 @@
 
   <description>
     <p>
-      OpenCode is an open source agent that helps you write and run code with any AI model.
+      OpenSec is an open source agent that helps you write and run code with any AI model.
     </p>
   </description>
 

@@ -11,12 +11,12 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Updateprüfung fehlgeschlagen",
   "desktop.updater.checkFailed.message": "Updates konnten nicht geprüft werden",
   "desktop.updater.none.title": "Kein Update verfügbar",
-  "desktop.updater.none.message": "Sie verwenden bereits die neueste Version von OpenCode",
+  "desktop.updater.none.message": "Sie verwenden bereits die neueste Version von OpenSec",
   "desktop.updater.downloadFailed.title": "Update fehlgeschlagen",
   "desktop.updater.downloadFailed.message": "Update konnte nicht heruntergeladen werden",
   "desktop.updater.downloaded.title": "Update heruntergeladen",
   "desktop.updater.downloaded.prompt":
-    "Version {{version}} von OpenCode wurde heruntergeladen. Möchten Sie sie installieren und neu starten?",
+    "Version {{version}} von OpenSec wurde heruntergeladen. Möchten Sie sie installieren und neu starten?",
   "desktop.updater.installFailed.title": "Update fehlgeschlagen",
   "desktop.updater.installFailed.message": "Update konnte nicht installiert werden",
 
