@@ -10,6 +10,7 @@ import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@openco
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
+import { terminalWriter } from "@/utils/terminal-writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -160,6 +161,7 @@ export const Terminal = (props: TerminalProps) => {
   const start =
     typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
   let cursor = start ?? 0
+  let output: ReturnType<typeof terminalWriter> | undefined
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -300,7 +302,7 @@ export const Terminal = (props: TerminalProps) => {
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: false,
-        convertEol: true,
+        convertEol: false,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
@@ -312,6 +314,7 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
+      output = terminalWriter((data) => t.write(data))
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -416,7 +419,7 @@ export const Terminal = (props: TerminalProps) => {
 
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
-        t.write(data)
+        output?.push(data)
         cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
@@ -459,6 +462,7 @@ export const Terminal = (props: TerminalProps) => {
 
   onCleanup(() => {
     disposed = true
+    output?.flush()
     persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
     cleanup()
   })
