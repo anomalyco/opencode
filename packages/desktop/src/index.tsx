@@ -115,12 +115,31 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
       void shellOpen(url).catch(() => undefined)
     },
     async openPath(path: string, app?: string) {
-      const os = ostype()
-      if (os === "windows") {
-        if (window.__OPENCODE__?.wsl && app) {
-          const linuxPath = await commands.wslPath(path, "linux").catch(() => path)
-          await Command.create("wsl", ["-e", app, linuxPath]).execute()
-          return
+        const os = ostype()
+        if (os === "windows") {
+          if (window.__OPENCODE__?.wsl && app) {
+            const allowed = new Set(["code", "cursor", "zed", "sublime-text"])
+          const validPattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
+          const isAppAllowed = allowed.has(app) && validPattern.test(app)
+          if (!isAppAllowed) {
+            console.warn("WSL open rejected app name", app) // fall back to Windows opener
+          } else {
+            const linuxPath = await commands
+              .wslPath(path, "linux")
+              .catch((err) => {
+                console.warn("Failed to convert path for WSL open", err)
+                return null
+              })
+            if (linuxPath) {
+              try {
+                const result = await Command.create("wsl", ["-e", app, linuxPath]).execute() // arguments are passed as separate array elements to avoid shell interpretation and injection attacks
+                if (result.code === 0) return // handled via WSL, skip Windows opener
+                console.warn("WSL open returned non-zero code", result.code, result.stderr)
+              } catch (err) {
+                console.warn("WSL open threw", err)
+              }
+            }
+          }
         }
         const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
         const resolvedPath = await (async () => {
