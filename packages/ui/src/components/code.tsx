@@ -1,5 +1,6 @@
 import { type FileContents, File, FileOptions, LineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
+import { Portal } from "solid-js/web"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { getWorkerPool } from "../pierre/worker"
 import { Icon } from "./icon"
@@ -125,11 +126,9 @@ export function Code<T>(props: CodeProps<T>) {
   let wrapper!: HTMLDivElement
   let container!: HTMLDivElement
   let findInput: HTMLInputElement | undefined
-  let findBar: HTMLDivElement | undefined
   let findOverlay!: HTMLDivElement
   let findOverlayFrame: number | undefined
   let findOverlayScroll: HTMLElement[] = []
-  let findScroll: HTMLElement | undefined
   let observer: MutationObserver | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
@@ -158,6 +157,8 @@ export function Code<T>(props: CodeProps<T>) {
   const [findCount, setFindCount] = createSignal(0)
   let findMode: "highlights" | "overlay" = "overlay"
   let findHits: Range[] = []
+
+  const [findPos, setFindPos] = createSignal<{ top: number; right: number }>({ top: 8, right: 8 })
 
   const file = createMemo(
     () =>
@@ -291,30 +292,33 @@ export function Code<T>(props: CodeProps<T>) {
     setFindIndex(0)
   }
 
-  const getScrollParent = (el: HTMLElement): HTMLElement | null => {
+  const getScrollParent = (el: HTMLElement): HTMLElement | undefined => {
     let parent = el.parentElement
     while (parent) {
       const style = getComputedStyle(parent)
       if (style.overflowY === "auto" || style.overflowY === "scroll") return parent
       parent = parent.parentElement
     }
-    return null
   }
 
   const positionFindBar = () => {
-    if (!findBar || !wrapper) return
-    const scrollTop = findScroll ? findScroll.scrollTop : window.scrollY
-    findBar.style.position = "absolute"
-    findBar.style.top = `${scrollTop + 8}px`
-    findBar.style.right = "8px"
-    findBar.style.left = ""
+    if (typeof window === "undefined") return
+
+    const root = getScrollParent(wrapper) ?? wrapper
+    const rect = root.getBoundingClientRect()
+    const title = parseFloat(getComputedStyle(root).getPropertyValue("--session-title-height"))
+    const header = Number.isNaN(title) ? 0 : title
+    setFindPos({
+      top: Math.round(rect.top) + header - 4,
+      right: Math.round(window.innerWidth - rect.right) + 8,
+    })
   }
 
   const scanFind = (root: ShadowRoot, query: string) => {
     const needle = query.toLowerCase()
     const out: Range[] = []
 
-    const cols = Array.from(root.querySelectorAll("[data-column-content]")).filter(
+    const cols = Array.from(root.querySelectorAll("[data-content] [data-line], [data-column-content]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
 
@@ -426,7 +430,6 @@ export function Code<T>(props: CodeProps<T>) {
       }
       if (opts?.scroll && active) {
         scrollToRange(active)
-        positionFindBar()
       }
       return
     }
@@ -435,7 +438,6 @@ export function Code<T>(props: CodeProps<T>) {
     syncOverlayScroll()
     if (opts?.scroll && active) {
       scrollToRange(active)
-      positionFindBar()
     }
     scheduleOverlay()
   }
@@ -464,14 +466,12 @@ export function Code<T>(props: CodeProps<T>) {
         return
       }
       scrollToRange(active)
-      positionFindBar()
       return
     }
 
     clearHighlightFind()
     syncOverlayScroll()
     scrollToRange(active)
-    positionFindBar()
     scheduleOverlay()
   }
 
@@ -484,11 +484,9 @@ export function Code<T>(props: CodeProps<T>) {
       findCurrent = host
       findTarget = host
 
-      findScroll = getScrollParent(wrapper) ?? undefined
       if (!findOpen()) setFindOpen(true)
       requestAnimationFrame(() => {
         applyFind({ scroll: true })
-        positionFindBar()
         findInput?.focus()
         findInput?.select()
       })
@@ -514,18 +512,18 @@ export function Code<T>(props: CodeProps<T>) {
 
   createEffect(() => {
     if (!findOpen()) return
-    findScroll = getScrollParent(wrapper) ?? undefined
-    const target = findScroll ?? window
 
-    const handler = () => positionFindBar()
-    target.addEventListener("scroll", handler, { passive: true })
-    window.addEventListener("resize", handler, { passive: true })
-    handler()
+    const update = () => positionFindBar()
+    requestAnimationFrame(update)
+    window.addEventListener("resize", update, { passive: true })
+
+    const root = getScrollParent(wrapper) ?? wrapper
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => update())
+    observer?.observe(root)
 
     onCleanup(() => {
-      target.removeEventListener("scroll", handler)
-      window.removeEventListener("resize", handler)
-      findScroll = undefined
+      window.removeEventListener("resize", update)
+      observer?.disconnect()
     })
   })
 
@@ -539,23 +537,42 @@ export function Code<T>(props: CodeProps<T>) {
       node.removeAttribute("data-comment-selected")
     }
 
+    const annotations = Array.from(root.querySelectorAll("[data-line-annotation]")).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
+
     for (const range of ranges) {
       const start = Math.max(1, Math.min(range.start, range.end))
       const end = Math.max(range.start, range.end)
 
       for (let line = start; line <= end; line++) {
-        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"]`))
+        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-column-number="${line}"]`))
         for (const node of nodes) {
           if (!(node instanceof HTMLElement)) continue
           node.setAttribute("data-comment-selected", "")
         }
       }
+
+      for (const annotation of annotations) {
+        const line = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
+        if (Number.isNaN(line)) continue
+        if (line < start || line > end) continue
+        annotation.setAttribute("data-comment-selected", "")
+      }
     }
   }
 
+  const text = () => {
+    const value = local.file.contents as unknown
+    if (typeof value === "string") return value
+    if (Array.isArray(value)) return value.join("\n")
+    if (value == null) return ""
+    return String(value)
+  }
+
   const lineCount = () => {
-    const text = local.file.contents
-    const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
+    const value = text()
+    const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
     return Math.max(1, total)
   }
 
@@ -839,8 +856,9 @@ export function Code<T>(props: CodeProps<T>) {
     observer = undefined
 
     container.innerHTML = ""
+    const value = text()
     file().render({
-      file: local.file,
+      file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents: value },
       lineAnnotations: local.annotations,
       containerWrapper: container,
     })
@@ -916,6 +934,64 @@ export function Code<T>(props: CodeProps<T>) {
     pendingSelectionEnd = false
   })
 
+  const FindBar = (barProps: { class: string; style?: ComponentProps<"div">["style"] }) => (
+    <div class={barProps.class} style={barProps.style} onPointerDown={(e) => e.stopPropagation()}>
+      <Icon name="magnifying-glass" size="small" class="text-text-weak shrink-0" />
+      <input
+        ref={findInput}
+        placeholder="Find"
+        value={findQuery()}
+        class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
+        onInput={(e) => {
+          setFindQuery(e.currentTarget.value)
+          setFindIndex(0)
+          applyFind({ reset: true, scroll: true })
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault()
+            closeFind()
+            return
+          }
+          if (e.key !== "Enter") return
+          e.preventDefault()
+          stepFind(e.shiftKey ? -1 : 1)
+        }}
+      />
+      <div class="shrink-0 text-12-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
+        {findCount() ? `${findIndex() + 1}/${findCount()}` : "0/0"}
+      </div>
+      <div class="flex items-center">
+        <button
+          type="button"
+          class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
+          disabled={findCount() === 0}
+          aria-label="Previous match"
+          onClick={() => stepFind(-1)}
+        >
+          <Icon name="chevron-down" size="small" class="rotate-180" />
+        </button>
+        <button
+          type="button"
+          class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
+          disabled={findCount() === 0}
+          aria-label="Next match"
+          onClick={() => stepFind(1)}
+        >
+          <Icon name="chevron-down" size="small" />
+        </button>
+      </div>
+      <button
+        type="button"
+        class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
+        aria-label="Close search"
+        onClick={closeFind}
+      >
+        <Icon name="close-small" size="small" />
+      </button>
+    </div>
+  )
+
   return (
     <div
       data-component="code"
@@ -936,65 +1012,15 @@ export function Code<T>(props: CodeProps<T>) {
       }}
     >
       <Show when={findOpen()}>
-        <div
-          ref={findBar}
-          class="z-50 flex h-8 items-center gap-2 rounded-md border border-border-base bg-background-base px-3 shadow-md"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <Icon name="magnifying-glass" size="small" class="text-text-weak shrink-0" />
-          <input
-            ref={findInput}
-            placeholder="Find"
-            value={findQuery()}
-            class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
-            onInput={(e) => {
-              setFindQuery(e.currentTarget.value)
-              setFindIndex(0)
-              applyFind({ reset: true, scroll: true })
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault()
-                closeFind()
-                return
-              }
-              if (e.key !== "Enter") return
-              e.preventDefault()
-              stepFind(e.shiftKey ? -1 : 1)
+        <Portal>
+          <FindBar
+            class="fixed z-50 flex h-8 items-center gap-2 rounded-md border border-border-base bg-background-base px-3 shadow-md"
+            style={{
+              top: `${findPos().top}px`,
+              right: `${findPos().right}px`,
             }}
           />
-          <div class="shrink-0 text-12-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
-            {findCount() ? `${findIndex() + 1}/${findCount()}` : "0/0"}
-          </div>
-          <div class="flex items-center">
-            <button
-              type="button"
-              class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
-              disabled={findCount() === 0}
-              aria-label="Previous match"
-              onClick={() => stepFind(-1)}
-            >
-              <Icon name="chevron-down" size="small" class="rotate-180" />
-            </button>
-            <button
-              type="button"
-              class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
-              disabled={findCount() === 0}
-              aria-label="Next match"
-              onClick={() => stepFind(1)}
-            >
-              <Icon name="chevron-down" size="small" />
-            </button>
-          </div>
-          <button
-            type="button"
-            class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
-            aria-label="Close search"
-            onClick={closeFind}
-          >
-            <Icon name="close-small" size="small" />
-          </button>
-        </div>
+        </Portal>
       </Show>
       <div ref={container} />
       <div ref={findOverlay} class="pointer-events-none absolute inset-0 z-0" />
