@@ -63,8 +63,8 @@ export const dict = {
   "ui.tool.webfetch": "Webhentning",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
-  "ui.tool.todos": "To-dos",
-  "ui.tool.todos.read": "Læs to-dos",
+  "ui.tool.todos": "Opgaver",
+  "ui.tool.todos.read": "Læs opgaver",
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
 
@@ -94,7 +94,7 @@ export const dict = {
   "ui.patch.action.deleted": "Slettet",
   "ui.patch.action.created": "Oprettet",
   "ui.patch.action.moved": "Flyttet",
-  "ui.patch.action.patched": "Patched",
+  "ui.patch.action.patched": "Patchet",
 
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",

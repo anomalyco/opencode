@@ -40,7 +40,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
+import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -233,7 +233,15 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const sessionPanelWidth = createMemo(() => {
+    if (!desktopSidePanelOpen()) return "100%"
+    if (desktopReviewOpen()) return `${layout.session.width()}px`
+    return `calc(100% - ${layout.fileTree.width()}px)`
+  })
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -252,12 +260,18 @@ export default function Page() {
     return next
   }
 
+  const openReviewPanel = () => {
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+  }
+
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
 
     const path = file.pathFromTab(next)
-    if (path) file.load(path)
+    if (!path) return
+    file.load(path)
+    openReviewPanel()
   }
 
   createEffect(() => {
@@ -380,6 +394,19 @@ export default function Page() {
       })
   }
 
+  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
+    if (params.id !== sessionID) return
+    if (parentID) {
+      navigate(`/${params.dir}/session/${parentID}`)
+      return
+    }
+    if (nextSessionID) {
+      navigate(`/${params.dir}/session/${nextSessionID}`)
+      return
+    }
+    navigate(`/${params.dir}/session`)
+  }
+
   async function archiveSession(sessionID: string) {
     const session = sync.session.get(sessionID)
     if (!session) return
@@ -397,17 +424,7 @@ export default function Page() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-
-        if (params.id !== sessionID) return
-        if (session.parentID) {
-          navigate(`/${params.dir}/session/${session.parentID}`)
-          return
-        }
-        if (nextSession) {
-          navigate(`/${params.dir}/session/${nextSession.id}`)
-          return
-        }
-        navigate(`/${params.dir}/session`)
+        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
       })
       .catch((err) => {
         showToast({
@@ -473,16 +490,7 @@ export default function Page() {
       }),
     )
 
-    if (params.id !== sessionID) return true
-    if (session.parentID) {
-      navigate(`/${params.dir}/session/${session.parentID}`)
-      return true
-    }
-    if (nextSession) {
-      navigate(`/${params.dir}/session/${nextSession.id}`)
-      return true
-    }
-    navigate(`/${params.dir}/session`)
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
     return true
   }
 
@@ -577,7 +585,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    if (project && sdk.directory !== project.worktree) return sdk.directory
     return "main"
   })
 
@@ -830,11 +838,9 @@ export default function Page() {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const currentTabs = tabs().all()
-      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
-      const toIndex = currentTabs?.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== undefined) {
-        tabs().move(draggable.id.toString(), toIndex)
-      }
+      const toIndex = getTabReorderIndex(currentTabs, draggable.id.toString(), droppable.id.toString())
+      if (toIndex === undefined) return
+      tabs().move(draggable.id.toString(), toIndex)
     }
   }
 
@@ -903,6 +909,8 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const focusInput = () => inputRef?.focus()
+
   useSessionCommands({
     command,
     dialog,
@@ -929,6 +937,7 @@ export default function Page() {
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
+    focusInput,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -1011,10 +1020,31 @@ export default function Page() {
         </Show>
       </Match>
       <Match when={true}>
-        <div class={input.emptyClass}>
-          <Mark class="w-14 opacity-10" />
-          <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
-        </div>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={
+            store.changes === "turn" ? (
+              emptyTurn()
+            ) : (
+              <div class={input.emptyClass}>
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+              </div>
+            )
+          }
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
       </Match>
     </Switch>
   )
@@ -1026,7 +1056,7 @@ export default function Page() {
           diffStyle: layout.review.diffStyle(),
           onDiffStyleChange: layout.review.setDiffStyle,
           loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6",
+          emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
         })}
       </div>
     </div>
@@ -1085,6 +1115,7 @@ export default function Page() {
   }
 
   const focusReviewDiff = (path: string) => {
+    openReviewPanel()
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
     setTree({ activeDiff: path, pendingDiff: path })
@@ -1203,7 +1234,7 @@ export default function Page() {
     if (!id) return
 
     const wants = isDesktop()
-      ? view().reviewPanel.opened() && (layout.fileTree.opened() || activeTab() === "review")
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
       : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
@@ -1216,7 +1247,6 @@ export default function Page() {
   createEffect(() => {
     const dir = sdk.directory
     if (!isDesktop()) return
-    if (!view().reviewPanel.opened()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
@@ -1496,15 +1526,18 @@ export default function Page() {
   createEffect(() => {
     if (!file.ready()) return
     setSessionHandoff(sessionKey(), {
-      files: Object.fromEntries(
-        tabs()
-          .all()
-          .flatMap((tab) => {
-            const path = file.pathFromTab(tab)
-            if (!path) return []
-            return [[path, file.selectedLines(path) ?? null] as const]
-          }),
-      ),
+      files: tabs()
+        .all()
+        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
+          const path = file.pathFromTab(tab)
+          if (!path) return acc
+          const selected = file.selectedLines(path)
+          acc[path] =
+            selected && typeof selected === "object" && "start" in selected && "end" in selected
+              ? (selected as SelectedLineRange)
+              : null
+          return acc
+        }, {}),
     })
   })
 
@@ -1521,6 +1554,7 @@ export default function Page() {
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
+          mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
@@ -1533,10 +1567,10 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": view().reviewPanel.opened(),
+            "md:flex-none": desktopSidePanelOpen(),
           }}
           style={{
-            width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
+            width: sessionPanelWidth(),
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1554,7 +1588,7 @@ export default function Page() {
                         container: "px-4",
                       },
                       loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
+                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
@@ -1632,7 +1666,7 @@ export default function Page() {
 
                     const target = value === "main" ? sync.project?.worktree : value
                     if (!target) return
-                    if (target === sync.data.path.directory) return
+                    if (target === sdk.directory) return
                     layout.projects.open(target)
                     navigate(`/${base64Encode(target)}/session`)
                   }}
@@ -1663,26 +1697,26 @@ export default function Page() {
             setPromptDockRef={(el) => (promptDock = el)}
           />
 
-          <Show when={isDesktop() && view().reviewPanel.opened()}>
+          <Show when={desktopReviewOpen()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
               min={450}
-              max={window.innerWidth * 0.45}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
               onResize={layout.session.resize}
             />
           </Show>
         </div>
 
         <SessionSidePanel
-          open={isDesktop() && view().reviewPanel.opened()}
+          open={desktopSidePanelOpen()}
+          reviewOpen={desktopReviewOpen()}
           language={language}
           layout={layout}
           command={command}
           dialog={dialog}
           file={file}
           comments={comments}
-          sync={sync}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
@@ -1694,10 +1728,12 @@ export default function Page() {
           openTab={openTab}
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
-          messages={messages as () => unknown[]}
-          visibleUserMessages={visibleUserMessages as () => unknown[]}
-          view={view}
-          info={info as () => unknown}
+          vm={{
+            messages,
+            visibleUserMessages,
+            view,
+            info,
+          }}
           handoffFiles={() => handoff.session.get(sessionKey())?.files}
           codeComponent={codeComponent}
           addCommentToContext={addCommentToContext}

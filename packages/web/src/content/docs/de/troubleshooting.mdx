@@ -1,0 +1,301 @@
+---
+title: Fehlerbehebung
+description: Haeufige Probleme und schnelle Loesungen.
+---
+
+Wenn OpenCode Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
+
+---
+
+## Logs
+
+Logdateien werden hier gespeichert:
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+
+Dateinamen enthalten Zeitstempel (z. B. `2025-01-09T123456.log`) und es bleiben die letzten 10 Logs erhalten.
+
+Mit `--log-level` bekommst du detailliertere Diagnoseinfos, z. B. `opencode --log-level DEBUG`.
+
+---
+
+## Speicher
+
+opencode speichert Sitzungs- und App-Daten auf der Festplatte unter:
+
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+
+Dieses Verzeichnis enthaelt:
+
+- `auth.json` - Authentifizierungsdaten wie API-Keys und OAuth-Tokens
+- `log/` - Anwendungslogs
+- `project/` - Projektspezifische Daten wie Sitzungen und Nachrichten
+  - In Git-Repositories unter `./<project-slug>/storage/`
+  - Ohne Git unter `./global/storage/`
+
+---
+
+## Desktop-App
+
+OpenCode Desktop startet im Hintergrund einen lokalen OpenCode-Server (`opencode-cli`-Sidecar).
+Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Server-Einstellungen.
+
+### Schnellchecks
+
+- App komplett beenden und neu starten
+- Bei Fehlerbildschirm **Restart** klicken und Details kopieren
+- Nur macOS: `OpenCode`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
+
+---
+
+### Plugins deaktivieren
+
+If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
+
+#### Globale Konfiguration prüfen
+
+Open your global config file and look for a `plugin` key.
+
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+If you have plugins configured, temporarily disable them by removing the key or setting it to an empty array:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [],
+}
+```
+
+#### Plugin-Verzeichnisse prüfen
+
+OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
+
+- **Global plugins**
+  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
+- **Project plugins** (only if you use per-project config)
+  - `<your-project>/.opencode/plugins/`
+
+If the app starts working again, re-enable plugins one at a time to find which one is causing the issue.
+
+---
+
+### Cache leeren
+
+If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
+
+1. Quit OpenCode Desktop completely.
+2. Delete the cache directory:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
+- **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+
+3. Restart OpenCode Desktop.
+
+---
+
+### Server-Verbindungsprobleme beheben
+
+OpenCode Desktop can either start its own local server (default) or connect to a server URL you configured.
+
+If you see a **"Connection Failed"** dialog (or the app never gets past the splash screen), check for a custom server URL.
+
+#### Desktop-Standard-Server-URL löschen
+
+From the Home screen, click the server name (with the status dot) to open the Server picker. In the **Default server** section, click **Clear**.
+
+#### `server.port` / `server.hostname` aus Konfiguration entfernen
+
+If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
+
+#### Umgebungsvariablen prüfen
+
+If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
+
+- Unset `OPENCODE_PORT` (or pick a free port) and restart.
+
+---
+
+### Linux: Wayland / X11-Probleme
+
+On Linux, some Wayland setups can cause blank windows or compositor errors.
+
+- If you're on Wayland and the app is blank/crashing, try launching with `OC_ALLOW_WAYLAND=1`.
+- If that makes things worse, remove it and try launching under an X11 session instead.
+
+---
+
+### Windows: WebView2-Laufzeit
+
+On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+
+---
+
+### Windows: Allgemeine Performance-Probleme
+
+If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL provides a Linux environment that works more seamlessly with OpenCode's features.
+
+---
+
+### Benachrichtigungen werden nicht angezeigt
+
+OpenCode Desktop only shows system notifications when:
+
+- notifications are enabled for OpenCode in your OS settings, and
+- the app window is not focused.
+
+---
+
+### Desktop-App-Speicher zurücksetzen (letzter Ausweg)
+
+If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
+
+1. Quit OpenCode Desktop.
+2. Find and delete these files (they live in the OpenCode Desktop app data directory):
+
+- `opencode.settings.dat` (desktop default server URL)
+- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
+
+To find the directory quickly:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
+- **Linux**: search under `~/.local/share` for the filenames above
+- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+
+---
+
+## Hilfe bekommen
+
+Wenn du Probleme mit OpenCode hast:
+
+1. **Probleme auf GitHub melden**
+
+   Bugs und Feature-Wuensche meldest du am besten im GitHub-Repository:
+
+   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+
+   Suche vor dem Erstellen nach bestehenden Issues, damit Duplikate vermieden werden.
+
+2. **Unserem Discord beitreten**
+
+   Fuer schnelle Hilfe und Austausch in der Community:
+
+   [**opencode.ai/discord**](https://opencode.ai/discord)
+
+---
+
+## Haeufige Probleme
+
+Hier sind typische Fehlerbilder und wie du sie loest.
+
+---
+
+### OpenCode startet nicht
+
+1. Check the logs for error messages
+2. Try running with `--print-logs` to see output in the terminal
+3. Ensure you have the latest version with `opencode upgrade`
+
+---
+
+### Authentifizierungsprobleme
+
+1. Try re-authenticating with the `/connect` command in the TUI
+2. Check that your API keys are valid
+3. Ensure your network allows connections to the provider's API
+
+---
+
+### Modell nicht verfügbar
+
+1. Check that you've authenticated with the provider
+2. Verify the model name in your config is correct
+3. Some models may require specific access or subscriptions
+
+If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
+referencing a model somewhere.
+Models should be referenced like so: `<providerId>/<modelId>`
+
+Examples:
+
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+To figure out what models you have access to, run `opencode models`
+
+---
+
+### ProviderInitError
+
+If you encounter a ProviderInitError, you likely have an invalid or corrupted configuration.
+
+To resolve this:
+
+1. First, verify your provider is set up correctly by following the [providers guide](/docs/providers)
+2. If the issue persists, try clearing your stored configuration:
+
+   ```bash
+   rm -rf ~/.local/share/opencode
+   ```
+
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\opencode`
+
+3. Re-authenticate with your provider using the `/connect` command in the TUI.
+
+---
+
+### AI_APICallError und Provider-Paket-Probleme
+
+If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+
+To resolve provider package issues:
+
+1. Clear the provider package cache:
+
+   ```bash
+   rm -rf ~/.cache/opencode
+   ```
+
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
+
+2. Restart opencode to reinstall the latest provider packages
+
+This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+
+---
+
+### Copy/Paste funktioniert nicht unter Linux
+
+Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
+
+**For X11 systems:**
+
+```bash
+apt install -y xclip
+# or
+apt install -y xsel
+```
+
+**For Wayland systems:**
+
+```bash
+apt install -y wl-clipboard
+```
+
+**For headless environments:**
+
+```bash
+apt install -y xvfb
+# and run:
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99.0
+```
+
+opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
