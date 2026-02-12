@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_SECURITY from "./prompt/security.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -149,6 +150,34 @@ export namespace Agent {
         ),
         description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
         prompt: PROMPT_EXPLORE,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      security: {
+        name: "security",
+        description: `Elite cybersecurity analyst agent for comprehensive security assessments. Use this agent for vulnerability scanning, secret detection, dependency auditing, CVE research, security report generation, and security posture scoring. It has access to all security tools: security_scan, secret_scan, dependency_audit, cve_lookup, security_report, and security_scorecard.`,
+        prompt: PROMPT_SECURITY,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            security_scan: "allow",
+            secret_scan: "allow",
+            dependency_audit: "allow",
+            cve_lookup: "allow",
+            security_report: "allow",
+            security_scorecard: "allow",
+            grep: "allow",
+            glob: "allow",
+            read: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+            bash: "allow",
+            todoread: "deny",
+            todowrite: "deny",
+          }),
+          user,
+        ),
         options: {},
         mode: "subagent",
         native: true,

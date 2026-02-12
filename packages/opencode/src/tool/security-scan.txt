@@ -1,0 +1,33 @@
+Advanced Static Application Security Testing (SAST) tool for deep code vulnerability analysis.
+
+This tool performs comprehensive security scanning on source code files and directories to identify vulnerabilities, security anti-patterns, and potential attack vectors.
+
+## Capabilities
+
+- **OWASP Top 10 Detection**: Identifies all OWASP Top 10 vulnerability categories including injection flaws, broken authentication, sensitive data exposure, XXE, broken access control, security misconfiguration, XSS, insecure deserialization, using components with known vulnerabilities, and insufficient logging
+- **CWE Classification**: Maps each finding to its Common Weakness Enumeration (CWE) identifier
+- **CVSS Scoring**: Assigns severity ratings (Critical/High/Medium/Low/Info) based on CVSS v3.1 methodology
+- **Language Support**: Analyzes JavaScript, TypeScript, Python, Java, Go, Rust, C/C++, PHP, Ruby, C#, Solidity, Shell scripts, SQL, and more
+- **Pattern-Based Analysis**: Uses extensive regex pattern matching to detect insecure coding patterns
+- **Taint Analysis**: Tracks data flow from untrusted sources to sensitive sinks
+- **Configuration Audit**: Checks for insecure configurations in common frameworks
+
+## Scan Types
+
+- `quick` - Fast scan for critical/high severity issues only
+- `standard` - Balanced scan covering all severity levels (default)
+- `deep` - Comprehensive scan with extended pattern matching and cross-file analysis
+- `owasp` - Focused OWASP Top 10 compliance scan
+- `secrets` - Dedicated scan for hardcoded secrets and credentials (use secret-scan for more thorough analysis)
+
+## Output Format
+
+Results are returned in a structured format including:
+- File path and line number of each finding
+- Vulnerability title and description
+- CWE identifier and OWASP category
+- Severity level with confidence rating
+- Remediation guidance
+- Code snippet showing the vulnerable code
+
+Use this tool when you need to analyze code for security vulnerabilities before deployment, during code review, or as part of a security audit.

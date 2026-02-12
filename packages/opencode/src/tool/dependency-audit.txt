@@ -1,0 +1,37 @@
+Dependency vulnerability auditing tool that scans project dependencies for known security vulnerabilities (CVEs).
+
+This tool analyzes package manifests and lock files to identify dependencies with known vulnerabilities from the National Vulnerability Database (NVD) and other security advisory sources.
+
+## Supported Package Managers
+
+- **npm/yarn/pnpm/bun** - package.json, package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb
+- **pip/pipenv/poetry** - requirements.txt, Pipfile, Pipfile.lock, pyproject.toml, poetry.lock
+- **Go modules** - go.mod, go.sum
+- **Cargo (Rust)** - Cargo.toml, Cargo.lock
+- **Maven/Gradle (Java)** - pom.xml, build.gradle, build.gradle.kts
+- **Composer (PHP)** - composer.json, composer.lock
+- **Gemfile (Ruby)** - Gemfile, Gemfile.lock
+- **NuGet (.NET)** - *.csproj, packages.config, Directory.Packages.props
+
+## Analysis Features
+
+- **CVE Matching**: Cross-references dependency versions against known CVEs
+- **CVSS Scoring**: Provides CVSS v3.1 severity scores for each vulnerability
+- **Transitive Dependencies**: Analyzes both direct and transitive dependency chains
+- **Upgrade Paths**: Suggests minimum version upgrades to resolve vulnerabilities
+- **License Analysis**: Identifies dependencies with problematic or incompatible licenses
+- **EOL Detection**: Flags dependencies that have reached end-of-life
+- **Malicious Package Detection**: Checks against known malicious package registries
+
+## Output
+
+For each vulnerable dependency:
+- Package name and installed version
+- CVE identifier(s) and description
+- CVSS score and severity level
+- Fixed version (if available)
+- Upgrade path recommendation
+- Whether it's a direct or transitive dependency
+- Link to the security advisory
+
+Use this tool to audit project dependencies for security issues, verify compliance with security policies, and generate vulnerability reports for stakeholders.

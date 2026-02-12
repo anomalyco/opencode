@@ -1,0 +1,75 @@
+Security posture scoring and assessment tool that calculates a comprehensive security score for codebases.
+
+This tool evaluates multiple dimensions of application security to produce an overall security health score, identify weaknesses, and provide actionable improvement recommendations.
+
+## Scoring Dimensions
+
+### 1. Code Security (25%)
+- Vulnerability density (findings per 1000 lines of code)
+- Critical/High severity finding count
+- Secure coding pattern adherence
+- Input validation coverage
+- Output encoding consistency
+
+### 2. Dependency Security (20%)
+- Vulnerable dependency count and severity
+- Dependency freshness (outdated packages)
+- License compliance
+- Supply chain risk indicators
+- Known malicious package exposure
+
+### 3. Secret Management (15%)
+- Hardcoded secret count
+- Environment variable usage patterns
+- Secret rotation indicators
+- Credential storage practices
+
+### 4. Configuration Security (15%)
+- Security headers configuration
+- TLS/SSL settings
+- CORS configuration
+- Authentication/Authorization setup
+- Error handling practices (information leakage prevention)
+
+### 5. Infrastructure Security (10%)
+- Docker/container security (if applicable)
+- CI/CD pipeline security
+- Deployment configuration
+- Network exposure assessment
+
+### 6. Security Practices (15%)
+- Security-related test coverage
+- Code review indicators
+- Security documentation presence
+- Incident response preparedness
+- Logging and monitoring setup
+
+## Output
+
+### Overall Score
+- Letter grade (A+ through F)
+- Numeric score (0-100)
+- Percentile ranking description
+
+### Dimension Breakdown
+- Individual scores for each dimension
+- Key findings per dimension
+- Improvement recommendations
+
+### Trend Analysis
+- Score changes over time (if baseline available)
+- New vs resolved issues
+- Risk trajectory
+
+### Action Items
+- Prioritized list of improvements
+- Expected score impact of each fix
+- Quick wins vs long-term improvements
+
+## Benchmark Comparisons
+
+- Industry average benchmarks
+- Best practice targets
+- Compliance thresholds for major standards
+
+Use this tool to get a quick security health check of a codebase, track security posture improvements over time, or generate metrics for security dashboards and stakeholder reporting.

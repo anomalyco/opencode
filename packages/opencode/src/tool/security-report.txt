@@ -1,0 +1,55 @@
+Professional security report generator for creating comprehensive cybersecurity assessment documents.
+
+This tool generates detailed, professional-grade security reports in multiple formats based on security scan results, vulnerability findings, and threat assessments.
+
+## Report Types
+
+- `executive` - High-level executive summary with risk overview, key metrics, and strategic recommendations
+- `technical` - Detailed technical report with all findings, code snippets, and remediation steps
+- `compliance` - Compliance-focused report mapped to standards (OWASP, PCI-DSS, SOC2, HIPAA, ISO 27001)
+- `pentest` - Penetration testing style report with methodology, findings, and proof of concepts
+- `audit` - Security audit report with controls assessment and gap analysis
+- `diff` - Differential report comparing current scan against a previous baseline
+- `sbom` - Software Bill of Materials with security annotations
+
+## Report Sections
+
+### Executive Summary
+- Overall security posture score (A-F grade)
+- Risk distribution chart (Critical/High/Medium/Low)
+- Top 5 priority remediation items
+- Trend comparison with previous scans
+- Estimated remediation effort
+
+### Detailed Findings
+- Each vulnerability with full context
+- CVSS scoring and severity justification
+- Attack scenario descriptions
+- Step-by-step remediation instructions
+- Code examples for fixes
+- References to security standards
+
+### Metrics & Analytics
+- Vulnerability density per file/module
+- Technical debt estimation
+- Mean time to remediation tracking
+- Coverage statistics
+- Dependency risk metrics
+
+## Output Formats
+
+- `markdown` - Formatted Markdown document (default)
+- `html` - Styled HTML report
+- `json` - Machine-readable JSON format
+- `sarif` - SARIF format for integration with security tools and CI/CD
+- `csv` - Spreadsheet-compatible format for tracking
+
+## Features
+
+- **Customizable Templates**: Adapt report structure to organizational requirements
+- **Risk Scoring**: Contextual risk scoring based on exploitability and impact
+- **Remediation Priority**: AI-powered prioritization of remediation efforts
+- **Compliance Mapping**: Maps findings to relevant compliance frameworks
+- **Historical Tracking**: Compare against previous scans to show improvement
+
+Use this tool after running security scans to generate professional reports for stakeholders, compliance audits, or internal security reviews.
