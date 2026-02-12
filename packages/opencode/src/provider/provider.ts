@@ -363,7 +363,6 @@ export namespace Provider {
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
-
       return {
         autoload: true,
         options: {
@@ -388,15 +387,6 @@ export namespace Provider {
         },
         async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
-          // For official SDK, it expects languageModel(id). For openai-compatible (via openapi), it likely expects just the ID or similar,
-          // but relying on the defaults in getSDK should handle the sdk() call if it's not the official one.
-          // Yet, looking at the previous implementations:
-          // vertex: sdk.languageModel(id)
-          // vertex-openapi: sdk(modelID)
-          // We need to know which SDK we are dealing with.
-          // However, getModel is called with the *instantiated* SDK.
-          // If it's @ai-sdk/google-vertex, it has .languageModel
-          // If it's @ai-sdk/openai-compatible, it is a function.
           if (typeof sdk === "function") return sdk(id)
           return sdk.languageModel(id)
         },
@@ -537,7 +527,7 @@ export namespace Provider {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -678,13 +668,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-            cache: {
-              read: model.cost.context_over_200k.cache_read ?? 0,
-              write: model.cost.context_over_200k.cache_write ?? 0,
-            },
-            input: model.cost.context_over_200k.input,
-            output: model.cost.context_over_200k.output,
-          }
+              cache: {
+                read: model.cost.context_over_200k.cache_read ?? 0,
+                write: model.cost.context_over_200k.cache_write ?? 0,
+              },
+              input: model.cost.context_over_200k.input,
+              output: model.cost.context_over_200k.output,
+            }
           : undefined,
       },
       limit: {
@@ -810,7 +800,6 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??
@@ -1027,11 +1016,7 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
-      // Sanitize options for official Google Vertex SDK to prevent conflicts
       if (model.api.npm === "@ai-sdk/google-vertex" || model.api.npm === "@ai-sdk/google") {
-        // Only strip if it's a standard Google URL (which conflicts with official SDK internals).
-        // Custom proxies and localhost will have a baseURL that doesn't include "googleapis.com", 
-        // so they will bypass this stripping.
         const isGoogle = !options.baseURL || options.baseURL.includes("googleapis.com")
         if (isGoogle) {
           delete options.baseURL

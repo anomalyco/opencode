@@ -2162,24 +2162,12 @@ test("Google Vertex: retains baseURL for custom proxy", async () => {
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-      // We need to trick GoogleAuth if possible, or expect failure but check if fetch was called?
-      // Without mock modules, createVertex will try to auth. 
-      // However, if we provide a custom baseURL, createVertex might skip some auth checks or we might fail later.
-      // Actually, without valid creds, createVertex might throw on initialization or first call.
-      // Let's assume we can't fully run doGenerate without creds.
-      // But we can check if the baseURL is present in the provider options returned by Provider.list()!
-      // Wait, Provider.list() returns the state options. 
-      // The sanitization happens inside getSDK, which is internal.
-      // So we MUST run getSDK/getLanguage to trigger sanitization.
-      // But getSDK returns the SDK instance.
-      // Does the SDK instance expose the baseURL?
-      // The Vertex SDK instance does not expose config easily.
+
     },
     fn: async () => {
       const originalFetch = globalThis.fetch
       let requestUrl: string | URL | Request | undefined
 
-      // Manual fetch replacement
       // @ts-ignore
       globalThis.fetch = async (url, init) => {
         requestUrl = url
@@ -2193,12 +2181,10 @@ test("Google Vertex: retains baseURL for custom proxy", async () => {
         const model = await Provider.getModel("vertex-proxy", "gemini-pro")
         const languageModel = await Provider.getLanguage(model)
 
-        // This call will trigger the fetch
         await languageModel.doGenerate({
           prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }]
         })
 
-        // Check if baseURL was retained in the request URL
         expect(requestUrl?.toString()).toContain("https://my-proxy.com/v1")
       } finally {
         globalThis.fetch = originalFetch
@@ -2227,7 +2213,6 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
               },
               options: {
                 apiKey: "test-key",
-                // includeUsage not set, should default to true due to logic
               },
             },
           },
@@ -2242,7 +2227,6 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
       const originalFetch = globalThis.fetch
       let requestBody: any = null
 
-      // key is strictly checked by some providers, passing invalid key is fine as we manually replace fetch
       // @ts-ignore
       globalThis.fetch = async (url, init) => {
         if (init && init.body) {
@@ -2264,19 +2248,6 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
         })
 
         expect(requestBody).toBeDefined()
-        // OpenAI compatible providers (using @ai-sdk/openai-compatible) usually put includeUsage in options, 
-        // which translates to stream_options: { include_usage: true } for streaming, 
-        // but for doGenerate (non-streaming), usage is usually returned by default or controlled by provider?
-        // Actually, the change was:
-        // if (options["includeUsage"] !== false) options["includeUsage"] = true
-        // The SDK uses this option.
-        // For OpenAI, includeUsage option controls whether usage is requested?
-        // Standard OpenAI API always returns usage for non-streaming.
-        // For streaming, it requires stream_options: {"include_usage": true}.
-        // doGenerate might use streaming internally? No, doGenerate is usually non-streaming.
-        // But let's check if we can verify it.
-        // If doGenerate uses non-streaming, usage is always there.
-        // So this logic might be for STREAMING mainly.
 
       } finally {
         globalThis.fetch = originalFetch
