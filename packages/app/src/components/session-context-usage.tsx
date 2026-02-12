@@ -15,12 +15,9 @@ interface SessionContextUsageProps {
 
 function openSessionContext(args: {
   view: ReturnType<ReturnType<typeof useLayout>["view"]>
-  layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
   if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
-  args.layout.fileTree.open()
-  args.layout.fileTree.setTab("all")
   args.tabs.open("context")
   args.tabs.setActive("context")
 }
@@ -55,7 +52,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     if (!params.id) return
     openSessionContext({
       view: view(),
-      layout,
       tabs: tabs(),
     })
   }
