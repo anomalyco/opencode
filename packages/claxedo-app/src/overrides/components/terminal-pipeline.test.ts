@@ -4,6 +4,7 @@ import { SerializeAddon } from "@xterm/addon-serialize"
 import { createTerminalRuntimeQueue } from "./terminal-runtime-queue"
 import { preparePersistBuffer, prepareRestoreBuffer } from "./terminal-buffer"
 import { createModeScanner } from "../terminal/mode-scan"
+import { createQuerySuppressor } from "../terminal/query-suppression"
 import { sigwinchToggleSize } from "./terminal-connection"
 
 // ---------------------------------------------------------------------------
@@ -98,12 +99,18 @@ function createPipeline(opts: {
 
   // I/O filters (same as real backend creates)
   const mode = createModeScanner()
+  const suppress = createQuerySuppressor()
 
-  // Write (matches backend.write in xterm.ts — no query suppression)
+  // Write (matches backend.write in xterm.ts)
   const filteredWrite = (data: string, callback?: () => void) => {
-    mode.scan(data)
-    if (callback) xterm.write(data, callback)
-    else xterm.write(data)
+    const out = suppress.scan(data)
+    mode.scan(out)
+    if (!out) {
+      callback?.()
+      return
+    }
+    if (callback) xterm.write(out, callback)
+    else xterm.write(out)
   }
 
   // Queue (matches terminal.tsx setup)

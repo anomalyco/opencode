@@ -280,7 +280,11 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const url = new URL(urlString)
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+      if (url.protocol === "http:") url.protocol = "ws:"
+      if (url.protocol === "https:") url.protocol = "wss:"
+      if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+        url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+      }
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__.serverPassword
@@ -598,44 +602,50 @@ export const Terminal = (props: TerminalProps) => {
         tlog("socket open", { ptyId: local.pty.id, cols: b.cols, rows: b.rows })
         local.onConnect?.()
 
-        // Force SIGWINCH via resize toggle so TUI apps (OpenCode, Codex) re-render
-        // after reconnect. A direct size update won't trigger SIGWINCH if the size
-        // happens to match the PTY's current size, so we send cols-1 first then cols.
-        const targetCols = b.cols
-        const targetRows = b.rows
-        const [first, second] = sigwinchToggleSize(targetCols, targetRows)
-        if (debug()) {
-          tlog("socket open sigwinch", {
-            ptyId: local.pty.id,
-            target: { cols: targetCols, rows: targetRows },
-            first,
-            second,
-            host: host(),
-          })
-        }
-        sdk.client.pty
-          .update({
-            ptyID: local.pty.id,
-            size: first,
-          })
-          .then(() => {
-            if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: first, step: 1 })
-            return sdk.client.pty.update({
-              ptyID: local.pty.id,
-              size: second,
-            })
-          })
-          .then(() => {
-            if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: second, step: 2 })
-          })
-          .catch((error) => {
-            tlog("socket open sigwinch failed", {
+        const modeSequences = local.pty.modeSequences ?? ""
+        const shouldForceSigwinch =
+          local.pty.wasAltScreen === true ||
+          /\x1b\[\?(?:1|9|1000|1001|1002|1003|1004|1005|1006|1049)h/.test(modeSequences)
+        if (!shouldForceSigwinch) {
+          publishResize({ cols: b.cols, rows: b.rows }, "socket-open")
+        } else {
+          // Force SIGWINCH via resize toggle so TUI apps re-render after reconnect.
+          const targetCols = b.cols
+          const targetRows = b.rows
+          const [first, second] = sigwinchToggleSize(targetCols, targetRows)
+          if (debug()) {
+            tlog("socket open sigwinch", {
               ptyId: local.pty.id,
+              target: { cols: targetCols, rows: targetRows },
               first,
               second,
-              error: error instanceof Error ? error.message : String(error),
+              host: host(),
             })
-          })
+          }
+          sdk.client.pty
+            .update({
+              ptyID: local.pty.id,
+              size: first,
+            })
+            .then(() => {
+              if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: first, step: 1 })
+              return sdk.client.pty.update({
+                ptyID: local.pty.id,
+                size: second,
+              })
+            })
+            .then(() => {
+              if (verbose()) tvlog("sigwinch ack", { ptyId: local.pty.id, size: second, step: 2 })
+            })
+            .catch((error) => {
+              tlog("socket open sigwinch failed", {
+                ptyId: local.pty.id,
+                first,
+                second,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            })
+        }
 
         // Execute initial command only once per PTY, including across reloads.
         if (shouldRunInitialCommand(local.pty)) {

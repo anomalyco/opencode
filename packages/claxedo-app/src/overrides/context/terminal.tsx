@@ -273,9 +273,8 @@ export function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: strin
     update(pty: Partial<LocalPTY> & { id: string }) {
       tvlog("update()", { dir, id: pty.id, patch: pty })
       const index = store.all.findIndex((x) => x.id === pty.id)
-      if (index !== -1) {
-        setStore("all", index, (existing) => ({ ...existing, ...pty }))
-      }
+      if (index === -1) return
+      setStore("all", index, (existing) => ({ ...existing, ...pty }))
       sdk.client.pty
         .update({
           ptyID: pty.id,

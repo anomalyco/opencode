@@ -10,6 +10,7 @@ import {
   scrollToBottom,
 } from "../helpers"
 import { createModeScanner } from "../mode-scan"
+import { createQuerySuppressor } from "../query-suppression"
 import type { TerminalBackend, TerminalBackendOptions, Disposable, CreateBackendFn } from "./types"
 
 export const createBackend: CreateBackendFn = async (
@@ -38,6 +39,7 @@ export const createBackend: CreateBackendFn = async (
 
   // Track bracketed paste mode across split writes.
   const mode = createModeScanner()
+  const suppress = createQuerySuppressor()
   const originalWrite = xterm.write.bind(xterm)
 
   // Data/key listeners managed externally
@@ -115,11 +117,16 @@ export const createBackend: CreateBackendFn = async (
     },
 
     write(data: string, callback?: () => void) {
-      mode.scan(data)
+      const filtered = suppress.scan(data)
+      mode.scan(filtered)
+      if (!filtered) {
+        callback?.()
+        return
+      }
       if (callback) {
-        originalWrite(data, callback)
+        originalWrite(filtered, callback)
       } else {
-        originalWrite(data)
+        originalWrite(filtered)
       }
     },
 

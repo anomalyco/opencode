@@ -8,6 +8,9 @@ export type LocalPTY = {
   buffer?: string
   scrollY?: number
   cursor?: number
+  modeSequences?: string
+  wasAltScreen?: boolean
+  wasAtBottom?: boolean
   initialCommand?: string
 }
 
@@ -43,4 +46,3 @@ export function mergeCreatedTerminal(
   const title = info.title ?? `Terminal ${titleNumber}`
   return [...all, { id: info.id, title, titleNumber, cwd: info.cwd }]
 }
-

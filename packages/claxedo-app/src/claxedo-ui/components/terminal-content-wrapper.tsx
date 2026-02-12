@@ -907,7 +907,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
               <div class="flex-1 min-h-0 h-full w-full overflow-hidden">
                 <Terminal
                   pty={currentPty}
-                  onCleanup={(pty) => queueMicrotask(() => terminal.update(pty))}
+                  onCleanup={terminal.update}
                   onUpdate={terminal.update}
                   // Cmd+D: split left/right (vertical split)
                   onSplitVertical={() => {
