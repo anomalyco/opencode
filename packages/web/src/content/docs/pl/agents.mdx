@@ -1,142 +1,141 @@
 ---
-title: Agencja
-description: Konfiguruj i używaj funkcjonalnych agentów.
+title: Agenci
+description: Konfiguruj i używaj potężnych agentów.
 ---
 
-Agencje do urządzeń asystenci AI, które można podłączyć do gniazd zasilania i przepływów pracy. Umożliwiają tworzenie ukierunkowanych narzędzi z niestandardowymi monitami, modelami i udostępnianiem narzędzi.
+Agenci to asystenci AI, których można przypisać do ról i workflow. Umożliwiają tworzenie ukierunkowanych narzędzi z niestandardowymi promptami, modelami i dostępem do narzędzi.
 
 :::tip
-Skorzystaj z agenta planu, aby uzyskać dostęp do kodu i przeglądać informacje bez dodatkowych zmian w kodzie.
+Użyj agenta Plan, aby uzyskać dostęp do kodu i przeglądać informacje bez wprowadzania zmian w kodzie.
 :::
 
 Możesz przełączać się między agentami podczas sesji lub wywoływać ich za pomocą wzmianki `@`.
 
 ---
 
-## Typowe
+## Typy
 
-W opencode zasada dwóch charakterystycznych agentów; Najpierw pierwotni i subagenci.
+W OpenCode obowiązuje zasada dwóch typów agentów: Primary (Główni) i Subagents (Subagenci).
 
 ---
 
-### Agencja Pierwsi
+### Primary Agents (Agenci główni)
 
-Główne zasady asystenci, z podstawowym kontaktem. Możesz je mieć za pomocą klawisza **Tab** lub podwójnego skrótu klawiszowego `switch_agent`. Ci agenci obsługujący urządzenie główne. Dostęp do narzędzia jest konfigurowany za pomocą uprawnień — na przykład w programie Build wszystkie narzędzia są dostępne, a plan jest ograniczony.
+Główni asystenci, z którymi prowadzisz interakcję. Możesz przełączać się między nimi za pomocą klawisza **Tab** lub skrótu klawiszowego `switch_agent`. Ci agenci obsługują główną pętlę. Dostęp do narzędzi jest konfigurowany za pomocą uprawnień — na przykład w agencie Build wszystkie narzędzia są dostępne, a w agencie Plan są ograniczone.
 
 :::tip
-Twój klawisz klawisza **Tab**, aby wyłączyć się między agentami podczas sesji.
+Użyj klawisza **Tab**, aby przełączać się między agentami podczas sesji.
 :::
 
-opencode zawiera dwa puste agenty główne: **Build** i **Plan**. Dobrze
-spójrz na te poniżej.
+OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy się im poniżej.
 
 ---
 
-### Podagencje
+### Subagents (Subagenci)
 
-Podagenci do pomocniczych asystenci, których można przywoływać agenci główni w celu wykonania podstawowych zadań. Możesz także wytwarzać je, **@ wspominając** o nich w swoich wiadomościach.
+Subagenci to asystenci pomocniczy, których mogą przywoływać agenci główni w celu wykonania konkretnych zadań. Możesz także wywoływać ich ręcznie, **wzmiankując ich (@)** w swoich wiadomościach.
 
-opencode ma dwóch subagentów: **Ogólne** i **Eksploruj**. Przyjrzymy się temu poniżej.
-
----
-
-## Wbudowany
-
-opencode ma dwa główne agenty i dwa główne agenty podrzędne.
+OpenCode ma dwóch wbudowanych subagentów: **General** i **Explore**. Przyjrzymy się im poniżej.
 
 ---
 
-### korzystać z pracy
+## Wbudowane
 
-_Tryb_: `primary`
-
-Kompilacja jest **domyślnym** agentem zastosowania z ukrytymi narzędziami. Jest to standardowy agent do prac programistycznych, którego dostęp jest udostępniony do operacji na plikach i podstawowych systemowych.
+OpenCode ma dwa wbudowane agenty główne i dwa wbudowane subagenty.
 
 ---
 
-### założenie z planu
+### Build
 
-_Tryb_: `primary`
+_Mode_: `primary`
 
-Zastrzeżony agent do analizy. Używamy systemu, aby włączyć Ci większe ryzyko i zapobiec niezamierzonym zmianom.
-Domyślnie są wybrane na `ask`:
-
-- `file edits`: Wszystkie zapisy, transkrypcja i edycje
-- `bash`: Wszystkie polecam bash
-
-Ten agent jest podłączony, gdy chcesz, aby LLM był kompatybilny z kodem, który wymaga zastosowania lub wersji plastikowej bez konieczności stosowania innej wersji bazy kodu.
+Build to **domyślny** agent ogólnego przeznaczenia z pełnym zestawem narzędzi. Jest to standardowy agent do prac programistycznych, który ma dostęp do operacji na plikach i poleceń systemowych.
 
 ---
 
-### miejsce
+### Plan
 
-_Tryb_: `subagent`
+_Mode_: `primary`
 
-Rozwiązanie rozwiązania złożone z zadań wieloetapowych. Pełny dostęp do narzędzia (z funkcjonalnymi funkcjami do wykonania), dzięki czemu może w razie potrzeby zostać dostarczone w plikach. Przewoźnik dziesięć, aby określić wiele jednostek roboczych.
+Dedykowany agent do analizy. Używa zestawu narzędzi tylko do odczytu, aby zmniejszyć ryzyko i zapobiec niezamierzonym zmianom.
+Domyślnie uprawnienia są ustawione na `ask` dla:
 
----
+- `file edits`: Wszystkie zapisy, patche i edycje
+- `bash`: Wszystkie polecenia bash
 
-### eksploracji
-
-_Tryb_: `subagent`
-
-Szybki agent tylko do odczytu do eksploracji baz kodu. Nie można modyfikować plików. Użycie tej opcji, jeśli chcesz szybko uzyskać dostęp do plików według wzorców, wyszukać w kodzie słowa kluczowe lub rozwiązania dotyczące zapytań dotyczących bazy kodu.
+Ten agent jest zalecany, gdy chcesz, aby LLM zapoznał się z kodem, stworzył plan lub odpowiedział na pytania bez ryzyka modyfikacji bazy kodu.
 
 ---
 
-### zagęszczanie danych
+### General
 
-_Tryb_: `primary`
+_Mode_: `subagent`
 
-Ukryty agent systemowy, który jest kontekstem kontekstowym w dużym podsumowaniu. W razie działania nie można przejść do interfejsu użytkownika.
-
----
-
-### jako tytuł
-
-_Tryb_: `primary`
-
-Ukryty agent systemowy, krótki tytuł sesji. Działa automatycznie i nie można przejść do interfejsu użytkownika.
+Rozwiązuje złożone zadania wieloetapowe. Pełny dostęp do narzędzi (z możliwością modyfikacji plików), dzięki czemu może w razie potrzeby wprowadzać zmiany w plikach. Używany przez agenta nadrzędnego do delegowania jednostek pracy.
 
 ---
 
-### Podsumowanie podsumowania
+### Explore
 
-_Tryb_: `primary`
+_Mode_: `subagent`
 
-Ukryty agent systemowy, który stanowi podsumowanie podsumowania sesji. Działa automatycznie i nie można przejść do interfejsu użytkownika.
+Szybki agent tylko do odczytu do eksploracji baz kodu. Nie może modyfikować plików. Używany, gdy chcesz szybko znaleźć pliki według wzorców, wyszukać w kodzie słowa kluczowe lub uzyskać odpowiedzi na pytania dotyczące bazy kodu.
 
 ---
 
-## Stosowanie
+### Compaction
 
-1. W przypadku agentów głównych klawisza **Tab**, aby przełączać się między nimi podczas sesji. Można również podać z skrótu klawiszowego `switch_agent`.
+_Mode_: `primary`
 
-2. Subagent można wytwarzać:
+Ukryty agent systemowy, który kompresuje kontekst w zwięzłe podsumowanie. Działa automatycznie i nie jest widoczny w interfejsie użytkownika.
+
+---
+
+### Title
+
+_Mode_: `primary`
+
+Ukryty agent systemowy, który generuje krótki tytuł sesji. Działa automatycznie i nie jest widoczny w interfejsie użytkownika.
+
+---
+
+### Summary
+
+_Mode_: `primary`
+
+Ukryty agent systemowy, który generuje podsumowanie sesji. Działa automatycznie i nie jest widoczny w interfejsie użytkownika.
+
+---
+
+## Użycie
+
+1. W przypadku agentów głównych użyj klawisza **Tab**, aby przełączać się między nimi podczas sesji. Można to również zrobić za pomocą skrótu klawiszowego `switch_agent`.
+
+2. Subagentów można wywoływać:
    - **Automatycznie** przez głównych agentów do specjalistycznych zadań na podstawie ich opisów.
-   - Ręcznie, **@ wspomnienie** o subagencji w Twoich wiadomościach. Na przykład.
+   - Ręcznie, **wzmiankując (@)** subagenta w swoich wiadomościach. Na przykład:
 
      ```txt frame="none"
-     @general help me search for this function
+     @explore help me search for this function
      ```
 
-3. **Nawigacja pomiędzy sesjami**: Kiedy można mieć własne sesje podrzędne, można nawigować pomiędzy sesjami nadrzędnymi a określonymi podrzędnymi, dostępnymi z:
-   - **\<Lider>+Prawo** (lub skonfigurowane przez Ciebie klawisze `session_child_cycle`), aby przełączać się między jednostkami nadrzędnymi → podrzędnymi 1 → podrzędnymi 2 → ... → nadrzędnymi
-   - **\<Leader>+Left** (lub skrót klawiszowy `session_child_cycle_reverse`), aby przejść dalej między macierzym ← podnośnik1 ← podnośnik2 ← ... ← prowadzącym
+3. **Nawigacja pomiędzy sesjami**: Kiedy sesja ma sesje podrzędne, możesz nawigować pomiędzy sesją nadrzędną a sesjami podrzędnymi za pomocą:
+   - **\<Leader>+Prawo** (lub skonfigurowanego klawisza `session_child_cycle`), aby przełączać się w dół: rodzic → dziecko 1 → dziecko 2 → ... → rodzic
+   - **\<Leader>+Lewo** (lub skonfigurowanego klawisza `session_child_cycle_reverse`), aby przełączać się w górę: rodzic ← dziecko 1 ← dziecko 2 ← ... ← rodzic
 
-   Dostępna możliwość płynnego przełączania pomiędzy rozmową główną a pracą specjalistyczną subagentę.
+   Umożliwia to płynne przełączanie się między główną rozmową a pracą specjalistyczną wykonywaną przez subagentów.
 
 ---
 
-## Skonfiguruj
+## Konfiguracja
 
-Możliwość zastosowania agentów lub urządzeń poprzez zastosowanie. Agentów można zidentyfikować na dwóch systemach:
+Możesz tworzyć własnych agentów lub dostosowywać istniejących. Agentów można definiować na dwa sposoby:
 
 ---
 
 ### JSON
 
-Skonfiguruj agenta w pliku konfiguracyjnym `opencode.json`:
+Skonfiguruj agenta w pliku `opencode.json`:
 
 ```json title="opencode.json"
 {
@@ -177,12 +176,12 @@ Skonfiguruj agenta w pliku konfiguracyjnym `opencode.json`:
 
 ---
 
-### Obniżka cen
+### Markdown
 
-Można także definiować agentów za pomocą plików przecen. Trzymaj je w:
+Możesz także definiować agentów za pomocą plików markdown. Przechowuj je w:
 
 - Globalnie: `~/.config/opencode/agents/`
-- Na projekt: `.opencode/agents/`
+- W projekcie: `.opencode/agents/`
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
@@ -206,19 +205,19 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-Nazwa pliku przecen staje się nazwą agenta. Na przykład `review.md` tworzy agenta `review`.
+Nazwa pliku markdown staje się nazwą agenta. Na przykład `review.md` tworzy agenta `review`.
 
 ---
 
 ## Opcje
 
-Przyjrzyjmy się szczegółowo tym opcjom konfiguracji.
+Przyjrzyjmy się szczegółowo opcjom konfiguracji.
 
 ---
 
-### Opis
+### Description (Opis)
 
-miejsce `description`, aby krótko tego, co robi agent i kiedy go stosować.
+Użyj `description`, aby krótko opisać, co robi agent i kiedy go używać.
 
 ```json title="opencode.json"
 {
@@ -234,11 +233,11 @@ Jest to **wymagana** opcja konfiguracji.
 
 ---
 
-### Temperatura
+### Temperature (Temperatura)
 
 Kontroluj losowość i kreatywność odpowiedzi LLM za pomocą konfiguracji `temperature`.
 
-Niższe wartości, że odpowiedzi są bardziej skupione i deterministyczne, gdy wartość jest innowacyjna i złożona.
+Niższe wartości sprawiają, że odpowiedzi są bardziej skupione i deterministyczne, podczas gdy wyższe wartości wprowadzają więcej różnorodności i kreatywności.
 
 ```json title="opencode.json"
 {
@@ -253,11 +252,11 @@ Niższe wartości, że odpowiedzi są bardziej skupione i deterministyczne, gdy 
 }
 ```
 
-Wartość temperatury zwykle waha się od 0,0 do 1,0:
+Wartość temperatury zwykle waha się od 0.0 do 1.0:
 
-- **0,0-0,2**: Bardzo skoncentrowane i deterministyczne odpowiedzi, idealne do analizy i kodu źródłowego
-- **0,3-0,5**: Zrównoważona odpowiedź z chwilą powstania, dobre do ogólnych zadań rozwojowych
-- **0,6–1,0**: Bardziej kreatywne i odpowiedzi, rozstrzygnięte podczas burzy mózgów i eksploracji
+- **0.0-0.2**: Bardzo skoncentrowane i deterministyczne odpowiedzi, idealne do analizy kodu i debugowania
+- **0.3-0.5**: Zrównoważone odpowiedzi, dobre do ogólnych zadań programistycznych
+- **0.6-1.0**: Bardziej kreatywne i zróżnicowane odpowiedzi, przydatne podczas burzy mózgów i eksploracji
 
 ```json title="opencode.json"
 {
@@ -277,15 +276,15 @@ Wartość temperatury zwykle waha się od 0,0 do 1,0:
 }
 ```
 
-Jeśli nie ma wpływu na kontrolę, opencode używa narzędzia do analizy danych dla modelu; 0 dla określonych modeli, 0,55 dla modeli Qwen.
+Jeśli nie zostanie skonfigurowana, OpenCode używa wartości domyślnej dla danego modelu; 0 dla modeli rozumowania (reasoning models), 0.55 dla modeli Qwen.
 
 ---
 
-### Maksymalna liczba kroków
+### Steps (Kroki)
 
-Kontroluj funkcjonowanie iteracji agenta, jaki agent może być, zanim będzie dostępny wyłącznie z tekstem. Dzięki temu użytkownicy kontrolujący koszty mogą mieć wpływ na działanie agentów.
+Kontroluj maksymalną liczbę iteracji, jaką agent może wykonać, zanim poprosi o interwencję użytkownika. Pomaga to kontrolować koszty i zapobiegać pętlom.
 
-Jeśli ta opcja nie zostanie skonfigurowana, agent będzie obowiązywał iterację, jeśli model nie zostanie wydany lub użytkownik nie będzie regularnie używany.
+Jeśli ta opcja nie zostanie skonfigurowana, agent będzie kontynuował iterację, dopóki model nie zakończy zadania lub użytkownik nie przerwie działania.
 
 ```json title="opencode.json"
 {
@@ -299,15 +298,15 @@ Jeśli ta opcja nie zostanie skonfigurowana, agent będzie obowiązywał iteracj
 }
 ```
 
-Po tym, jak agent limitu otrzymuje specjalny monit systemowy nakazujący podsumowanie swojej pracy i rekomendowanych do wykonywania zadań.
+Po osiągnięciu limitu agent otrzymuje specjalny monit systemowy nakazujący podsumowanie swojej pracy i zarekomendowanie kolejnych kroków.
 
 :::caution
-Starsze pole `maxSteps` jest przestarzałe. Zamiast tego nadzoru `steps`.
+Starsze pole `maxSteps` jest przestarzałe. Zamiast tego użyj `steps`.
 :::
 
 ---
 
-### Wymienne
+### Disabled (Wyłączony)
 
 Ustaw na `true`, aby wyłączyć agenta.
 
@@ -323,9 +322,9 @@ Ustaw na `true`, aby wyłączyć agenta.
 
 ---
 
-### Podpowiedź
+### Prompt (Monit)
 
-niestandardowy plik podpowiedzi systemowych dla tego agenta z konfiguracją `prompt`. Plik informacyjny powinien zawierać dla celu agenta.
+Podaj niestandardowy prompt systemowy dla tego agenta za pomocą konfiguracji `prompt`. Prompt powinien zawierać instrukcje dotyczące celu i zachowania agenta.
 
 ```json title="opencode.json"
 {
@@ -337,16 +336,16 @@ niestandardowy plik podpowiedzi systemowych dla tego agenta z konfiguracją `pro
 }
 ```
 
-Ścieżka ta zależy od miejsca, w którym znajduje się plik konfiguracyjny. Działa również w przypadku globalnej konstrukcji opencode, jak i funkcjonalnej dla projektu.
+Ścieżka jest względna do miejsca, w którym znajduje się plik konfiguracyjny. Działa to zarówno w przypadku globalnej konfiguracji OpenCode, jak i konfiguracji specyficznej dla projektu.
 
 ---
 
 ### Model
 
-konstrukcja nośna `model`, aby mieć model dla tego agenta. Przydatne przy różnych modelach konfiguracji w różnych zadaniach. Na przykład zastosowania modelu, skuteczne wykonanie modelu.
+Użyj `model`, aby określić model dla tego agenta. Przydatne do używania różnych modeli do różnych zadań. Na przykład użycie modelu rozumowania do planowania, ale szybszego modelu do edycji.
 
 :::tip
-Jeśli nie ma wpływu na model, główne są [modelu skonfigurowanego globalnie](/docs/config#models), agenci podrzędni podmiotem modelu agenta, który wywołał subagentę.
+Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigurowanego globalnie](/docs/config#models), a agenci podrzędni używają modelu agenta, który ich wywołał.
 :::
 
 ```json title="opencode.json"
@@ -359,13 +358,13 @@ Jeśli nie ma wpływu na model, główne są [modelu skonfigurowanego globalnie]
 }
 ```
 
-Identyfikator modelu w konfiguracji opencode w `provider/model-id`. Na koniec, [OpenCode Zen](/docs/zen), przestrzeganie `opencode/gpt-5.1-codex` dla kodeksu GPT 5.1.
+Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/model-id`. Na przykład, [OpenCode Zen](/docs/zen), użyj `opencode/gpt-5.1-codex` dla GPT 5.1 Codex.
 
 ---
 
-### Narzędzia
+### Tools (Narzędzia)
 
-Kontroluj, które narzędzia są dostępne w tej agencji, za pomocą konfiguracji `tools`. Można włączyć lub dostępne narzędzie, ustawiając je na `true` lub `false`.
+Kontroluj, które narzędzia są dostępne dla tego agenta, za pomocą konfiguracji `tools`. Możesz włączyć lub wyłączyć określone narzędzia, ustawiając je na `true` lub `false`.
 
 ```json title="opencode.json" {3-6,9-12}
 {
@@ -386,10 +385,10 @@ Kontroluj, które narzędzia są dostępne w tej agencji, za pomocą konfiguracj
 ```
 
 :::note
-Konfiguracja specjalna dla agenta globalnego.
+Konfiguracja specyficzna dla agenta nadpisuje konfigurację globalną.
 :::
 
-Można także zastosować symboli wieloznacznych do kontrolowanych wielu narzędzi jednocześnie. Na przykład, aby wyłączyć wszystkie narzędzia z serwera MCP:
+Możesz także używać symboli wieloznacznych (wildcards), aby kontrolować wiele narzędzi jednocześnie. Na przykład, aby wyłączyć wszystkie narzędzia z serwera MCP:
 
 ```json title="opencode.json"
 {
@@ -410,13 +409,13 @@ Można także zastosować symboli wieloznacznych do kontrolowanych wielu narzęd
 
 ---
 
-### Uprawnienia
+### Permissions (Uprawnienia)
 
-Może wystąpić możliwość działania, które może pozostać ostateczne przez agenta. Obecnie proste dla narzędzia `edit`, `bash` i `webfetch` można znaleźć w drodze:
+Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykonywanych przez agenta. Obecnie obsługiwane dla narzędzi `edit`, `bash` i `webfetch`:
 
-- `"ask"` — Monituj o zatwierdzenie przed użyciem narzędzia
-- `"allow"` — Zezwalaj na wszystkie operacje bez zatwierdzenia
-- `"deny"` — Wyłączenie narzędzia
+- `"ask"` — Pytaj o zatwierdzenie przed użyciem narzędzia
+- `"allow"` — Zezwalaj na użycie bez zatwierdzenia
+- `"deny"` — Zabroń użycia narzędzia
 
 ```json title="opencode.json"
 {
@@ -427,7 +426,7 @@ Może wystąpić możliwość działania, które może pozostać ostateczne prze
 }
 ```
 
-Można mieć odpowiedni dla każdego agenta.
+Możesz nadpisać to dla każdego agenta.
 
 ```json title="opencode.json" {3-5,8-10}
 {
@@ -445,7 +444,7 @@ Można mieć odpowiedni dla każdego agenta.
 }
 ```
 
-Można także istnieć w agentach Markdown.
+Można to również ustawić w agentach Markdown.
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
@@ -464,7 +463,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-Można podłączyć do gniazda bash.
+Możesz to skonfigurować szczegółowo dla poleceń bash.
 
 ```json title="opencode.json" {7}
 {
@@ -482,7 +481,7 @@ Można podłączyć do gniazda bash.
 }
 ```
 
-Może być przestrzegany globalnym.
+Można to połączyć z globalnym symbolem wieloznacznym.
 
 ```json title="opencode.json" {7}
 {
@@ -499,8 +498,8 @@ Może być przestrzegany globalnym.
 }
 ```
 
-Możesz także uzyskać symbolu wieloznacznego `*` do zarządzania uprawnieniami dla wszystkich użytkowników.
-Ostatnie dostępne źródło pierwszeństwo, symbol wieloznaczny `*` na pierwszym miejscu, wyodrębnione na końcu.
+Możesz także użyć symbolu wieloznacznego `*`, aby zarządzać wszystkimi innymi poleceniami.
+Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jest sprawdzany na końcu.
 
 ```json title="opencode.json" {8}
 {
@@ -518,13 +517,13 @@ Ostatnie dostępne źródło pierwszeństwo, symbol wieloznaczny `*` na pierwszy
 }
 ```
 
-[Dowiedz się więcej o prawach](/docs/permissions).
+[Dowiedz się więcej o uprawnieniach](/docs/permissions).
 
 ---
 
-### Tryb
+### Mode (Tryb)
 
-Kontroluj tryb agenta za pomocą konfiguracji `mode`. Opcja `mode` umożliwiająca użycie środka.
+Kontroluj tryb agenta za pomocą konfiguracji `mode`. Opcja `mode` określa, w jaki sposób agent może być używany.
 
 ```json title="opencode.json"
 {
@@ -536,13 +535,13 @@ Kontroluj tryb agenta za pomocą konfiguracji `mode`. Opcja `mode` umożliwiają
 }
 ```
 
-Opcję `mode` można ustawić na `primary`, `subagent` lub `all`. Jeśli nie dotyczy `mode`, jest to `all`.
+Opcję `mode` można ustawić na `primary`, `subagent` lub `all`. Jeśli nie podano `mode`, domyślnie jest to `all`.
 
 ---
 
-### Ukryty
+### Hidden (Ukryty)
 
-Ukryj subagenta w menu autouzupełniania `@` za pomocą `hidden: true`. Przydatne w postępowaniu sądowym podagenci, potencjalnie być wywoływani programowo przez innych agentów, którzy korzystają z pomocy jako narzędzia.
+Ukryj subagenta w menu autouzupełniania `@` za pomocą `hidden: true`. Przydatne w przypadku subagentów narzędziowych, którzy powinni być wywoływani tylko programowo przez innych agentów, a nie bezpośrednio przez użytkownika.
 
 ```json title="opencode.json"
 {
@@ -555,17 +554,17 @@ Ukryj subagenta w menu autouzupełniania `@` za pomocą `hidden: true`. Przydatn
 }
 ```
 
-Wpływ tylko na użytkownika w menu autouzupełniania. Model może nadal wywoływać ukrytych agentów za pomocą narzędzi do zadań, funkcji użytkowych.
+Wpływa to tylko na widoczność w menu autouzupełniania. Model nadal może wywoływać ukrytych agentów za pomocą narzędzia zadania, jeśli ma do nich dostęp.
 
 :::note
-Dotyczy tylko agentów `mode: subagent`.
+Dotyczy tylko agentów z `mode: subagent`.
 :::
 
 ---
 
-### Uprawnienia do zadań
+### Task Permissions (Uprawnienia zadań)
 
-Kontroluj, których agenci podawców mogą wywołać za pomocą narzędzia zadanie za pomocą `permission.task`. Używa wzorców globalnych do elastycznego dopasowywania.
+Kontroluj, których subagentów może wywołać ten agent za pomocą narzędzia zadania, używając `permission.task`. Używa wzorców glob do elastycznego dopasowywania.
 
 ```json title="opencode.json"
 {
@@ -584,23 +583,23 @@ Kontroluj, których agenci podawców mogą wywołać za pomocą narzędzia zadan
 }
 ```
 
-Po ustawieniu wartości `deny` podagent zostanie usunięty z opisu narzędzia Zadania, więc model nie będzie gotowy do uruchomienia.
+Po ustawieniu wartości `deny` subagent zostanie usunięty z definicji narzędzia Zadania, więc model nie będzie nawet wiedział o jego istnieniu.
 
 :::tip
-Reguły są następujące w kolejności i **ostatnia reguła wygrywająca**. W zasadzie `orchestrator-planner` jest konfiguracją `*` (odmową), jak i `orchestrator-*` (zezwolenie), ale ponieważ `orchestrator-*` użytkownika po `*`, postać jest `allow`.
+Reguły są oceniane w kolejności i **wygrywa ostatnia pasująca reguła**. W powyższym przykładzie `orchestrator-planner` pasuje zarówno do `*` (odmowa), jak i `orchestrator-*` (zezwolenie), ale ponieważ `orchestrator-*` występuje po `*`, wynikiem jest `allow`.
 :::
 
 :::tip
-Zawsze można rozwiązać rozwiązanie, bezpośrednio poprzez menu autouzupełnieniania `@`, nawet jeśli wystąpią zadania agenta temu naprawiające.
+Zawsze możesz wywołać subagenta ręcznie, wspominając go bezpośrednio (`@`), nawet jeśli obecny agent ma uprawnienia ustawione na `deny`.
 :::
 
 ---
 
-### Kolor
+### Color (Kolor)
 
-Dostosuj wygląd agenta w interfejsie użytkownika za pomocą opcji `color`. Wpływ na wygląd agenta w interfejsie.
+Dostosuj wygląd agenta w interfejsie użytkownika za pomocą opcji `color`. Wpływa to na ikonę i obramowanie agenta w interfejsie.
 
-Narodziny kościoła szesnastkowego (np. `#FF5733`) lub koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+Użyj kodu hex (np. `#FF5733`) lub nazwy koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
 ```json title="opencode.json"
 {
@@ -617,9 +616,9 @@ Narodziny kościoła szesnastkowego (np. `#FF5733`) lub koloru motywu: `primary`
 
 ---
 
-### Góra P
+### Top P
 
-Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla temperatury w celu kontrolowanej braku wartości.
+Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla temperatury w celu kontrolowania losowości.
 
 ```json title="opencode.json"
 {
@@ -631,15 +630,15 @@ Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla 
 }
 ```
 
-Wartość mieszkalna obejmuje zakres od 0,0 do 1,0. Niższe wartości są bardziej skoncentrowane, wyższe wartości są bardziej zaawansowane.
+Wartość waha się od 0.0 do 1.0. Niższe wartości są bardziej skoncentrowane, wyższe wartości są bardziej zróżnicowane.
 
 ---
 
-### nadal
+### Passthrough (Przekazywanie)
 
-Wszelkie inne konfiguracje w agentach **przekazane bezpośrednio** jako model sprzedawcy. Dostęp do funkcji i parametrów dostarczanych dla dostawcy.
+Wszelkie inne konfiguracje w agentach są **przekazywane bezpośrednio** do dostawcy modelu. Pozwala to na korzystanie z funkcji i parametrów specyficznych dla dostawcy.
 
-Na przykład dzięki modelowi rozumowania OpenAI może kontrolować rozumowanie:
+Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłek rozumowania:
 
 ```json title="opencode.json" {6,7}
 {
@@ -654,55 +653,55 @@ Na przykład dzięki modelowi rozumowania OpenAI może kontrolować rozumowanie:
 }
 ```
 
-Te dodatkowe cechy można zidentyfikować od modelu i dostawcy. Sprawdź swoje dostawcę pod kątem parametrów.
+Te dodatkowe właściwości zależą od modelu i dostawcy. Sprawdź dokumentację swojego dostawcy pod kątem dostępnych parametrów.
 
 :::tip
-Uruchomione `opencode models`, aby wyłączyć modele.
+Uruchom `opencode models`, aby zobaczyć dostępne modele.
 :::
 
 ---
 
-## Utwórz agentów
+## Tworzenie agentów
 
-Możesz stworzyć nowych agentów za pomocą innego polecenia:
+Możesz stworzyć nowych agentów interaktywnie za pomocą polecenia:
 
 ```bash
 opencode agent create
 ```
 
-Wykonaj decyzję:
+Poprowadzi Cię to przez proces:
 
-1. Zapytaj, gdzie zapisać agenta; globalne lub szczegółowe dla projektu.
-2. Opisz tego, co agent powinien.
-3. Wygeneruj właściwy monit systemowy i identyfikator.
-4. Wejście do wybrania narzędzia, do którego agenta może być dostęp.
-5. Na koniec pliku pliku przecen z konfiguracją agenta.
+1. Pytanie o miejsce zapisu agenta (globalnie lub dla projektu).
+2. Opis tego, co agent powinien robić.
+3. Wygenerowanie odpowiedniego promptu systemowego i identyfikatora.
+4. Wybór narzędzi, do których agent powinien mieć dostęp.
+5. Zapisanie pliku markdown z konfiguracją agenta.
 
 ---
 
 ## Przypadki użycia
 
-Oto kilka typowych zastosowań różnych agentów.
+Oto kilka typowych zastosowań różnych agentów:
 
-- **Agent użyciai**: Pełne prace programistyczne z dostępnymi narzędziami
-- **Plan agenta**: Analiza i planowanie bez zmian
-- **Agent recenzujący**: Przegląd kodu z odczytu i narzędzia do dokumentacji
-- **Agent debugujący**: Koncentruje się na urządzeniu z dostępnymi narzędziami bash i odczytu
-- **Agent Dokumentów**: Zapisywanie dokumentacji za pomocą operacji na plikach, ale bez konieczności posiadania kopii systemowych
+- **Agent programista**: Pełne prace programistyczne z dostępem do wszystkich narzędzi.
+- **Agent Plan**: Analiza i planowanie bez ryzyka modyfikacji kodu.
+- **Agent recenzujący**: Przegląd kodu z dostępem do odczytu plików i narzędzi dokumentacyjnych.
+- **Agent debugujący**: Koncentruje się na rozwiązywaniu problemów z dostępem do narzędzi bash i odczytu plików.
+- **Agent Documentation**: Tworzenie i utrzymywanie dokumentacji z dostępem do operacji na plikach, ale bez poleceń systemowych.
 
 ---
 
-## Przykład
+## Przykłady
 
-Oto kilka przykładowych agentów, którzy mogą się przydatni.
+Oto kilka przykładowych agentów, którzy mogą być przydatni.
 
 :::tip
-Czy masz agenta, który jest osobą towarzyszącą? [Prześlij PR](https://github.com/anomalyco/opencode).
+Masz agenta, którym warto się podzielić? [Prześlij PR](https://github.com/anomalyco/opencode).
 :::
 
 ---
 
-### Dokumentacja agenta
+### Agent Documentation
 
 ```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
@@ -724,7 +723,7 @@ Focus on:
 
 ---
 
-### Audytor bezpieczeństwa
+### Security Auditor
 
 ```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---

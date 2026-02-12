@@ -9,7 +9,7 @@ Para exemplos, confira os [plugins](/docs/ecosystem#plugins) criados pela comuni
 
 ---
 
-## Usar um plugin
+## Usando um plugin
 
 Existem duas maneiras de carregar plugins.
 
@@ -64,7 +64,7 @@ Pacotes npm duplicados com o mesmo nome e versão são carregados uma vez. No en
 
 ---
 
-## Criar um plugin
+## Criando um plugin
 
 Um plugin é um **módulo JavaScript/TypeScript** que exporta uma ou mais funções de plugin. Cada função recebe um objeto de contexto e retorna um objeto de hooks.
 
@@ -104,10 +104,10 @@ export const MyPlugin = async (ctx) => {
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin inicializado!")
+  console.log("Plugin initialized!")
 
   return {
-    // Implementações de hooks vão aqui
+    // Hook implementations go here
   }
 }
 ```
@@ -117,7 +117,7 @@ A função do plugin recebe:
 - `project`: As informações do projeto atual.
 - `directory`: O diretório de trabalho atual.
 - `worktree`: O caminho do worktree do git.
-- `client`: Um cliente SDK do opencode para interagir com a IA.
+- `client`: Um cliente SDK do opencode para interagir com a AI.
 - `$`: A [API shell](https://bun.com/docs/runtime/shell) do Bun para executar comandos.
 
 ---
@@ -131,7 +131,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
-    // Implementações de hooks seguras em tipo
+    // Type-safe hook implementations
   }
 }
 ```
@@ -214,7 +214,7 @@ Aqui estão alguns exemplos de plugins que você pode usar para estender o openc
 
 ---
 
-### Enviar notificações
+### Enviando notificações
 
 Envie notificações quando certos eventos ocorrerem:
 
@@ -222,7 +222,7 @@ Envie notificações quando certos eventos ocorrerem:
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
-      // Enviar notificação ao concluir a sessão
+      // Send notification on session completion
       if (event.type === "session.idle") {
         await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
       }
@@ -248,7 +248,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
   return {
     "tool.execute.before": async (input, output) => {
       if (input.tool === "read" && output.args.filePath.includes(".env")) {
-        throw new Error("Não leia arquivos .env")
+        throw new Error("Do not read .env files")
       }
     },
   }
@@ -257,15 +257,15 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
-### Injetar variáveis de ambiente
+### Injetando variáveis de ambiente
 
-Injete variáveis de ambiente em todas as execuções de shell (ferramentas de IA e terminais de usuário):
+Injete variáveis de ambiente em todas as execuções de shell (ferramentas de AI e terminais de usuário):
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
-      output.env.MY_API_KEY = "secreto"
+      output.env.MY_API_KEY = "secret"
       output.env.PROJECT_ROOT = input.cwd
     },
   }
@@ -285,7 +285,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
     tool: {
       mytool: tool({
-        description: "Esta é uma ferramenta personalizada",
+        description: "This is a custom tool",
         args: {
           foo: tool.schema.string(),
         },
@@ -319,7 +319,7 @@ export const MyPlugin = async ({ client }) => {
     body: {
       service: "my-plugin",
       level: "info",
-      message: "Plugin inicializado",
+      message: "Plugin initialized",
       extra: { foo: "bar" },
     },
   })
@@ -340,14 +340,14 @@ import type { Plugin } from "@opencode-ai/plugin"
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
     "experimental.session.compacting": async (input, output) => {
-      // Injetar contexto adicional no prompt de compactação
+      // Inject additional context into the compaction prompt
       output.context.push(`
-## Contexto Personalizado
+## Custom Context
 
-Inclua qualquer estado que deve persistir entre as compactações:
-- Status da tarefa atual
-- Decisões importantes tomadas
-- Arquivos sendo trabalhados ativamente
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
 `)
     },
   }
@@ -364,17 +364,17 @@ import type { Plugin } from "@opencode-ai/plugin"
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {
     "experimental.session.compacting": async (input, output) => {
-      // Substituir todo o prompt de compactação
+      // Replace the entire compaction prompt
       output.prompt = `
-Você está gerando um prompt de continuação para uma sessão de enxame multi-agente.
+You are generating a continuation prompt for a multi-agent swarm session.
 
-Resuma:
-1. A tarefa atual e seu status
-2. Quais arquivos estão sendo modificados e por quem
-3. Quaisquer bloqueios ou dependências entre agentes
-4. Os próximos passos para concluir o trabalho
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
 
-Formate como um prompt estruturado que um novo agente pode usar para retomar o trabalho.
+Format as a structured prompt that a new agent can use to resume work.
 `
     },
   }

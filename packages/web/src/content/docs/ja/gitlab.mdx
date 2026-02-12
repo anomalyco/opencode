@@ -17,17 +17,17 @@ OpenCode は通常の GitLab パイプラインで動作します。 [CI コン�
 
 ---
 
-### 特徴
+### 機能
 
-- **ジョブごとにカスタム構成を使用する**: カスタム構成ディレクトリ (`./config/#custom-directory` など) を使用して OpenCode を構成し、OpenCode の呼び出しごとに機能を有効または無効にします。
-- **最小限のセットアップ**: CI コンポーネントはバックグラウンドで OpenCode をセットアップします。必要なのは、OpenCode 構成と初期プロンプトを作成することだけです。
+- **ジョブごとにカスタム設定を使用する**: カスタム設定ディレクトリ (`./config/#custom-directory` など) を使用して OpenCode を構成し、OpenCode の呼び出しごとに機能を有効または無効にします。
+- **最小限のセットアップ**: CI コンポーネントはバックグラウンドで OpenCode をセットアップします。必要なのは、OpenCode 設定と初期プロンプトを作成することだけです。
 - **柔軟性**: CI コンポーネントは、動作をカスタマイズするための複数の入力をサポートしています。
 
 ---
 
 ### 設定
 
-1. OpenCode 認証 JSON をファイル タイプ CI 環境変数として [**設定**] > [**CI/CD**] > [**変数**] に保存します。必ず「マスクして非表示」としてマークしてください。
+1. OpenCode 認証 JSON をファイルタイプ CI 環境変数として [**設定**] > [**CI/CD**] > [**変数**] に保存します。必ず「マスクして非表示」としてマークしてください。
 2. 以下を `.gitlab-ci.yml` ファイルに追加します。
 
    ```yaml title=".gitlab-ci.yml"
@@ -40,18 +40,18 @@ OpenCode は通常の GitLab パイプラインで動作します。 [CI コン�
          message: "Your prompt here"
    ```
 
-さらに多くの入力と使用例については、このコンポーネントの docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) をチェックしてください。
+さらに多くの入力と使用例については、このコンポーネントの [ドキュメント](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) をチェックしてください。
 
 ---
 
-## GitLab デュオ
+## GitLab Duo
 
 OpenCode は GitLab ワークフローと統合します。
 コメントで `@opencode` に言及すると、OpenCode が GitLab CI パイプライン内でタスクを実行します。
 
 ---
 
-### 特徴
+### 機能
 
 - **問題のトリアージ**: OpenCode に問題を調べて説明してもらいます。
 - **修正と実装**: OpenCode に問題の修正または機能の実装を依頼します。
@@ -70,14 +70,14 @@ OpenCode は GitLab CI/CD パイプラインで実行されます。セットア
 
 1.  GitLab 環境を構成する
 2.  CI/CD のセットアップ
-3.  AI モデル プロバイダー API キーを取得する
+3.  AI モデルプロバイダー API キーを取得する
 4.  サービスアカウントを作成する
 5.  CI/CD変数を構成する
-6.  フロー構成ファイルを作成します。例を次に示します。
+6.  フロー設定ファイルを作成します。例を次に示します。
 
         <details>
 
-    <summary>Flow configuration</summary>
+    <summary>フロー設定</summary>
 
     ```yaml
     image: node:22-slim
@@ -152,7 +152,7 @@ OpenCode は GitLab CI/CD パイプラインで実行されます。セットア
 
         </details>
 
-詳細な手順については、「GitLab CLI エージェント docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)」を参照してください。
+詳細な手順については、[GitLab CLI エージェント docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)を参照してください。
 
 ---
 
@@ -161,7 +161,7 @@ OpenCode は GitLab CI/CD パイプラインで実行されます。セットア
 GitLab で OpenCode を使用する方法の例をいくつか示します。
 
 :::tip
-`@opencode` とは異なるトリガー フレーズを使用するように設定できます。
+`@opencode` とは異なるトリガーフレーズを使用するように設定できます。
 :::
 
 - **問題の説明**
@@ -169,7 +169,7 @@ GitLab で OpenCode を使用する方法の例をいくつか示します。
 このコメントを GitLab の問題に追加します。
 
 ```
-@opencode explain this issue
+  @opencode explain this issue
 ```
 
 OpenCode は問題を読み、明確な説明を返信します。
@@ -179,17 +179,17 @@ OpenCode は問題を読み、明確な説明を返信します。
 GitLab の問題では、次のように言います。
 
 ```
-@opencode fix this
+  @opencode fix this
 ```
 
-OpenCode は新しいブランチを作成し、変更を実装し、変更を含むマージ リクエストを開きます。
+OpenCode は新しいブランチを作成し、変更を実装し、変更を含むマージリクエストを開きます。
 
 - **マージリクエストを確認する**
 
-GitLab マージ リクエストに次のコメントを残してください。
+GitLab マージリクエストに次のコメントを残してください。
 
 ```
-@opencode review this merge request
+  @opencode review this merge request
 ```
 
-OpenCode はマージ リクエストをレビューし、フィードバックを提供します。
+OpenCode はマージリクエストをレビューし、フィードバックを提供します。

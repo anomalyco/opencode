@@ -7,34 +7,34 @@ OpenCode formatea automáticamente los archivos después de escribirlos o editar
 
 ---
 
-## Incorporado
+## Integrados
 
 OpenCode viene con varios formateadores integrados para lenguajes y marcos populares. A continuación se muestra una lista de los formateadores, las extensiones de archivo compatibles y los comandos u opciones de configuración que necesita.
 
 | Formateador          | Extensiones                                                                                          | Requisitos                                                                                                             |
 | -------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| gobierno             | .ir                                                                                                  | Comando `gofmt` disponible                                                                                             |
-| mezclar              | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                         | Comando `mix` disponible                                                                                               |
-| más bonita           | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml y [más](https://prettier.io/docs/en/index.html) | dependencia `prettier` en `package.json`                                                                               |
-| bioma                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml y [más](https://biomejs.dev/)                   | `biome.json(c)` archivo de configuración                                                                               |
-| zigzag               | .zig, .zon                                                                                           | Comando `zig` disponible                                                                                               |
-| formato clang        | .c, .cpp, .h, .hpp, .ino y [más](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` archivo de configuración                                                                               |
-| klint                | .kt, .kts                                                                                            | Comando `ktlint` disponible                                                                                            |
-| gorguera             | .py, .pyi                                                                                            | Comando `ruff` disponible con configuración                                                                            |
-| óxido                | .rs                                                                                                  | Comando `rustfmt` disponible                                                                                           |
-| cargafmt             | .rs                                                                                                  | Comando `cargo fmt` disponible                                                                                         |
-| ultravioleta         | .py, .pyi                                                                                            | Comando `uv` disponible                                                                                                |
+| gofmt                | .go                                                                                                  | Comando `gofmt` disponible                                                                                             |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                         | Comando `mix` disponible                                                                                               |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml y [más](https://prettier.io/docs/en/index.html) | dependencia `prettier` en `package.json`                                                                               |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml y [más](https://biomejs.dev/)                   | `biome.json(c)` archivo de configuración                                                                               |
+| zig                  | .zig, .zon                                                                                           | Comando `zig` disponible                                                                                               |
+| clang-format         | .c, .cpp, .h, .hpp, .ino y [más](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` archivo de configuración                                                                               |
+| ktlint               | .kt, .kts                                                                                            | Comando `ktlint` disponible                                                                                            |
+| ruff                 | .py, .pyi                                                                                            | Comando `ruff` disponible con configuración                                                                            |
+| rustfmt              | .rs                                                                                                  | Comando `rustfmt` disponible                                                                                           |
+| cargo fmt            | .rs                                                                                                  | Comando `cargo fmt` disponible                                                                                         |
+| uv                   | .py, .pyi                                                                                            | Comando `uv` disponible                                                                                                |
 | rubocop              | .rb, .rake, .gemspec, .ru                                                                            | Comando `rubocop` disponible                                                                                           |
-| estándarrb           | .rb, .rake, .gemspec, .ru                                                                            | Comando `standardrb` disponible                                                                                        |
-| embellecedor html    | .erb, .html.erb                                                                                      | Comando `htmlbeautifier` disponible                                                                                    |
-| aire                 | .R                                                                                                   | Comando `air` disponible                                                                                               |
-| dardo                | .dardo                                                                                               | Comando `dart` disponible                                                                                              |
-| formato ocaml        | .ml, .mli                                                                                            | Comando `ocamlformat` disponible y archivo de configuración `.ocamlformat`                                             |
-| terraformar          | .tf, .tfvars                                                                                         | Comando `terraform` disponible                                                                                         |
-| brillo               | .brillo                                                                                              | Comando `gleam` disponible                                                                                             |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                            | Comando `standardrb` disponible                                                                                        |
+| htmlbeautifier       | .erb, .html.erb                                                                                      | Comando `htmlbeautifier` disponible                                                                                    |
+| air                  | .R                                                                                                   | Comando `air` disponible                                                                                               |
+| dart                 | .dart                                                                                                | Comando `dart` disponible                                                                                              |
+| ocamlformat          | .ml, .mli                                                                                            | Comando `ocamlformat` disponible y archivo de configuración `.ocamlformat`                                             |
+| terraform            | .tf, .tfvars                                                                                         | Comando `terraform` disponible                                                                                         |
+| gleam                | .gleam                                                                                               | Comando `gleam` disponible                                                                                             |
 | nixfmt               | .nix                                                                                                 | Comando `nixfmt` disponible                                                                                            |
 | shfmt                | .sh, .bash                                                                                           | Comando `shfmt` disponible                                                                                             |
-| pinta                | .php                                                                                                 | dependencia `laravel/pint` en `composer.json`                                                                          |
+| pint                 | .php                                                                                                 | dependencia `laravel/pint` en `composer.json`                                                                          |
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                 | Dependencia de `oxfmt` en `package.json` y un [indicador de variable de entorno experimental](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                  | Comando `ormolu` disponible                                                                                            |
 
@@ -44,7 +44,7 @@ Entonces, si su proyecto tiene `prettier` en su `package.json`, OpenCode lo usar
 
 ## Cómo funciona
 
-Cuando OpenCode escribe o edita un archivo,:
+Cuando OpenCode escribe o edita un archivo:
 
 1. Comprueba la extensión del archivo con todos los formateadores habilitados.
 2. Ejecuta el comando de formateo apropiado en el archivo.
@@ -54,7 +54,7 @@ Este proceso ocurre en segundo plano, lo que garantiza que los estilos de su có
 
 ---
 
-## Configurar
+## Configuración
 
 Puede personalizar los formateadores a través de la sección `formatter` en su configuración OpenCode.
 

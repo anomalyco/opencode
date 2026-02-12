@@ -1,12 +1,12 @@
 ---
-title: Server
-description: Samhandle med opencode-server over HTTP.
+title: Tjener
+description: Samhandle med OpenCode-tjener over HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kjører en hodeløs HTTP-server som avslører et OpenAPI-endepunkt som en opencode-klient kan bruke.
+Kommandoen `opencode serve` kjører en hodeløs HTTP-server som eksponerer et OpenAPI-endepunkt som en OpenCode-klient kan bruke.
 
 ---
 
@@ -18,15 +18,15 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### Alternativer
 
-| Flagg           | Beskrivelse                                    | Standard         |
-| --------------- | ---------------------------------------------- | ---------------- |
-| `--port`        | Port å lytte på                                | `4096`           |
-| `--hostname`    | Vertsnavn å lytte på                           | `127.0.0.1`      |
-| `--mdns`        | Aktiver mDNS-oppdagelse                        | `false`          |
-| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste      | `opencode.local` |
-| `--cors`        | Ytterligere nettleseropprinnelse for å tillate | `[]`             |
+| Flagg           | Beskrivelse                                   | Standard         |
+| --------------- | --------------------------------------------- | ---------------- |
+| `--port`        | Port å lytte på                               | `4096`           |
+| `--hostname`    | Vertsnavn å lytte på                          | `127.0.0.1`      |
+| `--mdns`        | Aktiver mDNS-oppdagelse                       | `false`          |
+| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste     | `opencode.local` |
+| `--cors`        | Ytterligere nettleseropprinnelse som tillates | `[]`             |
 
-`--cors` kan passeres flere ganger:
+`--cors` kan angis flere ganger:
 
 ```bash
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
@@ -36,7 +36,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### Autentisering
 
-Sett `OPENCODE_SERVER_PASSWORD` for å beskytte serveren med HTTP grunnleggende autentisering. Brukernavnet er standard til `opencode`, eller sett `OPENCODE_SERVER_USERNAME` for å overstyre det. Dette gjelder både `opencode serve` og `opencode web`.
+Sett `OPENCODE_SERVER_PASSWORD` for å beskytte serveren med HTTP grunnleggende autentisering. Brukernavnet er satt til `opencode` som standard, eller sett `OPENCODE_SERVER_USERNAME` for å overstyre det. Dette gjelder både `opencode serve` og `opencode web`.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve
@@ -51,13 +51,13 @@ klient som snakker med serveren. Serveren viser en OpenAPI 3.1-spesifikasjon
 endepunkt. Dette endepunktet brukes også til å generere en [SDK](/docs/sdk).
 
 :::tip
-Bruk opencode-serveren til å samhandle med opencode programmatisk.
+Bruk OpenCode-serveren til å samhandle med OpenCode programmatisk.
 :::
 
-Denne arkitekturen lar opencode støtte flere klienter og lar deg samhandle med opencode programmatisk.
+Denne arkitekturen lar OpenCode støtte flere klienter og lar deg samhandle med OpenCode programmatisk.
 
 Du kan kjøre `opencode serve` for å starte en frittstående server. Hvis du har
-opencode TUI kjører, vil `opencode serve` starte en ny server.
+OpenCode TUI kjører, vil `opencode serve` starte en ny server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI kjører, vil `opencode serve` starte en ny server.
 
 Når du starter TUI, tildeler den tilfeldig en port og vertsnavn. Du kan i stedet sende inn `--hostname` og `--port` [flagg](/docs/cli). Bruk deretter denne til å koble til serveren.
 
-[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av opencode [IDE](/docs/ide) plugins.
+[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av OpenCode [IDE](/docs/ide) plugins.
 
 ---
 
@@ -98,69 +98,69 @@ opencode-serveren viser følgende APIer.
 
 ### Prosjekt
 
-| Metode | Sti                | Beskrivelse                 | Svar                                          |
-| ------ | ------------------ | --------------------------- | --------------------------------------------- |
-| `GET`  | `/project`         | Liste over alle prosjekter  | <a href={typesUrl}><code>Project[]</code></a> |
-| `GET`  | `/project/current` | Få det nåværende prosjektet | <a href={typesUrl}><code>Project</code></a>   |
+| Metode | Sti                | Beskrivelse             | Svar                                          |
+| ------ | ------------------ | ----------------------- | --------------------------------------------- |
+| `GET`  | `/project`         | List alle prosjekter    | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Hent gjeldende prosjekt | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
 ### Bane og VCS
 
-| Metode | Sti     | Beskrivelse                        | Svar                                        |
-| ------ | ------- | ---------------------------------- | ------------------------------------------- |
-| `GET`  | `/path` | Få gjeldende bane                  | <a href={typesUrl}><code>Path</code></a>    |
-| `GET`  | `/vcs`  | Få VCS info for gjeldende prosjekt | <a href={typesUrl}><code>VcsInfo</code></a> |
+| Metode | Sti     | Beskrivelse                          | Svar                                        |
+| ------ | ------- | ------------------------------------ | ------------------------------------------- |
+| `GET`  | `/path` | Hent gjeldende bane                  | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Hent VCS-info for gjeldende prosjekt | <a href={typesUrl}><code>VcsInfo</code></a> |
 
 ---
 
 ### Forekomst
 
-| Metode | Sti                 | Beskrivelse              | Svar      |
-| ------ | ------------------- | ------------------------ | --------- |
-| `POST` | `/instance/dispose` | Kast gjeldende forekomst | `boolean` |
+| Metode | Sti                 | Beskrivelse                 | Svar      |
+| ------ | ------------------- | --------------------------- | --------- |
+| `POST` | `/instance/dispose` | Avslutt gjeldende forekomst | `boolean` |
 
 ---
 
-### Konfig
+### Konfigurasjon
 
-| Metode  | Sti                 | Beskrivelse                            | Svar                                                                                     |
-| ------- | ------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `GET`   | `/config`           | Få konfigurasjonsinformasjon           | <a href={typesUrl}><code>Config</code></a>                                               |
-| `PATCH` | `/config`           | Oppdater konfigurasjon                 | <a href={typesUrl}><code>Config</code></a>                                               |
-| `GET`   | `/config/providers` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+| Metode  | Sti                 | Beskrivelse                           | Svar                                                                                     |
+| ------- | ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Hent konfigurasjonsinformasjon        | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Oppdater konfigurasjon                | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | List leverandører og standardmodeller | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
 
 ### Leverandør
 
-| Metode | Sti                              | Beskrivelse                                     | Svar                                                                                |
-| ------ | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET`  | `/provider`                      | Liste alle leverandører                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
-| `GET`  | `/provider/auth`                 | Få leverandørautentiseringsmetoder              | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
-| `POST` | `/provider/{id}/oauth/authorize` | Autoriser en leverandør ved å bruke OAuth       | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
-| `POST` | `/provider/{id}/oauth/callback`  | Håndtere OAuth-tilbakeringing for en leverandør | `boolean`                                                                           |
+| Metode | Sti                              | Beskrivelse                                    | Svar                                                                                |
+| ------ | -------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | List alle leverandører                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Hent autentiseringsmetoder for leverandør      | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Autoriser en leverandør ved å bruke OAuth      | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Håndter OAuth-tilbakeringing for en leverandør | `boolean`                                                                           |
 
 ---
 
-### økter
+### Sesjoner
 
 | Metode   | Sti                                      | Beskrivelse                              | Merknader                                                                             |
 | -------- | ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| `GET`    | `/session`                               | Liste alle økter                         | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session`                               | List alle økter                          | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
 | `POST`   | `/session`                               | Opprett en ny økt                        | body: `{ parentID?, title? }`, returnerer <a href={typesUrl}><code>Session</code></a> |
-| `GET`    | `/session/status`                        | Få øktstatus for alle økter              | Returnerer `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
-| `GET`    | `/session/:id`                           | Få øktdetaljer                           | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/status`                        | Hent øktstatus for alle økter            | Returnerer `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | Hent øktdetaljer                         | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
 | `DELETE` | `/session/:id`                           | Slett en økt og alle dens data           | Returnerer `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Oppdater øktegenskaper                   | body: `{ title? }`, returnerer <a href={typesUrl}><code>Session</code></a>            |
-| `GET`    | `/session/:id/children`                  | Få en økts barneøkter                    | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | Få gjøremålslisten for en økt            | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `GET`    | `/session/:id/children`                  | Hent en økts barneøkter                  | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | Hent gjøremålslisten for en økt          | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
 | `POST`   | `/session/:id/init`                      | Analyser appen og lag `AGENTS.md`        | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Fork en eksisterende økt ved en melding  | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
-| `POST`   | `/session/:id/abort`                     | Avbryt en løpeøkt                        | Returnerer `boolean`                                                                  |
+| `POST`   | `/session/:id/abort`                     | Avbryt en kjørende økt                   | Returnerer `boolean`                                                                  |
 | `POST`   | `/session/:id/share`                     | Del en økt                               | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
 | `DELETE` | `/session/:id/share`                     | Slutt å dele en økt                      | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `GET`    | `/session/:id/diff`                      | Få diff for denne økten                  | spørring: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `GET`    | `/session/:id/diff`                      | Hent diff for denne økten                | spørring: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>     |
 | `POST`   | `/session/:id/summarize`                 | Oppsummer økten                          | body: `{ providerID, modelID }`, returnerer `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Tilbakestill en melding                  | body: `{ messageID, partID? }`, returnerer `boolean`                                  |
 | `POST`   | `/session/:id/unrevert`                  | Gjenopprett alle tilbakestilte meldinger | Returnerer `boolean`                                                                  |
@@ -172,20 +172,20 @@ opencode-serveren viser følgende APIer.
 
 | Metode | Sti                               | Beskrivelse                            | Merknader                                                                                                                                                                |
 | ------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/session/:id/message`            | Liste meldinger i en økt               | spørring: `limit?`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
+| `GET`  | `/session/:id/message`            | List meldinger i en økt                | spørring: `limit?`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
 | `POST` | `/session/:id/message`            | Send en melding og vent på svar        | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
-| `GET`  | `/session/:id/message/:messageID` | Få meldingsdetaljer                    | Returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `GET`  | `/session/:id/message/:messageID` | Hent meldingsdetaljer                  | Returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
 | `POST` | `/session/:id/prompt_async`       | Send en melding asynkront (ingen vent) | body: samme som `/session/:id/message`, returnerer `204 No Content`                                                                                                      |
-| `POST` | `/session/:id/command`            | Utfør en skråstrek-kommando            | body: `{ messageID?, agent?, model?, command, arguments }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/command`            | Utfør en slash-kommando                | body: `{ messageID?, agent?, model?, command, arguments }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
 | `POST` | `/session/:id/shell`              | Kjør en shell-kommando                 | body: `{ agent, model?, command }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 
 ### Kommandoer
 
-| Metode | Sti        | Beskrivelse           | Svar                                          |
-| ------ | ---------- | --------------------- | --------------------------------------------- |
-| `GET`  | `/command` | Liste alle kommandoer | <a href={typesUrl}><code>Command[]</code></a> |
+| Metode | Sti        | Beskrivelse          | Svar                                          |
+| ------ | ---------- | -------------------- | --------------------------------------------- |
+| `GET`  | `/command` | List alle kommandoer | <a href={typesUrl}><code>Command[]</code></a> |
 
 ---
 
@@ -195,10 +195,10 @@ opencode-serveren viser følgende APIer.
 | ------ | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------ |
 | `GET`  | `/find?pattern=<pat>`    | Søk etter tekst i filer            | En rekke matchobjekter med `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `GET`  | `/find/file?query=<q>`   | Finn filer og kataloger etter navn | `string[]` (baner)                                                                         |
-| `GET`  | `/find/symbol?query=<q>` | Finn arbeidsområdesymboler         | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
-| `GET`  | `/file?path=<path>`      | Liste filer og kataloger           | <a href={typesUrl}><code>FileNode[]</code></a>                                             |
+| `GET`  | `/find/symbol?query=<q>` | Finn symboler i arbeidsområdet     | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
+| `GET`  | `/file?path=<path>`      | List filer og kataloger            | <a href={typesUrl}><code>FileNode[]</code></a>                                             |
 | `GET`  | `/file/content?path=<p>` | Les en fil                         | <a href={typesUrl}><code>FileContent</code></a>                                            |
-| `GET`  | `/file/status`           | Få status for sporede filer        | <a href={typesUrl}><code>File[]</code></a>                                                 |
+| `GET`  | `/file/status`           | Hent status for sporede filer      | <a href={typesUrl}><code>File[]</code></a>                                                 |
 
 #### `/find/file` spørringsparametere
 
@@ -223,26 +223,26 @@ opencode-serveren viser følgende APIer.
 
 | Metode | Sti          | Beskrivelse                  | Svar                                                     |
 | ------ | ------------ | ---------------------------- | -------------------------------------------------------- |
-| `GET`  | `/lsp`       | Få LSP serverstatus          | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
-| `GET`  | `/formatter` | Få formateringsstatus        | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
-| `GET`  | `/mcp`       | Få MCP serverstatus          | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
-| `POST` | `/mcp`       | Legg til MCP server dynamisk | body: `{ name, config }`, returnerer MCP statusobjekt    |
+| `GET`  | `/lsp`       | Hent LSP-serverstatus        | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Hent formateringsstatus      | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | Hent MCP-serverstatus        | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Legg til MCP-server dynamisk | body: `{ name, config }`, returnerer MCP statusobjekt    |
 
 ---
 
 ### Agenter
 
-| Metode | Sti      | Beskrivelse                      | Svar                                        |
-| ------ | -------- | -------------------------------- | ------------------------------------------- |
-| `GET`  | `/agent` | Liste alle tilgjengelige agenter | <a href={typesUrl}><code>Agent[]</code></a> |
+| Metode | Sti      | Beskrivelse                     | Svar                                        |
+| ------ | -------- | ------------------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | List alle tilgjengelige agenter | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
 ### Logging
 
-| Metode | Sti    | Beskrivelse                                                           | Svar      |
-| ------ | ------ | --------------------------------------------------------------------- | --------- |
-| `POST` | `/log` | Skriv loggoppføring. Brødtekst: `{ service, level, message, extra? }` | `boolean` |
+| Metode | Sti    | Beskrivelse                                                      | Svar      |
+| ------ | ------ | ---------------------------------------------------------------- | --------- |
+| `POST` | `/log` | Skriv loggoppføring. Body: `{ service, level, message, extra? }` | `boolean` |
 
 ---
 
@@ -250,13 +250,13 @@ opencode-serveren viser følgende APIer.
 
 | Metode | Sti                     | Beskrivelse                                 | Svar                       |
 | ------ | ----------------------- | ------------------------------------------- | -------------------------- |
-| `POST` | `/tui/append-prompt`    | Legg til tekst i ledeteksten                | `boolean`                  |
+| `POST` | `/tui/append-prompt`    | Legg til tekst i prompten                   | `boolean`                  |
 | `POST` | `/tui/open-help`        | Åpne hjelpedialogen                         | `boolean`                  |
 | `POST` | `/tui/open-sessions`    | Åpne øktvelgeren                            | `boolean`                  |
 | `POST` | `/tui/open-themes`      | Åpne temavelgeren                           | `boolean`                  |
 | `POST` | `/tui/open-models`      | Åpne modellvelgeren                         | `boolean`                  |
-| `POST` | `/tui/submit-prompt`    | Send inn gjeldende ledetekst                | `boolean`                  |
-| `POST` | `/tui/clear-prompt`     | Fjern ledeteksten                           | `boolean`                  |
+| `POST` | `/tui/submit-prompt`    | Send inn gjeldende prompt                   | `boolean`                  |
+| `POST` | `/tui/clear-prompt`     | Tøm prompten                                | `boolean`                  |
 | `POST` | `/tui/execute-command`  | Utfør en kommando (`{ command }`)           | `boolean`                  |
 | `POST` | `/tui/show-toast`       | Vis toast (`{ title?, message, variant }`)  | `boolean`                  |
 | `GET`  | `/tui/control/next`     | Vent på neste kontrollforespørsel           | Kontrollforespørselsobjekt |
@@ -266,21 +266,21 @@ opencode-serveren viser følgende APIer.
 
 ### Auth
 
-| Metode | Sti         | Beskrivelse                                                                 | Svar      |
-| ------ | ----------- | --------------------------------------------------------------------------- | --------- |
-| `PUT`  | `/auth/:id` | Angi autentiseringslegitimasjon. Brødtekst må samsvare med leverandørskjema | `boolean` |
+| Metode | Sti         | Beskrivelse                                                           | Svar      |
+| ------ | ----------- | --------------------------------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | Angi autentiseringsinformasjon. Body må samsvare med leverandørskjema | `boolean` |
 
 ---
 
 ### Hendelser
 
-| Metode | Sti      | Beskrivelse                                                                                        | Svar                           |
-| ------ | -------- | -------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `GET`  | `/event` | Server-sendte hendelsesstrøm. Første arrangement er `server.connected`, deretter bussarrangementer | Server-sendte hendelser stream |
+| Metode | Sti      | Beskrivelse                                                                                     | Svar                             |
+| ------ | -------- | ----------------------------------------------------------------------------------------------- | -------------------------------- |
+| `GET`  | `/event` | Strøm av server-sendte hendelser. Første hendelse er `server.connected`, deretter busshendelser | Strøm av server-sendte hendelser |
 
 ---
 
-### Dokumenter
+### Dokumentasjon
 
 | Metode | Sti    | Beskrivelse               | Svar                                |
 | ------ | ------ | ------------------------- | ----------------------------------- |

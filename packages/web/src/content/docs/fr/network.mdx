@@ -7,7 +7,7 @@ OpenCode prend en charge les variables d'environnement proxy standard et les cer
 
 ---
 
-## Procuration
+## Proxy
 
 OpenCode respecte les variables d'environnement proxy standard.
 
@@ -30,9 +30,9 @@ Vous pouvez configurer le port et le nom d'hôte du serveur à l'aide de [CLI fl
 
 ---
 
-### Authentifier
+### Authentification
 
-Si votre proxy nécessite une authentification de base, incluez les informations d'identification dans le URL.
+Si votre proxy nécessite une authentification de base, incluez les informations d'identification dans l'URL.
 
 ```bash
 export HTTPS_PROXY=http://username:password@proxy.example.com:8080
@@ -54,4 +54,4 @@ Si votre entreprise utilise des autorités de certification personnalisées pour
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
 ```
 
-Cela fonctionne à la fois pour les connexions proxy et pour l'accès direct à API.
+Cela fonctionne à la fois pour les connexions proxy et pour l'accès direct à l'API.

@@ -19,17 +19,22 @@ export const dict = {
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
   "command.category.workspace": "工作区",
-
   "command.category.settings": "设置",
+
   "theme.scheme.system": "系统",
   "theme.scheme.light": "浅色",
   "theme.scheme.dark": "深色",
 
   "command.sidebar.toggle": "切换侧边栏",
+
   "command.project.open": "打开项目",
+
   "command.provider.connect": "连接提供商",
+
   "command.server.switch": "切换服务器",
+
   "command.settings.open": "打开设置",
+
   "command.session.previous": "上一个会话",
   "command.session.next": "下一个会话",
   "command.session.previous.unseen": "上一个未读会话",
@@ -47,35 +52,53 @@ export const dict = {
   "command.language.set": "使用语言：{{language}}",
 
   "command.session.new": "新建会话",
+
   "command.file.open": "打开文件",
+
   "command.tab.close": "关闭标签页",
+
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
+
   "command.input.focus": "聚焦输入框",
+
   "command.terminal.toggle": "切换终端",
+
   "command.fileTree.toggle": "切换文件树",
+
   "command.review.toggle": "切换审查",
+
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",
+
   "command.steps.toggle": "切换步骤",
   "command.steps.toggle.description": "显示或隐藏当前消息的步骤",
+
   "command.message.previous": "上一条消息",
   "command.message.previous.description": "跳转到上一条用户消息",
   "command.message.next": "下一条消息",
   "command.message.next.description": "跳转到下一条用户消息",
+
   "command.model.choose": "选择模型",
   "command.model.choose.description": "选择不同的模型",
+
   "command.mcp.toggle": "切换 MCPs",
   "command.mcp.toggle.description": "切换 MCPs",
+
   "command.agent.cycle": "切换智能体",
   "command.agent.cycle.description": "切换到下一个智能体",
   "command.agent.cycle.reverse": "反向切换智能体",
   "command.agent.cycle.reverse.description": "切换到上一个智能体",
+
   "command.model.variant.cycle": "切换思考强度",
   "command.model.variant.cycle.description": "切换到下一个强度等级",
+
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
+
   "command.workspace.toggle": "切换工作区",
+  "command.workspace.toggle.description": "在侧边栏启用或禁用多个工作区",
+
   "command.session.undo": "撤销",
   "command.session.undo.description": "撤销上一条消息",
   "command.session.redo": "重做",
@@ -99,10 +122,10 @@ export const dict = {
   "dialog.provider.group.popular": "热门",
   "dialog.provider.group.other": "其他",
   "dialog.provider.tag.recommended": "推荐",
-  "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
-  "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
-  "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
   "dialog.provider.opencode.note": "使用 OpenCode Zen 或 API 密钥连接",
+  "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
+  "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
+  "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
   "dialog.provider.google.note": "使用 Google 账号或 API 密钥连接",
   "dialog.provider.openrouter.note": "使用 OpenRouter 账号或 API 密钥连接",
   "dialog.provider.vercel.note": "使用 Vercel 账号或 API 密钥连接",
@@ -112,7 +135,6 @@ export const dict = {
   "dialog.model.empty": "未找到模型",
   "dialog.model.manage": "管理模型",
   "dialog.model.manage.description": "自定义模型选择器中显示的模型。",
-
   "dialog.model.unpaid.freeModels.title": "OpenCode 提供的免费模型",
   "dialog.model.unpaid.addMore.title": "从热门提供商添加更多模型",
 
@@ -188,9 +210,9 @@ export const dict = {
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} 已断开连接",
   "provider.disconnect.toast.disconnected.description": "{{provider}} 模型已不再可用。",
+
   "model.tag.free": "免费",
   "model.tag.latest": "最新",
-
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
@@ -205,8 +227,10 @@ export const dict = {
   "model.tooltip.reasoning.allowed": "支持推理",
   "model.tooltip.reasoning.none": "不支持推理",
   "model.tooltip.context": "上下文上限 {{limit}}",
+
   "common.search.placeholder": "搜索",
   "common.goBack": "返回",
+  "common.goForward": "前进",
   "common.loading": "加载中",
   "common.loading.ellipsis": "...",
   "common.cancel": "取消",
@@ -224,7 +248,6 @@ export const dict = {
   "prompt.placeholder.summarizeComment": "总结该评论…",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "按 esc 退出",
-
   "prompt.example.1": "修复代码库中的一个 TODO",
   "prompt.example.2": "这个项目的技术栈是什么？",
   "prompt.example.3": "修复失败的测试",
@@ -250,7 +273,6 @@ export const dict = {
   "prompt.example.23": "给这个列表添加分页",
   "prompt.example.24": "创建一个 CLI 命令用于...",
   "prompt.example.25": "这里的环境变量是怎么工作的？",
-
   "prompt.popover.emptyResults": "没有匹配的结果",
   "prompt.popover.emptyCommands": "没有匹配的命令",
   "prompt.dropzone.label": "将图片或 PDF 拖到这里",
@@ -266,7 +288,6 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
-
   "prompt.toast.pasteUnsupported.title": "不支持的粘贴",
   "prompt.toast.pasteUnsupported.description": "这里只能粘贴图片或 PDF 文件。",
   "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
@@ -283,6 +304,7 @@ export const dict = {
   "dialog.mcp.empty": "未配置 MCPs",
 
   "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
+
   "dialog.plugins.empty": "在 opencode.json 中配置的插件",
 
   "mcp.status.connected": "已连接",
@@ -311,7 +333,6 @@ export const dict = {
   "dialog.server.default.set": "将当前服务器设为默认",
   "dialog.server.default.clear": "清除",
   "dialog.server.action.remove": "移除服务器",
-
   "dialog.server.menu.edit": "编辑",
   "dialog.server.menu.default": "设为默认",
   "dialog.server.menu.defaultRemove": "取消默认",
@@ -327,10 +348,10 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "建议：128x128px",
   "dialog.project.edit.color": "颜色",
   "dialog.project.edit.color.select": "选择{{color}}颜色",
-
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
+
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
   "context.breakdown.system": "系统",
@@ -338,10 +359,8 @@ export const dict = {
   "context.breakdown.assistant": "助手",
   "context.breakdown.tool": "工具调用",
   "context.breakdown.other": "其他",
-
   "context.systemPrompt.title": "系统提示词",
   "context.rawMessages.title": "原始消息",
-
   "context.stats.session": "会话",
   "context.stats.messages": "消息数",
   "context.stats.provider": "提供商",
@@ -358,34 +377,44 @@ export const dict = {
   "context.stats.totalCost": "总成本",
   "context.stats.sessionCreated": "创建时间",
   "context.stats.lastActivity": "最后活动",
-
   "context.usage.tokens": "Token",
   "context.usage.usage": "使用率",
   "context.usage.cost": "成本",
   "context.usage.clickToView": "点击查看上下文",
   "context.usage.view": "查看上下文用量",
 
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
+  "language.th": "ไทย",
+
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
-
   "toast.theme.title": "主题已切换",
   "toast.scheme.title": "颜色方案",
-
   "toast.workspace.enabled.title": "工作区已启用",
   "toast.workspace.enabled.description": "侧边栏现在显示多个工作树",
   "toast.workspace.disabled.title": "工作区已禁用",
   "toast.workspace.disabled.description": "侧边栏只显示主工作树",
-
   "toast.permissions.autoaccept.on.title": "自动接受编辑",
   "toast.permissions.autoaccept.on.description": "编辑和写入权限将自动获批",
   "toast.permissions.autoaccept.off.title": "已停止自动接受编辑",
   "toast.permissions.autoaccept.off.description": "编辑和写入权限将需要手动批准",
-
   "toast.model.none.title": "未选择模型",
   "toast.model.none.description": "请先连接提供商以总结此会话",
-
   "toast.file.loadFailed.title": "加载文件失败",
-
   "toast.file.listFailed.title": "列出文件失败",
   "toast.context.noLineSelection.title": "未选择行",
   "toast.context.noLineSelection.description": "请先在文件标签中选择行范围。",
@@ -394,14 +423,11 @@ export const dict = {
   "toast.session.share.success.description": "分享链接已复制到剪贴板",
   "toast.session.share.failed.title": "分享会话失败",
   "toast.session.share.failed.description": "分享会话时发生错误",
-
   "toast.session.unshare.success.title": "已取消分享会话",
   "toast.session.unshare.success.description": "会话已成功取消分享",
   "toast.session.unshare.failed.title": "取消分享失败",
   "toast.session.unshare.failed.description": "取消分享会话时发生错误",
-
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
-
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
   "toast.update.action.installRestart": "安装并重启",
@@ -417,10 +443,9 @@ export const dict = {
   "error.page.report.prefix": "请将此错误报告给 OpenCode 团队",
   "error.page.report.discord": "在 Discord 上",
   "error.page.version": "版本：{{version}}",
-
   "error.dev.rootNotFound": "未找到根元素。你是不是忘了把它添加到 index.html？或者 id 属性拼写错了？",
-
   "error.globalSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行？",
+
   "directory.error.invalidUrl": "URL 中的目录无效。",
 
   "error.chain.unknown": "未知错误",
@@ -448,7 +473,6 @@ export const dict = {
   "notification.question.title": "问题",
   "notification.question.description": "{{sessionTitle}}（{{projectName}}）有一个问题",
   "notification.action.goToSession": "前往会话",
-
   "notification.session.responseReady.title": "回复已就绪",
   "notification.session.error.title": "会话错误",
   "notification.session.error.fallbackDescription": "发生错误",
@@ -474,17 +498,19 @@ export const dict = {
   "session.messages.loadingEarlier": "正在加载更早的消息...",
   "session.messages.loadEarlier": "加载更早的消息",
   "session.messages.loading": "正在加载消息...",
-
   "session.messages.jumpToLatest": "跳转到最新",
   "session.context.addToContext": "将 {{selection}} 添加到上下文",
-
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支（{{branch}}）",
   "session.new.worktree.create": "创建新的 worktree",
   "session.new.lastModified": "最后修改",
-
   "session.header.search.placeholder": "搜索 {{project}}",
   "session.header.searchFiles": "搜索文件",
+  "session.header.openIn": "打开方式",
+  "session.header.open.action": "打开 {{app}}",
+  "session.header.open.ariaLabel": "在 {{app}} 中打开",
+  "session.header.open.menu": "打开选项",
+  "session.header.open.copyPath": "复制路径",
 
   "status.popover.trigger": "状态",
   "status.popover.ariaLabel": "服务器配置",
@@ -510,13 +536,14 @@ export const dict = {
   "lsp.label.connected": "{{count}} LSP",
 
   "prompt.loading": "正在加载提示...",
+
   "terminal.loading": "正在加载终端...",
   "terminal.title": "终端",
   "terminal.title.numbered": "终端 {{number}}",
   "terminal.close": "关闭终端",
-
   "terminal.connectionLost.title": "连接已丢失",
   "terminal.connectionLost.description": "终端连接已中断。这可能发生在服务器重启时。",
+
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",
   "common.requestFailed": "请求失败",
@@ -529,8 +556,8 @@ export const dict = {
   "common.close": "关闭",
   "common.edit": "编辑",
   "common.loadMore": "加载更多",
-
   "common.key.esc": "ESC",
+
   "sidebar.menu.toggle": "切换菜单",
   "sidebar.nav.projectsAndSessions": "项目和会话",
   "sidebar.settings": "设置",
@@ -544,16 +571,22 @@ export const dict = {
   "sidebar.project.viewAllSessions": "查看全部会话",
 
   "app.name.desktop": "OpenCode Desktop",
+
   "settings.section.desktop": "桌面",
   "settings.section.server": "服务器",
+
   "settings.tab.general": "通用",
   "settings.tab.shortcuts": "快捷键",
+
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL 集成",
+  "settings.desktop.wsl.description": "在 Windows 的 WSL 环境中运行 OpenCode 服务器。",
 
   "settings.general.section.appearance": "外观",
   "settings.general.section.notifications": "系统通知",
   "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
-
+  "settings.general.section.display": "显示",
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",
   "settings.general.row.appearance.title": "外观",
@@ -562,6 +595,9 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+  "settings.general.row.wayland.title": "使用原生 Wayland",
+  "settings.general.row.wayland.description": "在 Wayland 上禁用 X11 回退。需要重启。",
+  "settings.general.row.wayland.tooltip": "在混合刷新率显示器的 Linux 系统上，原生 Wayland 可能更稳定。",
   "settings.general.row.releaseNotes.title": "发行说明",
   "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
 
@@ -586,6 +622,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",
   "sound.option.alert03": "警报 03",
@@ -631,13 +668,13 @@ export const dict = {
   "sound.option.yup04": "是 04",
   "sound.option.yup05": "是 05",
   "sound.option.yup06": "是 06",
+
   "settings.general.notifications.agent.title": "智能体",
   "settings.general.notifications.agent.description": "当智能体完成或需要注意时显示系统通知",
   "settings.general.notifications.permissions.title": "权限",
   "settings.general.notifications.permissions.description": "当需要权限时显示系统通知",
   "settings.general.notifications.errors.title": "错误",
   "settings.general.notifications.errors.description": "发生错误时显示系统通知",
-
   "settings.general.sounds.agent.title": "智能体",
   "settings.general.sounds.agent.description": "当智能体完成或需要注意时播放声音",
   "settings.general.sounds.permissions.title": "权限",
@@ -655,7 +692,6 @@ export const dict = {
   "settings.shortcuts.pressKeys": "按下按键",
   "settings.shortcuts.search.placeholder": "搜索快捷键",
   "settings.shortcuts.search.empty": "未找到快捷键",
-
   "settings.shortcuts.group.general": "通用",
   "settings.shortcuts.group.session": "会话",
   "settings.shortcuts.group.navigation": "导航",
@@ -672,12 +708,16 @@ export const dict = {
   "settings.providers.tag.config": "配置",
   "settings.providers.tag.custom": "自定义",
   "settings.providers.tag.other": "其他",
+
   "settings.models.title": "模型",
   "settings.models.description": "模型设置将在此处可配置。",
+
   "settings.agents.title": "智能体",
   "settings.agents.description": "智能体设置将在此处可配置。",
+
   "settings.commands.title": "命令",
   "settings.commands.description": "命令设置将在此处可配置。",
+
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "MCP 设置将在此处可配置。",
 
@@ -685,11 +725,9 @@ export const dict = {
   "settings.permissions.description": "控制服务器默认可以使用哪些工具。",
   "settings.permissions.section.tools": "工具",
   "settings.permissions.toast.updateFailed.title": "更新权限失败",
-
   "settings.permissions.action.allow": "允许",
   "settings.permissions.action.ask": "询问",
   "settings.permissions.action.deny": "拒绝",
-
   "settings.permissions.tool.read.title": "读取",
   "settings.permissions.tool.read.description": "读取文件（匹配文件路径）",
   "settings.permissions.tool.edit.title": "编辑",
@@ -702,9 +740,9 @@ export const dict = {
   "settings.permissions.tool.list.description": "列出目录中的文件",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "运行 shell 命令",
-  "settings.permissions.tool.task.title": "Task",
+  "settings.permissions.tool.task.title": "任务",
   "settings.permissions.tool.task.description": "启动子智能体",
-  "settings.permissions.tool.skill.title": "Skill",
+  "settings.permissions.tool.skill.title": "技能",
   "settings.permissions.tool.skill.description": "按名称加载技能",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "运行语言服务器查询",
@@ -712,15 +750,15 @@ export const dict = {
   "settings.permissions.tool.todoread.description": "读取待办列表",
   "settings.permissions.tool.todowrite.title": "更新待办",
   "settings.permissions.tool.todowrite.description": "更新待办列表",
-  "settings.permissions.tool.webfetch.title": "Web Fetch",
+  "settings.permissions.tool.webfetch.title": "网页获取",
   "settings.permissions.tool.webfetch.description": "从 URL 获取内容",
-  "settings.permissions.tool.websearch.title": "Web Search",
+  "settings.permissions.tool.websearch.title": "网页搜索",
   "settings.permissions.tool.websearch.description": "搜索网页",
-  "settings.permissions.tool.codesearch.title": "Code Search",
+  "settings.permissions.tool.codesearch.title": "代码搜索",
   "settings.permissions.tool.codesearch.description": "在网上搜索代码",
   "settings.permissions.tool.external_directory.title": "外部目录",
   "settings.permissions.tool.external_directory.description": "访问项目目录之外的文件",
-  "settings.permissions.tool.doom_loop.title": "Doom Loop",
+  "settings.permissions.tool.doom_loop.title": "死循环",
   "settings.permissions.tool.doom_loop.description": "检测具有相同输入的重复工具调用",
 
   "session.delete.failed.title": "删除会话失败",

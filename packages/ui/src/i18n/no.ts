@@ -8,16 +8,17 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.diffStyle.split": "Delt",
   "ui.sessionReview.expandAll": "Utvid alle",
   "ui.sessionReview.collapseAll": "Fold sammen alle",
-
   "ui.sessionReview.change.added": "Lagt til",
   "ui.sessionReview.change.removed": "Fjernet",
   "ui.sessionReview.change.modified": "Endret",
+
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.submit": "Kommenter",
+
   "ui.sessionTurn.steps.show": "Vis trinn",
   "ui.sessionTurn.steps.hide": "Skjul trinn",
   "ui.sessionTurn.summary.response": "Svar",
