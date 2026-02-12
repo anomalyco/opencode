@@ -358,6 +358,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const syntax = createMemo(() => generateSyntax(values()))
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
+    const appBackground = createMemo(() => {
+      const bg = values().background
+      if (store.active !== "system") return bg
+      // Preserve RGB at alpha 0 to avoid transparent-black artifacts.
+      return RGBA.fromValues(bg.r, bg.g, bg.b, 0)
+    })
+
     return {
       theme: new Proxy(values(), {
         get(_target, prop) {
@@ -371,6 +378,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       all() {
         return store.themes
       },
+      appBackground,
       syntax,
       subtleSyntax,
       mode() {
@@ -428,7 +436,6 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const transparent = RGBA.fromInts(0, 0, 0, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
@@ -479,8 +486,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors - use transparent to respect terminal transparency
-      background: transparent,
+      // Background colors
+      background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
