@@ -60,7 +60,7 @@
     font-family: var(--font-family-sans);
     font-size: 14px;
     font-style: normal;
-    font-weight: var(--font-weight-regular);
+    font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-strong);

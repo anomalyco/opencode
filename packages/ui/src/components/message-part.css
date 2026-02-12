@@ -491,7 +491,7 @@
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
-    padding: 6px 8px 6px 12px;
+    padding: 6px 0;
   }
 }
 

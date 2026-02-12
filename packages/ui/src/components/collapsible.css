@@ -8,6 +8,10 @@
   border-radius: var(--radius-md);
   overflow: clip;
 
+  &.tool-collapsible {
+    gap: 8px;
+  }
+
   [data-slot="collapsible-trigger"] {
     width: 100%;
     display: flex;

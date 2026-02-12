@@ -417,11 +417,11 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
                     <div data-slot="basic-tool-tool-trigger-content">
-                      <div data-slot="basic-tool-tool-indicator">
-                        <Show when={running} fallback={<Icon name={info.icon} size="small" />}>
+                      <Show when={running}>
+                        <div data-slot="basic-tool-tool-indicator">
                           <Spinner style={{ width: "16px" }} />
-                        </Show>
-                      </div>
+                        </div>
+                      </Show>
                       <div data-slot="basic-tool-tool-info">
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
