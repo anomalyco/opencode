@@ -1,5 +1,5 @@
 ---
-title: Introduction
+title: 介绍
 description: 开始使用 opencode。
 ---
 
@@ -15,7 +15,7 @@ export const console = config.console
 
 ---
 
-#### Prerequisites
+#### 先决条件
 
 要在终端中使用 opencode，您需要：
 
@@ -89,17 +89,17 @@ curl -fsSL https://opencode.ai/install | bash
 
 #### Windows
 
-:::tip[Recommended: 使用 WSL]
+:::tip[推荐：使用 WSL]
 为了在 Windows 上获得最佳体验，我们建议使用 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl)。它提供了更好的性能并与 opencode 的功能完全兼容。
 :::
 
-- **Using Chocolatey**
+- **使用 Chocolatey**
 
   ```bash
   choco install opencode
   ```
 
-- **Using Scoop**
+- **使用 Scoop**
 
   ```bash
   scoop install opencode
@@ -111,7 +111,7 @@ curl -fsSL https://opencode.ai/install | bash
   npm install -g opencode-ai
   ```
 
-- **Using Mise**
+- **使用 Mise**
 
   ```bash
   mise use -g github:anomalyco/opencode
@@ -157,7 +157,7 @@ curl -fsSL https://opencode.ai/install | bash
 
 ---
 
-## Initialization
+## 初始化
 
 现在您已经配置了提供商，您可以导航到一个项目
 你想继续工作。
@@ -197,7 +197,7 @@ opencode
 
 ---
 
-### Asking Questions
+### 提问
 
 您可以要求 opencode 向您解释代码库。
 
@@ -213,13 +213,13 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ---
 
-### Adding Features
+### 添加功能
 
 您可以要求 opencode 向您的项目添加新功能。但是我们首先建议要求它制定一个计划。
 
-1. **Create a plan**
+1. **创建计划**
 
-   opencode 有一个 _Plan Mode_，该模式禁止其进行更改和
+   opencode 有一个 _计划模式_，该模式禁止其进行更改和
    相反，建议 _如何_ 实现该功能。
 
    使用 **Tab** 键切换到它。您会在右下角有一个指示符。
@@ -244,7 +244,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    想。
    :::
 
-2. **Iterate on the plan**
+2. **迭代计划**
 
    一旦它为您提供了计划，您就可以提供反馈或添加更多详细信息。
 
@@ -260,9 +260,9 @@ How is authentication handled in @packages/functions/src/api/index.ts
    opencode 可以扫描您提供的任何图像并将其添加到提示中。您可以
    通过将图像拖放到终端中来完成此操作。
 
-3. **Build the feature**
+3. **构建功能**
 
-   一旦您对计划感到满意，请切换回 _Build Mode_
+   一旦您对计划感到满意，请切换回 _构建模式_
    再次按 **Tab** 键。
 
    ```bash frame="none"
@@ -277,7 +277,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ---
 
-### Making Changes
+### 进行更改
 
 对于更直接的更改，您可以要求 opencode 直接构建它
 无需先审查计划。

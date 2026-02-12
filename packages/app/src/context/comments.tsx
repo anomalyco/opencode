@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
 import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
+import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
 
 export type LineComment = {
@@ -53,7 +54,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 
   const add = (input: Omit<LineComment, "id" | "time">) => {
     const next: LineComment = {
-      id: crypto.randomUUID?.() ?? Math.random().toString(16).slice(2),
+      id: uuid(),
       time: Date.now(),
       ...input,
     }
