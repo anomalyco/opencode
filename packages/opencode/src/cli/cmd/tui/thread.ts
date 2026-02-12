@@ -142,6 +142,8 @@ export const TuiThreadCommand = cmd({
       // Start HTTP server for external access
       const server = await client.call("server", networkOpts)
       url = server.url
+      customFetch = createWorkerFetch(client)
+      events = createEventSource(client)
     } else {
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"

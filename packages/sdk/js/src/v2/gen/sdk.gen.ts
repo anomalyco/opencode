@@ -164,6 +164,13 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  VoiceDisableResponses,
+  VoiceEnableResponses,
+  VoiceModelsResponses,
+  VoiceStatusResponses,
+  VoiceStreamResponses,
+  VoiceSwitchModelResponses,
+  VoiceTranscribeResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -2166,6 +2173,191 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Voice extends HeyApiClient {
+  /**
+   * Get voice service status
+   *
+   * Check the current status of the voice transcription service
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceStatusResponses, unknown, ThrowOnError>({
+      url: "/voice/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Enable voice transcription
+   *
+   * Enable voice transcription with optional model selection
+   */
+  public enable<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      model?: "tiny" | "base" | "small"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceEnableResponses, unknown, ThrowOnError>({
+      url: "/voice/enable",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Disable voice transcription
+   *
+   * Disable voice transcription service
+   */
+  public disable<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<VoiceDisableResponses, unknown, ThrowOnError>({
+      url: "/voice/disable",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List available models
+   *
+   * Get list of available Whisper models
+   */
+  public models<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceModelsResponses, unknown, ThrowOnError>({
+      url: "/voice/models",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Switch to a different model
+   *
+   * Switch the voice transcription model
+   */
+  public switchModel<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      model?: "tiny" | "base" | "small"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceSwitchModelResponses, unknown, ThrowOnError>({
+      url: "/voice/switch-model",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Transcribe audio file
+   *
+   * Submit a base64-encoded audio file for transcription
+   */
+  public transcribe<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      audio?: string
+      timestamps?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "audio" },
+            { in: "body", key: "timestamps" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceTranscribeResponses, unknown, ThrowOnError>({
+      url: "/voice/transcribe",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stream audio for transcription
+   *
+   * Establish a WebSocket connection to stream audio chunks and receive real-time transcriptions
+   */
+  public stream<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceStreamResponses, unknown, ThrowOnError>({
+      url: "/voice/stream",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3254,6 +3446,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _voice?: Voice
+  get voice(): Voice {
+    return (this._voice ??= new Voice({ client: this.client }))
   }
 
   private _find?: Find

@@ -583,6 +583,25 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
+  export const Voice = z
+    .object({
+      enabled: z.boolean().optional().describe("Enable or disable voice transcription"),
+      model: z
+        .enum(["tiny", "base", "small"])
+        .optional()
+        .default("base")
+        .describe("Whisper model size: tiny (75MB), base (142MB), or small (466MB)"),
+      device: z
+        .enum(["cpu", "gpu", "auto"])
+        .optional()
+        .default("auto")
+        .describe("Device to run the model on: cpu, gpu, or auto"),
+    })
+    .meta({
+      ref: "VoiceConfig",
+    })
+  export type Voice = z.infer<typeof Voice>
+
   export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
     ref: "PermissionActionConfig",
   })
@@ -822,6 +841,7 @@ export namespace Config {
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      voice_input: z.string().optional().default("\\").describe("Voice input (tap to record, tap to stop)"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()
@@ -1098,6 +1118,7 @@ export namespace Config {
         )
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
+      voice: Voice.optional().describe("Voice transcription configuration"),
       formatter: z
         .union([
           z.literal(false),

@@ -4049,6 +4049,372 @@
         ]
       }
     },
+    "/voice/status": {
+      "get": {
+        "operationId": "voice.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get voice service status",
+        "description": "Check the current status of the voice transcription service",
+        "responses": {
+          "200": {
+            "description": "Service status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceStatus"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/enable": {
+      "post": {
+        "operationId": "voice.enable",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Enable voice transcription",
+        "description": "Enable voice transcription with optional model selection",
+        "responses": {
+          "200": {
+            "description": "Enable result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "enum": ["tiny", "base", "small"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.enable({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/disable": {
+      "post": {
+        "operationId": "voice.disable",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Disable voice transcription",
+        "description": "Disable voice transcription service",
+        "responses": {
+          "200": {
+            "description": "Disabled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.disable({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/models": {
+      "get": {
+        "operationId": "voice.models",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List available models",
+        "description": "Get list of available Whisper models",
+        "responses": {
+          "200": {
+            "description": "Available models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": ["tiny", "base", "small"]
+                          },
+                          "size": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["name", "size"]
+                      }
+                    },
+                    "downloaded": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tiny", "base", "small"]
+                      }
+                    },
+                    "current": {
+                      "type": "string",
+                      "enum": ["tiny", "base", "small"]
+                    }
+                  },
+                  "required": ["available", "downloaded", "current"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.models({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/switch-model": {
+      "post": {
+        "operationId": "voice.switchModel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Switch to a different model",
+        "description": "Switch the voice transcription model",
+        "responses": {
+          "200": {
+            "description": "Model switch result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "enum": ["tiny", "base", "small"]
+                  }
+                },
+                "required": ["model"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.switchModel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/transcribe": {
+      "post": {
+        "operationId": "voice.transcribe",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Transcribe audio file",
+        "description": "Submit a base64-encoded audio file for transcription",
+        "responses": {
+          "200": {
+            "description": "Transcription result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "chunks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["text", "timestamp"]
+                      }
+                    }
+                  },
+                  "required": ["text"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "audio": {
+                    "description": "Base64-encoded WAV audio data",
+                    "type": "string"
+                  },
+                  "timestamps": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["audio"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.transcribe({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/voice/stream": {
+      "get": {
+        "operationId": "voice.stream",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Stream audio for transcription",
+        "description": "Establish a WebSocket connection to stream audio chunks and receive real-time transcriptions",
+        "responses": {
+          "200": {
+            "description": "WebSocket connection established",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.voice.stream({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/find": {
       "get": {
         "operationId": "find.text",
@@ -8397,6 +8763,98 @@
         },
         "required": ["type", "properties"]
       },
+      "VoiceStatus": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "disabled"
+              }
+            },
+            "required": ["status"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "idle"
+              }
+            },
+            "required": ["status"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "downloading"
+              },
+              "progress": {
+                "type": "number"
+              }
+            },
+            "required": ["status", "progress"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "loading"
+              }
+            },
+            "required": ["status"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "ready"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "model"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "error"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "error"]
+          }
+        ]
+      },
+      "Event.voice.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "voice.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "$ref": "#/components/schemas/VoiceStatus"
+              }
+            },
+            "required": ["status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -8524,6 +8982,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.voice.updated"
           }
         ]
       },
@@ -8791,6 +9252,11 @@
           "input_paste": {
             "description": "Paste from clipboard",
             "default": "ctrl+v",
+            "type": "string"
+          },
+          "voice_input": {
+            "description": "Voice input (tap to record, tap to stop)",
+            "default": "\\",
             "type": "string"
           },
           "input_submit": {
@@ -9584,6 +10050,29 @@
         "required": ["type", "url"],
         "additionalProperties": false
       },
+      "VoiceConfig": {
+        "description": "Voice transcription configuration",
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "description": "Enable or disable voice transcription",
+            "type": "boolean"
+          },
+          "model": {
+            "description": "Whisper model size: tiny (75MB), base (142MB), or small (466MB)",
+            "default": "base",
+            "type": "string",
+            "enum": ["tiny", "base", "small"]
+          },
+          "device": {
+            "description": "Device to run the model on: cpu, gpu, or auto",
+            "default": "auto",
+            "type": "string",
+            "enum": ["cpu", "gpu", "auto"]
+          }
+        },
+        "additionalProperties": false
+      },
       "LayoutConfig": {
         "description": "@deprecated Always uses stretch layout.",
         "type": "string",
@@ -9840,6 +10329,9 @@
                 }
               ]
             }
+          },
+          "voice": {
+            "$ref": "#/components/schemas/VoiceConfig"
           },
           "formatter": {
             "anyOf": [

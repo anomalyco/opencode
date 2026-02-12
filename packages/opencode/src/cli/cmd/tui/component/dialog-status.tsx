@@ -162,6 +162,27 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
+      <Show when={sync.data.voice?.status !== "disabled"}>
+        <box>
+          <text fg={theme.text}>Voice</text>
+          <box flexDirection="row" gap={1}>
+            <text
+              flexShrink={0}
+              style={{
+                fg: sync.data.voice?.status === "ready" ? theme.success : theme.warning,
+              }}
+            >
+              •
+            </text>
+            <text fg={theme.text} wrapMode="word">
+              <b>{sync.data.voice?.status === "ready" ? sync.data.voice.model : "..."}</b>{" "}
+              <span style={{ fg: theme.textMuted }}>
+                {sync.data.voice?.status === "ready" ? "Ready" : "Loading model..."}
+              </span>
+            </text>
+          </box>
+        </box>
+      </Show>
     </box>
   )
 }

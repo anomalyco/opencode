@@ -32,11 +32,6 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-// Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
-})
-
 let server: Bun.Server<BunWebSocketData> | undefined
 
 const eventStream = {
@@ -65,14 +60,7 @@ const startEventStream = (directory: string) => {
 
   ;(async () => {
     while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
+      const events = await Promise.resolve(sdk.global.event({ parseAs: "stream" })).catch(() => undefined)
 
       if (!events) {
         await Bun.sleep(250)
@@ -80,7 +68,7 @@ const startEventStream = (directory: string) => {
       }
 
       for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+        Rpc.emit("event", event.payload as Event)
       }
 
       if (!signal.aborted) {

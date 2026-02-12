@@ -381,6 +381,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const voice = {
+      async toggle() {
+        const status = sync.data.voice
+        if (status?.status === "ready") {
+          await sdk.client.voice.disable()
+        } else {
+          await sdk.client.voice.enable()
+        }
+      },
+      async switchModel(model: "tiny" | "base" | "small") {
+        await sdk.client.voice.switchModel({ model })
+      },
+    }
+
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
@@ -403,6 +417,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      voice,
     }
     return result
   },
