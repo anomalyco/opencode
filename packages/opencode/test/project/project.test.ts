@@ -4,9 +4,40 @@ import { Log } from "../../src/util/log"
 import { Storage } from "../../src/storage/storage"
 import { $ } from "bun"
 import path from "path"
+import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+
+async function withFakeGit(mode: "rev-list-fail" | "top-fail" | "common-dir-fail", run: () => Promise<void>) {
+  const realGit = Bun.which("git")
+  if (!realGit) throw new Error("git binary missing")
+  await using tmp = await tmpdir()
+  const bindir = path.join(tmp.path, "bin")
+  await fs.mkdir(bindir, { recursive: true })
+  const script = path.join(bindir, "git")
+  const source = `#!/usr/bin/env bash
+if [ "$1" = "rev-list" ] && [ "$2" = "--max-parents=0" ] && [ "$3" = "--all" ] && [ "${mode}" = "rev-list-fail" ]; then
+  exit 128
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ] && [ "${mode}" = "top-fail" ]; then
+  exit 128
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ] && [ "${mode}" = "common-dir-fail" ]; then
+  exit 128
+fi
+exec "${realGit}" "$@"
+`
+  await Bun.write(script, source)
+  await fs.chmod(script, 0o755)
+  const oldPath = process.env.PATH
+  process.env.PATH = `${bindir}:${oldPath ?? ""}`
+  try {
+    await run()
+  } finally {
+    process.env.PATH = oldPath
+  }
+}
 
 describe("Project.fromDirectory", () => {
   test("should handle git repository with no commits", async () => {
@@ -38,6 +69,40 @@ describe("Project.fromDirectory", () => {
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()
     expect(fileExists).toBe(true)
+  })
+
+  test("keeps git vcs when rev-list exits non-zero with empty output", async () => {
+    await using tmp = await tmpdir()
+    await $`git init`.cwd(tmp.path).quiet()
+
+    await withFakeGit("rev-list-fail", async () => {
+      const { project } = await Project.fromDirectory(tmp.path)
+      expect(project.vcs).toBe("git")
+      expect(project.id).toBe("global")
+      expect(project.worktree).toBe(tmp.path)
+    })
+  })
+
+  test("keeps git vcs when show-toplevel exits non-zero with empty output", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await withFakeGit("top-fail", async () => {
+      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+      expect(project.vcs).toBe("git")
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(tmp.path)
+    })
+  })
+
+  test("keeps git vcs when git-common-dir exits non-zero with empty output", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await withFakeGit("common-dir-fail", async () => {
+      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+      expect(project.vcs).toBe("git")
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(tmp.path)
+    })
   })
 })
 
