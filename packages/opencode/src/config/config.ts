@@ -175,8 +175,23 @@ export namespace Config {
     }
 
     // Inline config content overrides all non-managed config sources.
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+    const inlineContent = process.env["OPENCODE_CONFIG_CONTENT"]
+    if (inlineContent) {
+      // Parse and re-serialize with $schema to robustly prevent load() from
+      // attempting a write-back to a non-existent file path.
+      const inlineErrors: JsoncParseError[] = []
+      const inlineData = parseJsonc(inlineContent, inlineErrors, { allowTrailingComma: true })
+      if (inlineErrors.length) {
+        throw new JsonError({
+          path: "OPENCODE_CONFIG_CONTENT",
+          message: "malformed inline config JSON",
+        })
+      }
+      if (typeof inlineData === "object" && inlineData !== null && !inlineData.$schema) {
+        inlineData.$schema = "https://opencode.ai/config.json"
+      }
+      const inlinePath = path.join(process.cwd(), "opencode.inline.jsonc")
+      result = mergeConfigConcatArrays(result, await load(JSON.stringify(inlineData), inlinePath))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 

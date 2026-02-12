@@ -1602,6 +1602,141 @@ describe("deduplicatePlugins", () => {
   })
 })
 
+describe("OPENCODE_CONFIG_CONTENT inline config", () => {
+  const original = process.env["OPENCODE_CONFIG_CONTENT"]
+
+  afterEach(() => {
+    if (original === undefined) delete process.env["OPENCODE_CONFIG_CONTENT"]
+    else process.env["OPENCODE_CONFIG_CONTENT"] = original
+  })
+
+  test("resolves {env:VAR} substitution in inline config", async () => {
+    const originalTestVar = process.env["INLINE_TEST_VAR"]
+    process.env["INLINE_TEST_VAR"] = "inline_theme_value"
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "{env:INLINE_TEST_VAR}",
+    })
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.theme).toBe("inline_theme_value")
+        },
+      })
+    } finally {
+      if (originalTestVar === undefined) delete process.env["INLINE_TEST_VAR"]
+      else process.env["INLINE_TEST_VAR"] = originalTestVar
+    }
+  })
+
+  test("resolves {file:relative} substitution relative to cwd", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "inline-secret.txt"), "file_content_here")
+      },
+    })
+
+    const originalCwd = process.cwd()
+    process.chdir(tmp.path)
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "{file:inline-secret.txt}",
+    })
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.theme).toBe("file_content_here")
+        },
+      })
+    } finally {
+      process.chdir(originalCwd)
+    }
+  })
+
+  test("throws on missing {file:...} reference in inline config", async () => {
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "{file:does-not-exist.txt}",
+    })
+
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(Config.get()).rejects.toThrow()
+      },
+    })
+  })
+
+  test("inline config still wins over project config (precedence)", async () => {
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "inline_wins",
+    })
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          theme: "project_theme",
+        })
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        // Inline (higher precedence) overrides project config for the same field
+        expect(config.theme).toBe("inline_wins")
+      },
+    })
+  })
+
+  test("throws on malformed inline JSON", async () => {
+    process.env["OPENCODE_CONFIG_CONTENT"] = "{ this is not valid json }"
+
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(Config.get()).rejects.toThrow()
+      },
+    })
+  })
+
+  test("does not create opencode.inline.jsonc artifact on disk", async () => {
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      theme: "no_artifact",
+    })
+
+    await using tmp = await tmpdir()
+    const originalCwd = process.cwd()
+    process.chdir(tmp.path)
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.theme).toBe("no_artifact")
+          const exists = await Bun.file(path.join(tmp.path, "opencode.inline.jsonc")).exists()
+          expect(exists).toBe(false)
+        },
+      })
+    } finally {
+      process.chdir(originalCwd)
+    }
+  })
+})
+
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
