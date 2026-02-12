@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://mammouth.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logotype.svg" media="(prefers-color-scheme: dark)">
       <img src="packages/console/app/src/asset/logotype.svg" alt="Mammouth AI logo">
@@ -8,7 +8,7 @@
 </p>
 <p align="center">Mammouth AI coding agent.</p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Mammouth Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://info.mammouth.ai/fr/docs/mammouth-code/)
 
 ---
 
