@@ -27,22 +27,22 @@ opencode run "Explain how closures work in JavaScript"
 opencode [project]
 ```
 
-#### Flags
+#### 标志
 
-| Flag         | Short | Description                                               |
-| ------------ | ----- | --------------------------------------------------------- |
-| `--continue` | `-c`  | 继续上一个会话                                            |
-| `--session`  | `-s`  | 继续的会话 ID                                             |
-| `--fork`     |       | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用） |
-| `--prompt`   |       | 使用的提示                                                |
-| `--model`    | `-m`  | 使用的模型 (provider/model)                               |
-| `--agent`    |       | 使用的代理                                                |
-| `--port`     |       | 监听端口                                                  |
-| `--hostname` |       | 监听的主机名                                              |
+| 标志         | 简写 | 描述                                                      |
+| ------------ | ---- | --------------------------------------------------------- |
+| `--continue` | `-c` | 继续上一个会话                                            |
+| `--session`  | `-s` | 继续的会话 ID                                             |
+| `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用） |
+| `--prompt`   |      | 使用的提示                                                |
+| `--model`    | `-m` | 使用的模型 (provider/model)                               |
+| `--agent`    |      | 使用的代理                                                |
+| `--port`     |      | 监听端口                                                  |
+| `--hostname` |      | 监听的主机名                                              |
 
 ---
 
-## Commands
+## 命令
 
 opencode CLI 还具有以下命令。
 
@@ -76,12 +76,12 @@ opencode web --port 4096 --hostname 0.0.0.0
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Flags
+#### 标志
 
-| Flag        | Short | Description         |
-| ----------- | ----- | ------------------- |
-| `--dir`     |       | 启动 TUI 的工作目录 |
-| `--session` | `-s`  | 继续的会话 ID       |
+| 标志        | 简写 | 描述                |
+| ----------- | ---- | ------------------- |
+| `--dir`     |      | 启动 TUI 的工作目录 |
+| `--session` | `-s` | 继续的会话 ID       |
 
 ---
 
@@ -185,9 +185,9 @@ opencode github install
 opencode github run
 ```
 
-##### Flags
+#### 标志
 
-| Flag      | Description                    |
+| 标志      | 描述                           |
 | --------- | ------------------------------ |
 | `--event` | 用于运行代理的 GitHub 模拟事件 |
 | `--token` | GitHub 个人访问 Token          |
@@ -294,9 +294,9 @@ opencode models [provider]
 opencode models anthropic
 ```
 
-#### Flags
+#### 标志
 
-| Flag        | Description                              |
+| 标志        | 描述                                     |
 | ----------- | ---------------------------------------- |
 | `--refresh` | 从 models.dev 刷新模型缓存               |
 | `--verbose` | 使用更详细的模型输出（包括成本等元数据） |
@@ -333,22 +333,22 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
-#### Flags
+#### 标志
 
-| Flag         | Short | Description                                                     |
-| ------------ | ----- | --------------------------------------------------------------- |
-| `--command`  |       | 要运行的命令，使用消息作为参数                                  |
-| `--continue` | `-c`  | 继续上一个会话                                                  |
-| `--session`  | `-s`  | 继续的会话 ID                                                   |
-| `--fork`     |       | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用）       |
-| `--share`    |       | 分享会话                                                        |
-| `--model`    | `-m`  | 使用的模型 (provider/model)                                     |
-| `--agent`    |       | 使用的代理                                                      |
-| `--file`     | `-f`  | 要附加到消息的文件                                              |
-| `--format`   |       | 格式：default（格式化）或 json（原始 JSON 事件）                |
-| `--title`    |       | 会话标题（如果未提供值，则使用截断的提示）                      |
-| `--attach`   |       | 连接到正在运行的 opencode 服务器（例如，http://localhost:4096） |
-| `--port`     |       | 本地服务器的端口（默认为随机端口）                              |
+| 标志         | 简写 | 描述                                                            |
+| ------------ | ---- | --------------------------------------------------------------- |
+| `--command`  |      | 要运行的命令，使用消息作为参数                                  |
+| `--continue` | `-c` | 继续上一个会话                                                  |
+| `--session`  | `-s` | 继续的会话 ID                                                   |
+| `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用）       |
+| `--share`    |      | 分享会话                                                        |
+| `--model`    | `-m` | 使用的模型 (provider/model)                                     |
+| `--agent`    |      | 使用的代理                                                      |
+| `--file`     | `-f` | 要附加到消息的文件                                              |
+| `--format`   |      | 格式：default（格式化）或 json（原始 JSON 事件）                |
+| `--title`    |      | 会话标题（如果未提供值，则使用截断的提示）                      |
+| `--attach`   |      | 连接到正在运行的 opencode 服务器（例如，http://localhost:4096） |
+| `--port`     |      | 本地服务器的端口（默认为随机端口）                              |
 
 ---
 
@@ -362,9 +362,9 @@ opencode serve
 
 这将启动一个 HTTP 服务器，该服务器提供对 opencode 功能的 API 访问，无需 TUI 界面。设置 `OPENCODE_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `opencode`）。
 
-#### Flags
+#### 标志
 
-| Flag         | Description              |
+| 标志         | 描述                     |
 | ------------ | ------------------------ |
 | `--port`     | 监听端口                 |
 | `--hostname` | 监听的主机名             |
@@ -391,12 +391,12 @@ opencode session [command]
 opencode session list
 ```
 
-##### Flags
+##### 标志
 
-| Flag          | Short | Description                    |
-| ------------- | ----- | ------------------------------ |
-| `--max-count` | `-n`  | 限制为最近的 N 个会话          |
-| `--format`    |       | 输出格式：table 或 json(table) |
+| 标志          | 简写 | 描述                           |
+| ------------- | ---- | ------------------------------ |
+| `--max-count` | `-n` | 限制为最近的 N 个会话          |
+| `--format`    |      | 输出格式：table 或 json(table) |
 
 ---
 
@@ -408,9 +408,9 @@ opencode session list
 opencode stats
 ```
 
-#### Flags
+#### 标志
 
-| Flag        | Description                                              |
+| 标志        | 描述                                                     |
 | ----------- | -------------------------------------------------------- |
 | `--days`    | 显示过去 N 天（所有时间）的统计数据                      |
 | `--tools`   | 显示工具数量（全部）                                     |
@@ -458,9 +458,9 @@ opencode web
 
 这将启动 HTTP 服务器并打开 Web 浏览器以通过 Web 界面访问 opencode。设置 `OPENCODE_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `opencode`）。
 
-#### Flags
+#### 标志
 
-| Flag         | Description              |
+| 标志         | 描述                     |
 | ------------ | ------------------------ |
 | `--port`     | 监听端口                 |
 | `--hostname` | 监听的主机名             |
@@ -479,9 +479,9 @@ opencode acp
 
 此命令启动一个 ACP 服务器，该服务器使用 nd-JSON 通过 stdin/stdout 进行通信。
 
-#### Flags
+#### 标志
 
-| Flag         | Description  |
+| 标志         | 描述         |
 | ------------ | ------------ |
 | `--cwd`      | 工作目录     |
 | `--port`     | 监听端口     |
@@ -497,14 +497,14 @@ opencode acp
 opencode uninstall
 ```
 
-#### Flags
+#### 标志
 
-| Flag            | Short | Description                  |
-| --------------- | ----- | ---------------------------- |
-| `--keep-config` | `-c`  | 保留配置文件                 |
-| `--keep-data`   | `-d`  | 保留会话数据和快照           |
-| `--dry-run`     |       | 显示将删除的内容但不实际删除 |
-| `--force`       | `-f`  | 跳过确认提示                 |
+| 标志            | 简写 | 描述                         |
+| --------------- | ---- | ---------------------------- |
+| `--keep-config` | `-c` | 保留配置文件                 |
+| `--keep-data`   | `-d` | 保留会话数据和快照           |
+| `--dry-run`     |      | 显示将删除的内容但不实际删除 |
+| `--force`       | `-f` | 跳过确认提示                 |
 
 ---
 
@@ -528,32 +528,32 @@ opencode upgrade
 opencode upgrade v0.1.48
 ```
 
-#### Flags
+#### 标志
 
-| Flag       | Short | Description                                |
-| ---------- | ----- | ------------------------------------------ |
-| `--method` | `-m`  | 使用的安装方法；curl, npm, pnpm, bun, brew |
+| 标志       | 简写 | 描述                                       |
+| ---------- | ---- | ------------------------------------------ |
+| `--method` | `-m` | 使用的安装方法；curl, npm, pnpm, bun, brew |
 
 ---
 
-## Global Flags
+## 全局标志
 
 opencode CLI 接受以下全局标志。
 
-| Flag           | Short | Description                         |
-| -------------- | ----- | ----------------------------------- |
-| `--help`       | `-h`  | 显示帮助                            |
-| `--version`    | `-v`  | 打印版本号                          |
-| `--print-logs` |       | 将日志打印到 stderr                 |
-| `--log-level`  |       | 日志级别 (DEBUG, INFO, WARN, ERROR) |
+| 标志           | 简写 | 描述                                |
+| -------------- | ---- | ----------------------------------- |
+| `--help`       | `-h` | 显示帮助                            |
+| `--version`    | `-v` | 打印版本号                          |
+| `--print-logs` |      | 将日志打印到 stderr                 |
+| `--log-level`  |      | 日志级别 (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
-## Environment variables
+## 环境变量
 
 可以使用环境变量配置 opencode。
 
-| Variable                              | Type    | Description                               |
+| 变量                                  | 类型    | 描述                                      |
 | ------------------------------------- | ------- | ----------------------------------------- |
 | `OPENCODE_AUTO_SHARE`                 | boolean | 自动共享会话                              |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径      |
@@ -582,11 +582,11 @@ opencode CLI 接受以下全局标志。
 
 ---
 
-### Experimental
+### 实验性功能
 
 这些环境变量启用可能会更改或删除的实验性功能。
 
-| Variable                                        | Type    | Description                         |
+| 变量                                            | 类型    | 描述                                |
 | ----------------------------------------------- | ------- | ----------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | boolean | 启用所有实验性功能                  |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                        |

@@ -41,7 +41,9 @@ export namespace SessionCompaction {
 
     const reserved =
       config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-    const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
+    const usable = input.model.limit.input
+      ? input.model.limit.input - reserved
+      : context - ProviderTransform.maxOutputTokens(input.model)
     return count >= usable
   }
 

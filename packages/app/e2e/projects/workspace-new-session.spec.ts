@@ -69,15 +69,19 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
 
   const prompt = page.locator(promptSelector)
   await expect(prompt).toBeVisible()
+  await expect(prompt).toBeEditable()
   await prompt.click()
-  await page.keyboard.type(text)
-  await page.keyboard.press("Enter")
+  await expect(prompt).toBeFocused()
+  await prompt.fill(text)
+  await expect.poll(async () => ((await prompt.textContent()) ?? "").trim()).toContain(text)
+  await prompt.press("Enter")
 
   await expect.poll(() => slugFromUrl(page.url())).toBe(slug)
-  await expect(page).toHaveURL(new RegExp(`/${slug}/session/[^/?#]+`), { timeout: 30_000 })
+  await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
 
   const sessionID = sessionIDFromUrl(page.url())
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+  await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:[/?#]|$)`))
   return sessionID
 }
 
