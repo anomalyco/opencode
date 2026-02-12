@@ -71,6 +71,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpResource
       }
       formatter: FormatterStatus[]
+      sandboxes: string[]
       vcs: VcsInfo | undefined
       path: Path
     }>({
@@ -98,6 +99,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       mcp_resource: {},
       formatter: [],
+      sandboxes: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
     })
@@ -318,6 +320,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "project.updated": {
+          sdk.client.worktree.list().then((x) => setStore("sandboxes", x.data ?? []))
+          break
+        }
+
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
           break
@@ -395,6 +402,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.worktree.list().then((x) => setStore("sandboxes", x.data ?? [])),
           ]).then(() => {
             setStore("status", "complete")
           })

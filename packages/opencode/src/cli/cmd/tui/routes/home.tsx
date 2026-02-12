@@ -1,5 +1,6 @@
+import path from "path"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
@@ -32,6 +33,22 @@ export function Home() {
 
   const connectedMcpCount = createMemo(() => {
     return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
+  })
+
+  const [worktree, setWorktreeRaw] = createSignal(kv.get("worktree_selection", "main") as string)
+  const setWorktree = (value: string) => {
+    setWorktreeRaw(value)
+    kv.set("worktree_selection", value)
+  }
+  const isGit = createMemo(() => !!sync.data.vcs)
+  const worktreeLabel = createMemo(() => {
+    const value = worktree()
+    if (value === "main") {
+      const branch = sync.data.vcs?.branch
+      return branch ? `main (${branch})` : "main"
+    }
+    if (value === "create") return "new workspace"
+    return path.basename(value)
   })
 
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
@@ -107,6 +124,8 @@ export function Home() {
               promptRef.set(r)
             }}
             hint={Hint}
+            worktree={worktree()}
+            onWorktreeChange={setWorktree}
           />
         </box>
         <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
@@ -119,6 +138,15 @@ export function Home() {
       </box>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
+        <Show when={isGit()}>
+          <box gap={1} flexDirection="row" flexShrink={0}>
+            <text fg={theme.text}>
+              <span style={{ fg: theme.accent }}>⊙ </span>
+              {worktreeLabel()}
+            </text>
+            <text fg={theme.textMuted}>/workspace</text>
+          </box>
+        </Show>
         <box gap={1} flexDirection="row" flexShrink={0}>
           <Show when={mcp()}>
             <text fg={theme.text}>

@@ -18,6 +18,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogWorktree } from "@tui/component/dialog-worktree"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -463,6 +464,31 @@ function App() {
         local.agent.move(-1)
       },
     },
+    ...(sync.data.vcs
+      ? [
+          {
+            title: "Select workspace",
+            value: "workspace.select",
+            keybind: undefined as any,
+            suggested: route.data.type === "home",
+            slash: {
+              name: "workspace",
+              aliases: ["worktree", "sandbox"],
+            },
+            onSelect: () => {
+              dialog.replace(() => (
+                <DialogWorktree
+                  current={kv.get("worktree_selection", "main") as string}
+                  onSelect={(value: string) => {
+                    kv.set("worktree_selection", value)
+                  }}
+                />
+              ))
+            },
+            category: "Session",
+          },
+        ]
+      : []),
     {
       title: "Connect provider",
       value: "provider.connect",

@@ -1,3 +1,4 @@
+import path from "path"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
@@ -34,6 +35,8 @@ export function DialogSessionList() {
 
   const sessions = createMemo(() => searchResults() ?? sync.data.session)
 
+  const primary = createMemo(() => sync.data.path.worktree)
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
@@ -48,8 +51,10 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
+        const worktree = primary() && x.directory !== primary() ? path.basename(x.directory) : undefined
         return {
           title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          description: worktree ? `[${worktree}]` : undefined,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,

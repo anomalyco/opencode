@@ -41,6 +41,8 @@ export type PromptProps = {
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  worktree?: string
+  onWorktreeChange?: (value: string) => void
 }
 
 export type PromptRef = {
@@ -537,10 +539,27 @@ export function Prompt(props: PromptProps) {
       promptModelWarning()
       return
     }
+    const worktreeSelection = !props.sessionID ? (props.worktree ?? "main") : "main"
+    let client = sdk.client
+    if (!props.sessionID && worktreeSelection !== "main") {
+      if (worktreeSelection === "create") {
+        const created = await sdk.client.worktree.create({}).then((x) => x.data).catch(() => undefined)
+        if (!created?.directory) {
+          toast.show({ variant: "error", message: "Failed to create workspace" })
+          return
+        }
+        client = sdk.createClient(created.directory)
+        toast.show({ variant: "info", message: `Creating workspace ${created.name}...`, duration: 3000 })
+      } else {
+        client = sdk.createClient(worktreeSelection)
+      }
+      props.onWorktreeChange?.("main")
+    }
+
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+          const sessionID = await client.session.create({}).then((x) => x.data!.id)
           return sessionID
         })()
     const messageID = Identifier.ascending("message")
@@ -570,7 +589,7 @@ export function Prompt(props: PromptProps) {
     const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
-      sdk.client.session.shell({
+      client.session.shell({
         sessionID,
         agent: local.agent.current().name,
         model: {
@@ -595,7 +614,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session.command({
+      client.session.command({
         sessionID,
         command: command.slice(1),
         arguments: args,
@@ -611,7 +630,7 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      sdk.client.session
+      client.session
         .prompt({
           sessionID,
           ...selectedModel,
