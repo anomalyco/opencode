@@ -302,12 +302,22 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+  const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
   const [expanded, setExpanded] = createSignal(false)
   const [canExpand, setCanExpand] = createSignal(false)
+  const [confirmingUndo, setConfirmingUndo] = createSignal(false)
+  const [confirmingFork, setConfirmingFork] = createSignal(false)
   let textRef: HTMLDivElement | undefined
+  let undoTimer: ReturnType<typeof setTimeout> | undefined
+  let forkTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (undoTimer) clearTimeout(undoTimer)
+    if (forkTimer) clearTimeout(forkTimer)
+  })
 
   const updateCanExpand = () => {
     const el = textRef
@@ -417,7 +427,61 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           >
             <Icon name="chevron-down" size="small" />
           </button>
-          <div data-slot="user-message-copy-wrapper">
+          <div data-slot="user-message-actions">
+            <Show when={data.forkMessage}>
+              <Tooltip
+                value={confirmingFork() ? i18n.t("ui.message.fork.confirm") : i18n.t("ui.message.fork.description")}
+                placement="top"
+                gutter={8}
+                forceOpen={confirmingFork()}
+              >
+                <IconButton
+                  icon="branch"
+                  size="small"
+                  variant={confirmingFork() ? "primary" : "secondary"}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (confirmingFork()) {
+                      if (forkTimer) clearTimeout(forkTimer)
+                      setConfirmingFork(false)
+                      data.forkMessage?.(props.message.sessionID, props.message.id)
+                      return
+                    }
+                    setConfirmingFork(true)
+                    forkTimer = setTimeout(() => setConfirmingFork(false), 3000)
+                  }}
+                  aria-label={confirmingFork() ? i18n.t("ui.message.fork.confirm") : i18n.t("ui.message.fork")}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={data.undoMessage}>
+              <Tooltip
+                value={confirmingUndo() ? i18n.t("ui.message.undo.confirm") : i18n.t("ui.message.undo")}
+                placement="top"
+                gutter={8}
+                forceOpen={confirmingUndo()}
+              >
+                <IconButton
+                  icon="undo"
+                  size="small"
+                  variant={confirmingUndo() ? "primary" : "secondary"}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (confirmingUndo()) {
+                      if (undoTimer) clearTimeout(undoTimer)
+                      setConfirmingUndo(false)
+                      data.undoMessage?.(props.message.sessionID, props.message.id)
+                      return
+                    }
+                    setConfirmingUndo(true)
+                    undoTimer = setTimeout(() => setConfirmingUndo(false), 3000)
+                  }}
+                  aria-label={confirmingUndo() ? i18n.t("ui.message.undo.confirm") : i18n.t("ui.message.undo")}
+                />
+              </Tooltip>
+            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"

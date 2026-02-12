@@ -94,6 +94,11 @@ export const dict = {
   "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
   "ui.message.copied": "Kopirano!",
+  "ui.message.undo": "Poništi",
+  "ui.message.undo.confirm": "Kliknite ponovo za poništavanje",
+  "ui.message.fork": "Račvaj",
+  "ui.message.fork.confirm": "Kliknite ponovo za račvanje",
+  "ui.message.fork.description": "Račvaj od ove poruke",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",

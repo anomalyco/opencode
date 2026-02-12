@@ -90,6 +90,11 @@ export const dict = {
   "ui.message.collapse": "Collapse message",
   "ui.message.copy": "Copy",
   "ui.message.copied": "Copied!",
+  "ui.message.undo": "Undo",
+  "ui.message.undo.confirm": "Click again to undo",
+  "ui.message.fork": "Fork",
+  "ui.message.fork.confirm": "Click again to fork",
+  "ui.message.fork.description": "Fork from this message",
   "ui.message.attachment.alt": "attachment",
 
   "ui.patch.action.deleted": "Deleted",

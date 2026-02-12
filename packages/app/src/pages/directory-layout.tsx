@@ -11,6 +11,8 @@ import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 
+import { base64Encode } from "@opencode-ai/util/encode"
+
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
@@ -61,6 +63,26 @@ export default function Layout(props: ParentProps) {
 
             const syncSession = (sessionID: string) => sync.session.sync(sessionID)
 
+            const undoMessage = async (sessionID: string, messageID: string) => {
+              const status = sync.data.session_status[sessionID]
+              if (status?.type !== "idle") {
+                await sdk.client.session.abort({ sessionID }).catch(() => {})
+              }
+              await sdk.client.session.revert({ sessionID, messageID })
+            }
+
+            const forkMessage = async (sessionID: string, messageID: string) => {
+              const msgs = sync.data.message[sessionID]
+              let cutoffID: string | undefined
+              if (msgs) {
+                const idx = msgs.findIndex((m) => m.id === messageID)
+                if (idx !== -1 && idx + 1 < msgs.length) cutoffID = msgs[idx + 1]!.id
+              }
+              const result = await sdk.client.session.fork({ sessionID, messageID: cutoffID })
+              if (!result.data) return
+              navigate(`/${base64Encode(sdk.directory)}/session/${result.data.id}`)
+            }
+
             return (
               <DataProvider
                 data={sync.data}
@@ -71,6 +93,8 @@ export default function Layout(props: ParentProps) {
                 onNavigateToSession={navigateToSession}
                 onSessionHref={sessionHref}
                 onSyncSession={syncSession}
+                onUndoMessage={undoMessage}
+                onForkMessage={forkMessage}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

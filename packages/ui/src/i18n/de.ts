@@ -93,6 +93,11 @@ export const dict = {
   "ui.message.collapse": "Nachricht reduzieren",
   "ui.message.copy": "Kopieren",
   "ui.message.copied": "Kopiert!",
+  "ui.message.undo": "Rückgängig",
+  "ui.message.undo.confirm": "Erneut klicken zum Rückgängigmachen",
+  "ui.message.fork": "Verzweigen",
+  "ui.message.fork.confirm": "Erneut klicken zum Verzweigen",
+  "ui.message.fork.description": "Ab dieser Nachricht verzweigen",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",

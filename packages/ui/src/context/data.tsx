@@ -52,6 +52,10 @@ export type SessionHrefFn = (sessionID: string) => string
 
 export type SyncSessionFn = (sessionID: string) => void | Promise<void>
 
+export type UndoMessageFn = (sessionID: string, messageID: string) => void | Promise<void>
+
+export type ForkMessageFn = (sessionID: string, messageID: string) => void | Promise<void>
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -63,6 +67,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
     onSyncSession?: SyncSessionFn
+    onUndoMessage?: UndoMessageFn
+    onForkMessage?: ForkMessageFn
   }) => {
     return {
       get store() {
@@ -77,6 +83,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
       syncSession: props.onSyncSession,
+      undoMessage: props.onUndoMessage,
+      forkMessage: props.onForkMessage,
     }
   },
 })

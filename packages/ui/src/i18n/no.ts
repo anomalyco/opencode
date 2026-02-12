@@ -93,6 +93,11 @@ export const dict: Record<Keys, string> = {
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
   "ui.message.copied": "Kopiert!",
+  "ui.message.undo": "Angre",
+  "ui.message.undo.confirm": "Klikk igjen for å angre",
+  "ui.message.fork": "Forgren",
+  "ui.message.fork.confirm": "Klikk igjen for å forgrene",
+  "ui.message.fork.description": "Forgren fra denne meldingen",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",

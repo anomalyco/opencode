@@ -90,6 +90,11 @@ export const dict = {
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
   "ui.message.copied": "คัดลอกแล้ว!",
+  "ui.message.undo": "เลิกทำ",
+  "ui.message.undo.confirm": "คลิกอีกครั้งเพื่อเลิกทำ",
+  "ui.message.fork": "แยกสาขา",
+  "ui.message.fork.confirm": "คลิกอีกครั้งเพื่อแยกสาขา",
+  "ui.message.fork.description": "แยกสาขาจากข้อความนี้",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",

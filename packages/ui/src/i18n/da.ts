@@ -89,6 +89,11 @@ export const dict = {
   "ui.message.collapse": "Skjul besked",
   "ui.message.copy": "Kopier",
   "ui.message.copied": "Kopieret!",
+  "ui.message.undo": "Fortryd",
+  "ui.message.undo.confirm": "Klik igen for at fortryde",
+  "ui.message.fork": "Forgren",
+  "ui.message.fork.confirm": "Klik igen for at forgrene",
+  "ui.message.fork.description": "Forgren fra denne besked",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",

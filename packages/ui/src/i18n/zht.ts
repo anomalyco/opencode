@@ -94,6 +94,11 @@ export const dict = {
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
   "ui.message.copied": "已複製！",
+  "ui.message.undo": "復原",
+  "ui.message.undo.confirm": "再次點擊以復原",
+  "ui.message.fork": "分支",
+  "ui.message.fork.confirm": "再次點擊以建立分支",
+  "ui.message.fork.description": "從此訊息建立分支",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",

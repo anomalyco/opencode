@@ -90,6 +90,11 @@ export const dict = {
   "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
   "ui.message.copied": "تم النسخ!",
+  "ui.message.undo": "تراجع",
+  "ui.message.undo.confirm": "انقر مرة أخرى للتراجع",
+  "ui.message.fork": "تفرع",
+  "ui.message.fork.confirm": "انقر مرة أخرى للتفرع",
+  "ui.message.fork.description": "تفرع من هذه الرسالة",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",

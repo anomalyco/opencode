@@ -89,15 +89,17 @@
       color: var(--syntax-type);
     }
 
-    [data-slot="user-message-copy-wrapper"] {
+    [data-slot="user-message-actions"] {
       position: absolute;
       top: 7px;
       right: 7px;
+      display: flex;
+      gap: 5px;
       opacity: 0;
       transition: opacity 0.15s ease;
     }
 
-    &:hover [data-slot="user-message-copy-wrapper"] {
+    &:hover [data-slot="user-message-actions"] {
       opacity: 1;
     }
   }

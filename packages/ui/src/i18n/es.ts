@@ -90,6 +90,11 @@ export const dict = {
   "ui.message.collapse": "Colapsar mensaje",
   "ui.message.copy": "Copiar",
   "ui.message.copied": "¡Copiado!",
+  "ui.message.undo": "Deshacer",
+  "ui.message.undo.confirm": "Haz clic de nuevo para deshacer",
+  "ui.message.fork": "Bifurcar",
+  "ui.message.fork.confirm": "Haz clic de nuevo para bifurcar",
+  "ui.message.fork.description": "Bifurcar desde este mensaje",
   "ui.message.attachment.alt": "adjunto",
 
   "ui.patch.action.deleted": "Eliminado",
