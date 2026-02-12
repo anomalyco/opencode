@@ -21,7 +21,9 @@ test("ask - returns pending promise", async () => {
           },
         ],
       })
+      promise.catch(() => {})
       expect(promise).toBeInstanceOf(Promise)
+      await Instance.dispose()
     },
   })
 })
@@ -45,11 +47,12 @@ test("ask - adds to pending list", async () => {
       Question.ask({
         sessionID: "ses_test",
         questions,
-      })
+      }).catch(() => {})
 
       const pending = await Question.list()
       expect(pending.length).toBe(1)
       expect(pending[0].questions).toEqual(questions)
+      await Instance.dispose()
     },
   })
 })
@@ -269,7 +272,7 @@ test("list - returns all pending requests", async () => {
             options: [{ label: "A", description: "A" }],
           },
         ],
-      })
+      }).catch(() => {})
 
       Question.ask({
         sessionID: "ses_test2",
@@ -280,10 +283,11 @@ test("list - returns all pending requests", async () => {
             options: [{ label: "B", description: "B" }],
           },
         ],
-      })
+      }).catch(() => {})
 
       const pending = await Question.list()
       expect(pending.length).toBe(2)
+      await Instance.dispose()
     },
   })
 })
