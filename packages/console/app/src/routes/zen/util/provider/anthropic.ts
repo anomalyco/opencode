@@ -167,6 +167,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
           }
         },
         retrieve: () => usage,
+        buidlCostChunk: (cost: string) => `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`,
       }
     },
     normalizeUsage: (usage: Usage) => ({

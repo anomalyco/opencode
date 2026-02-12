@@ -15,14 +15,14 @@ Za dodavanje provajdera potrebno je:
 
 ---
 
-### Akreditacije
+### Vjerodajnice
 
 Kada dodate API ključeve dobavljača sa naredbom `/connect`, oni se pohranjuju
 u `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Konfiguracija
 
 Možete prilagoditi dobavljače putem odjeljka `provider` u vašem OpenCode
 config.
@@ -84,7 +84,7 @@ Radi kao i svaki drugi provajder u OpenCode i potpuno je opcionalan za korišten
 
 ---
 
-## Directory
+## Direktorij
 
 Pogledajmo neke od provajdera detaljno. Ako želite dodati provajdera na
 listu, slobodno otvori PR.
@@ -135,7 +135,7 @@ Da biste koristili Amazon Bedrock s OpenCode:
 
 2. **Konfigurirajte autentifikaciju** koristeći jedan od sljedećih metoda:
 
-   #### Varijable okruženja (brzi početak)
+   #### Varijable okruženja (Brzi početak)
 
    Postavite jednu od ovih varijabli okruženja dok pokrećete opencode:
 
@@ -157,7 +157,7 @@ Ili ih dodajte na svoj bash profil:
    export AWS_REGION=us-east-1
 ```
 
-#### Konfiguracijski fajl (preporučeno)
+#### Konfiguracijski fajl (Preporučeno)
 
 Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `opencode.json`:
 
@@ -689,7 +689,7 @@ da pohrani token u opencode auth memoriju.
 
 ##### Samostalni GitLab
 
-:::note[compliance note]
+:::note[Napomena o usklađenosti]
 OpenCode koristi mali model za neke AI zadatke kao što je generiranje naslova sesije.
 Podrazumevano je konfigurisan da koristi gpt-5-nano, a hostuje ga Zen. Da zaključate OpenCode
 da biste koristili samo svoju vlastitu instancu koju hostuje GitLab, dodajte sljedeće u svoju
@@ -1889,7 +1889,7 @@ Ako imate problema s konfiguracijom provajdera, provjerite sljedeće:
 
    Ovo se ne odnosi na dobavljače kao što je Amazon Bedrock, koji se oslanjaju na varijable okruženja za svoju autentifikaciju.
 
-2. Za prilagođene provajdere, provjerite konfiguraciju otvorenog koda i:
+2. Za prilagođene provajdere, provjerite OpenCode konfiguraciju i:
    - Uvjerite se da ID provajdera korišten u naredbi `/connect` odgovara ID-u u vašoj opencode konfiguraciji.
    - Za provajdera se koristi pravi npm paket. Na primjer, koristite `@ai-sdk/cerebras` za Cerebras. A za sve ostale OpenAI kompatibilne provajdere, koristite `@ai-sdk/openai-compatible`.
    - Provjerite da li se ispravna krajnja tačka API-ja koristi u polju `options.baseURL`.

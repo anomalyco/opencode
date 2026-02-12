@@ -16,9 +16,9 @@ The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
-#### 選項
+#### 选项
 
-| 旗幟            | 描述                                | 默认             |
+| 标志            | 描述                                | 默认             |
 | --------------- | ----------------------------------- | ---------------- |
 | `--port`        | 监听音频                            | `4096`           |
 | `--hostname`    | 监听的主机名                        | `127.0.0.1`      |
@@ -34,7 +34,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ---
 
-### 驗證
+### 验证
 
 Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
 
@@ -81,13 +81,13 @@ http://<hostname>:<port>/doc
 
 ---
 
-## 蜜蜂
+## API
 
 opencode服务器公开以下API。
 
 ---
 
-### 全球的
+### 全局
 
 | 方法  | 路徑             | 描述                     | 回应                                 |
 | ----- | ---------------- | ------------------------ | ------------------------------------ |
@@ -96,7 +96,7 @@ opencode服务器公开以下API。
 
 ---
 
-### 专案
+### 项目
 
 | 方法  | 路徑               | 描述         | 回应                                       |
 | ----- | ------------------ | ------------ | ------------------------------------------ |
@@ -238,7 +238,7 @@ opencode服务器公开以下API。
 
 ---
 
-### 記錄
+### 日志
 
 | 方法   | 路徑                                        | 描述   | 回应                 |
 | ------ | ------------------------------------------- | ------ | -------------------- |
@@ -264,7 +264,7 @@ opencode服务器公开以下API。
 
 ---
 
-### 授權
+### 授权
 
 | 方法  | 路徑        | 描述                                       | 回应      |
 | ----- | ----------- | ------------------------------------------ | --------- |
@@ -280,7 +280,7 @@ opencode服务器公开以下API。
 
 ---
 
-### 文件
+### 文档
 
 | 方法  | 路徑   | 描述            | 回应                      |
 | ----- | ------ | --------------- | ------------------------- |

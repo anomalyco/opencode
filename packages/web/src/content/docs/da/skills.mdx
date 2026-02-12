@@ -1,5 +1,5 @@
 ---
-title: "Agentferdigheter"
+title: "Agentfærdigheder"
 description: "Definer gjenbrugbar atferd via SKILL.md-definisjoner"
 ---
 
@@ -8,7 +8,7 @@ Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet 
 
 ---
 
-## Plasser filer
+## Placer filer
 
 Opret én mappe per ferdighetsnavn og tilføj inn en `SKILL.md` i den.
 OpenCode søker etter disse stedene:
@@ -22,7 +22,7 @@ OpenCode søker etter disse stedene:
 
 ---
 
-## Forstå oppdagelsen
+## Forstå opdagelsen
 
 For prosjektlokale stier går OpenCode opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
 Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
@@ -31,7 +31,7 @@ Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`
 
 ---
 
-## Skriv frontmaterie
+## Skriv frontmatter
 
 Hver `SKILL.md` må starte med YAML frontmatter.
 Bare disse feltene gjenkjennes:
@@ -46,7 +46,7 @@ Ukjente frontmatter-felter ignoreres.
 
 ---
 
-## Bekreft navn
+## Bekræft navn
 
 `name` må:
 
@@ -64,7 +64,7 @@ Ekvivalent regulært uttrykk:
 
 ---
 
-## Følg lengdereglene
+## Følg længdereglerne
 
 `description` må bestå av 1-1024 tegn.
 Hold det spesifikt nok til at agenten kan velge riktig.
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Gjenkjenne verktøybeskrivelsen
+## Genkend værktøjsbeskrivelsen
 
 OpenCode viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
 Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## Konfigurer tillatelser
+## Konfigurer tilladelser
 
 Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaserte tillatelser i `opencode.json`:
 
@@ -149,7 +149,7 @@ Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `intern
 
 ---
 
-## Overstyring per agent
+## Tilsidesættelse pr. agent
 
 Gi spesifikke agenter andre tillatelser enn de globale standardinnstillingene.
 
@@ -181,7 +181,7 @@ permission:
 
 ---
 
-## Deaktiver ferdighetsverktøyet
+## Deaktiver færdighedsværktøjet
 
 Deaktiver ferdigheter fullstendig for agenter som ikke bør bruge dem:
 
@@ -212,7 +212,7 @@ Når den er deaktivert, blir `<available_skills>`-delen utelatt helt.
 
 ---
 
-## Feilsøk lasting
+## Fejlfind indlæsning
 
 Hvis en ferdighet ikke vises:
 

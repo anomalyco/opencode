@@ -394,6 +394,19 @@ export default function Page() {
       })
   }
 
+  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
+    if (params.id !== sessionID) return
+    if (parentID) {
+      navigate(`/${params.dir}/session/${parentID}`)
+      return
+    }
+    if (nextSessionID) {
+      navigate(`/${params.dir}/session/${nextSessionID}`)
+      return
+    }
+    navigate(`/${params.dir}/session`)
+  }
+
   async function archiveSession(sessionID: string) {
     const session = sync.session.get(sessionID)
     if (!session) return
@@ -411,17 +424,7 @@ export default function Page() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-
-        if (params.id !== sessionID) return
-        if (session.parentID) {
-          navigate(`/${params.dir}/session/${session.parentID}`)
-          return
-        }
-        if (nextSession) {
-          navigate(`/${params.dir}/session/${nextSession.id}`)
-          return
-        }
-        navigate(`/${params.dir}/session`)
+        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
       })
       .catch((err) => {
         showToast({
@@ -487,16 +490,7 @@ export default function Page() {
       }),
     )
 
-    if (params.id !== sessionID) return true
-    if (session.parentID) {
-      navigate(`/${params.dir}/session/${session.parentID}`)
-      return true
-    }
-    if (nextSession) {
-      navigate(`/${params.dir}/session/${nextSession.id}`)
-      return true
-    }
-    navigate(`/${params.dir}/session`)
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
     return true
   }
 
@@ -1532,15 +1526,18 @@ export default function Page() {
   createEffect(() => {
     if (!file.ready()) return
     setSessionHandoff(sessionKey(), {
-      files: Object.fromEntries(
-        tabs()
-          .all()
-          .flatMap((tab) => {
-            const path = file.pathFromTab(tab)
-            if (!path) return []
-            return [[path, file.selectedLines(path) ?? null] as const]
-          }),
-      ),
+      files: tabs()
+        .all()
+        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
+          const path = file.pathFromTab(tab)
+          if (!path) return acc
+          const selected = file.selectedLines(path)
+          acc[path] =
+            selected && typeof selected === "object" && "start" in selected && "end" in selected
+              ? (selected as SelectedLineRange)
+              : null
+          return acc
+        }, {}),
     })
   })
 
@@ -1557,6 +1554,7 @@ export default function Page() {
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
+          mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
@@ -1719,7 +1717,6 @@ export default function Page() {
           dialog={dialog}
           file={file}
           comments={comments}
-          sync={sync}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
@@ -1731,10 +1728,12 @@ export default function Page() {
           openTab={openTab}
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
-          messages={messages as () => unknown[]}
-          visibleUserMessages={visibleUserMessages as () => unknown[]}
-          view={view}
-          info={info as () => unknown}
+          vm={{
+            messages,
+            visibleUserMessages,
+            view,
+            info,
+          }}
           handoffFiles={() => handoff.session.get(sessionKey())?.files}
           codeComponent={codeComponent}
           addCommentToContext={addCommentToContext}
