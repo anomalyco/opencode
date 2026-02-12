@@ -1,5 +1,5 @@
 ---
-title: Normas
+title: Reglas
 description: Establezca instrucciones personalizadas para opencode.
 ---
 
@@ -66,7 +66,7 @@ También puedes tener reglas globales en un archivo `~/.config/opencode/AGENTS.m
 
 Dado que esto no está comprometido con Git ni se comparte con su equipo, recomendamos usarlo para especificar las reglas personales que debe seguir LLM.
 
-### Compatibilidad del código Claude
+### Compatibilidad con Claude Code
 
 Para los usuarios que migran desde Claude Code, OpenCode admite las convenciones de archivos de Claude Code como alternativas:
 
@@ -90,7 +90,7 @@ Cuando se inicia opencode, busca archivos de reglas en este orden:
 
 1. **Archivos locales** atravesando desde el directorio actual (`AGENTS.md`, `CLAUDE.md`)
 2. **Archivo global** en `~/.config/opencode/AGENTS.md`
-3. **Archivo de Código Claude** en `~/.claude/CLAUDE.md` (a menos que esté deshabilitado)
+3. **Archivo de Claude Code** en `~/.claude/CLAUDE.md` (a menos que esté deshabilitado)
 
 El primer archivo coincidente gana en cada categoría. Por ejemplo, si tiene `AGENTS.md` y `CLAUDE.md`, solo se usa `AGENTS.md`. De manera similar, `~/.config/opencode/AGENTS.md` tiene prioridad sobre `~/.claude/CLAUDE.md`.
 
@@ -128,7 +128,7 @@ Todos los archivos de instrucciones se combinan con sus archivos `AGENTS.md`.
 
 Si bien opencode no analiza automáticamente las referencias de archivos en `AGENTS.md`, puedes lograr una funcionalidad similar de dos maneras:
 
-### Usando opencode.json
+### Usar opencode.json
 
 El enfoque recomendado es utilizar el campo `instructions` en `opencode.json`:
 
