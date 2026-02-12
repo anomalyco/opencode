@@ -36,6 +36,223 @@ type Entry = {
 
 type DialogSelectFileMode = "all" | "files"
 
+const ENTRY_LIMIT = 5
+const COMMON_COMMAND_IDS = [
+  "session.new",
+  "workspace.new",
+  "session.previous",
+  "session.next",
+  "terminal.toggle",
+  "review.toggle",
+] as const
+
+const uniqueEntries = (items: Entry[]) => {
+  const seen = new Set<string>()
+  const out: Entry[] = []
+  for (const item of items) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    out.push(item)
+  }
+  return out
+}
+
+const createCommandEntry = (option: CommandOption, category: string): Entry => ({
+  id: "command:" + option.id,
+  type: "command",
+  title: option.title,
+  description: option.description,
+  keybind: option.keybind,
+  category,
+  option,
+})
+
+const createFileEntry = (path: string, category: string): Entry => ({
+  id: "file:" + path,
+  type: "file",
+  title: path,
+  category,
+  path,
+})
+
+const createSessionEntry = (
+  input: {
+    directory: string
+    id: string
+    title: string
+    description: string
+    archived?: number
+    updated?: number
+  },
+  category: string,
+): Entry => ({
+  id: `session:${input.directory}:${input.id}`,
+  type: "session",
+  title: input.title,
+  description: input.description,
+  category,
+  directory: input.directory,
+  sessionID: input.id,
+  archived: input.archived,
+  updated: input.updated,
+})
+
+function createCommandEntries(props: {
+  filesOnly: () => boolean
+  command: ReturnType<typeof useCommand>
+  language: ReturnType<typeof useLanguage>
+}) {
+  const allowed = createMemo(() => {
+    if (props.filesOnly()) return []
+    return props.command.options.filter(
+      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
+    )
+  })
+
+  const list = createMemo(() => {
+    const category = props.language.t("palette.group.commands")
+    return allowed().map((option) => createCommandEntry(option, category))
+  })
+
+  const picks = createMemo(() => {
+    const all = allowed()
+    const order = new Map<string, number>(COMMON_COMMAND_IDS.map((id, index) => [id, index]))
+    const picked = all.filter((option) => order.has(option.id))
+    const base = picked.length ? picked : all.slice(0, ENTRY_LIMIT)
+    const sorted = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
+    const category = props.language.t("palette.group.commands")
+    return sorted.map((option) => createCommandEntry(option, category))
+  })
+
+  return { allowed, list, picks }
+}
+
+function createFileEntries(props: {
+  file: ReturnType<typeof useFile>
+  tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
+  language: ReturnType<typeof useLanguage>
+}) {
+  const recent = createMemo(() => {
+    const all = props.tabs().all()
+    const active = props.tabs().active()
+    const order = active ? [active, ...all.filter((item) => item !== active)] : all
+    const seen = new Set<string>()
+    const category = props.language.t("palette.group.files")
+    const items: Entry[] = []
+
+    for (const item of order) {
+      const path = props.file.pathFromTab(item)
+      if (!path) continue
+      if (seen.has(path)) continue
+      seen.add(path)
+      items.push(createFileEntry(path, category))
+    }
+
+    return items.slice(0, ENTRY_LIMIT)
+  })
+
+  const root = createMemo(() => {
+    const category = props.language.t("palette.group.files")
+    const nodes = props.file.tree.children("")
+    const paths = nodes
+      .filter((node) => node.type === "file")
+      .map((node) => node.path)
+      .sort((a, b) => a.localeCompare(b))
+    return paths.slice(0, ENTRY_LIMIT).map((path) => createFileEntry(path, category))
+  })
+
+  return { recent, root }
+}
+
+function createSessionEntries(props: {
+  workspaces: () => string[]
+  label: (directory: string) => string
+  globalSDK: ReturnType<typeof useGlobalSDK>
+  language: ReturnType<typeof useLanguage>
+}) {
+  const state: {
+    token: number
+    inflight: Promise<Entry[]> | undefined
+    cached: Entry[] | undefined
+  } = {
+    token: 0,
+    inflight: undefined,
+    cached: undefined,
+  }
+
+  const sessions = (text: string) => {
+    const query = text.trim()
+    if (!query) {
+      state.token += 1
+      state.inflight = undefined
+      state.cached = undefined
+      return [] as Entry[]
+    }
+
+    if (state.cached) return state.cached
+    if (state.inflight) return state.inflight
+
+    const current = state.token
+    const dirs = props.workspaces()
+    if (dirs.length === 0) return [] as Entry[]
+
+    state.inflight = Promise.all(
+      dirs.map((directory) => {
+        const description = props.label(directory)
+        return props.globalSDK.client.session
+          .list({ directory, roots: true })
+          .then((x) =>
+            (x.data ?? [])
+              .filter((s) => !!s?.id)
+              .map((s) => ({
+                id: s.id,
+                title: s.title ?? props.language.t("command.session.new"),
+                description,
+                directory,
+                archived: s.time?.archived,
+                updated: s.time?.updated,
+              })),
+          )
+          .catch(
+            () =>
+              [] as {
+                id: string
+                title: string
+                description: string
+                directory: string
+                archived?: number
+                updated?: number
+              }[],
+          )
+      }),
+    )
+      .then((results) => {
+        if (state.token !== current) return [] as Entry[]
+        const seen = new Set<string>()
+        const category = props.language.t("command.category.session")
+        const next = results
+          .flat()
+          .filter((item) => {
+            const key = `${item.directory}:${item.id}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .map((item) => createSessionEntry(item, category))
+        state.cached = next
+        return next
+      })
+      .catch(() => [] as Entry[])
+      .finally(() => {
+        state.inflight = undefined
+      })
+
+    return state.inflight
+  }
+
+  return { sessions }
+}
+
 export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
@@ -52,40 +269,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
-  const common = [
-    "session.new",
-    "workspace.new",
-    "session.previous",
-    "session.next",
-    "terminal.toggle",
-    "review.toggle",
-  ]
-  const limit = 5
-
-  const allowed = createMemo(() => {
-    if (filesOnly()) return []
-    return command.options.filter(
-      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
-    )
-  })
-
-  const commandItem = (option: CommandOption): Entry => ({
-    id: "command:" + option.id,
-    type: "command",
-    title: option.title,
-    description: option.description,
-    keybind: option.keybind,
-    category: language.t("palette.group.commands"),
-    option,
-  })
-
-  const fileItem = (path: string): Entry => ({
-    id: "file:" + path,
-    type: "file",
-    title: path,
-    category: language.t("palette.group.files"),
-    path,
-  })
+  const commandEntries = createCommandEntries({ filesOnly, command, language })
+  const fileEntries = createFileEntries({ file, tabs, language })
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -116,136 +301,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     return `${kind} : ${name || path}`
   }
 
-  const sessionItem = (input: {
-    directory: string
-    id: string
-    title: string
-    description: string
-    archived?: number
-    updated?: number
-  }): Entry => ({
-    id: `session:${input.directory}:${input.id}`,
-    type: "session",
-    title: input.title,
-    description: input.description,
-    category: language.t("command.category.session"),
-    directory: input.directory,
-    sessionID: input.id,
-    archived: input.archived,
-    updated: input.updated,
-  })
-
-  const list = createMemo(() => allowed().map(commandItem))
-
-  const picks = createMemo(() => {
-    const all = allowed()
-    const order = new Map(common.map((id, index) => [id, index]))
-    const picked = all.filter((option) => order.has(option.id))
-    const base = picked.length ? picked : all.slice(0, limit)
-    const sorted = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
-    return sorted.map(commandItem)
-  })
-
-  const recent = createMemo(() => {
-    const all = tabs().all()
-    const active = tabs().active()
-    const order = active ? [active, ...all.filter((item) => item !== active)] : all
-    const seen = new Set<string>()
-    const items: Entry[] = []
-
-    for (const item of order) {
-      const path = file.pathFromTab(item)
-      if (!path) continue
-      if (seen.has(path)) continue
-      seen.add(path)
-      items.push(fileItem(path))
-    }
-
-    return items.slice(0, limit)
-  })
-
-  const root = createMemo(() => {
-    const nodes = file.tree.children("")
-    const paths = nodes
-      .filter((node) => node.type === "file")
-      .map((node) => node.path)
-      .sort((a, b) => a.localeCompare(b))
-    return paths.slice(0, limit).map(fileItem)
-  })
-
-  const unique = (items: Entry[]) => {
-    const seen = new Set<string>()
-    const out: Entry[] = []
-    for (const item of items) {
-      if (seen.has(item.id)) continue
-      seen.add(item.id)
-      out.push(item)
-    }
-    return out
-  }
-
-  const sessionToken = { value: 0 }
-  let sessionInflight: Promise<Entry[]> | undefined
-  let sessionAll: Entry[] | undefined
-
-  const sessions = (text: string) => {
-    const query = text.trim()
-    if (!query) {
-      sessionToken.value += 1
-      sessionInflight = undefined
-      sessionAll = undefined
-      return [] as Entry[]
-    }
-
-    if (sessionAll) return sessionAll
-    if (sessionInflight) return sessionInflight
-
-    const current = sessionToken.value
-    const dirs = workspaces()
-    if (dirs.length === 0) return [] as Entry[]
-
-    sessionInflight = Promise.all(
-      dirs.map((directory) => {
-        const description = label(directory)
-        return globalSDK.client.session
-          .list({ directory, roots: true })
-          .then((x) =>
-            (x.data ?? [])
-              .filter((s) => !!s?.id)
-              .map((s) => ({
-                id: s.id,
-                title: s.title ?? language.t("command.session.new"),
-                description,
-                directory,
-                archived: s.time?.archived,
-                updated: s.time?.updated,
-              })),
-          )
-          .catch(() => [] as { id: string; title: string; description: string; directory: string; archived?: number }[])
-      }),
-    )
-      .then((results) => {
-        if (sessionToken.value !== current) return [] as Entry[]
-        const seen = new Set<string>()
-        const next = results
-          .flat()
-          .filter((item) => {
-            const key = `${item.directory}:${item.id}`
-            if (seen.has(key)) return false
-            seen.add(key)
-            return true
-          })
-          .map(sessionItem)
-        sessionAll = next
-        return next
-      })
-      .catch(() => [] as Entry[])
-      .finally(() => {
-        sessionInflight = undefined
-      })
-
-    return sessionInflight
-  }
+  const { sessions } = createSessionEntries({ workspaces, label, globalSDK, language })
 
   const items = async (text: string) => {
     const query = text.trim()
@@ -254,7 +310,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (!query && filesOnly()) {
       const loaded = file.tree.state("")?.loaded
       const pending = loaded ? Promise.resolve() : file.tree.list("")
-      const next = unique([...recent(), ...root()])
+      const next = uniqueEntries([...fileEntries.recent(), ...fileEntries.root()])
 
       if (loaded || next.length > 0) {
         void pending
@@ -262,19 +318,21 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
       }
 
       await pending
-      return unique([...recent(), ...root()])
+      return uniqueEntries([...fileEntries.recent(), ...fileEntries.root()])
     }
 
-    if (!query) return [...picks(), ...recent()]
+    if (!query) return [...commandEntries.picks(), ...fileEntries.recent()]
 
     if (filesOnly()) {
       const files = await file.searchFiles(query)
-      return files.map(fileItem)
+      const category = language.t("palette.group.files")
+      return files.map((path) => createFileEntry(path, category))
     }
 
     const [files, nextSessions] = await Promise.all([file.searchFiles(query), Promise.resolve(sessions(query))])
-    const entries = files.map(fileItem)
-    return [...list(), ...nextSessions, ...entries]
+    const category = language.t("palette.group.files")
+    const entries = files.map((path) => createFileEntry(path, category))
+    return [...commandEntries.list(), ...nextSessions, ...entries]
   }
 
   const handleMove = (item: Entry | undefined) => {
