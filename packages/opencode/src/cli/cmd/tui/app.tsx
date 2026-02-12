@@ -2,7 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on, onCleanup } from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -99,6 +99,62 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 
+async function getOSDarkMode(): Promise<"dark" | "light"> {
+  const { execSync } = await import("child_process")
+
+  const run = (cmd: string) => {
+    try {
+      return execSync(cmd, { encoding: "utf-8", timeout: 1000, stdio: ["pipe", "pipe", "pipe"] }).trim()
+    } catch {
+      return ""
+    }
+  }
+
+  if (process.platform === "darwin") {
+    const result = run("defaults read -g AppleInterfaceStyle")
+    return result.toLowerCase() === "dark" ? "dark" : "light"
+  }
+
+  if (process.platform === "win32") {
+    const result = run(
+      "reg query HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize /v AppsUseLightTheme",
+    )
+    // Output contains "AppsUseLightTheme    REG_DWORD    0x0" (0 = dark, 1 = light)
+    const match = result.match(/AppsUseLightTheme\s+REG_DWORD\s+0x(\d)/)
+    if (match) return match[1] === "0" ? "dark" : "light"
+    return "dark"
+  }
+
+  if (process.platform === "linux") {
+    // Try GNOME
+    const gnome = run("gsettings get org.gnome.desktop.interface color-scheme")
+    if (gnome.includes("prefer-dark")) return "dark"
+    if (gnome.includes("prefer-light") || gnome.includes("default")) return "light"
+
+    // Try KDE
+    const kde = run("kreadconfig5 --group General --key ColorScheme")
+    if (kde.toLowerCase().includes("dark")) return "dark"
+    if (kde) return "light"
+  }
+
+  // Fallback to terminal detection
+  return getTerminalBackgroundColor()
+}
+
+async function getInitialMode(): Promise<"dark" | "light"> {
+  // Check if auto mode is enabled by reading KV file directly
+  try {
+    const { Global } = await import("@/global")
+    const path = await import("path")
+    const file = Bun.file(path.join(Global.Path.state, "kv.json"))
+    const kv = await file.json()
+    if (kv?.auto_mode_enabled) return getOSDarkMode()
+  } catch {
+    // KV file doesn't exist or is invalid, use terminal detection
+  }
+  return getTerminalBackgroundColor()
+}
+
 export function tui(input: {
   url: string
   args: Args
@@ -110,7 +166,7 @@ export function tui(input: {
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
-    const mode = await getTerminalBackgroundColor()
+    const mode = await getInitialMode()
     const onExit = async () => {
       await input.onExit?.()
       resolve()
@@ -209,6 +265,7 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [autoModeEnabled, setAutoModeEnabled] = createSignal(kv.get("auto_mode_enabled", false))
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -234,6 +291,21 @@ function App() {
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
     }
+  })
+
+  // Poll for OS dark mode changes when auto mode is enabled
+  createEffect(() => {
+    if (!autoModeEnabled()) return
+
+    const sync = async () => {
+      const osMode = await getOSDarkMode()
+      if (osMode !== mode()) setMode(osMode)
+    }
+
+    // Sync immediately, then poll every 3 seconds
+    sync()
+    const interval = setInterval(sync, 3000)
+    onCleanup(() => clearInterval(interval))
   })
 
   const args = useArgs()
@@ -494,6 +566,21 @@ function App() {
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: autoModeEnabled() ? "Stop matching system dark/light mode" : "Match system dark/light mode",
+      value: "theme.auto_mode",
+      onSelect: async (dialog) => {
+        const next = !autoModeEnabled()
+        setAutoModeEnabled(next)
+        kv.set("auto_mode_enabled", next)
+        if (next) {
+          const osMode = await getOSDarkMode()
+          setMode(osMode)
+        }
         dialog.clear()
       },
       category: "System",
