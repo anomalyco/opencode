@@ -112,6 +112,12 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
+    will-change: opacity;
+
+    [data-component="tooltip-trigger"] {
+      display: inline-flex;
+      width: fit-content;
+    }
   }
 
   [data-slot="user-message-body"]:hover [data-slot="user-message-copy-wrapper"],
@@ -145,6 +151,12 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
+    will-change: opacity;
+
+    [data-component="tooltip-trigger"] {
+      display: inline-flex;
+      width: fit-content;
+    }
   }
 
   &:hover [data-slot="text-part-copy-wrapper"],
