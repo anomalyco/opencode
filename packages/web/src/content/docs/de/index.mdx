@@ -29,7 +29,7 @@ Um OpenCode in Ihrem Terminal verwenden zu können, benötigen Sie:
 
 ---
 
-## Installieren
+## Installation
 
 Der einfachste Weg, OpenCode zu installieren, ist über das Installationsskript.
 
@@ -129,7 +129,7 @@ Sie können die Binärdatei auch aus [Releases](https://github.com/anomalyco/ope
 
 ---
 
-## Konfigurieren
+## Konfiguration
 
 Mit OpenCode können Sie jeden LLM-Anbieter verwenden, indem Sie dessen API-Schlüssel konfigurieren.
 
@@ -157,10 +157,10 @@ Alternativ können Sie auch einen der anderen Anbieter auswählen. [Mehr erfahre
 
 ---
 
-## Initialize
+## Initialisierung
 
 Nachdem Sie nun einen Anbieter konfiguriert haben, können Sie zu einem Projekt navigieren
-an dem du arbeiten möchtest.
+an dem Sie arbeiten möchten.
 
 ```bash
 cd /path/to/project
@@ -185,21 +185,20 @@ Sie sollten die `AGENTS.md`-Datei Ihres Projekts an Git übergeben.
 :::
 
 Dies hilft OpenCode, die Projektstruktur und die Codierungsmuster zu verstehen
-used.
+die verwendet werden.
 
 ---
 
 ## Verwendung
 
-Sie können nun OpenCode verwenden, um an Ihrem Projekt zu arbeiten. Fragen Sie ruhig danach
-anything!
+Sie können nun OpenCode verwenden, um an Ihrem Projekt zu arbeiten. Fragen Sie ruhig nach
+allem!
 
-Wenn Sie mit der Verwendung eines AI-Codierungsagenten noch nicht vertraut sind, finden Sie hier einige Beispiele, die hilfreich sein könnten
-help.
+Wenn Sie mit der Verwendung eines AI-Codierungsagenten noch nicht vertraut sind, finden Sie hier einige Beispiele, die hilfreich sein könnten.
 
 ---
 
-### Stellen Sie Fragen
+### Fragen stellen
 
 Sie können OpenCode bitten, Ihnen die Codebasis zu erklären.
 
@@ -226,7 +225,7 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
 
    Wechseln Sie mit der **Tabulatortaste** dorthin. In der unteren rechten Ecke sehen Sie einen Indikator dafür.
 
-   ```bash frame="none" title="Switch to Plan mode"
+   ```bash frame="none" title="In den Plan-Modus wechseln"
    <TAB>
    ```
 
@@ -242,11 +241,11 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
    mit ihm zu sprechen, als ob Sie mit einem Junior-Entwickler in Ihrem Team sprechen würden.
 
    :::tip
-   Geben Sie OpenCode reichlich Kontext und Beispiele, damit es versteht, was Sie möchten
-   want.
+   Geben Sie OpenCode reichlich Kontext und Beispiele, damit es versteht, was Sie
+   wollen.
    :::
 
-2. **Den Plan wiederholen**
+2. **Den Plan überarbeiten**
 
    Sobald Sie einen Plan erhalten, können Sie ihm Feedback geben oder weitere Details hinzufügen.
 
@@ -279,7 +278,7 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
 
 ---
 
-### Nehmen Sie Änderungen vor
+### Änderungen vornehmen
 
 Für einfachere Änderungen können Sie OpenCode bitten, es direkt zu erstellen
 ohne den Plan vorher überprüfen zu müssen.
@@ -290,8 +289,8 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Sie möchten sicherstellen, dass Sie viele Details bereitstellen, damit OpenCode das Richtige tut
-changes.
+Sie möchten sicherstellen, dass Sie viele Details bereitstellen, damit OpenCode die richtigen
+Änderungen vornimmt.
 
 ---
 
@@ -310,8 +309,8 @@ mit dem Befehl `/undo`.
 /undo
 ```
 
-OpenCode macht nun die von Ihnen vorgenommenen Änderungen rückgängig und zeigt Ihre ursprüngliche Nachricht an
-again.
+OpenCode macht nun die von Ihnen vorgenommenen Änderungen rückgängig und zeigt Ihre ursprüngliche Nachricht
+wieder an.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -349,8 +348,8 @@ Hier ist ein [Beispielgespräch](https://opencode.ai/s/4XP1fce5) mit OpenCode.
 
 ---
 
-## Anpassen
+## Anpassung
 
 Und das ist es! Sie sind jetzt ein Profi im Umgang mit OpenCode.
 
-Um es zu Ihrem eigenen zu machen, empfehlen wir [ein Theme auszuwaehlen](/docs/themes), [Keybinds anzupassen](/docs/keybinds), [Code-Formatter zu konfigurieren](/docs/formatters), [eigene Commands zu erstellen](/docs/commands) oder mit der [OpenCode-Konfiguration](/docs/config) zu experimentieren.
+Um es zu Ihrem eigenen zu machen, empfehlen wir [ein Theme auszuwählen](/docs/themes), [Keybinds anzupassen](/docs/keybinds), [Code-Formatter zu konfigurieren](/docs/formatters), [eigene Commands zu erstellen](/docs/commands) oder mit der [OpenCode-Konfiguration](/docs/config) zu experimentieren.

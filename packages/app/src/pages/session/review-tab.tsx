@@ -1,4 +1,5 @@
-import { createEffect, on, onCleanup, createSignal, type JSX } from "solid-js"
+import { createEffect, on, onCleanup, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
@@ -30,7 +31,7 @@ export interface SessionReviewTabProps {
 }
 
 export function StickyAddButton(props: { children: JSX.Element }) {
-  const [stuck, setStuck] = createSignal(false)
+  const [state, setState] = createStore({ stuck: false })
   let button: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -43,7 +44,7 @@ export function StickyAddButton(props: { children: JSX.Element }) {
     const handler = () => {
       const rect = node.getBoundingClientRect()
       const scrollRect = scroll.getBoundingClientRect()
-      setStuck(rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
+      setState("stuck", rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
     }
 
     scroll.addEventListener("scroll", handler, { passive: true })
@@ -60,7 +61,7 @@ export function StickyAddButton(props: { children: JSX.Element }) {
     <div
       ref={button}
       class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
-      classList={{ "border-l": stuck() }}
+      classList={{ "border-l": state.stuck }}
     >
       {props.children}
     </div>
@@ -78,7 +79,10 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)
-      .catch(() => undefined)
+      .catch((error) => {
+        console.debug("[session-review] failed to read file", { path, error })
+        return undefined
+      })
   }
 
   const restoreScroll = () => {
@@ -139,7 +143,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
-        root: props.classes?.root ?? "pb-40",
+        root: props.classes?.root ?? "pb-6",
         header: props.classes?.header ?? "px-6",
         container: props.classes?.container ?? "px-6",
       }}

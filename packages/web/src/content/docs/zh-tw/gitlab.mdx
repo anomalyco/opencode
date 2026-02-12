@@ -3,32 +3,32 @@ title: GitLab
 description: 在 GitLab 問題和合併請求中使用 opencode。
 ---
 
-opencode 通過 GitLab CI/CD 管道或與 GitLab Duo 與您的 GitLab 工作流程集成。
+opencode 透過 GitLab CI/CD 管線或與 GitLab Duo 與您的 GitLab 工作流程整合。
 
-在這兩種情況下，opencode 都將在您的 GitLab 運行器上運行。
-
----
-
-## GitLab。
-
-opencode 在常規 GitLab 管道中工作。您可以將其構建為管道作為 [CI組件](https://docs.gitlab.com/ee/ci/components/)
-
-在這裡，我們使用社區創建的 opencode CI/CD 組件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
+在這兩種情況下，opencode 都將在您的 GitLab Runner 上執行。
 
 ---
 
-### 特徵
+## GitLab
 
-- **每個作業使用自定義配置**：使用自定義配置目錄配置 opencode，例如 `./config/#custom-directory` 以啟用或禁用每個 opencode 調用的功能。
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
-- **靈活**：CI 組件支持多種輸入來自定義其行為
+opencode 在常規 GitLab 管線中工作。您可以將其構建為管線作為 [CI 組件](https://docs.gitlab.com/ee/ci/components/)
+
+在這裡，我們使用社群建立的 opencode CI/CD 組件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
+
+---
+
+### 功能
+
+- **每個作業使用自定義設定**：使用自定義設定目錄設定 opencode，例如 `./config/#custom-directory` 以啟用或禁用每個 opencode 呼叫的功能。
+- **無狀態**：opencode 的狀態（訊息歷史記錄等）儲存在合併請求評論線程中，使其完全無狀態。
+- **靈活**：CI 組件支援多種輸入來自定義其行為
 
 ---
 
 ### 設定
 
-1. 將 opencode 身份驗證 JSON 作為文件類型 CI 環境變量存儲在 **設置** > **CI/CD** > **變量** 下。確保將它們標記為“屏蔽和隱藏”。
-2. 將以下內容添加到您的 `.gitlab-ci.yml` 文件中。
+1. 將 opencode 身分驗證 JSON 作為檔案類型 CI 環境變數儲存在 **Settings** > **CI/CD** > **Variables** 下。確保將它們標記為「Masked and hidden」。
+2. 將以下內容新增到您的 `.gitlab-ci.yml` 檔案中。
 
    ```yaml title=".gitlab-ci.yml"
    include:
@@ -40,40 +40,40 @@ opencode 在常規 GitLab 管道中工作。您可以將其構建為管道作為
          message: "Your prompt here"
    ```
 
-有關此組件的更多輸入和用例[查看文檔](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)。
+有關此組件的更多輸入和使用案例[查看文件](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)。
 
 ---
 
-## 亞搏體育app二人組
+## GitLab Duo
 
-opencode 與您的 GitLab 工作流程集成。
-在評論中提及`@opencode`，opencode 將在您的 GitLab CI 管道中執行任務。
+opencode 與您的 GitLab 工作流程整合。
+在評論中提及 `@opencode`，opencode 將在您的 GitLab CI 管線中執行任務。
 
 ---
 
-### 特徵
+### 功能
 
 - **分類問題**：要求 opencode 調查問題並向您解釋。
-- **修復和實施**：要求 opencode 修復問題或實施功能。
-  它將創建一個新分支並提出包含更改的合併請求。
-- **安全**：opencode 在您的 GitLab 運行器上運行。
+- **修復和實作**：要求 opencode 修復問題或實作功能。
+  它將建立一個新分支並提出包含變更的合併請求。
+- **安全**：opencode 在您的 GitLab Runner 上執行。
 
 ---
 
 ### 設定
 
-opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
+opencode 在您的 GitLab CI/CD 管線中執行，您需要進行以下設定：
 
 :::tip
-查看[**GitLab 文檔**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 以獲取最新說明。
+查看 [**GitLab 文件**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 以獲取最新說明。
 :::
 
-1.  配置您的 GitLab 環境
-2.  設置 CI/CD
-3.  獲取 AI 模型提供商 API 密鑰
-4.  創建服務帳戶
-5.  配置 CI/CD 變量
-6.  創建一個流配置文件，這是一個示例：
+1.  設定您的 GitLab 環境
+2.  設定 CI/CD
+3.  取得 AI 模型供應商 API 金鑰
+4.  建立服務帳號
+5.  設定 CI/CD 變數
+6.  建立一個流程設定檔，這是一個範例：
 
         <details>
 
@@ -152,16 +152,16 @@ opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
 
         </details>
 
-詳細說明可以參考[GitLab CLI 代理文檔](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
+詳細說明可以參考 [GitLab CLI 代理文件](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
 
 ---
 
-### 示例
+### 範例
 
-以下是如何在 GitLab 中使用 opencode 的一些示例。
+以下是如何在 GitLab 中使用 opencode 的一些範例。
 
 :::tip
-您可以配置使用與 `@opencode` 不同的觸發短語。
+您可以設定使用與 `@opencode` 不同的觸發短語。
 :::
 
 - **解釋一個問題**
@@ -172,7 +172,7 @@ opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
   @opencode explain this issue
   ```
 
-  opencode 將閱讀該問題並回复並提供清晰的解釋。
+  opencode 將閱讀該問題並回覆並提供清晰的解釋。
 
 - **解決問題**
 
@@ -182,9 +182,9 @@ opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
   @opencode fix this
   ```
 
-  opencode 將創建一個新分支，實施更改，並打開包含更改的合併請求。
+  opencode 將建立一個新分支，實作變更，並打開包含變更的合併請求。
 
-- **審查合併請求**
+- **審閱合併請求**
 
   對 GitLab 合併請求留下以下評論。
 
@@ -192,4 +192,4 @@ opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
   @opencode review this merge request
   ```
 
-  opencode 將審核合併請求並提供反饋。
+  opencode 將審閱合併請求並提供回饋。

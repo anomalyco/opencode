@@ -32,6 +32,9 @@ description: Use this when you are working on file operations like reading, writ
 - Decode tool stderr with `Bun.readableStreamToText`.
 - For large writes, use `Bun.write(Bun.file(path), text)`.
 
+NOTE: Bun.file(...).exists() will return `false` if the value is a directory.
+Use Filesystem.exists(...) instead if path can be file or directory
+
 ## Quick checklist
 
 - Use Bun APIs first.
