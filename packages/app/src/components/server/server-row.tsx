@@ -1,5 +1,5 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { JSXElement, ParentProps, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { JSXElement, ParentProps, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { serverDisplayName } from "@/context/server"
 import type { ServerHealth } from "@/utils/server-health"
 
@@ -17,6 +17,7 @@ export function ServerRow(props: ServerRowProps) {
   const [truncated, setTruncated] = createSignal(false)
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
+  const name = createMemo(() => serverDisplayName(props.url))
 
   const check = () => {
     const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
@@ -25,25 +26,24 @@ export function ServerRow(props: ServerRowProps) {
   }
 
   createEffect(() => {
+    name()
     props.url
     props.status?.version
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(check)
-      return
-    }
-    check()
+    queueMicrotask(check)
   })
 
   onMount(() => {
     check()
-    if (typeof window === "undefined") return
-    window.addEventListener("resize", check)
-    onCleanup(() => window.removeEventListener("resize", check))
+    if (typeof ResizeObserver !== "function") return
+    const observer = new ResizeObserver(check)
+    if (nameRef) observer.observe(nameRef)
+    if (versionRef) observer.observe(versionRef)
+    onCleanup(() => observer.disconnect())
   })
 
   const tooltipValue = () => (
     <span class="flex items-center gap-2">
-      <span>{serverDisplayName(props.url)}</span>
+      <span>{name()}</span>
       <Show when={props.status?.version}>
         <span class="text-text-invert-base">{props.status?.version}</span>
       </Show>
@@ -62,7 +62,7 @@ export function ServerRow(props: ServerRowProps) {
           }}
         />
         <span ref={nameRef} class={props.nameClass ?? "truncate"}>
-          {serverDisplayName(props.url)}
+          {name()}
         </span>
         <Show when={props.status?.version}>
           <span ref={versionRef} class={props.versionClass ?? "text-text-weak text-14-regular truncate"}>

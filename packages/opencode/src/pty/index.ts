@@ -4,7 +4,6 @@ import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
@@ -16,6 +15,22 @@ export namespace Pty {
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
   const encoder = new TextEncoder()
+
+  type Socket = {
+    readyState: number
+    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    close: (code?: number, reason?: string) => void
+  }
+
+  const sockets = new WeakMap<object, number>()
+  let socketCounter = 0
+
+  const tagSocket = (ws: Socket) => {
+    if (!ws || typeof ws !== "object") return
+    const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
+    sockets.set(ws, next)
+    return next
+  }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
   const meta = (cursor: number) => {
@@ -81,7 +96,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Set<WSContext>
+    subscribers: Map<Socket, number>
   }
 
   const state = Instance.state(
@@ -91,8 +106,12 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers) {
-          ws.close()
+        for (const ws of session.subscribers.keys()) {
+          try {
+            ws.close()
+          } catch {
+            // ignore
+          }
         }
       }
       sessions.clear()
@@ -154,18 +173,26 @@ export namespace Pty {
       buffer: "",
       bufferCursor: 0,
       cursor: 0,
-      subscribers: new Set(),
+      subscribers: new Map(),
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
       session.cursor += data.length
 
-      for (const ws of session.subscribers) {
+      for (const [ws, id] of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
-        ws.send(data)
+        if (typeof ws === "object" && sockets.get(ws) !== id) {
+          session.subscribers.delete(ws)
+          continue
+        }
+        try {
+          ws.send(data)
+        } catch {
+          session.subscribers.delete(ws)
+        }
       }
 
       session.buffer += data
@@ -177,14 +204,15 @@ export namespace Pty {
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const ws of session.subscribers) {
-        ws.close()
+      for (const ws of session.subscribers.keys()) {
+        try {
+          ws.close()
+        } catch {
+          // ignore
+        }
       }
       session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
-      for (const ws of session.subscribers) {
-        ws.close()
-      }
       state().delete(id)
     })
     Bus.publish(Event.Created, { info })
@@ -211,9 +239,14 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers) {
-      ws.close()
+    for (const ws of session.subscribers.keys()) {
+      try {
+        ws.close()
+      } catch {
+        // ignore
+      }
     }
+    session.subscribers.clear()
     state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
@@ -232,7 +265,7 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext, cursor?: number) {
+  export function connect(id: string, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
@@ -272,7 +305,8 @@ export namespace Pty {
       return
     }
 
-    session.subscribers.add(ws)
+    const socketId = tagSocket(ws)
+    if (typeof socketId === "number") session.subscribers.set(ws, socketId)
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))
