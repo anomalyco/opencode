@@ -1361,6 +1361,9 @@
                   },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
+                  },
+                  "slug": {
+                    "type": "string"
                   }
                 }
               }

@@ -237,6 +237,10 @@ export const RunCommand = cmd({
         describe: "session id to continue",
         type: "string",
       })
+      .option("session-slug", {
+        describe: "session slug to find or create",
+        type: "string",
+      })
       .option("fork", {
         describe: "fork the session before continuing (requires --continue or --session)",
         type: "boolean",
@@ -334,6 +338,11 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
+    if (args["session-slug"] && (args.session || args.continue)) {
+      UI.error("--session-slug cannot be used with --session or --continue")
+      process.exit(1)
+    }
+
     const rules: PermissionNext.Ruleset = [
       {
         permission: "question",
@@ -359,7 +368,24 @@ export const RunCommand = cmd({
     }
 
     async function session(sdk: OpencodeClient) {
-      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
+      const sessions = await sdk.session.list()
+
+      // If session-slug is provided, look for existing session or create new one with that slug
+      if (args["session-slug"]) {
+        const slug = args["session-slug"]
+        const existing = sessions.data?.find((s) => s.slug === slug)
+        if (existing) return existing.id
+        const name = title()
+        const body = { title: name, permission: rules, slug } as {
+          title?: string
+          permission: typeof rules
+          slug: string
+        }
+        const result = await sdk.session.create(body)
+        return result.data?.id
+      }
+
+      const baseID = args.continue ? sessions.data?.find((s) => !s.parentID)?.id : args.session
 
       if (baseID && args.fork) {
         const forked = await sdk.session.fork({ sessionID: baseID })
