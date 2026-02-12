@@ -206,6 +206,7 @@ export const dict = {
   "common.attachment": "pièce jointe",
   "prompt.placeholder.shell": "Entrez une commande shell...",
   "prompt.placeholder.normal": 'Demandez n\'importe quoi... "{{example}}"',
+  "prompt.placeholder.simple": "Demandez n'importe quoi...",
   "prompt.placeholder.summarizeComments": "Résumer les commentaires…",
   "prompt.placeholder.summarizeComment": "Résumer le commentaire…",
   "prompt.mode.shell": "Shell",

@@ -207,6 +207,7 @@ export const dict = {
   "common.attachment": "załącznik",
   "prompt.placeholder.shell": "Wpisz polecenie terminala...",
   "prompt.placeholder.normal": 'Zapytaj o cokolwiek... "{{example}}"',
+  "prompt.placeholder.simple": "Zapytaj o cokolwiek...",
   "prompt.placeholder.summarizeComments": "Podsumuj komentarze…",
   "prompt.placeholder.summarizeComment": "Podsumuj komentarz…",
   "prompt.mode.shell": "Terminal",

@@ -209,6 +209,7 @@ export const dict = {
   "common.attachment": "첨부 파일",
   "prompt.placeholder.shell": "셸 명령어 입력...",
   "prompt.placeholder.normal": '무엇이든 물어보세요... "{{example}}"',
+  "prompt.placeholder.simple": "무엇이든 물어보세요...",
   "prompt.placeholder.summarizeComments": "댓글 요약…",
   "prompt.placeholder.summarizeComment": "댓글 요약…",
   "prompt.mode.shell": "셸",

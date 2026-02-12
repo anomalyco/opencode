@@ -223,14 +223,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
   })
-  const placeholder = createMemo(() =>
-    promptPlaceholder({
-      mode: store.mode,
-      commentCount: commentCount(),
-      example: language.t(EXAMPLES[store.placeholder]),
-      t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
-    }),
-  )
+
+  const hasUserPrompt = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    const messages = sync.data.message[sessionID]
+    if (!messages) return false
+    return messages.some((m) => m.role === "user")
+  })
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
@@ -247,6 +247,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       entries: Prompt[]
     }>({
       entries: [],
+    }),
+  )
+
+  const suggest = createMemo(() => !hasUserPrompt())
+
+  const placeholder = createMemo(() =>
+    promptPlaceholder({
+      mode: store.mode,
+      commentCount: commentCount(),
+      example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
+      suggest: suggest(),
+      t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
 
@@ -326,6 +338,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(() => {
     params.id
     if (params.id) return
+    if (!suggest()) return
     const interval = setInterval(() => {
       setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
     }, 6500)

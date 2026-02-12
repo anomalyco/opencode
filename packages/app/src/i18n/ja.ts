@@ -205,6 +205,7 @@ export const dict = {
   "common.attachment": "添付ファイル",
   "prompt.placeholder.shell": "シェルコマンドを入力...",
   "prompt.placeholder.normal": '何でも聞いてください... "{{example}}"',
+  "prompt.placeholder.simple": "何でも聞いてください...",
   "prompt.placeholder.summarizeComments": "コメントを要約…",
   "prompt.placeholder.summarizeComment": "コメントを要約…",
   "prompt.mode.shell": "シェル",

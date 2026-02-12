@@ -206,6 +206,7 @@ export const dict = {
   "common.attachment": "anexo",
   "prompt.placeholder.shell": "Digite comando do shell...",
   "prompt.placeholder.normal": 'Pergunte qualquer coisa... "{{example}}"',
+  "prompt.placeholder.simple": "Pergunte qualquer coisa...",
   "prompt.placeholder.summarizeComments": "Resumir comentários…",
   "prompt.placeholder.summarizeComment": "Resumir comentário…",
   "prompt.mode.shell": "Shell",
