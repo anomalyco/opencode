@@ -64,10 +64,13 @@ jobs:
 
             Requirements:
             1. Update all relevant locale docs under packages/web/src/content/docs/<locale>/ so they reflect these English page changes.
-            2. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
-            3. Keep locale docs structure aligned with their corresponding English pages.
-            4. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
-            5. If no locale updates are needed, make no changes.
+            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).
+            3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.
+            4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.
+            5. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
+            6. Keep locale docs structure aligned with their corresponding English pages.
+            7. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
+            8. If no locale updates are needed, make no changes.
 
       - name: Commit and push locale docs updates
         if: steps.changes.outputs.has_changes == 'true'

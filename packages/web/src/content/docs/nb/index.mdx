@@ -1,5 +1,5 @@
 ---
-title: Intro
+title: Introduksjon
 description: Kom i gang med OpenCode.
 ---
 
@@ -29,7 +29,7 @@ For å bruke OpenCode i terminalen din trenger du:
 
 ---
 
-## Installer
+## Installasjon
 
 Den enkleste måten å installere OpenCode på er gjennom installasjonsskriptet.
 
@@ -123,21 +123,20 @@ For den beste opplevelsen på Windows anbefaler vi å bruke [Windows Subsystem f
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-Støtte for å installere OpenCode på Windows med Bun pågår for øyeblikket.
+Støtte for installasjon av OpenCode på Windows med Bun er under arbeid.
 
 Du kan også hente binæren fra [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
 Med OpenCode kan du bruke hvilken som helst LLM-leverandør ved å konfigurere deres API-nøkler.
 
-Hvis du er ny til å bruke LLM-leverandører, anbefaler vi å bruke [OpenCode Zen](/docs/zen).
-Det er en kuratert liste over modeller som har blitt testet og verifisert av OpenCode
-team.
+Hvis du er ukjent med LLM-leverandører, anbefaler vi å bruke [OpenCode Zen](/docs/zen).
+Det er en kuratert liste over modeller som har blitt testet og verifisert av OpenCode-teamet.
 
-1. Kjør kommandoen `/connect` i TUI, velg opencode og gå til [opencode.ai/auth](https://opencode.ai/auth).
+1. Kjør kommandoen `/connect` i TUI, velg OpenCode og gå til [opencode.ai/auth](https://opencode.ai/auth).
 
    ```txt
    /connect
@@ -158,7 +157,7 @@ Alternativt kan du velge en av de andre leverandørene. [Finn ut mer](/docs/prov
 
 ---
 
-## Initialiser
+## Initialisering
 
 Nå som du har konfigurert en leverandør, kan du navigere til et prosjekt som
 du vil jobbe med.
@@ -196,8 +195,8 @@ brukt.
 Du er nå klar til å bruke OpenCode for å jobbe med prosjektet ditt. Spør det gjerne
 noe!
 
-Hvis du er ny til å bruke en AI kodeagent, her er noen eksempler som kan
-hjelp.
+Hvis du er ukjent med AI-kodeagenter, her er noen eksempler som kan
+hjelpe.
 
 ---
 
@@ -217,14 +216,14 @@ Dette er nyttig hvis det er en del av kodebasen du ikke har jobbet med.
 
 ---
 
-### Legg til funksjoner
+### Legg til funksjonalitet
 
 Du kan be OpenCode legge til nye funksjoner i prosjektet ditt. Selv om vi først anbefaler å be den om å lage en plan.
 
 1. **Lag en plan**
 
-   OpenCode har en _Plan-modus_ som deaktiverer evnen til å gjøre endringer og
-   foreslå i stedet _hvordan_ det vil implementere funksjonen.
+   OpenCode har en _Plan-modus_ som deaktiverer muligheten til å gjøre endringer og
+   foreslår i stedet _hvordan_ den vil implementere funksjonen.
 
    Bytt til den ved å bruke **Tab**-tasten. Du vil se en indikator for dette i nedre høyre hjørne.
 
@@ -240,17 +239,17 @@ Du kan be OpenCode legge til nye funksjoner i prosjektet ditt. Selv om vi først
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   Du vil gi OpenCode nok detaljer til å forstå hva du ønsker. Det hjelper
+   Du bør gi OpenCode nok detaljer til å forstå hva du ønsker. Det hjelper
    å snakke med det som om du snakker med en juniorutvikler på laget ditt.
 
    :::tip
-   Gi OpenCode mye kontekst og eksempler for å hjelpe den å forstå hva du gjør
+   Gi OpenCode mye kontekst og eksempler for å hjelpe den å forstå hva du
    ønsker.
    :::
 
-2. **Gjenta på planen**
+2. **Iterer på planen**
 
-   Når den gir deg en plan, kan du gi den tilbakemelding eller legge til flere detaljer.
+   Når du får en plan, kan du gi den tilbakemelding eller legge til flere detaljer.
 
    ```txt frame="none"
    We'd like to design this new screen using a design I've used before.
@@ -266,14 +265,14 @@ Du kan be OpenCode legge til nye funksjoner i prosjektet ditt. Selv om vi først
 
 3. **Bygg funksjonen**
 
-   Når du føler deg komfortabel med planen, bytt tilbake til _Byggemodus_ av
+   Når du føler deg komfortabel med planen, bytt tilbake til _Byggemodus_ ved å
    trykke på **Tab**-tasten igjen.
 
    ```bash frame="none"
    <TAB>
    ```
 
-   Og ber den om å gjøre endringene.
+   Og be den om å gjøre endringene.
 
    ```bash frame="none"
    Sounds good! Go ahead and make the changes.
@@ -283,7 +282,7 @@ Du kan be OpenCode legge til nye funksjoner i prosjektet ditt. Selv om vi først
 
 ### Gjør endringer
 
-For mer enkle endringer kan du be OpenCode om å bygge den direkte
+For mer enkle endringer kan du be OpenCode om å bygge det direkte
 uten å måtte gjennomgå planen først.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -292,8 +291,8 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Du vil sørge for at du gir en god mengde detaljer, slik at OpenCode gjør det rette
-endringer.
+Sørg for å gi nok detaljer, slik at OpenCode gjør de rette
+endringene.
 
 ---
 
@@ -333,7 +332,7 @@ Eller du **kan gjøre om** endringene ved å bruke `/redo`-kommandoen.
 
 ---
 
-## Del
+## Deling
 
 Samtalene du har med OpenCode kan [deles med din
 team](/docs/share).
@@ -352,8 +351,8 @@ Her er en [eksempelsamtale](https://opencode.ai/s/4XP1fce5) med OpenCode.
 
 ---
 
-## Tilpass
+## Tilpasning
 
 Og det er det! Du er nå en proff på å bruke OpenCode.
 
-For å gjøre det til ditt eget anbefaler vi å [velge et tema](/docs/themes), [tilpasse nøkkelbindingene](/docs/keybinds), [konfigurere kodeformatere](/docs/formatters), [opprette egendefinerte kommandoer](/docs/commands) eller leke med [OpenCode-konfigurasjonen](/docs/config).
+For å tilpasse det anbefaler vi å [velge et tema](/docs/themes), [tilpasse tastebindingene](/docs/keybinds), [konfigurere kodeformattere](/docs/formatters), [opprette egendefinerte kommandoer](/docs/commands) eller leke med [OpenCode-konfigurasjonen](/docs/config).
