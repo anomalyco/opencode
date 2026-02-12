@@ -12,6 +12,9 @@ on:
       - "package.json"
       - "packages/*/package.json"
       - "flake.lock"
+      - "nix/node_modules.nix"
+      - "nix/scripts/**"
+      - "patches/**"
       - ".github/workflows/nix-hashes.yml"
 
 jobs:

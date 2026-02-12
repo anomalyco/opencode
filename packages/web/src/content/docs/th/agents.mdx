@@ -1,0 +1,736 @@
+---
+title: เอเจนต์
+description: เอเจนต์พิเศษและปรับแต่งได้
+---
+
+เอเจนต์ (Agent) คือผู้ช่วย AI ที่เชี่ยวชาญในงานเฉพาะด้าน คุณสามารถสร้างเอเจนต์ที่มีเครื่องมือ (tools) ที่เหมาะสมกับงานและคำสั่งระบบ (system prompt) ที่ต้องการได้
+
+:::tip
+ใช้เอเจนต์ **Plan** เพื่อวิเคราะห์โค้ดและตรวจสอบเหตุผลก่อนทำการเปลี่ยนแปลงโค้ดใดๆ
+:::
+
+คุณสามารถสลับเอเจนต์ได้ระหว่างการสนทนาโดยใช้ปุ่ม **Tab** หรือเรียกใช้โดยระบุ `@`
+
+---
+
+## ประเภท
+
+OpenCode มีเอเจนต์สองประเภท: **Primary Agent** (เอเจนต์หลัก) และ **Subagent** (เอเจนต์ย่อย)
+
+---
+
+### Primary Agent (เอเจนต์หลัก)
+
+Primary Agent คือผู้ช่วยหลักที่คุณคุยด้วยโดยตรง คุณสามารถวนดูเอเจนต์หลักที่มีอยู่ได้โดยกดปุ่ม **Tab** หรือปุ่ม `switch_agent` ที่ตั้งค่าไว้ เอเจนต์เหล่านี้สามารถจัดการงานที่ซับซ้อนและเข้าถึงเครื่องมือที่มีความเสี่ยงสูงได้ เช่น **Build** ที่มีเครื่องมือทั้งหมด หรือ **Plan** ที่ถูกจำกัดสิทธิ์
+
+:::tip
+**Tab** จะเก็บประวัติการสนทนาไว้เมื่อสลับระหว่างเอเจนต์
+:::
+
+OpenCode มีเอเจนต์หลักในตัวได้แก่ **Build** และ **Plan**
+ดูรายละเอียดด้านล่าง
+
+---
+
+### Subagent (เอเจนต์ย่อย)
+
+Subagent คือผู้ช่วยเฉพาะทางที่ Primary Agent สามารถเรียกใช้งานได้ หรือคุณสามารถเรียกใช้โดยตรงโดยพิมพ์ **@** ตามด้วยชื่อเอเจนต์ในข้อความของคุณ
+
+OpenCode มี subagent ในตัวได้แก่ **General** และ **Explore**
+
+---
+
+## บิวท์อิน
+
+OpenCode มาพร้อมกับเอเจนต์หลักและ subagent ในตัวดังนี้
+
+---
+
+### Build
+
+_Mode_: `primary`
+
+เอเจนต์หลักสำหรับ **การพัฒนา** มาพร้อมกับเครื่องมือทั้งหมดเพื่อให้มีสิทธิ์การเข้าถึงไฟล์และคำสั่งระบบโดยสมบูรณ์
+
+---
+
+### Plan
+
+_Mode_: `primary`
+
+เอเจนต์ที่ถูกจำกัดสิทธิ์ เน้นการคิดวิเคราะห์และวางแผน โดยป้องกันการเปลี่ยนแปลงไฟล์โดยไม่ได้ตั้งใจ
+เครื่องมือต่อไปนี้จะถูกตั้งค่าเป็น `ask` (ต้องขออนุญาต):
+
+- `file edits`: การแก้ไขไฟล์, patch, และการเขียนไฟล์
+- `bash`: คำสั่ง bash ทั้งหมด
+
+เอเจนต์นี้มีประโยชน์เมื่อต้องการให้ LLM ตรวจสอบโค้ด หรือสร้างแผนงานก่อนที่จะลงมือทำจริง
+
+---
+
+### General
+
+_Mode_: `subagent`
+
+เอเจนต์สำหรับตอบคำถามทั่วไปและการคิดวิเคราะห์หลายขั้นตอน อนุญาตให้เข้าถึงเครื่องมือต่างๆ (ยกเว้นการแก้ไขไฟล์) ใช้สิ่งนี้เมื่อต้องการรันงานที่ไม่ต้องแก้ไขโค้ด
+
+---
+
+### Explore
+
+_Mode_: `subagent`
+
+เอเจนต์ความเร็วสูงสำหรับอ่านและสำรวจ codebase ใช้สิ่งนี้เมื่อคุณต้องการค้นหาไฟล์อย่างรวดเร็ว, ค้นหาโค้ดด้วยคำสำคัญ, หรือสอบถามเกี่ยวกับโครงสร้าง codebase
+
+---
+
+### Compact
+
+_Mode_: `primary`
+
+เอเจนต์ระบบที่มีหน้าที่สรุปประวัติการสนทนาที่ยาวให้สั้นลง โดยยังคงใจความสำคัญไว้
+
+---
+
+### Name
+
+_Mode_: `primary`
+
+เอเจนต์ระบบที่มีหน้าที่สร้างชื่อ session ให้สั้นและได้ใจความ ทำงานอัตโนมัติโดยไม่ต้องมี UI
+
+---
+
+### Summarize
+
+_Mode_: `primary`
+
+เอเจนต์ระบบที่มีหน้าที่สร้างสรุปการเปลี่ยนแปลงและงานที่ทำไป ทำงานอัตโนมัติโดยไม่ต้องมี UI
+
+---
+
+## การใช้งาน
+
+1. สำหรับ Primary Agent ให้ใช้ปุ่ม **Tab** เพื่อวนดูเอเจนต์ที่มีอยู่ หรือใช้ keybind `switch_agent` ที่คุณตั้งค่าไว้
+
+2. สำหรับ Subagent:
+   - เรียกใช้โดย Primary Agent โดยอัตโนมัติตามความเหมาะสม
+   - เรียกใช้ด้วยตนเองโดยพิมพ์ **@** ตามด้วยชื่อ subagent ในข้อความของคุณ เช่น
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **การนำทางระหว่าง Agent**: เมื่อ Subagent ทำงานเสร็จและส่งผลลัพธ์กลับมายัง Primary Agent คุณสามารถดูประวัติการทำงานได้:
+   - **\<Leader>+Right** (หรือ `session_child_cycle` keybind) เพื่อวนผ่าน parent → child1 → child2 → ... → parent
+   - **\<Leader>+Left** (หรือ `session_child_cycle_reverse` keybind) เพื่อวนย้อนกลับผ่าน parent ← child1 ← child2 ← ... ← parent
+
+---
+
+## การกำหนดค่า
+
+คุณสามารถปรับแต่งเอเจนต์ที่มีอยู่หรือสร้างเอเจนต์ใหม่ได้สองวิธี:
+
+---
+
+### JSON
+
+กำหนดค่าเอเจนต์ในไฟล์ `opencode.json` ของคุณ:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+คุณสามารถกำหนดเอเจนต์ด้วยไฟล์ Markdown ได้ใน:
+
+- ระดับผู้ใช้ (Global): `~/.config/opencode/agents/`
+- ระดับโปรเจ็กต์: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+ชื่อไฟล์ Markdown จะกลายเป็นชื่อเอเจนต์ เช่น `review.md` สร้างเอเจนต์ `review`
+
+---
+
+## ตัวเลือก
+
+มาดูรายละเอียดของตัวเลือกต่างๆ
+
+---
+
+### Description (คำอธิบาย)
+
+ใช้ฟิลด์ `description` เพื่ออธิบายว่าเอเจนต์นี้ทำอะไร
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+ฟิลด์นี้ **จำเป็น** สำหรับ JSON
+
+---
+
+### Temperature (อุณหภูมิ)
+
+ควบคุมความสุ่มและความคิดสร้างสรรค์ของการตอบกลับของ LLM ด้วย `temperature`
+
+ค่าที่ต่ำกว่าจะให้ผลลัพธ์ที่แน่นอนและแม่นยำกว่า ส่วนค่าที่สูงกว่าจะให้ความหลากหลายและความคิดสร้างสรรค์มากกว่า
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+ช่วงอุณหภูมิอยู่ระหว่าง 0.0 ถึง 1.0:
+
+- **0.0-0.2**: แน่นอนและแม่นยำ เหมาะสำหรับการเขียนโค้ดและการวางแผน
+- **0.3-0.5**: สมดุล เหมาะสำหรับการพัฒนาทั่วไป
+- **0.6-1.0**: สร้างสรรค์ เหมาะสำหรับการระดมสมอง
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+หมายเหตุ: OpenCode ค่าเริ่มต้นคือ 0 สำหรับโมเดลส่วนใหญ่ และ 0.55 สำหรับโมเดล Qwen
+
+---
+
+### Steps (ขั้นตอน)
+
+จำกัดจำนวนการวนซ้ำ (iterations) สูงสุดที่เอเจนต์สามารถทำได้ เพื่อควบคุมค่าใช้จ่ายและป้องกันการทำงานไม่รู้จบ
+
+หากไม่ได้ตั้งค่านี้ เอเจนต์จะทำงานต่อไปจนกว่างานจะเสร็จหรือผู้ใช้ขัดจังหวะ
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+เมื่อถึงขีดจำกัด เอเจนต์จะได้รับพรอมต์พิเศษเพื่อสรุปงานและสิ่งที่เหลืออยู่
+
+:::caution
+ฟิลด์ `maxSteps` แบบเดิมเลิกใช้แล้ว โปรดใช้ `steps` แทน
+:::
+
+---
+
+### Disable (ปิดใช้งาน)
+
+ตั้งค่าเป็น `true` เพื่อปิดการใช้งานเอเจนต์
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### พรอมต์
+
+ระบุ System Prompt สำหรับเอเจนต์นี้ด้วย `prompt`
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+รองรับเส้นทางสัมพัทธ์ (Relative paths) ซึ่งทำให้ใช้งานได้สะดวกทั้งในระดับ Global และ Project
+
+---
+
+### Model (โมเดล)
+
+ใช้ตัวเลือก `model` เพื่อกำหนดโมเดลเฉพาะสำหรับเอเจนต์นี้ มีประโยชน์เมื่อต้องการใช้โมเดลที่เชี่ยวชาญเฉพาะด้าน หรือโมเดลที่มี Context window ขนาดใหญ่สำหรับการตรวจสอบ codebase
+
+:::tip
+หากไม่ได้ระบุโมเดล เอเจนต์จะใช้ [โมเดลเริ่มต้น](/docs/config#models) ของ OpenCode
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+ID ของโมเดลใช้รูปแบบ `provider/model-id`
+
+---
+
+### เครื่องมือ
+
+กำหนดเครื่องมือที่เอเจนต์สามารถใช้งานได้ด้วย `tools` คุณสามารถระบุชื่อเครื่องมือ หรือใช้ wildcard
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+การกำหนดค่าเครื่องมือในระดับเอเจนต์จะมีความสำคัญเหนือกว่าระดับ Global
+:::
+
+คุณสามารถใช้ wildcard `*` เพื่อควบคุมเครื่องมือหลายรายการพร้อมกัน เช่น เครื่องมือจากเซิร์ฟเวอร์ MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับเครื่องมือ](/docs/tools)
+
+---
+
+### Permissions (สิทธิ์)
+
+กำหนดสิทธิ์สำหรับเครื่องมือที่มีความละเอียดอ่อน เช่น `edit`, `bash` และ `webfetch`:
+
+- `"ask"` — ต้องขออนุมัติจากผู้ใช้ก่อน
+- `"allow"` — อนุญาตให้ทำงานได้โดยไม่ต้องถาม
+- `"deny"` — ไม่อนุญาตให้ใช้
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+คุณสามารถกำหนดสิทธิ์ในระดับเอเจนต์ได้:
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+ใน Markdown agent:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+คุณสามารถกำหนดสิทธิ์สำหรับคำสั่ง bash เฉพาะได้:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+รองรับ glob patterns:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+ใช้ `*` wildcard เพื่อตั้งค่าเริ่มต้นสำหรับคำสั่งอื่นๆ ทั้งหมด กฎที่ตรงกันล่าสุดจะมีผลบังคับใช้ (Last match wins):
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับสิทธิ์](/docs/permissions)
+
+---
+
+### Mode (โหมด)
+
+กำหนดโหมดของเอเจนต์ด้วย `mode`
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+`mode` สามารถเป็น `primary`, `subagent` หรือ `all` หากไม่ระบุ ค่าเริ่มต้นจะเป็น `all`
+
+---
+
+### Hidden (ซ่อน)
+
+ซ่อน subagent จากเมนู autocomplete `@` ด้วย `hidden: true` มีประโยชน์สำหรับ subagent ภายในที่ถูกเรียกใช้โดยเอเจนต์อื่นผ่านเครื่องมือ task เท่านั้น
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+:::note
+ใช้ได้กับเอเจนต์ที่มี `mode: subagent` เท่านั้น
+:::
+
+---
+
+### Task Permissions (สิทธิ์งาน)
+
+กำหนดว่า subagent ใดที่เอเจนต์นี้สามารถเรียกใช้ได้ผ่านเครื่องมือ task ด้วย `permission.task`
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+หากตั้งเป็น `deny` เอเจนต์จะมองไม่เห็นเครื่องมือ task สำหรับ subagent นั้นๆ
+
+:::tip
+กฎทำงานตามลำดับ และ **กฎที่ตรงกันล่าสุดจะมีผล** ในตัวอย่างข้างต้น `orchestrator-planner` ตรงกับทั้ง `*` (deny) และ `orchestrator-*` (allow) แต่เนื่องจาก `orchestrator-*` มาทีหลัง ผลลัพธ์จึงเป็น `allow`
+:::
+
+---
+
+### สี
+
+ปรับแต่งสีของเอเจนต์ใน UI ด้วยตัวเลือก `color`
+
+ใช้รหัสสี hex (เช่น `#FF5733`) หรือชื่อสีมาตรฐาน: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+ควบคุมความหลากหลายของการตอบกลับด้วยตัวเลือก `top_p`
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+ช่วงค่า 0.0 ถึง 1.0 ค่าที่ต่ำกว่าจะเน้นไปที่โทเค็นที่มีความน่าจะเป็นสูง
+
+---
+
+### Additional (เพิ่มเติม)
+
+คุณสมบัติอื่นๆ ที่คุณระบุใน object ของเอเจนต์จะถูก **ส่งผ่านโดยตรง** ไปยัง LLM config
+
+เช่น สำหรับโมเดลที่มีการให้เหตุผลของ OpenAI:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+ตรวจสอบเอกสารของแต่ละโมเดลสำหรับตัวเลือกที่รองรับ
+
+:::tip
+ใช้ `opencode models` เพื่อดูรายการตัวเลือกทั้งหมด
+:::
+
+---
+
+## การสร้างเอเจนต์
+
+สร้างเอเจนต์ใหม่ด้วยคำสั่ง:
+
+```bash
+opencode agent create
+```
+
+คำสั่งแบบโต้ตอบจะถาม:
+
+1. สถานที่บันทึก (Global หรือ Project)
+2. คำอธิบายหน้าที่ของเอเจนต์
+3. สร้างพรอมต์และเลือกไอคอนที่เหมาะสม
+4. เลือกเครื่องมือที่เอเจนต์สามารถใช้ได้
+5. สร้างไฟล์ Markdown ของเอเจนต์
+
+---
+
+## ตัวอย่างการใช้งาน
+
+ต่อไปนี้เป็นกรณีการใช้งานทั่วไปสำหรับเอเจนต์ต่างๆ
+
+- **Developer**: งานพัฒนาทั่วไป ใช้เครื่องมือทั้งหมด
+- **Planner**: วิเคราะห์และวางแผนโดยไม่ทำการเปลี่ยนแปลง
+- **Reviewer**: ตรวจสอบโค้ดแบบอ่านอย่างเดียว (Read-only)
+- **Debugger**: แก้ไขข้อผิดพลาดโดยเน้นการอ่าน log และทดสอบ
+- **Docs Writer**: เขียนและปรับปรุงเอกสาร
+
+---
+
+## ตัวอย่างเอเจนต์
+
+นี่คือตัวอย่างเอเจนต์ที่คุณอาจพบว่ามีประโยชน์
+
+:::tip
+คุณมีเอเจนต์เจ๋งๆ ที่ต้องการแบ่งปันหรือไม่? [ส่ง PR มาที่นี่](https://github.com/anomalyco/opencode)
+:::
+
+### Docs Writer
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### Security Auditor
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```

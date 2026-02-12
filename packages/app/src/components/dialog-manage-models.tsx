@@ -17,6 +17,7 @@ export const DialogManageModels: Component = () => {
   const handleConnectProvider = () => {
     dialog.show(() => <DialogSelectProvider />)
   }
+  const providerRank = (id: string) => popularProviders.indexOf(id)
 
   return (
     <Dialog
@@ -37,19 +38,18 @@ export const DialogManageModels: Component = () => {
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         groupBy={(x) => x.provider.name}
         sortGroupsBy={(a, b) => {
-          const aProvider = a.items[0].provider.id
-          const bProvider = b.items[0].provider.id
-          if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
-          if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
-          return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+          const aRank = providerRank(a.items[0].provider.id)
+          const bRank = providerRank(b.items[0].provider.id)
+          const aPopular = aRank >= 0
+          const bPopular = bRank >= 0
+          if (aPopular && !bPopular) return -1
+          if (!aPopular && bPopular) return 1
+          return aRank - bRank
         }}
         onSelect={(x) => {
           if (!x) return
-          const visible = local.model.visible({
-            modelID: x.id,
-            providerID: x.provider.id,
-          })
-          local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, !visible)
+          const key = { modelID: x.id, providerID: x.provider.id }
+          local.model.setVisibility(key, !local.model.visible(key))
         }}
       >
         {(i) => (
@@ -57,12 +57,7 @@ export const DialogManageModels: Component = () => {
             <span>{i.name}</span>
             <div onClick={(e) => e.stopPropagation()}>
               <Switch
-                checked={
-                  !!local.model.visible({
-                    modelID: i.id,
-                    providerID: i.provider.id,
-                  })
-                }
+                checked={!!local.model.visible({ modelID: i.id, providerID: i.provider.id })}
                 onChange={(checked) => {
                   local.model.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
                 }}

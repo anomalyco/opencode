@@ -1,0 +1,188 @@
+---
+title: LSP-servere
+description: opencode integreres med LSP-serverne dine.
+---
+
+OpenCode integreres med din Language Server Protocol (LSP) for å hjelpe LLM med å samhandle med kodebasen din. Den bruker diagnostikk for å gi tilbakemelding til LLM.
+
+---
+
+## Innebygde servere
+
+OpenCode kommer med flere innebygde LSP-servere for populære språk:
+
+| LSP Server         | Filendelser                                                         | Krav                                                                    |
+| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| astro              | .astro                                                              | Installeres automatisk for Astro-prosjekter                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Installerer bash-language-server automatisk                             |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Installeres automatisk for C/C++-prosjekter                             |
+| csharp             | .cs                                                                 | `.NET SDK` installert                                                   |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` kommando tilgjengelig                                     |
+| dart               | .dart                                                               | `dart` kommando tilgjengelig                                            |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` kommando tilgjengelig (automatisk oppdager deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` kommando tilgjengelig                                          |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` avhengighet i prosjekt                                         |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installert                                                   |
+| gleam              | .gleam                                                              | `gleam` kommando tilgjengelig                                           |
+| gopls              | .go                                                                 | `go` kommando tilgjengelig                                              |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` kommando tilgjengelig                 |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installert                                     |
+| kotlin-ls          | .kt, .kts                                                           | Installeres automatisk for Kotlin-prosjekter                            |
+| lua-ls             | .lua                                                                | Installeres automatisk for Lua-prosjekter                               |
+| nixd               | .nix                                                                | `nixd` kommando tilgjengelig                                            |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` kommando tilgjengelig                                        |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` avhengighet i prosjekt                                         |
+| php intelephense   | .php                                                                | Installeres automatisk for PHP-prosjekter                               |
+| prisma             | .prisma                                                             | `prisma` kommando tilgjengelig                                          |
+| pyright            | .py, .pyi                                                           | `pyright` avhengighet installert                                        |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` og `gem` kommandoer tilgjengelig                                 |
+| rust               | .rs                                                                 | `rust-analyzer` kommando tilgjengelig                                   |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installert (`xcode` på macOS)                                   |
+| svelte             | .svelte                                                             | Installeres automatisk for Svelte-prosjekter                            |
+| terraform          | .tf, .tfvars                                                        | Installeres automatisk fra GitHub-utgivelser                            |
+| tinymist           | .typ, .typc                                                         | Installeres automatisk fra GitHub-utgivelser                            |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` avhengighet i prosjekt                                     |
+| vue                | .vue                                                                | Installeres automatisk for Vue-prosjekter                               |
+| yaml-ls            | .yaml, .yml                                                         | Installerer Red Hat yaml-language-server automatisk                     |
+| zls                | .zig, .zon                                                          | `zig` kommando tilgjengelig                                             |
+
+LSP-servere aktiveres automatisk når en av filtypene ovenfor oppdages og kravene oppfylles.
+
+:::note
+Du kan deaktivere automatiske LSP-servernedlastinger ved å sette miljøvariabelen `OPENCODE_DISABLE_LSP_DOWNLOAD` til `true`.
+:::
+
+---
+
+## Slik fungerer det
+
+Når opencode åpner en fil, gjør den:
+
+1. Kontrollerer filtypen mot alle aktiverte LSP-servere.
+2. Starter den riktige LSP-serveren hvis den ikke allerede kjører.
+
+---
+
+## Konfigurasjon
+
+Du kan tilpasse LSP-servere gjennom `lsp`-delen i OpenCode-konfigurasjonen.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+Hver LSP-server støtter følgende:
+
+| Egenskap         | Type     | Beskrivelse                                              |
+| ---------------- | -------- | -------------------------------------------------------- |
+| `disabled`       | boolean  | Sett dette til `true` for å deaktivere LSP-serveren      |
+| `command`        | string[] | Kommandoen for å starte LSP-serveren                     |
+| `extensions`     | string[] | Filendelser denne LSP-serveren skal håndtere             |
+| `env`            | object   | Miljøvariabler som skal angis når serveren startes       |
+| `initialization` | object   | Initialiseringsalternativer for å sende til LSP-serveren |
+
+La oss se på noen eksempler.
+
+---
+
+### Miljøvariabler
+
+Bruk egenskapen `env` til å angi miljøvariabler når du starter LSP-serveren:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Initialiseringsalternativer
+
+Bruk egenskapen `initialization` til å sende initialiseringsalternativer til LSP-serveren. Dette er serverspesifikke innstillinger sendt under LSP `initialize`-forespørselen:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Initialiseringsalternativer varierer etter LSP-server. Sjekk dokumentasjonen til LSP-serveren for tilgjengelige alternativer.
+:::
+
+---
+
+### Deaktivering av LSP-servere
+
+For å deaktivere **alle** LSP-servere globalt, sett `lsp` til `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+For å deaktivere en **spesifikk** LSP-server, sett `disabled` til `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Egendefinerte LSP-servere
+
+Du kan legge til egendefinerte LSP-servere ved å spesifisere kommandoen og filtypene:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## Tilleggsinformasjon
+
+### PHP Intelephense
+
+PHP Intelephense tilbyr førsteklasses funksjoner gjennom en lisensnøkkel. Du kan oppgi en lisensnøkkel ved å plassere (bare) nøkkelen i en tekstfil på:
+
+- På macOS/Linux: `$HOME/intelephense/license.txt`
+- På Windows: `%USERPROFILE%/intelephense/license.txt`
+
+Filen skal bare inneholde lisensnøkkelen uten ekstra innhold.
