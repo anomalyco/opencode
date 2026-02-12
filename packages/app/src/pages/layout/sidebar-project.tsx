@@ -244,6 +244,7 @@ export const SortableProject = (props: {
   project: LocalProject
   mobile?: boolean
   ctx: ProjectSidebarContext
+  sortNow: Accessor<number>
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -284,11 +285,11 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), Date.now()).slice(0, 2))
+  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()).slice(0, 2))
   const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
-    return sortedRootSessions(data, Date.now()).slice(0, 2)
+    return sortedRootSessions(data, props.sortNow()).slice(0, 2)
   }
   const workspaceChildren = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })

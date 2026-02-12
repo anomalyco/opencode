@@ -72,6 +72,8 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
 }) {
+  const openedTabs = createMemo(() => props.openedTabs())
+
   return (
     <Show when={props.open}>
       <aside
@@ -140,8 +142,8 @@ export function SessionSidePanel(props: {
                             </div>
                           </Tabs.Trigger>
                         </Show>
-                        <SortableProvider ids={props.openedTabs()}>
-                          <For each={props.openedTabs()}>
+                        <SortableProvider ids={openedTabs()}>
+                          <For each={openedTabs()}>
                             {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
                           </For>
                         </SortableProvider>
