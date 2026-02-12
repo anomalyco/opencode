@@ -2,7 +2,6 @@ import z from "zod"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
@@ -13,6 +12,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
+import { git } from "../util/git"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -55,15 +55,15 @@ export namespace Project {
 
     const { id, sandbox, worktree, vcs } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
-      const git = await matches.next().then((x) => x.value)
+      const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
-      if (git) {
-        let sandbox = path.dirname(git)
+      if (dotgit) {
+        let sandbox = path.dirname(dotgit)
 
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Bun.file(path.join(git, "opencode"))
+        let id = await Bun.file(path.join(dotgit, "opencode"))
           .text()
           .then((x) => x.trim())
           .catch(() => undefined)
@@ -79,18 +79,17 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
-            .quiet()
-            .nothrow()
-            .cwd(sandbox)
-            .text()
-            .then((x) =>
-              x
+          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+            cwd: sandbox,
+          })
+            .then(async (result) => {
+              if (result.exitCode !== 0) return undefined
+              return (await result.text())
                 .split("\n")
                 .filter(Boolean)
                 .map((x) => x.trim())
-                .toSorted(),
-            )
+                .toSorted()
+            })
             .catch(() => undefined)
 
           if (!roots) {
@@ -104,7 +103,7 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Bun.file(path.join(git, "opencode"))
+            void Bun.file(path.join(dotgit, "opencode"))
               .write(id)
               .catch(() => undefined)
           }
@@ -119,12 +118,15 @@ export namespace Project {
           }
         }
 
-        const top = await $`git rev-parse --show-toplevel`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => path.resolve(sandbox, x.trim()))
+        const top = await git(["rev-parse", "--show-toplevel"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => {
+            if (result.exitCode !== 0) return undefined
+            const text = (await result.text()).trim()
+            if (!text) return undefined
+            return path.resolve(sandbox, text)
+          })
           .catch(() => undefined)
 
         if (!top) {
@@ -138,13 +140,12 @@ export namespace Project {
 
         sandbox = top
 
-        const worktree = await $`git rev-parse --git-common-dir`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => {
-            const dirname = path.dirname(x.trim())
+        const worktree = await git(["rev-parse", "--git-common-dir"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => {
+            if (result.exitCode !== 0) return undefined
+            const dirname = path.dirname((await result.text()).trim())
             if (dirname === ".") return sandbox
             return dirname
           })
