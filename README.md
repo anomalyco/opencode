@@ -8,7 +8,7 @@
 </p>
 <p align="center">Mammouth AI coding agent.</p>
 
-[![Mammouth Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://info.mammouth.ai/fr/docs/mammouth-code/)
+[![Mammouth Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://info.mammouth.ai/docs/mammouth-code/)
 
 ---
 
