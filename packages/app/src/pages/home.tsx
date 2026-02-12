@@ -30,6 +30,13 @@ export default function Home() {
       .slice(0, 5)
   })
 
+  const serverDotClass = createMemo(() => {
+    const healthy = server.healthy()
+    if (healthy === true) return "bg-icon-success-base"
+    if (healthy === false) return "bg-icon-critical-base"
+    return "bg-border-weak-base"
+  })
+
   function openProject(directory: string) {
     layout.projects.open(directory)
     server.projects.touch(directory)
@@ -73,9 +80,7 @@ export default function Home() {
         <div
           classList={{
             "size-2 rounded-full": true,
-            "bg-icon-success-base": server.healthy() === true,
-            "bg-icon-critical-base": server.healthy() === false,
-            "bg-border-weak-base": server.healthy() === undefined,
+            [serverDotClass()]: true,
           }}
         />
         {server.name}
@@ -115,8 +120,7 @@ export default function Home() {
               <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
               <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
-            <div />
-            <Button class="px-3" onClick={chooseProject}>
+            <Button class="px-3 mt-1" onClick={chooseProject}>
               {language.t("command.project.open")}
             </Button>
           </div>

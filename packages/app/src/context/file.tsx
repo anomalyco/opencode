@@ -43,6 +43,12 @@ export {
   touchFileContent,
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error) return error
+  return "Unknown error"
+}
+
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
   gate: false,
@@ -110,6 +116,45 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setStore("file", file, { path: file, name: getFilename(file) })
     }
 
+    const setLoading = (file: string) => {
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.loading = true
+          draft.error = undefined
+        }),
+      )
+    }
+
+    const setLoaded = (file: string, content: FileState["content"]) => {
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.loaded = true
+          draft.loading = false
+          draft.content = content
+        }),
+      )
+    }
+
+    const setLoadError = (file: string, message: string) => {
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.loading = false
+          draft.error = message
+        }),
+      )
+      showToast({
+        variant: "error",
+        title: language.t("toast.file.loadFailed.title"),
+        description: message,
+      })
+    }
+
     const load = (input: string, options?: { force?: boolean }) => {
       const file = path.normalize(input)
       if (!file) return Promise.resolve()
@@ -124,29 +169,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const pending = inflight.get(key)
       if (pending) return pending
 
-      setStore(
-        "file",
-        file,
-        produce((draft) => {
-          draft.loading = true
-          draft.error = undefined
-        }),
-      )
+      setLoading(file)
 
       const promise = sdk.client.file
         .read({ path: file })
         .then((x) => {
           if (scope() !== directory) return
           const content = x.data
-          setStore(
-            "file",
-            file,
-            produce((draft) => {
-              draft.loaded = true
-              draft.loading = false
-              draft.content = content
-            }),
-          )
+          setLoaded(file, content)
 
           if (!content) return
           touchFileContent(file, approxBytes(content))
@@ -154,19 +184,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
         .catch((e) => {
           if (scope() !== directory) return
-          setStore(
-            "file",
-            file,
-            produce((draft) => {
-              draft.loading = false
-              draft.error = e.message
-            }),
-          )
-          showToast({
-            variant: "error",
-            title: language.t("toast.file.loadFailed.title"),
-            description: e.message,
-          })
+          setLoadError(file, errorMessage(e))
         })
         .finally(() => {
           inflight.delete(key)
@@ -211,21 +229,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return state
     }
 
-    const scrollTop = (input: string) => view().scrollTop(path.normalize(input))
-    const scrollLeft = (input: string) => view().scrollLeft(path.normalize(input))
-    const selectedLines = (input: string) => view().selectedLines(path.normalize(input))
-
-    const setScrollTop = (input: string, top: number) => {
-      view().setScrollTop(path.normalize(input), top)
+    function withPath(input: string, action: (file: string) => unknown) {
+      return action(path.normalize(input))
     }
-
-    const setScrollLeft = (input: string, left: number) => {
-      view().setScrollLeft(path.normalize(input), left)
-    }
-
-    const setSelectedLines = (input: string, range: SelectedLineRange | null) => {
-      view().setSelectedLines(path.normalize(input), range)
-    }
+    const scrollTop = (input: string) => withPath(input, (file) => view().scrollTop(file))
+    const scrollLeft = (input: string) => withPath(input, (file) => view().scrollLeft(file))
+    const selectedLines = (input: string) => withPath(input, (file) => view().selectedLines(file))
+    const setScrollTop = (input: string, top: number) => withPath(input, (file) => view().setScrollTop(file, top))
+    const setScrollLeft = (input: string, left: number) => withPath(input, (file) => view().setScrollLeft(file, left))
+    const setSelectedLines = (input: string, range: SelectedLineRange | null) =>
+      withPath(input, (file) => view().setSelectedLines(file, range))
 
     onCleanup(() => {
       stop()
