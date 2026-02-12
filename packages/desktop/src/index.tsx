@@ -132,7 +132,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
               })
             if (linuxPath) {
               try {
-                const result = await Command.create("wsl", ["-e", app, linuxPath]).execute() // arguments are passed as separate array elements to avoid shell interpretation and injection attacks
+                const result = await Command.create("wsl", ["-e", app, "--", linuxPath]).execute() // arguments are passed as separate array elements to avoid shell interpretation and injection attacks; `--` prevents filenames starting with `-` from being treated as flags
                 if (result.code === 0) return // handled via WSL, skip Windows opener
                 console.warn("WSL open returned non-zero code", result.code, result.stderr)
               } catch (err) {
