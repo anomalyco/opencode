@@ -7,32 +7,6 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 
-const writeAt = <T,>(list: T[], index: number, value: T) => {
-  const next = [...list]
-  next[index] = value
-  return next
-}
-
-const pickAnswer = (list: QuestionAnswer[], index: number, value: string) => {
-  return writeAt(list, index, [value])
-}
-
-const toggleAnswer = (list: QuestionAnswer[], index: number, value: string) => {
-  const current = list[index] ?? []
-  const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
-  return writeAt(list, index, next)
-}
-
-const appendAnswer = (list: QuestionAnswer[], index: number, value: string) => {
-  const current = list[index] ?? []
-  if (current.includes(value)) return list
-  return writeAt(list, index, [...current, value])
-}
-
-const writeCustom = (list: string[], index: number, value: string) => {
-  return writeAt(list, index, value)
-}
-
 export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
@@ -95,10 +69,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   const pick = (answer: string, custom: boolean = false) => {
-    setStore("answers", pickAnswer(store.answers, store.tab, answer))
+    setStore("answers", store.tab, [answer])
 
     if (custom) {
-      setStore("custom", writeCustom(store.custom, store.tab, answer))
+      setStore("custom", store.tab, answer)
     }
 
     if (single()) {
@@ -110,7 +84,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   const toggle = (answer: string) => {
-    setStore("answers", toggleAnswer(store.answers, store.tab, answer))
+    setStore("answers", store.tab, (current = []) => {
+      if (current.includes(answer)) return current.filter((item) => item !== answer)
+      return [...current, answer]
+    })
   }
 
   const selectTab = (index: number) => {
@@ -146,7 +123,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     }
 
     if (multi()) {
-      setStore("answers", appendAnswer(store.answers, store.tab, value))
+      setStore("answers", store.tab, (current = []) => {
+        if (current.includes(value)) return current
+        return [...current, value]
+      })
       setStore("editing", false)
       return
     }
@@ -239,7 +219,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   value={input()}
                   disabled={store.sending}
                   onInput={(e) => {
-                    setStore("custom", writeCustom(store.custom, store.tab, e.currentTarget.value))
+                    setStore("custom", store.tab, e.currentTarget.value)
                   }}
                 />
                 <Button type="submit" variant="primary" size="small" disabled={store.sending}>

@@ -1,5 +1,5 @@
 import { type ValidComponent, createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { checksum } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
@@ -112,6 +112,12 @@ export function FileTabContent(props: {
     return props.comments.list(p)
   })
 
+  const commentLayout = createMemo(() => {
+    return fileComments()
+      .map((comment) => `${comment.id}:${comment.selection.start}:${comment.selection.end}`)
+      .join("|")
+  })
+
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
   const [note, setNote] = createStore({
@@ -164,7 +170,22 @@ export function FileTabContent(props: {
       next[comment.id] = markerTop(el, marker)
     }
 
-    setNote("positions", next)
+    const removed = Object.keys(note.positions).filter((id) => next[id] === undefined)
+    const changed = Object.entries(next).filter(([id, top]) => note.positions[id] !== top)
+    if (removed.length > 0 || changed.length > 0) {
+      setNote(
+        "positions",
+        produce((draft) => {
+          for (const id of removed) {
+            delete draft[id]
+          }
+
+          for (const [id, top] of changed) {
+            draft[id] = top
+          }
+        }),
+      )
+    }
 
     const range = note.commenting
     if (!range) {
@@ -186,7 +207,7 @@ export function FileTabContent(props: {
   }
 
   createEffect(() => {
-    fileComments()
+    commentLayout()
     scheduleComments()
   })
 

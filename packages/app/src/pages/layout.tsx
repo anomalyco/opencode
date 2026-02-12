@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -124,7 +125,7 @@ export default function Layout(props: ParentProps) {
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
-    busyWorkspaces: new Set<string>(),
+    busyWorkspaces: {} as Record<string, boolean>,
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -134,15 +135,28 @@ export default function Layout(props: ParentProps) {
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = workspaceKey(directory)
-    setState("busyWorkspaces", (prev) => {
-      const next = new Set(prev)
-      if (value) next.add(key)
-      else next.delete(key)
-      return next
-    })
+    if (value) {
+      setState("busyWorkspaces", key, true)
+      return
+    }
+    setState(
+      "busyWorkspaces",
+      produce((draft) => {
+        delete draft[key]
+      }),
+    )
   }
-  const isBusy = (directory: string) => state.busyWorkspaces.has(workspaceKey(directory))
+  const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
+  const [sortNow, setSortNow] = createSignal(Date.now())
+  let sortNowInterval: ReturnType<typeof setInterval> | undefined
+  const sortNowTimeout = setTimeout(
+    () => {
+      setSortNow(Date.now())
+      sortNowInterval = setInterval(() => setSortNow(Date.now()), 60_000)
+    },
+    60_000 - (Date.now() % 60_000),
+  )
 
   const aim = createAim({
     enabled: () => !layout.sidebar.opened(),
@@ -157,6 +171,8 @@ export default function Layout(props: ParentProps) {
 
   onCleanup(() => {
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
+    clearTimeout(sortNowTimeout)
+    if (sortNowInterval) clearInterval(sortNowInterval)
     aim.reset()
   })
 
@@ -518,10 +534,13 @@ export default function Layout(props: ParentProps) {
 
   const setWorkspaceName = (directory: string, next: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
-    setStore("workspaceName", (prev) => ({ ...(prev ?? {}), [key]: next }))
+    setStore("workspaceName", key, next)
     if (!projectId) return
     if (!branch) return
-    setStore("workspaceBranchName", projectId, (prev) => ({ ...(prev ?? {}), [branch]: next }))
+    if (!store.workspaceBranchName[projectId]) {
+      setStore("workspaceBranchName", projectId, {})
+    }
+    setStore("workspaceBranchName", projectId, branch, next)
   }
 
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
@@ -1447,23 +1466,41 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
+  const loadedSessionDirs = new Set<string>()
+
   createEffect(() => {
     const project = currentProject()
-    if (!project) return
+    const workspaces = workspaceSetting()
+    const next = new Set<string>()
+    if (!project) {
+      loadedSessionDirs.clear()
+      return
+    }
 
-    if (workspaceSetting()) {
+    if (workspaces) {
       const activeDir = currentDir()
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
         const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
         const active = directory === activeDir
         if (!expanded && !active) continue
-        globalSync.project.loadSessions(directory)
+        next.add(directory)
       }
-      return
     }
 
-    globalSync.project.loadSessions(project.worktree)
+    if (!workspaces) {
+      next.add(project.worktree)
+    }
+
+    for (const directory of next) {
+      if (loadedSessionDirs.has(directory)) continue
+      globalSync.project.loadSessions(directory)
+    }
+
+    loadedSessionDirs.clear()
+    for (const directory of next) {
+      loadedSessionDirs.add(directory)
+    }
   })
 
   function handleDragStart(event: unknown) {
@@ -1766,7 +1803,12 @@ export default function Layout(props: ParentProps) {
                         </TooltipKeybind>
                       </div>
                       <div class="flex-1 min-h-0">
-                        <LocalWorkspace ctx={workspaceSidebarCtx} project={p()} mobile={panelProps.mobile} />
+                        <LocalWorkspace
+                          ctx={workspaceSidebarCtx}
+                          project={p()}
+                          sortNow={sortNow}
+                          mobile={panelProps.mobile}
+                        />
                       </div>
                     </>
                   }
@@ -1805,6 +1847,7 @@ export default function Layout(props: ParentProps) {
                                   ctx={workspaceSidebarCtx}
                                   directory={directory}
                                   project={p()}
+                                  sortNow={sortNow}
                                   mobile={panelProps.mobile}
                                 />
                               )}
@@ -1890,7 +1933,9 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} />}
+              renderProject={(project) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
+              )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
@@ -1953,7 +1998,9 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile />}
+              renderProject={(project) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
+              )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
