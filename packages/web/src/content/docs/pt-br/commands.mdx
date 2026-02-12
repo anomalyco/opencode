@@ -13,7 +13,7 @@ Comandos personalizados são adicionais aos comandos integrados como `/init`, `/
 
 ---
 
-## Criar arquivos de comando
+## Criando arquivos de comando
 
 Crie arquivos markdown no diretório `commands/` para definir comandos personalizados.
 
@@ -21,13 +21,13 @@ Crie `.opencode/commands/test.md`:
 
 ```md title=".opencode/commands/test.md"
 ---
-description: Run tests with coverage
+description: Execute testes com cobertura
 agent: build
 model: anthropic/claude-3-5-sonnet-20241022
 ---
 
-Run the full test suite with coverage report and show any failures.
-Focus on the failing tests and suggest fixes.
+Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
+Concentre-se nos testes com falha e sugira correções.
 ```
 
 O frontmatter define as propriedades do comando. O conteúdo se torna o template.
@@ -40,7 +40,7 @@ Use o comando digitando `/` seguido pelo nome do comando.
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode adicionar comandos personalizados através da configuração do opencode ou criando arquivos markdown no diretório `commands/`.
 
@@ -54,12 +54,12 @@ Use a opção `command` na sua [configuração](/docs/config) do opencode:
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
-    // This becomes the name of the command
+    // Isso se torna o nome do comando
     "test": {
-      // This is the prompt that will be sent to the LLM
-      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
-      // This is shown as the description in the TUI
-      "description": "Run tests with coverage",
+      // Este é o prompt que será enviado ao LLM
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções.",
+      // Isso é exibido como a descrição no TUI
+      "description": "Execute testes com cobertura",
       "agent": "build",
       "model": "anthropic/claude-3-5-sonnet-20241022"
     }
@@ -84,13 +84,13 @@ Você também pode definir comandos usando arquivos markdown. Coloque-os em:
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
-description: Run tests with coverage
+description: Execute testes com cobertura
 agent: build
 model: anthropic/claude-3-5-sonnet-20241022
 ---
 
-Run the full test suite with coverage report and show any failures.
-Focus on the failing tests and suggest fixes.
+Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
+Concentre-se nos testes com falha e sugira correções.
 ```
 
 O nome do arquivo markdown se torna o nome do comando. Por exemplo, `test.md` permite que você execute:
@@ -113,11 +113,11 @@ Passe argumentos para os comandos usando o espaço reservado `$ARGUMENTS`.
 
 ```md title=".opencode/commands/component.md"
 ---
-description: Create a new component
+description: Crie um novo componente
 ---
 
-Create a new React component named $ARGUMENTS with TypeScript support.
-Include proper typing and basic structure.
+Crie um novo componente React chamado $ARGUMENTS com suporte a TypeScript.
+Inclua tipagem adequada e estrutura básica.
 ```
 
 Execute o comando com argumentos:
@@ -139,11 +139,11 @@ Por exemplo:
 
 ```md title=".opencode/commands/create-file.md"
 ---
-description: Create a new file with content
+description: Crie um novo arquivo com conteúdo
 ---
 
-Create a file named $1 in the directory $2
-with the following content: $3
+Crie um arquivo chamado $1 no diretório $2
+com o seguinte conteúdo: $3
 ```
 
 Execute o comando:
@@ -168,26 +168,26 @@ Por exemplo, para criar um comando personalizado que analisa a cobertura de test
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
-description: Analyze test coverage
+description: Analise cobertura de testes
 ---
 
-Here are the current test results:
+Aqui estão os resultados atuais dos testes:
 !`npm test`
 
-Based on these results, suggest improvements to increase coverage.
+Com base nesses resultados, sugira melhorias para aumentar a cobertura.
 ```
 
 Ou para revisar alterações recentes:
 
 ```md title=".opencode/commands/review-changes.md"
 ---
-description: Review recent changes
+description: Revise alterações recentes
 ---
 
-Recent git commits:
+Commits recentes do git:
 !`git log --oneline -10`
 
-Review these changes and suggest any improvements.
+Revise essas alterações e sugira quaisquer melhorias.
 ```
 
 Os comandos são executados no diretório raiz do seu projeto e sua saída se torna parte do prompt.
@@ -200,11 +200,11 @@ Inclua arquivos no seu comando usando `@` seguido pelo nome do arquivo.
 
 ```md title=".opencode/commands/review-component.md"
 ---
-description: Review component
+description: Revise componente
 ---
 
-Review the component in @src/components/Button.tsx.
-Check for performance issues and suggest improvements.
+Revise o componente em @src/components/Button.tsx.
+Verifique problemas de desempenho e sugira melhorias.
 ```
 
 O conteúdo do arquivo é incluído automaticamente no prompt.
@@ -225,7 +225,7 @@ A opção `template` define o prompt que será enviado ao LLM quando o comando f
 {
   "command": {
     "test": {
-      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções."
     }
   }
 }
@@ -243,7 +243,7 @@ Use a opção `description` para fornecer uma breve descrição do que o comando
 {
   "command": {
     "test": {
-      "description": "Run tests with coverage"
+      "description": "Execute testes com cobertura"
     }
   }
 }
@@ -311,7 +311,7 @@ Esta é uma opção de configuração **opcional**.
 
 ---
 
-## Integrado
+## Integrados
 
 opencode inclui vários comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [saiba mais](/docs/tui#commands).
 
