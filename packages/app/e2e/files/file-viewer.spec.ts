@@ -1,18 +1,33 @@
 import { test, expect } from "../fixtures"
-import { openPalette, clickListItem } from "../actions"
+import { promptSelector } from "../selectors"
 
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  const sep = process.platform === "win32" ? "\\" : "/"
-  const file = ["packages", "app", "package.json"].join(sep)
+  await page.locator(promptSelector).click()
+  await page.keyboard.type("/open")
 
-  const dialog = await openPalette(page)
+  const command = page.locator('[data-slash-id="file.open"]').first()
+  await expect(command).toBeVisible()
+  await page.keyboard.press("Enter")
+
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByPlaceholder(/search files/i) })
+    .first()
+  await expect(dialog).toBeVisible()
+
+  const file = "packages/app/package.json"
 
   const input = dialog.getByRole("textbox").first()
   await input.fill(file)
 
-  await clickListItem(dialog, { text: /packages.*app.*package.json/ })
+  const item = dialog
+    .locator('[data-slot="list-item"]')
+    .filter({ hasText: /packages[\\/].*app[\\/].*package.json/ })
+    .first()
+  await expect(item).toBeVisible({ timeout: 30_000 })
+  await item.click()
 
   await expect(dialog).toHaveCount(0)
 

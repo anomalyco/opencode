@@ -22,7 +22,7 @@ import {
   projectWorkspacesToggleSelector,
   workspaceItemSelector,
 } from "../selectors"
-import { dirSlug } from "../utils"
+import { createSdk, dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
@@ -256,14 +256,45 @@ test("can delete a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async (project) => {
-    const { rootSlug, slug } = await setupWorkspaceTest(page, project)
+    const sdk = createSdk(project.directory)
+    const { rootSlug, slug, directory } = await setupWorkspaceTest(page, project)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true)
 
     const menu = await openWorkspaceMenu(page, slug)
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
     await expect(page).toHaveURL(new RegExp(`/${rootSlug}/session`))
-    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(false)
+
+    await project.gotoSession()
+
+    await openSidebar(page)
+    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
   })
 })
