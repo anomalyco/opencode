@@ -562,9 +562,17 @@ export function Code<T>(props: CodeProps<T>) {
     }
   }
 
+  const text = () => {
+    const value = local.file.contents as unknown
+    if (typeof value === "string") return value
+    if (Array.isArray(value)) return value.join("\n")
+    if (value == null) return ""
+    return String(value)
+  }
+
   const lineCount = () => {
-    const text = local.file.contents
-    const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
+    const value = text()
+    const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
     return Math.max(1, total)
   }
 
@@ -848,8 +856,9 @@ export function Code<T>(props: CodeProps<T>) {
     observer = undefined
 
     container.innerHTML = ""
+    const value = text()
     file().render({
-      file: local.file,
+      file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents: value },
       lineAnnotations: local.annotations,
       containerWrapper: container,
     })
