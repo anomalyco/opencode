@@ -1,9 +1,18 @@
 import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
-import { logo as glyphs } from "./logo"
 
 export namespace UI {
+  // Cerebras orange: RGB(240, 90, 40)
+  const CEREBRAS_ORANGE = "\x1b[38;2;240;90;40m"
+  const RESET = "\x1b[0m"
+  
+  const LOGO = [
+    [`${CEREBRAS_ORANGE}█▀▀▀${RESET} `, `█▀▀▀ █▀▀█ █▀▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀`],
+    [`${CEREBRAS_ORANGE}█░░░${RESET} `, `█▀▀▀ █▀▀▄ █▀▀▀ █▀▀▄ █▀▀▄ █▀▀█ ▀▀▀█`],
+    [`${CEREBRAS_ORANGE}▀▀▀▀${RESET} `, `▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀  ▀  ▀ ▀  ▀ ▀▀▀▀`],
+  ]
+
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
   export const Style = {
@@ -41,50 +50,13 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
-    const result: string[] = []
-    const reset = "\x1b[0m"
-    const left = {
-      fg: Bun.color("gray", "ansi") ?? "",
-      shadow: "\x1b[38;5;235m",
-      bg: "\x1b[48;5;235m",
-    }
-    const right = {
-      fg: reset,
-      shadow: "\x1b[38;5;238m",
-      bg: "\x1b[48;5;238m",
-    }
-    const gap = " "
-    const draw = (line: string, fg: string, shadow: string, bg: string) => {
-      const parts: string[] = []
-      for (const char of line) {
-        if (char === "_") {
-          parts.push(bg, " ", reset)
-          continue
-        }
-        if (char === "^") {
-          parts.push(fg, bg, "▀", reset)
-          continue
-        }
-        if (char === "~") {
-          parts.push(shadow, "▀", reset)
-          continue
-        }
-        if (char === " ") {
-          parts.push(" ")
-          continue
-        }
-        parts.push(fg, char, reset)
-      }
-      return parts.join("")
-    }
-    glyphs.left.forEach((row, index) => {
+    const result = []
+    for (const row of LOGO) {
       if (pad) result.push(pad)
-      result.push(draw(row, left.fg, left.shadow, left.bg))
-      result.push(gap)
-      const other = glyphs.right[index] ?? ""
-      result.push(draw(other, right.fg, right.shadow, right.bg))
+      result.push(row[0])
+      result.push(row[1])
       result.push(EOL)
-    })
+    }
     return result.join("").trimEnd()
   }
 

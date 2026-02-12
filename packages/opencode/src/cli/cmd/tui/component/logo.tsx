@@ -1,85 +1,43 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { For, type JSX } from "solid-js"
-import { useTheme, tint } from "@tui/context/theme"
-import { logo, marks } from "@/cli/logo"
+import { useTheme } from "@tui/context/theme"
 
-// Shadow markers (rendered chars in parens):
-// _ = full shadow cell (space with bg=shadow)
-// ^ = letter top, shadow bottom (▀ with fg=letter, bg=shadow)
-// ~ = shadow top only (▀ with fg=shadow)
-const SHADOW_MARKER = new RegExp(`[${marks}]`)
+// Cerebras orange: RGB 240, 90, 40
+const CEREBRAS_ORANGE = RGBA.fromInts(240, 90, 40)
+
+// "C" letter (first letter, colored orange)
+const C_LINE1 = `█▀▀▀`
+const C_LINE2 = `█░░░`
+const C_LINE3 = `▀▀▀▀`
+
+// Rest of "EREBRAS"
+const REST_LINE1 = ` █▀▀▀ █▀▀█ █▀▀▀ █▀▀▄ █▀▀█ █▀▀█ █▀▀▀`
+const REST_LINE2 = ` █▀▀▀ █▀▀▄ █▀▀▀ █▀▀▄ █▀▀▄ █▀▀█ ▀▀▀█`
+const REST_LINE3 = ` ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀  ▀  ▀ ▀  ▀ ▀▀▀▀`
+
+// "Code CLI" in block characters
+const CODE_LINE1 = `█▀▀▀  █▀▀█  █▀▀▄  █▀▀▀   █▀▀▀  █░░  ▀█▀`
+const CODE_LINE2 = `█░░░  █░░█  █░░█  █▀▀▀   █░░░  █░░  ░█░`
+const CODE_LINE3 = `▀▀▀▀  ▀▀▀▀  ▀▀▀   ▀▀▀▀   ▀▀▀▀  ▀▀▀  ▀▀▀`
 
 export function Logo() {
   const { theme } = useTheme()
-
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background, fg, 0.25)
-    const attrs = bold ? TextAttributes.BOLD : undefined
-    const elements: JSX.Element[] = []
-    let i = 0
-
-    while (i < line.length) {
-      const rest = line.slice(i)
-      const markerIndex = rest.search(SHADOW_MARKER)
-
-      if (markerIndex === -1) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest}
-          </text>,
-        )
-        break
-      }
-
-      if (markerIndex > 0) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest.slice(0, markerIndex)}
-          </text>,
-        )
-      }
-
-      const marker = rest[markerIndex]
-      switch (marker) {
-        case "_":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              {" "}
-            </text>,
-          )
-          break
-        case "^":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
-        case "~":
-          elements.push(
-            <text fg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
-      }
-
-      i += markerIndex + 1
-    }
-
-    return elements
-  }
-
   return (
     <box>
-      <For each={logo.left}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
-          </box>
-        )}
-      </For>
+      <text attributes={TextAttributes.BOLD}>
+        <span style={{ fg: CEREBRAS_ORANGE }}>{C_LINE1}</span>
+        <span style={{ fg: theme.text }}>{REST_LINE1}</span>
+      </text>
+      <text attributes={TextAttributes.BOLD}>
+        <span style={{ fg: CEREBRAS_ORANGE }}>{C_LINE2}</span>
+        <span style={{ fg: theme.text }}>{REST_LINE2}</span>
+      </text>
+      <text attributes={TextAttributes.BOLD}>
+        <span style={{ fg: CEREBRAS_ORANGE }}>{C_LINE3}</span>
+        <span style={{ fg: theme.text }}>{REST_LINE3}</span>
+      </text>
+      <text fg={theme.textMuted}>{CODE_LINE1}</text>
+      <text fg={theme.textMuted}>{CODE_LINE2}</text>
+      <text fg={theme.textMuted}>{CODE_LINE3}</text>
     </box>
   )
 }
