@@ -2195,8 +2195,6 @@ test("Google Vertex: retains baseURL for custom proxy", async () => {
 
         // This call will trigger the fetch
         await languageModel.doGenerate({
-          inputFormat: "prompt",
-          mode: { type: "regular" },
           prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }]
         })
 
@@ -2262,8 +2260,6 @@ test("OpenAI Compatible: forces includeUsage to true", async () => {
         const languageModel = await Provider.getLanguage(model)
 
         await languageModel.doGenerate({
-          inputFormat: "prompt",
-          mode: { type: "regular" },
           prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }]
         })
 
