@@ -20,6 +20,7 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
@@ -91,6 +92,7 @@ export default function Page() {
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
+  const globalSync = useGlobalSync()
   const terminal = useTerminal()
   const dialog = useDialog()
   const codeComponent = useCodeComponent()
@@ -674,7 +676,8 @@ export default function Page() {
     sdk.directory
     const id = params.id
     if (!id) return
-    sync.session.sync(id)
+    void sync.session.sync(id)
+    void sync.session.todo(id)
   })
 
   createEffect(() => {
@@ -727,6 +730,11 @@ export default function Page() {
   )
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
+  const todos = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    return globalSync.data.session_todo[id] ?? []
+  })
 
   createEffect(
     on(
@@ -1668,6 +1676,7 @@ export default function Page() {
             questionRequest={questionRequest}
             permissionRequest={permRequest}
             blocked={blocked()}
+            todos={todos()}
             promptReady={prompt.ready()}
             handoffPrompt={handoff.session.get(sessionKey())?.prompt}
             t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}

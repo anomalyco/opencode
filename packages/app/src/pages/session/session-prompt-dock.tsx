@@ -1,9 +1,10 @@
 import { For, Show } from "solid-js"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
+import { SessionTodoDock } from "@/components/session-todo-dock"
 import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
 
 export function SessionPromptDock(props: {
@@ -11,6 +12,7 @@ export function SessionPromptDock(props: {
   questionRequest: () => QuestionRequest | undefined
   permissionRequest: () => { patterns: string[]; permission: string } | undefined
   blocked: boolean
+  todos: Todo[]
   promptReady: boolean
   handoffPrompt?: string
   t: (key: string, vars?: Record<string, string | number | boolean>) => string
@@ -122,6 +124,14 @@ export function SessionPromptDock(props: {
               </div>
             }
           >
+            <Show when={props.todos.length > 0}>
+              <SessionTodoDock
+                todos={props.todos}
+                title={props.t("session.todo.title")}
+                collapseLabel={props.t("session.todo.collapse")}
+                expandLabel={props.t("session.todo.expand")}
+              />
+            </Show>
             <PromptInput
               ref={props.inputRef}
               newSessionWorktree={props.newSessionWorktree}

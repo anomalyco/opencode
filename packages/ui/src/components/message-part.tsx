@@ -693,6 +693,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = props.part as ToolPart
+  if (part.tool === "todowrite" || part.tool === "todoread") return null
 
   const permission = createMemo(() => {
     const next = data.store.permission?.[props.message.sessionID]?.[0]
@@ -1020,11 +1021,6 @@ ToolRegistry.register({
       if (typeof value !== "string") return ""
       return value
     })
-    const format = createMemo(() => {
-      const value = props.input.format
-      if (typeof value !== "string") return ""
-      return value
-    })
     return (
       <BasicTool
         {...props}
@@ -1050,9 +1046,6 @@ ToolRegistry.register({
                 >
                   {url()}
                 </a>
-              </Show>
-              <Show when={!pending() && format()}>
-                <span data-slot="basic-tool-tool-arg">format={format()}</span>
               </Show>
             </div>
             <Show when={!pending() && url()}>
