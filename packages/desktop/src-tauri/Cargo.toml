@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
+tauri = { version = "2.9.5", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -47,6 +47,10 @@ specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 dirs = "6.0.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+chrono = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
@@ -55,6 +59,7 @@ webkit2gtk = "=2.0.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-web-kit = "0.3"
+
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

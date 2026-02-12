@@ -6242,6 +6242,28 @@
         },
         "required": ["name", "data"]
       },
+      "ContextOverflowError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "ContextOverflowError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "responseBody": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -6328,6 +6350,9 @@
                 "$ref": "#/components/schemas/MessageAbortedError"
               },
               {
+                "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
                 "$ref": "#/components/schemas/APIError"
               }
             ]
@@ -6368,6 +6393,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -6998,6 +7026,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -8093,6 +8124,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/MessageAbortedError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContextOverflowError"
                   },
                   {
                     "$ref": "#/components/schemas/APIError"
@@ -9866,6 +9900,12 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "reserved": {
+                "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             }
           },

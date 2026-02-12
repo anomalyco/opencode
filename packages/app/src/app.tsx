@@ -43,7 +43,7 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[] }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[]; wsl?: boolean }
   }
 }
 
@@ -84,7 +84,7 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element }) {
+export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {
   const platform = usePlatform()
 
   const stored = (() => {
@@ -106,7 +106,7 @@ export function AppInterface(props: { defaultUrl?: string; children?: JSX.Elemen
   }
 
   return (
-    <ServerProvider defaultUrl={defaultServerUrl()}>
+    <ServerProvider defaultUrl={defaultServerUrl()} isSidecar={props.isSidecar}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>

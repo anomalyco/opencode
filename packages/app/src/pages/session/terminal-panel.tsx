@@ -41,7 +41,7 @@ export function TerminalPanel(props: {
           direction="vertical"
           size={props.height}
           min={100}
-          max={window.innerHeight * 0.6}
+          max={typeof window === "undefined" ? 1000 : window.innerHeight * 0.6}
           collapseThreshold={50}
           onResize={props.resize}
           onCollapse={props.close}
