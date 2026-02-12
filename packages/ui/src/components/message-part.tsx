@@ -817,7 +817,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"
-              gutter={8}
+              gutter={4}
             >
               <IconButton
                 icon={copied() ? "check" : "copy"}
