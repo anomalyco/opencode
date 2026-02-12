@@ -291,6 +291,58 @@
   overflow: hidden;
 }
 
+[data-component="bash-output"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 6px;
+  background: transparent;
+  position: relative;
+
+  [data-slot="bash-copy"] {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  &:hover [data-slot="bash-copy"],
+  &:focus-within [data-slot="bash-copy"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] {
+    box-shadow: none;
+    border: 1px solid var(--border-weak-base);
+  }
+
+  [data-slot="bash-copy"] [data-component="icon-button"][data-variant="secondary"] [data-slot="icon-svg"] {
+    color: var(--icon-base);
+  }
+
+  [data-slot="bash-pre"] {
+    margin: 0;
+    overflow: auto;
+    max-height: 240px;
+
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  [data-slot="bash-pre"] code {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: 13px;
+    line-height: var(--line-height-large);
+    white-space: pre;
+  }
+}
+
 [data-slot="collapsible-content"]:has([data-component="edit-content"]) [data-component="edit-content"],
 [data-slot="collapsible-content"]:has([data-component="write-content"]) [data-component="write-content"] {
   border-top: none;

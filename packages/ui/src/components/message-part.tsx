@@ -1219,6 +1219,21 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
+    const text = createMemo(() => {
+      const cmd = props.input.command ?? props.metadata.command ?? ""
+      const out = stripAnsi(props.output || props.metadata.output || "")
+      return `$ ${cmd}${out ? "\n\n" + out : ""}`
+    })
+    const [copied, setCopied] = createSignal(false)
+
+    const handleCopy = async () => {
+      const content = text()
+      if (!content) return
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+
     return (
       <BasicTool
         {...props}
@@ -1228,10 +1243,26 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <div data-component="tool-output" data-scrollable>
-          <Markdown
-            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
-          />
+        <div data-component="bash-output">
+          <div data-slot="bash-copy">
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={4}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="small"
+                variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </Tooltip>
+          </div>
+          <pre data-slot="bash-pre">
+            <code>{text()}</code>
+          </pre>
         </div>
       </BasicTool>
     )
