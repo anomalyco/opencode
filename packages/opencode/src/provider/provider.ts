@@ -532,7 +532,7 @@ export namespace Provider {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -805,7 +805,7 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-              (model.protocol === "openapi" ? "@ai-sdk/openai-compatible" : undefined) ??
+
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??

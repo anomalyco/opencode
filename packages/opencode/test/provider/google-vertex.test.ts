@@ -154,8 +154,7 @@ describe("Google Vertex Provider Merge", () => {
               "google-vertex": {
                 models: {
                   "openapi-model": {
-                    protocol: "openapi",
-                    id: "gemini-1.5-pro-alias"
+                    api: { npm: "@ai-sdk/openai-compatible", id: "gemini-1.5-pro-alias" }
                   }
                 }
               }
