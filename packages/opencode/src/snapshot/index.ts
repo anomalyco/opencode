@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
-import { git } from "../util/git"
+import { git, gitLines } from "../util/git"
 import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
@@ -255,7 +255,7 @@ export namespace Snapshot {
       status.set(file, kind)
     }
 
-    const numstatResult = await git(
+    for await (const line of gitLines(
       [
         "-c",
         "core.autocrlf=false",
@@ -275,10 +275,7 @@ export namespace Snapshot {
         ".",
       ],
       { cwd: Instance.directory },
-    )
-    const numstatOutput = await numstatResult.text()
-
-    for (const line of numstatOutput.trim().split("\n")) {
+    )) {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"

@@ -9,6 +9,34 @@ export interface GitResult {
 }
 
 /**
+ * Run a git command and stream its stdout line by line.
+ *
+ * In non-ACP mode this uses Bun's native `.lines()` streaming.
+ * In ACP mode it collects the full output first, then yields lines.
+ */
+export function gitLines(
+  args: string[],
+  opts: { cwd: string; env?: Record<string, string> },
+): AsyncIterable<string> {
+  if (Flag.OPENCODE_CLIENT === "acp") {
+    return {
+      async *[Symbol.asyncIterator]() {
+        const result = await git(args, opts)
+        const text = await result.text()
+        for (const line of text.split("\n")) {
+          yield line
+        }
+      },
+    }
+  }
+
+  const env = opts.env ? { ...process.env, ...opts.env } : undefined
+  let cmd = $`git ${args}`.quiet().nothrow().cwd(opts.cwd)
+  if (env) cmd = cmd.env(env)
+  return cmd.lines()
+}
+
+/**
  * Run a git command.
  *
  * Uses Bun's lightweight `$` shell by default.  When the process is running
