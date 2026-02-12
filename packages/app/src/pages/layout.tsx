@@ -388,7 +388,9 @@ export default function Layout(props: ParentProps) {
         alertedAtBySession.set(sessionKey, now)
 
         if (e.details.type === "permission.asked") {
-          playSound(soundSrc(settings.sounds.permissions()))
+          if (settings.sounds.permissionsEnabled()) {
+            playSound(soundSrc(settings.sounds.permissions()))
+          }
           if (settings.notifications.permissions()) {
             void platform.notify(title, description, href)
           }

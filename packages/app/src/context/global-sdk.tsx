@@ -12,19 +12,32 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const platform = usePlatform()
     const abort = new AbortController()
 
+    const password = typeof window === "undefined" ? undefined : window.__OPENCODE__?.serverPassword
+
     const auth = (() => {
-      if (typeof window === "undefined") return
-      const password = window.__OPENCODE__?.serverPassword
       if (!password) return
+      if (!server.isLocal()) return
       return {
         Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+      }
+    })()
+
+    const eventFetch = (() => {
+      if (!platform.fetch) return
+      try {
+        const url = new URL(server.url)
+        const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+        if (url.protocol === "http:" && !loopback) return platform.fetch
+      } catch {
+        return
       }
     })()
 
     const eventSdk = createOpencodeClient({
       baseUrl: server.url,
       signal: abort.signal,
-      headers: auth,
+      fetch: eventFetch,
+      headers: eventFetch ? undefined : auth,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
@@ -80,7 +93,17 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let streamErrorLogged = false
 
     void (async () => {
-      const events = await eventSdk.global.event()
+      const events = await eventSdk.global.event({
+        onSseError: (error) => {
+          if (streamErrorLogged) return
+          streamErrorLogged = true
+          console.error("[global-sdk] event stream error", {
+            url: server.url,
+            fetch: eventFetch ? "platform" : "webview",
+            error,
+          })
+        },
+      })
       let yielded = Date.now()
       for await (const event of events.stream) {
         const directory = event.directory ?? "global"
@@ -106,7 +129,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       .catch((error) => {
         if (streamErrorLogged) return
         streamErrorLogged = true
-        console.error("[global-sdk] event stream failed", error)
+        console.error("[global-sdk] event stream failed", {
+          url: server.url,
+          fetch: eventFetch ? "platform" : "webview",
+          error,
+        })
       })
 
     onCleanup(() => {
