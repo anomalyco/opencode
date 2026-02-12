@@ -1,0 +1,7 @@
+github-policies:
+  runners:
+    allowed_groups:
+      - "blacksmith runners 01kbd5v56sg8tz7rea39b7ygpt"
+  build:
+    disallow_reruns: false
+  branch_rulesets:
