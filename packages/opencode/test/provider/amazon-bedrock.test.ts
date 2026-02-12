@@ -1,38 +1,6 @@
-import { test, expect, describe, mock } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import path from "path"
 import { unlink } from "fs/promises"
-
-// Mock BunProc and default plugins to prevent actual installations during tests
-mock.module("../../src/bun/index", () => ({
-  BunProc: {
-    install: async (pkg: string, _version?: string) => {
-      // Return package name without version for mocking
-      const lastAtIndex = pkg.lastIndexOf("@")
-      return lastAtIndex > 0 ? pkg.substring(0, lastAtIndex) : pkg
-    },
-    run: async () => {
-      throw new Error("BunProc.run should not be called in tests")
-    },
-    which: () => process.execPath,
-    InstallFailedError: class extends Error { },
-  },
-}))
-
-const mockPlugin = () => ({})
-mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
-mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
-mock.module("@gitlab/opencode-gitlab-auth", () => ({
-  default: mockPlugin,
-  gitlabAuthPlugin: mockPlugin,
-}))
-
-mock.module("@aws-sdk/credential-providers", () => ({
-  fromNodeProviderChain: () => async () => ({
-    accessKeyId: "mock-key-id",
-    secretAccessKey: "mock-secret",
-    sessionToken: "mock-session",
-  }),
-}))
 
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
