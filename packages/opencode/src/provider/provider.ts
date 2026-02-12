@@ -293,7 +293,7 @@ export namespace Provider {
               const isTokyoRegion = region === "ap-northeast-1"
               if (
                 isAustraliaRegion &&
-                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
+                ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) => modelID.includes(m))
               ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
