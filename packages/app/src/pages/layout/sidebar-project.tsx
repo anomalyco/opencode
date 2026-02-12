@@ -295,7 +295,7 @@ export const SortableProject = (props: {
     const [data] = globalSync.child(directory, { bootstrap: false })
     return childMapByParent(data.session)
   }
-  const trigger = (
+  const tile = () => (
     <ProjectTile
       project={props.project}
       mobile={props.mobile}
@@ -321,14 +321,14 @@ export const SortableProject = (props: {
   return (
     // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-      <Show when={preview()} fallback={trigger}>
+      <Show when={preview()} fallback={tile()}>
         <HoverCard
           open={open() && !menu()}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
           gutter={6}
-          trigger={trigger}
+          trigger={tile()}
           onOpenChange={(value) => {
             if (menu()) return
             setOpen(value)
