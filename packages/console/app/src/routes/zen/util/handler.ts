@@ -389,24 +389,25 @@ export async function handler(
         if (provider) return provider
       }
 
-      if (retry.retryCount === MAX_FAILOVER_RETRIES) {
-        const provider = modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+      if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
+        const providers = modelInfo.providers
+          .filter((provider) => !provider.disabled)
+          .filter((provider) => !retry.excludeProviders.includes(provider.id))
+          .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
+
+        // Use the last 4 characters of session ID to select a provider
+        let h = 0
+        const l = sessionId.length
+        for (let i = l - 4; i < l; i++) {
+          h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
+        }
+        const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
+        const provider = providers[index || 0]
         if (provider) return provider
       }
 
-      const providers = modelInfo.providers
-        .filter((provider) => !provider.disabled)
-        .filter((provider) => !retry.excludeProviders.includes(provider.id))
-        .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
-
-      // Use the last 4 characters of session ID to select a provider
-      let h = 0
-      const l = sessionId.length
-      for (let i = l - 4; i < l; i++) {
-        h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
-      }
-      const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
-      return providers[index || 0]
+      // fallback provider
+      return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
     })()
 
     if (!modelProvider) throw new ModelError("No provider available")
