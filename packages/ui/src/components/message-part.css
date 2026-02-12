@@ -14,7 +14,7 @@
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-base);
+  color: var(--text-strong);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
