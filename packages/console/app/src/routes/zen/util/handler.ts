@@ -390,7 +390,8 @@ export async function handler(
       }
 
       if (retry.retryCount === MAX_FAILOVER_RETRIES) {
-        return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+        const provider = modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+        if (provider) return provider
       }
 
       const providers = modelInfo.providers
