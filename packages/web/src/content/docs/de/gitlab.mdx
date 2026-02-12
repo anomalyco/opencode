@@ -1,11 +1,11 @@
 ---
 title: GitLab
-description: Verwenden Sie OpenCode in GitLab-Problemen und Zusammenführungsanfragen.
+description: Verwenden Sie OpenCode in GitLab-Issues und Merge Requests.
 ---
 
 OpenCode lässt sich über Ihre GitLab CI/CD-Pipeline oder mit GitLab Duo in Ihren GitLab-Workflow integrieren.
 
-In beiden Fällen läuft OpenCode auf Ihren GitLab-Läufern.
+In beiden Fällen läuft OpenCode auf Ihren GitLab Runners.
 
 ---
 
@@ -17,7 +17,7 @@ Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für OpenCo
 
 ---
 
-### Features
+### Funktionen
 
 - **Benutzerdefinierte Konfiguration pro Job verwenden**: Konfigurieren Sie OpenCode mit einem benutzerdefinierten Konfigurationsverzeichnis, zum Beispiel `./config/#custom-directory`, um die Funktionalität pro OpenCode-Aufruf zu aktivieren oder zu deaktivieren.
 - **Minimale Einrichtung**: Die CI-Komponente richtet OpenCode im Hintergrund ein. Sie müssen lediglich die OpenCode-Konfiguration und die erste Eingabeaufforderung erstellen.
@@ -25,7 +25,7 @@ Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für OpenCo
 
 ---
 
-### Setup
+### Einrichtung
 
 1. Speichern Sie Ihre OpenCode-Authentifizierung JSON als Umgebungsvariablen vom Dateityp CI unter **Einstellungen** > **CI/CD** > **Variablen**. Stellen Sie sicher, dass Sie sie als „Maskiert und ausgeblendet“ markieren.
 2. Fügen Sie Folgendes zu Ihrer `.gitlab-ci.yml`-Datei hinzu.
@@ -35,7 +35,7 @@ Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für OpenCo
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # Die variable name für ihre OpenCode authentifizierung JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -51,16 +51,16 @@ Erwähnen Sie `@opencode` in einem Kommentar und OpenCode führt Aufgaben innerh
 
 ---
 
-### Features
+### Funktionen
 
-- **Triage-Probleme**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
+- **Issue Triage**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
 - **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren.
-  Es wird ein neuer Zweig erstellt und eine Zusammenführungsanforderung mit den Änderungen ausgelöst.
-- **Sicher**: OpenCode läuft auf Ihren GitLab-Läufern.
+  Es wird ein neuer Branch erstellt und eine Merge Request mit den Änderungen ausgelöst.
+- **Sicher**: OpenCode läuft auf Ihren GitLab Runners.
 
 ---
 
-### Setup
+### Einrichtung
 
 OpenCode wird in Ihrer GitLab CI/CD-Pipeline ausgeführt. Folgendes müssen Sie zum Einrichten benötigen:
 
@@ -77,7 +77,7 @@ Aktuelle Anweisungen finden Sie im [**GitLab docs**](https://docs.gitlab.com/use
 
         <details>
 
-    <summary>Flow configuration</summary>
+    <summary>Flow-Konfiguration</summary>
 
     ```yaml
     image: node:22-slim
@@ -156,7 +156,7 @@ Ausführliche Anweisungen finden Sie unter [GitLab CLI agents docs](https://docs
 
 ---
 
-### Examples
+### Beispiele
 
 Hier sind einige Beispiele, wie Sie OpenCode in GitLab verwenden können.
 
@@ -182,14 +182,14 @@ Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfiguri
   @opencode fix this
   ```
 
-  OpenCode erstellt einen neuen Zweig, implementiert die Änderungen und öffnet eine Zusammenführungsanforderung mit den Änderungen.
+  OpenCode erstellt einen neuen Branch, implementiert die Änderungen und öffnet eine Merge Request mit den Änderungen.
 
-- **Zusammenführungsanfragen prüfen**
+- **Merge Requests prüfen**
 
-  Hinterlassen Sie den folgenden Kommentar zu einer GitLab-Merge-Anfrage.
+  Hinterlassen Sie den folgenden Kommentar zu einer GitLab Merge Request.
 
   ```
   @opencode review this merge request
   ```
 
-  OpenCode prüft die Zusammenführungsanfrage und gibt Feedback.
+  OpenCode prüft die Merge Request und gibt Feedback.

@@ -7,7 +7,7 @@ OpenCode lässt sich in Ihr Language Server Protocol (LSP) integrieren, um die I
 
 ---
 
-## Eingebaut
+## Integriert
 
 OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 
@@ -54,18 +54,18 @@ Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebun
 
 ---
 
-## Wie es funktioniert
+## Funktionsweise
 
-Wenn Opencode eine Datei öffnet, geschieht Folgendes:
+Wenn OpenCode eine Datei öffnet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten LSP-Server.
 2. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
 
 ---
 
-## Konfigurieren
+## Konfiguration
 
-Sie können LSP-Server über den Abschnitt `lsp` in Ihrer Opencode-Konfiguration anpassen.
+Sie können LSP-Server über den Abschnitt `lsp` in Ihrer OpenCode-Konfiguration anpassen.
 
 ```json title="opencode.json"
 {
@@ -178,11 +178,11 @@ Sie können einen benutzerdefinierten LSP-Server hinzufügen, indem Sie den Befe
 
 ## Weitere Informationen
 
-### PHP Intelepense
+### PHP Intelephense
 
 PHP Intelepense bietet Premium-Funktionen über einen Lizenzschlüssel. Sie können einen Lizenzschlüssel bereitstellen, indem Sie (nur) den Schlüssel in eine Textdatei einfügen unter:
 
-- Auf macOS/Linux: `$HOME/intelephense/licence.txt`
-- Unter Windows: `%USERPROFILE%/intelephense/licence.txt`
+- Auf macOS/Linux: `$HOME/intelephense/license.txt`
+- Unter Windows: `%USERPROFILE%/intelephense/license.txt`
 
 Die Datei sollte nur den Lizenzschlüssel ohne zusätzlichen Inhalt enthalten.

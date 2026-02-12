@@ -187,7 +187,7 @@ export interface Hooks {
   ) => Promise<void>
   "shell.env"?: (input: { cwd: string }, output: { env: Record<string, string> }) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string },
+    input: { tool: string; sessionID: string; callID: string; args: any },
     output: {
       title: string
       output: string

@@ -89,7 +89,7 @@ El servidor opencode expone las siguientes API.
 
 ### Global
 
-| Método | Camino           | Descripción                                 | Respuesta                            |
+| Método | Ruta             | Descripción                                 | Respuesta                            |
 | ------ | ---------------- | ------------------------------------------- | ------------------------------------ |
 | `GET`  | `/global/health` | Obtener el estado y la versión del servidor | `{ healthy: true, version: string }` |
 | `GET`  | `/global/event`  | Obtenga eventos globales (transmisión SSE)  | Flujo de eventos                     |
@@ -98,7 +98,7 @@ El servidor opencode expone las siguientes API.
 
 ### Proyecto
 
-| Método | Camino             | Descripción                | Respuesta                                     |
+| Método | Ruta               | Descripción                | Respuesta                                     |
 | ------ | ------------------ | -------------------------- | --------------------------------------------- |
 | `GET`  | `/project`         | Listar todos los proyectos | <a href={typesUrl}><code>Project[]</code></a> |
 | `GET`  | `/project/current` | Obtener el proyecto actual | <a href={typesUrl}><code>Project</code></a>   |
@@ -107,7 +107,7 @@ El servidor opencode expone las siguientes API.
 
 ### Ruta y VCS
 
-| Método | Camino  | Descripción                                        | Respuesta                                   |
+| Método | Ruta    | Descripción                                        | Respuesta                                   |
 | ------ | ------- | -------------------------------------------------- | ------------------------------------------- |
 | `GET`  | `/path` | Obtener la ruta actual                             | <a href={typesUrl}><code>Path</code></a>    |
 | `GET`  | `/vcs`  | Obtenga información de VCS para el proyecto actual | <a href={typesUrl}><code>VcsInfo</code></a> |
@@ -116,7 +116,7 @@ El servidor opencode expone las siguientes API.
 
 ### Instancia
 
-| Método | Camino              | Descripción                  | Respuesta |
+| Método | Ruta                | Descripción                  | Respuesta |
 | ------ | ------------------- | ---------------------------- | --------- |
 | `POST` | `/instance/dispose` | Eliminar la instancia actual | `boolean` |
 
@@ -124,7 +124,7 @@ El servidor opencode expone las siguientes API.
 
 ### Configuración
 
-| Método  | Camino              | Descripción                                    | Respuesta                                                                                 |
+| Método  | Ruta                | Descripción                                    | Respuesta                                                                                 |
 | ------- | ------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `GET`   | `/config`           | Obtener información de configuración           | <a href={typesUrl}><code>Config</code></a>                                                |
 | `PATCH` | `/config`           | Actualizar configuración                       | <a href={typesUrl}><code>Config</code></a>                                                |
@@ -134,7 +134,7 @@ El servidor opencode expone las siguientes API.
 
 ### Proveedor
 
-| Método | Camino                           | Descripción                                              | Respuesta                                                                            |
+| Método | Ruta                             | Descripción                                              | Respuesta                                                                            |
 | ------ | -------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `GET`  | `/provider`                      | Listar todos los proveedores                             | `{ all: `<a href={typesUrl}>Proveedor[]</a>`, default: {...}, connected: string[] }` |
 | `GET`  | `/provider/auth`                 | Obtener métodos de autenticación de proveedores          | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`            |
@@ -145,7 +145,7 @@ El servidor opencode expone las siguientes API.
 
 ### Sesiones
 
-| Método   | Camino                                   | Descripción                                            | Notas                                                                                 |
+| Método   | Ruta                                     | Descripción                                            | Notas                                                                                 |
 | -------- | ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | `GET`    | `/session`                               | Listar todas las sesiones                              | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                |
 | `POST`   | `/session`                               | Crear una nueva sesión                                 | cuerpo: `{ parentID?, title? }`, devuelve <a href={typesUrl}><code>Session</code></a> |
@@ -170,7 +170,7 @@ El servidor opencode expone las siguientes API.
 
 ### Mensajes
 
-| Método | Camino                            | Descripción                                         | Notas                                                                                                                                                                     |
+| Método | Ruta                              | Descripción                                         | Notas                                                                                                                                                                     |
 | ------ | --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/session/:id/message`            | Listar mensajes en una sesión                       | consulta: `limit?`, devuelve `{ info: `<a href={typesUrl}>Mensaje</a>`, parts: `<a href={typesUrl}>Parte[]</a>`}[]`                                                       |
 | `POST` | `/session/:id/message`            | Envía un mensaje y espera respuesta                 | cuerpo: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, devuelve `{ info: `<a href={typesUrl}>Mensaje</a>`, parts: `<a href={typesUrl}>Parte[]</a>`}` |
@@ -183,7 +183,7 @@ El servidor opencode expone las siguientes API.
 
 ### Comandos
 
-| Método | Camino     | Descripción               | Respuesta                                     |
+| Método | Ruta       | Descripción               | Respuesta                                     |
 | ------ | ---------- | ------------------------- | --------------------------------------------- |
 | `GET`  | `/command` | Listar todos los comandos | <a href={typesUrl}><code>Command[]</code></a> |
 
@@ -191,7 +191,7 @@ El servidor opencode expone las siguientes API.
 
 ### Archivos
 
-| Método | Camino                   | Descripción                                  | Respuesta                                                                                          |
+| Método | Ruta                     | Descripción                                  | Respuesta                                                                                          |
 | ------ | ------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `GET`  | `/find?pattern=<pat>`    | Buscar texto en archivos                     | Matriz de objetos coincidentes con `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `GET`  | `/find/file?query=<q>`   | Buscar archivos y directorios por nombre     | `string[]` (caminos)                                                                               |
@@ -200,7 +200,7 @@ El servidor opencode expone las siguientes API.
 | `GET`  | `/file/content?path=<p>` | Leer un archivo                              | <a href={typesUrl}><code>FileContent</code></a>                                                    |
 | `GET`  | `/file/status`           | Obtener el estado de los archivos rastreados | <a href={typesUrl}><code>File[]</code></a>                                                         |
 
-#### `/find/file` parámetros de consulta
+#### Parámetros de consulta de /find/file
 
 - `query` (obligatorio) — cadena de búsqueda (coincidencia aproximada)
 - `type` (opcional): limita los resultados a `"file"` o `"directory"`
@@ -212,7 +212,7 @@ El servidor opencode expone las siguientes API.
 
 ### Herramientas (experimentales)
 
-| Método | Camino                                      | Descripción                                          | Respuesta                                    |
+| Método | Ruta                                        | Descripción                                          | Respuesta                                    |
 | ------ | ------------------------------------------- | ---------------------------------------------------- | -------------------------------------------- |
 | `GET`  | `/experimental/tool/ids`                    | Listar todos los ID de herramientas                  | <a href={typesUrl}><code>ToolIDs</code></a>  |
 | `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Listar herramientas con esquemas JSON para un modelo | <a href={typesUrl}><code>ToolList</code></a> |
@@ -221,7 +221,7 @@ El servidor opencode expone las siguientes API.
 
 ### LSP, formateadores y MCP
 
-| Método | Camino       | Descripción                           | Respuesta                                                 |
+| Método | Ruta         | Descripción                           | Respuesta                                                 |
 | ------ | ------------ | ------------------------------------- | --------------------------------------------------------- |
 | `GET`  | `/lsp`       | Obtener el estado del servidor LSP    | <a href={typesUrl}><code>LSPStatus[]</code></a>           |
 | `GET`  | `/formatter` | Obtener estado del formateador        | <a href={typesUrl}><code>FormatterStatus[]</code></a>     |
@@ -232,7 +232,7 @@ El servidor opencode expone las siguientes API.
 
 ### Agentes
 
-| Método | Camino   | Descripción                          | Respuesta                                   |
+| Método | Ruta     | Descripción                          | Respuesta                                   |
 | ------ | -------- | ------------------------------------ | ------------------------------------------- |
 | `GET`  | `/agent` | Listar todos los agentes disponibles | <a href={typesUrl}><code>Agent[]</code></a> |
 
@@ -240,7 +240,7 @@ El servidor opencode expone las siguientes API.
 
 ### Registro
 
-| Método | Camino | Descripción                                                                 | Respuesta |
+| Método | Ruta   | Descripción                                                                 | Respuesta |
 | ------ | ------ | --------------------------------------------------------------------------- | --------- |
 | `POST` | `/log` | Escribir entrada de registro. Cuerpo: `{ service, level, message, extra? }` | `boolean` |
 
@@ -248,7 +248,7 @@ El servidor opencode expone las siguientes API.
 
 ### TUI
 
-| Método | Camino                  | Descripción                                       | Respuesta                      |
+| Método | Ruta                    | Descripción                                       | Respuesta                      |
 | ------ | ----------------------- | ------------------------------------------------- | ------------------------------ |
 | `POST` | `/tui/append-prompt`    | Agregar texto al mensaje                          | `boolean`                      |
 | `POST` | `/tui/open-help`        | Abra el cuadro de diálogo de ayuda                | `boolean`                      |
@@ -266,7 +266,7 @@ El servidor opencode expone las siguientes API.
 
 ### Autenticación
 
-| Método | Camino      | Descripción                                                                                     | Respuesta |
+| Método | Ruta        | Descripción                                                                                     | Respuesta |
 | ------ | ----------- | ----------------------------------------------------------------------------------------------- | --------- |
 | `PUT`  | `/auth/:id` | Establecer credenciales de autenticación. El cuerpo debe coincidir con el esquema del proveedor | `boolean` |
 
@@ -274,14 +274,14 @@ El servidor opencode expone las siguientes API.
 
 ### Eventos
 
-| Método | Camino   | Descripción                                                                                                   | Respuesta                                       |
+| Método | Ruta     | Descripción                                                                                                   | Respuesta                                       |
 | ------ | -------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | `GET`  | `/event` | Transmisión de eventos enviados por el servidor. El primer evento es `server.connected`, luego eventos de bus | Transmisión de eventos enviados por el servidor |
 
 ---
 
-### Documentos
+### Documentación
 
-| Método | Camino | Descripción                | Respuesta                              |
+| Método | Ruta   | Descripción                | Respuesta                              |
 | ------ | ------ | -------------------------- | -------------------------------------- |
 | `GET`  | `/doc` | Especificación OpenAPI 3.1 | Página HTML con especificación OpenAPI |

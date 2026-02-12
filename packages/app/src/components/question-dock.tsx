@@ -7,6 +7,32 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 
+const writeAt = <T,>(list: T[], index: number, value: T) => {
+  const next = [...list]
+  next[index] = value
+  return next
+}
+
+const pickAnswer = (list: QuestionAnswer[], index: number, value: string) => {
+  return writeAt(list, index, [value])
+}
+
+const toggleAnswer = (list: QuestionAnswer[], index: number, value: string) => {
+  const current = list[index] ?? []
+  const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
+  return writeAt(list, index, next)
+}
+
+const appendAnswer = (list: QuestionAnswer[], index: number, value: string) => {
+  const current = list[index] ?? []
+  if (current.includes(value)) return list
+  return writeAt(list, index, [...current, value])
+}
+
+const writeCustom = (list: string[], index: number, value: string) => {
+  return writeAt(list, index, value)
+}
+
 export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
@@ -38,43 +64,45 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
-  const reply = (answers: QuestionAnswer[]) => {
+  const reply = async (answers: QuestionAnswer[]) => {
     if (store.sending) return
 
     setStore("sending", true)
-    sdk.client.question
-      .reply({ requestID: props.request.id, answers })
-      .catch(fail)
-      .finally(() => setStore("sending", false))
+    try {
+      await sdk.client.question.reply({ requestID: props.request.id, answers })
+    } catch (err) {
+      fail(err)
+    } finally {
+      setStore("sending", false)
+    }
   }
 
-  const reject = () => {
+  const reject = async () => {
     if (store.sending) return
 
     setStore("sending", true)
-    sdk.client.question
-      .reject({ requestID: props.request.id })
-      .catch(fail)
-      .finally(() => setStore("sending", false))
+    try {
+      await sdk.client.question.reject({ requestID: props.request.id })
+    } catch (err) {
+      fail(err)
+    } finally {
+      setStore("sending", false)
+    }
   }
 
   const submit = () => {
-    reply(questions().map((_, i) => store.answers[i] ?? []))
+    void reply(questions().map((_, i) => store.answers[i] ?? []))
   }
 
   const pick = (answer: string, custom: boolean = false) => {
-    const answers = [...store.answers]
-    answers[store.tab] = [answer]
-    setStore("answers", answers)
+    setStore("answers", pickAnswer(store.answers, store.tab, answer))
 
     if (custom) {
-      const inputs = [...store.custom]
-      inputs[store.tab] = answer
-      setStore("custom", inputs)
+      setStore("custom", writeCustom(store.custom, store.tab, answer))
     }
 
     if (single()) {
-      reply([[answer]])
+      void reply([[answer]])
       return
     }
 
@@ -82,15 +110,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   const toggle = (answer: string) => {
-    const existing = store.answers[store.tab] ?? []
-    const next = [...existing]
-    const index = next.indexOf(answer)
-    if (index === -1) next.push(answer)
-    if (index !== -1) next.splice(index, 1)
-
-    const answers = [...store.answers]
-    answers[store.tab] = next
-    setStore("answers", answers)
+    setStore("answers", toggleAnswer(store.answers, store.tab, answer))
   }
 
   const selectTab = (index: number) => {
@@ -126,13 +146,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     }
 
     if (multi()) {
-      const existing = store.answers[store.tab] ?? []
-      const next = [...existing]
-      if (!next.includes(value)) next.push(value)
-
-      const answers = [...store.answers]
-      answers[store.tab] = next
-      setStore("answers", answers)
+      setStore("answers", appendAnswer(store.answers, store.tab, value))
       setStore("editing", false)
       return
     }
@@ -225,9 +239,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   value={input()}
                   disabled={store.sending}
                   onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
+                    setStore("custom", writeCustom(store.custom, store.tab, e.currentTarget.value))
                   }}
                 />
                 <Button type="submit" variant="primary" size="small" disabled={store.sending}>

@@ -3,9 +3,9 @@ title: Mreža
 description: Konfigurirajte proksije i prilagođene certifikate.
 ---
 
-## OpenCode podržava standardne varijable proxy okruženja i prilagođene sertifikate za mrežna okruženja preduzeća.
+OpenCode podržava standardne proxy varijable okruženja i prilagođene certifikate za enterprise mrežna okruženja.
 
-## Proxy
+## Proksi
 
 OpenCode poštuje standardne varijable proxy okruženja.
 
@@ -24,7 +24,7 @@ export NO_PROXY=localhost,127.0.0.1
 TUI komunicira sa lokalnim HTTP serverom. Morate zaobići proxy za ovu vezu kako biste spriječili petlje usmjeravanja.
 :::
 
-## Možete konfigurirati port servera i ime hosta koristeći [CLI flags](/docs/cli#run).
+Možete konfigurirati port servera i naziv hosta koristeći [CLI flags](/docs/cli#run).
 
 ### Autentikacija
 
@@ -38,7 +38,7 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 Izbjegavajte tvrdo kodiranje lozinki. Koristite varijable okruženja ili sigurno skladište vjerodajnica.
 :::
 
-## Za proxy servere koji zahtijevaju naprednu autentifikaciju kao što je NTLM ili Kerberos, razmislite o korištenju LLM Gatewaya koji podržava vašu metodu provjere autentičnosti.
+Za proxy servere koji zahtijevaju naprednu autentifikaciju poput NTLM ili Kerberos, razmotrite LLM Gateway koji podržava vašu metodu autentifikacije.
 
 ## Prilagođeni certifikati
 

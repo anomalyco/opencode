@@ -8,16 +8,16 @@ Jednom dodani, MCP alati su automatski dostupni LLM-u zajedno sa ugrađenim alat
 
 ---
 
-#### Upozorenja
+#### Upozorenje
 
 Kada koristite MCP server, on dodaje u kontekst. Ovo se može brzo zbrojiti ako imate puno alata. Stoga preporučujemo da pazite koje MCP servere koristite.
 :::tip
 MCP serveri dodaju vaš kontekst, tako da želite da budete pažljivi s tim koje ćete omogućiti.
 :::
 
-## Određeni MCP serveri, poput GitHub MCP servera, imaju tendenciju da dodaju mnogo tokena i lako mogu premašiti ograničenje konteksta.
+Određeni MCP serveri, poput GitHub MCP servera, mogu dodati mnogo tokena i lako premašiti limit konteksta.
 
-## Omogući
+## Omogućavanje
 
 Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
 
@@ -36,9 +36,9 @@ Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/do
 }
 ```
 
-## Također možete onemogućiti server postavljanjem `enabled` na `false`. Ovo je korisno ako želite privremeno onemogućiti server bez uklanjanja iz vaše konfiguracije.
+Također možete onemogućiti server postavljanjem `enabled` na `false`. To je korisno kada ga želite privremeno isključiti bez uklanjanja iz konfiguracije.
 
-### Poništavanje daljinskih zadanih postavki
+### Poništavanje udaljenih zadanih postavki
 
 Organizacije mogu obezbijediti zadane MCP servere preko svoje krajnje tačke `.well-known/opencode`. Ovi serveri mogu biti onemogućeni prema zadanim postavkama, omogućavajući korisnicima da se odluče za one koji su im potrebni.
 Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dodajte ga u svoju lokalnu konfiguraciju sa `enabled: true`:
@@ -56,7 +56,7 @@ Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dod
 }
 ```
 
-## Vrijednosti vaše lokalne konfiguracije nadjačavaju udaljene zadane postavke. Pogledajte [config precedence](/docs/config#precedence-order) za više detalja.
+Vrijednosti lokalne konfiguracije nadjačavaju udaljene zadane postavke. Pogledajte [config precedence](/docs/config#precedence-order) za više detalja.
 
 ## Lokalno
 
@@ -105,7 +105,7 @@ use the mcp_everything tool to add the number 3 and 4
 #### Opcije
 
 Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
-| Opcija | Vrsta | Obavezno | Opis
+| Opcija | Tip | Obavezno | Opis
 |------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `type` | String | Y | Tip veze sa MCP serverom, mora biti `"local"`. |
 | `command` | Niz | Y | Naredba i argumenti za pokretanje MCP servera. |
@@ -115,7 +115,7 @@ Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
 
 ---
 
-## Daljinski
+## Udaljeno
 
 Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
@@ -135,11 +135,11 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 }
 ```
 
-## `url` je URL udaljenog MCP servera i sa opcijom `headers` možete proslijediti listu zaglavlja.
+`url` je URL udaljenog MCP servera, a kroz opciju `headers` možete proslijediti listu zaglavlja.
 
 #### Opcije
 
-| Opcija    | Vrsta   | Obavezno | Opis                                                                                               |
+| Opcija    | Tip     | Obavezno | Opis                                                                                               |
 | --------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
 | `type`    | String  | Y        | Tip veze sa MCP serverom, mora biti `"remote"`.                                                    |
 | `url`     | String  | Y        | URL udaljenog MCP servera.                                                                         |
@@ -176,9 +176,9 @@ Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracij
 }
 ```
 
-## Ako server zahtijeva autentifikaciju, OpenCode će od vas zatražiti autentifikaciju kada prvi put pokušate da ga koristite. Ako ne, možete [ručno pokrenuti tok](#authenticating) sa `opencode mcp auth <server-name>`.
+Ako server zahtijeva autentifikaciju, OpenCode će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `opencode mcp auth <server-name>`.
 
-### Prethodno registrovano
+### Prethodno registrirano
 
 Ako imate klijentske vjerodajnice od dobavljača MCP servera, možete ih konfigurirati:
 
@@ -222,7 +222,7 @@ Uklonite pohranjene vjerodajnice:
 opencode mcp logout my-oauth-server
 ```
 
-## Komanda `mcp auth` će otvoriti vaš pretraživač za autorizaciju. Nakon što odobrite, OpenCode će sigurno pohraniti tokene u `~/.local/share/opencode/mcp-auth.json`.
+Komanda `mcp auth` otvara pretraživač za autorizaciju. Nakon odobrenja, OpenCode sigurno čuva tokene u `~/.local/share/opencode/mcp-auth.json`.
 
 #### Onemogućavanje OAuth-a
 
@@ -248,7 +248,7 @@ Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjest
 
 #### OAuth opcije
 
-| Opcija         | Vrsta           | Opis                                                                                          |
+| Opcija         | Tip             | Opis                                                                                          |
 | -------------- | --------------- | --------------------------------------------------------------------------------------------- |
 | `oauth`        | Objekt \| false | OAuth konfiguracijski objekt, ili `false` da onemogućite automatsko otkrivanje OAuth.         |
 | `clientId`     | String          | ID OAuth klijenta. Ako nije navedeno, pokušat će se izvršiti dinamička registracija klijenta. |
@@ -267,13 +267,13 @@ opencode mcp auth list
 opencode mcp debug my-oauth-server
 ```
 
-## Komanda `mcp debug` pokazuje trenutni status auth, testira HTTP povezanost i pokušava tok otkrivanja OAuth.
+Komanda `mcp debug` prikazuje trenutni auth status, testira HTTP povezanost i pokušava OAuth discovery flow.
 
-## Upravljaj
+## Upravljanje
 
-## Vaši MCP-ovi su dostupni kao alati u OpenCode-u, zajedno sa ugrađenim alatima. Tako da možete upravljati njima kroz OpenCode konfiguraciju kao i svaki drugi alat.
+Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima. Možete njima upravljati kroz OpenCode konfiguraciju kao i bilo kojim drugim alatom.
 
-### Global
+### Globalno
 
 To znači da ih možete omogućiti ili onemogućiti globalno.
 
@@ -317,7 +317,7 @@ Također možemo koristiti glob obrazac da onemogućimo sve odgovarajuće MCP-ov
 }
 ```
 
-## Ovdje koristimo glob obrazac `my-mcp*` da onemogućimo sve MCP-ove.
+Ovdje koristimo glob obrazac `my-mcp*` da onemogućimo sve MCP servere.
 
 ### Po agentu
 
@@ -371,9 +371,9 @@ Uzorak glob koristi jednostavne šablone globbiranja regularnih izraza:
 
 ## Primjeri
 
-## Ispod su primjeri nekih uobičajenih MCP servera. Možete poslati PR ako želite dokumentirati druge servere.
+Ispod su primjeri uobičajenih MCP servera. Možete poslati PR ako želite dokumentovati druge servere.
 
-### Stražar
+### Sentry
 
 Dodajte [Sentry MCP server](https://mcp.sentry.dev) za interakciju sa vašim Sentry projektima i problemima.
 
@@ -405,7 +405,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### Kontekst7
+### Context7
 
 Dodajte [Context7 MCP server](https://github.com/upstash/context7) za pretraživanje dokumenata.
 
@@ -453,9 +453,9 @@ When you need to search docs, use `context7` tools.
 
 ---
 
-### Grep od Vercela
+### Grep by Vercel
 
-Dodajte [Grep by Vercel](https://grep.app) MCP server za pretraživanje isječaka koda na GitHubu.
+Dodajte [Grep by Vercel](https://grep.app) MCP server za pretraživanje isječaka koda na GitHub.
 
 ```json title="opencode.json" {4-7}
 {

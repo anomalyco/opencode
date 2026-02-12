@@ -13,7 +13,7 @@ Koristite ga za izradu integracija i programsko upravljanje opencode-om.
 
 ---
 
-## Install
+## Instalacija
 
 Instalirajte SDK sa npm-a:
 
@@ -23,9 +23,9 @@ npm install @opencode-ai/sdk
 
 ---
 
-## Create client
+## Kreiranje klijenta
 
-Kreirajte instancu opencode-a:
+Kreirajte instancu opencode:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -35,7 +35,7 @@ const { client } = await createOpencode()
 
 Ovo pokrece i server i klijent
 
-#### Options
+#### Opcije
 
 | Opcija     | Tip           | Opis                          | Default     |
 | ---------- | ------------- | ----------------------------- | ----------- |
@@ -47,7 +47,7 @@ Ovo pokrece i server i klijent
 
 ---
 
-## Config
+## Konfiguracija
 
 Mozete proslijediti konfiguracijski objekat za prilagodavanje ponasanja. Instanca i dalje ucitava `opencode.json`, ali konfiguraciju mozete nadjacati ili dodati inline:
 
@@ -67,7 +67,7 @@ console.log(`Server running at ${opencode.server.url}`)
 opencode.server.close()
 ```
 
-## Client only
+## Samo klijent
 
 Ako vec imate pokrenutu opencode instancu, mozete napraviti klijentsku instancu i povezati se na nju:
 
@@ -79,7 +79,7 @@ const client = createOpencodeClient({
 })
 ```
 
-#### Options
+#### Opcije
 
 | Opcija          | Tip        | Opis                              | Default                 |
 | --------------- | ---------- | --------------------------------- | ----------------------- |
@@ -91,7 +91,7 @@ const client = createOpencodeClient({
 
 ---
 
-## Types
+## Tipovi
 
 SDK ukljucuje TypeScript definicije za sve API tipove. Uvezite ih direktno:
 
@@ -103,7 +103,7 @@ Svi tipovi su generisani iz OpenAPI specifikacije servera i dostupni u <a href={
 
 ---
 
-## Errors
+## Greške
 
 SDK moze baciti greske koje mozete uhvatiti i obraditi:
 
@@ -117,7 +117,7 @@ try {
 
 ---
 
-## APIs
+## API-ji
 
 SDK izlaže sve server API-je kroz type-safe klijent.
 
@@ -131,7 +131,7 @@ SDK izlaže sve server API-je kroz type-safe klijent.
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 const health = await client.global.health()
@@ -149,7 +149,7 @@ console.log(health.data.version)
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Write a log entry
@@ -176,7 +176,7 @@ const agents = await client.app.agents()
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // List all projects
@@ -196,7 +196,7 @@ const currentProject = await client.project.current()
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Get current path information
@@ -205,7 +205,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-### Config
+### Konfiguracija
 
 | Metoda               | Opis                              | Odgovor                                                                                               |
 | -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -214,7 +214,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 const config = await client.config.get()
@@ -224,9 +224,9 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### Sessions
+### Sesije
 
-| Method                                                     | Description                        | Notes                                                                                                                                          |
+| Metoda                                                     | Opis                               | Napomene                                                                                                                                       |
 | ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
 | `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
@@ -250,7 +250,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Create and manage sessions
@@ -281,9 +281,9 @@ await client.session.prompt({
 
 ---
 
-### Files
+### Datoteke
 
-| Method                    | Description                        | Response                                                                                    |
+| Metoda                    | Opis                               | Odgovor                                                                                     |
 | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
@@ -299,7 +299,7 @@ await client.session.prompt({
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Search and read files
@@ -324,7 +324,7 @@ const content = await client.file.read({
 
 ### TUI
 
-| Method                         | Description               | Response  |
+| Metoda                         | Opis                      | Odgovor   |
 | ------------------------------ | ------------------------- | --------- |
 | `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
 | `tui.openHelp()`               | Open the help dialog      | `boolean` |
@@ -338,7 +338,7 @@ const content = await client.file.read({
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Control TUI interface
@@ -355,13 +355,13 @@ await client.tui.showToast({
 
 ### Auth
 
-| Method              | Description                    | Response  |
+| Metoda              | Opis                           | Odgovor   |
 | ------------------- | ------------------------------ | --------- |
 | `auth.set({ ... })` | Set authentication credentials | `boolean` |
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 await client.auth.set({
@@ -372,15 +372,15 @@ await client.auth.set({
 
 ---
 
-### Events
+### Događaji
 
-| Method              | Description               | Response                  |
+| Metoda              | Opis                      | Odgovor                   |
 | ------------------- | ------------------------- | ------------------------- |
 | `event.subscribe()` | Server-sent events stream | Server-sent events stream |
 
 ---
 
-#### Examples
+#### Primjeri
 
 ```javascript
 // Listen to real-time events

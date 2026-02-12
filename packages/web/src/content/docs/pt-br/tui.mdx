@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Usando a interface de usuário de terminal OpenCode.
+description: Usando a interface de usuário de terminal opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode fornece uma interface de terminal interativa ou TUI para trabalhar em seus projetos com um LLM.
+O opencode fornece uma interface de terminal interativa ou TUI para trabalhar em seus projetos com um LLM.
 
-Executar OpenCode inicia o TUI para o diretório atual.
+Executar opencode inicia o TUI para o diretório atual.
 
 ```bash
 opencode
@@ -16,13 +16,13 @@ opencode
 Ou você pode iniciá-lo para um diretório de trabalho específico.
 
 ```bash
-opencode /caminho/para/projeto
+opencode /path/to/project
 ```
 
 Uma vez que você esteja no TUI, você pode solicitar com uma mensagem.
 
 ```text
-Me dê um resumo rápido da base de código.
+Faça um resumo rápido da base de código.
 ```
 
 ---
@@ -57,7 +57,7 @@ A saída do comando é adicionada à conversa como um resultado de ferramenta.
 
 ## Comandos
 
-Ao usar o TUI do OpenCode, você pode digitar `/` seguido pelo nome de um comando para executar ações rapidamente. Por exemplo:
+Ao usar o TUI do opencode, você pode digitar `/` seguido pelo nome de um comando para executar ações rapidamente. Por exemplo:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Aqui estão todos os comandos de barra disponíveis:
 
 ### connect
 
-Adicione um provedor ao OpenCode. Permite que você selecione entre os provedores disponíveis e adicione suas chaves de API.
+Adicione um provedor ao opencode. Permite que você selecione entre os provedores disponíveis e adicione suas chaves de API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Abra um editor externo para compor mensagens. Usa o editor definido na sua vari�
 
 ### exit
 
-Saia do OpenCode. _Aliases_: `/quit`, `/q`
+Saia do opencode. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -333,7 +333,7 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
 
 As opções de editor populares incluem:
 
-- `code` - Visual Studio Code
+- `code` - VS Code
 - `cursor` - Cursor
 - `windsurf` - Windsurf
 - `nvim` - Editor Neovim
@@ -350,9 +350,9 @@ Alguns editores precisam de argumentos de linha de comando para rodar em modo bl
 
 ---
 
-## Configurar
+## Configuração
 
-Você pode personalizar o comportamento do TUI através do seu arquivo de configuração do OpenCode.
+Você pode personalizar o comportamento do TUI através do seu arquivo de configuração do opencode.
 
 ```json title="opencode.json"
 {

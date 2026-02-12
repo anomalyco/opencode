@@ -17,19 +17,19 @@ Puede cambiar entre modos durante una sesión o configurarlos en su archivo de c
 
 ---
 
-## Incorporado
+## Integrados
 
 opencode viene con dos modos integrados.
 
 ---
 
-### Construir
+### Modo Build
 
 Build es el modo **predeterminado** con todas las herramientas habilitadas. Este es el modo estándar para el trabajo de desarrollo en el que necesita acceso completo a las operaciones de archivos y a los comandos del sistema.
 
 ---
 
-### Plan
+### Modo Plan
 
 Un modo restringido diseñado para la planificación y el análisis. En el modo de plan, las siguientes herramientas están deshabilitadas de forma predeterminada:
 
@@ -42,7 +42,7 @@ Este modo es útil cuando desea que la IA analice código, sugiera cambios o cre
 
 ---
 
-## Cambio
+## Cambiar de modo
 
 Puede cambiar entre modos durante una sesión usando la tecla _Tab_. O su combinación de teclas `switch_mode` configurada.
 
@@ -50,11 +50,11 @@ Consulte también: [Formateadores](/docs/formatters) para obtener información s
 
 ---
 
-## Configurar
+## Configuración
 
 Puede personalizar los modos integrados o crear los suyos propios mediante la configuración. Los modos se pueden configurar de dos maneras:
 
-### JSON Configuración
+### Configuración JSON
 
 Configure los modos en su archivo de configuración `opencode.json`:
 
@@ -83,9 +83,9 @@ Configure los modos en su archivo de configuración `opencode.json`:
 }
 ```
 
-### Configuración de rebajas
+### Configuración de Markdown
 
-También puede definir modos utilizando archivos de rebajas. Colócalos en:
+También puede definir modos utilizando archivos de Markdown. Colócalos en:
 
 - Global: `~/.config/opencode/modes/`
 - Proyecto: `.opencode/modes/`
@@ -110,7 +110,7 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-El nombre del archivo de rebajas se convierte en el nombre del modo (por ejemplo, `review.md` crea un modo `review`).
+El nombre del archivo de Markdown se convierte en el nombre del modo (por ejemplo, `review.md` crea un modo `review`).
 
 Veamos estas opciones de configuración en detalle.
 
@@ -177,7 +177,7 @@ Si no se especifica ninguna temperatura, opencode utiliza valores predeterminado
 
 ---
 
-### Inmediato
+### Indicación
 
 Especifique un archivo de aviso del sistema personalizado para este modo con la configuración `prompt`. El archivo de aviso debe contener instrucciones específicas para el propósito del modo.
 
@@ -266,7 +266,7 @@ Puede crear sus propios modos personalizados agregándolos a la configuración. 
 }
 ```
 
-### Usando archivos de rebajas
+### Usando archivos de Markdown
 
 Cree archivos de modo en `.opencode/modes/` para modos específicos del proyecto o `~/.config/opencode/modes/` para modos globales:
 
@@ -322,10 +322,10 @@ Priorities:
 
 A continuación se muestran algunos casos de uso comunes para diferentes modos.
 
-- **Modo de compilación**: trabajo de desarrollo completo con todas las herramientas habilitadas
-- **Modo Planificación**: Análisis y planificación sin realizar cambios
-- **Modo de revisión**: revisión de código con acceso de solo lectura más herramientas de documentación
-- **Modo de depuración**: centrado en la investigación con bash y herramientas de lectura habilitadas
-- **Modo Documentos**: escritura de documentación con operaciones de archivos pero sin comandos del sistema
+- **Modo Build**: trabajo de desarrollo completo con todas las herramientas habilitadas
+- **Modo Plan**: Análisis y planificación sin realizar cambios
+- **Modo Review**: revisión de código con acceso de solo lectura más herramientas de documentación
+- **Modo Debug**: centrado en la investigación con bash y herramientas de lectura habilitadas
+- **Modo Docs**: escritura de documentacion con operaciones de archivos pero sin comandos del sistema
 
 También puede encontrar que diferentes modelos son buenos para diferentes casos de uso.

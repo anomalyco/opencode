@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Użyj OpenCode w problemach z GitHubem i zastosujch ściągnięcia.
+description: Użyj opencode w problemach z GitHubem i zastosujch ściągnięcia.
 ---
 
-OpenCode integruje się z przepływem pracy w GitHub. Wspomnij o `/opencode` lub `/oc` w swoim komentarzu, a OpenCode wykonaj zadania w ramach modułu uruchamiającego GitHub Actions.
+opencode integruje się z przepływem pracy w GitHub. Wspomnij o `/opencode` lub `/oc` w swoim komentarzu, a opencode wykonaj zadania w ramach modułu uruchamiającego GitHub Actions.
 
 ---
 
 ## Cechy
 
-- **Problem związany z segregacją**: Poproś OpenCode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
-- **Napraw i zaimplementuj**: Poproś OpenCode o naprawienie problemu lub zaimplementowanie funkcji. Będzie dostępny w następnym oddziale i wysyłać PR ze stosowaniem dodatku.
-- **Bezpieczny**: OpenCode działa w modułach sprzętowych GitHuba.
+- **Problem związany z segregacją**: Poproś opencode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
+- **Napraw i zaimplementuj**: Poproś opencode o naprawienie problemu lub zaimplementowanie funkcji. Będzie dostępny w następnym oddziale i wysyłać PR ze stosowaniem dodatku.
+- **Bezpieczny**: opencode działa w modułach sprzętowych GitHuba.
 
 ---
 
@@ -81,13 +81,13 @@ Można też uszkodzić to rozwiązanie.
 
 ## Konfiguracja
 
-- `model`: Model używany z OpenCode. Przyjmuje format `provider/model`. To **wymagane**.
+- `model`: Model używany z opencode. Przyjmuje format `provider/model`. To **wymagane**.
 - `agent`: Agent, którego należy używać. Musi być odległym agentem. Wraca do `default_agent` z konfiguracją lub `"build"`, jeśli nie został znaleziony.
-- `share`: Czyć funkcję sesji OpenCode. Domyślnie **true** dla repozytoriów publicznych.
-- `prompt`: Opcjonalny niestandardowy monit o zastąpienie przestrzegania zachowania. Wykorzystanie tego, aby dostosować sposób przetwarzania przez OpenCode.
-- `token`: opcjonalny token dostępu GitHub podstawowe operacje, takie jak tworzenie komentarzy, zatwierdzanie zmian i otwieranie zastosowania ściągnięcia. Domyślnie OpenCode używa tokena dostępu do instalacji z aplikacji OpenCode GitHub, więc zatwierdzenia, komentarze i zasady ściągnięcia widoczne jako źródło z aplikacji.
+- `share`: Czyć funkcję sesji opencode. Domyślnie **true** dla repozytoriów publicznych.
+- `prompt`: Opcjonalny niestandardowy monit o zastąpienie przestrzegania zachowania. Wykorzystanie tego, aby dostosować sposób przetwarzania przez opencode.
+- `token`: opcjonalny token dostępu GitHub podstawowe operacje, takie jak tworzenie komentarzy, zatwierdzanie zmian i otwieranie zastosowania ściągnięcia. Domyślnie opencode używa tokena dostępu do instalacji z aplikacji opencode GitHub, więc zatwierdzenia, komentarze i zasady ściągnięcia widoczne jako źródło z aplikacji.
 
-  Alternatywnie możesz użyć [wbudowanego `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) modułu uruchamiającego GitHub Action bez instalacji aplikacji OpenCode GitHub. Pamiętaj tylko o przyznaniu wymaganych mocy w przepływie pracy:
+  Alternatywnie możesz użyć [wbudowanego `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) modułu uruchamiającego GitHub Action bez instalacji aplikacji opencode GitHub. Pamiętaj tylko o przyznaniu wymaganych mocy w przepływie pracy:
 
   ```yaml
   permissions:
@@ -103,20 +103,20 @@ Można też uszkodzić to rozwiązanie.
 
 ## Obsługiwane wydarzenia
 
-OpenCode może zostać wywołany przez zdarzenie GitHub:
+opencode może zostać wywołany przez zdarzenie GitHub:
 
 | Typ zdarzenia                 | Wywołane przez                                   | Szczegóły                                                                                                                                             |
 | ----------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Skomentuj problem lub PR                         | Wspomnij o `/opencode` lub `/oc` w swoim komentarzu. OpenCode odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną.  |
-| `pull_request_review_comment` | Komentarz określonym kodem w PR                  | Wspomnij o `/opencode` lub `/oc` podczas przeglądania kodu. OpenCode źródło pochodzenia, numery linii i kontekst różnicowy.                           |
-| `issues`                      | Wydanie otwarte lub edytowane                    | Automatycznie wyzwalaj OpenCode po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                                                  |
-| `pull_request`                | PR otwarty lub zaktualizowany                    | Automatycznie wyzwalaj OpenCode, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.         |
-| `schedule`                    | Harmonogram oparty na Cron                       | Uruchom OpenCode zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją). |
-| `workflow_dispatch`           | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom OpenCode na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                                    |
+| `issue_comment`               | Skomentuj problem lub PR                         | Wspomnij o `/opencode` lub `/oc` w swoim komentarzu. opencode odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną.  |
+| `pull_request_review_comment` | Komentarz określonym kodem w PR                  | Wspomnij o `/opencode` lub `/oc` podczas przeglądania kodu. opencode źródło pochodzenia, numery linii i kontekst różnicowy.                           |
+| `issues`                      | Wydanie otwarte lub edytowane                    | Automatycznie wyzwalaj opencode po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                                                  |
+| `pull_request`                | PR otwarty lub zaktualizowany                    | Automatycznie wyzwalaj opencode, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.         |
+| `schedule`                    | Harmonogram oparty na Cron                       | Uruchom opencode zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją). |
+| `workflow_dispatch`           | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom opencode na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                                    |
 
 ### Przykład harmonogramu
 
-Uruchamiaj OpenCode zgodnie z harmonogramem, aby wykonać zautomatyzowane zadania:
+Uruchamiaj opencode zgodnie z harmonogramem, aby wykonać zautomatyzowane zadania:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-W przypadku wystąpienia danych wyjściowych `prompt` są **wymagane**, które nie są dostarczane, z których można wyodrębnić instrukcje. Zaplanowane przepływomierze pracy bez kontekstu użytkownika, który został uruchomiony, więc przepływ pracy musi `contents: write` i `pull-requests: write`, wystąpisz, że OpenCode utworzył główne lub PR.
+W przypadku wystąpienia danych wyjściowych `prompt` są **wymagane**, które nie są dostarczane, z których można wyodrębnić instrukcje. Zaplanowane przepływomierze pracy bez kontekstu użytkownika, który został uruchomiony, więc przepływ pracy musi `contents: write` i `pull-requests: write`, wystąpisz, że opencode utworzył główne lub PR.
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-W przypadku zdarzenia `pull_request`, jeśli nie podano `prompt`, OpenCode użytkownika przeglądającego ściągnięcie.
+W przypadku zdarzenia `pull_request`, jeśli nie podano `prompt`, opencode użytkownika przeglądającego ściągnięcie.
 
 ---
 
@@ -252,7 +252,7 @@ W przypadku zdarzenia `issues` wprowadzenie `prompt` jest **wymagane**, poniewa�
 
 ## Niestandardowe monity
 
-Zastąp domyślne monit, aby zastosować zachowanie OpenCode do twojego własnego pracy.
+Zastąp domyślne monit, aby zastosować zachowanie opencode do twojego własnego pracy.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ Jest to przepis wykonawczy, który podlega przepisom kodowania lub zakresów tem
 
 ## Przykłady
 
-Oto kilka możliwości wykorzystania OpenCode w GitHubie.
+Oto kilka możliwości wykorzystania opencode w GitHubie.
 
 - **Wyjaśnij problem**
 
@@ -281,7 +281,7 @@ Oto kilka możliwości wykorzystania OpenCode w GitHubie.
   /opencode explain this issue
   ```
 
-  OpenCode przeczytaj całość, zawierając dodatek z komentarzami i odpowiedzią z jasnym wyjaśnieniem.
+  opencode przeczytaj całość, zawierając dodatek z komentarzami i odpowiedzią z jasnym wyjaśnieniem.
 
 - **Napraw problem**
 
@@ -291,7 +291,7 @@ Oto kilka możliwości wykorzystania OpenCode w GitHubie.
   /opencode fix this
   ```
 
-  A OpenCode utworzy nową podstawę, wdroży zmiany i zastąpi PR ze zmiany.
+  A opencode utworzy nową podstawę, wdroży zmiany i zastąpi PR ze zmiany.
 
 - **Przegląd zmiany PR i wprowadzenie zmiany**
 
@@ -301,18 +301,18 @@ Oto kilka możliwości wykorzystania OpenCode w GitHubie.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  OpenCode zaimplementuje uruchomioną zmianę i zatwierdzi ją do tego samego PR.
+  opencode zaimplementuje uruchomioną zmianę i zatwierdzi ją do tego samego PR.
 
 - **Przejrzyj konkretne linie kodu**
 
-  Zostaw komentarz bezpośrednio w wierszu kodu w dodatku „Pliki” PR. OpenCode automatyczne wykrywanie pliku, numery linii i kontekst różnicowy, aby sprawdzić odpowiedzi.
+  Zostaw komentarz bezpośrednio w wierszu kodu w dodatku „Pliki” PR. opencode automatyczne wykrywanie pliku, numery linii i kontekst różnicowy, aby sprawdzić odpowiedzi.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  Komentując określone linie, OpenCode otrzymuje:
+  Komentując określone linie, opencode otrzymuje:
   - Dokładny plik, który jest sprawdzany
   - Konkretne linie kodu
   - Otaczający kontekst różnicowy

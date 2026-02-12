@@ -1,5 +1,5 @@
 ---
-title: LSP Servidores
+title: Servidores LSP
 description: OpenCode se integra con sus servidores LSP.
 ---
 
@@ -7,42 +7,42 @@ OpenCode se integra con su protocolo de servidor de idiomas (LSP) para ayudar a 
 
 ---
 
-## Incorporado
+## Incorporados
 
 OpenCode viene con varios servidores LSP integrados para idiomas populares:
 
-| LSP Servidor       | Extensiones                                                         | Requisitos                                                               |
+| Servidor LSP       | Extensiones                                                         | Requisitos                                                               |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | astro              | .astro                                                              | Autoinstalaciones para proyectos Astro                                   |
-| fiesta             | .sh, .bash, .zsh, .ksh                                              | Autoinstala el servidor en lenguaje bash                                 |
-| sonido metálico    | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Instalaciones automáticas para proyectos C/C++                           |
-| csostenido         | .cs                                                                 | `.NET SDK` instalado                                                     |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Autoinstala el servidor en lenguaje bash                                 |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Instalaciones automáticas para proyectos C/C++                           |
+| csharp             | .cs                                                                 | `.NET SDK` instalado                                                     |
 | clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | Comando `clojure-lsp` disponible                                         |
-| dardo              | .dardo                                                              | Comando `dart` disponible                                                |
+| dart               | .dart                                                               | Comando `dart` disponible                                                |
 | deno               | .ts, .tsx, .js, .jsx, .mjs                                          | Comando `deno` disponible (detecta automáticamente deno.json/deno.jsonc) |
 | elixir-ls          | .ex, .exs                                                           | Comando `elixir` disponible                                              |
 | eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependencia en proyecto                                         |
-| f sostenido        | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` instalado                                                     |
-| brillo             | .brillo                                                             | Comando `gleam` disponible                                               |
-| gopls              | .ir                                                                 | Comando `go` disponible                                                  |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` instalado                                                     |
+| gleam              | .gleam                                                              | Comando `gleam` disponible                                               |
+| gopls              | .go                                                                 | Comando `go` disponible                                                  |
 | hls                | .hs, .lhs                                                           | Comando `haskell-language-server-wrapper` disponible                     |
 | jdtls              | .java                                                               | `Java SDK (version 21+)` instalado                                       |
 | kotlin-ls          | .kt, .kts                                                           | Autoinstalaciones para proyectos Kotlin                                  |
 | lua-ls             | .lua                                                                | Autoinstalaciones para proyectos Lua                                     |
-| nada               | .nix                                                                | Comando `nixd` disponible                                                |
+| nixd               | .nix                                                                | Comando `nixd` disponible                                                |
 | ocaml-lsp          | .ml, .mli                                                           | Comando `ocamllsp` disponible                                            |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependencia en proyecto                                         |
-| php intelefense    | .php                                                                | Autoinstalaciones para proyectos PHP                                     |
+| php intelephense   | .php                                                                | Autoinstalaciones para proyectos PHP                                     |
 | prisma             | .prisma                                                             | Comando `prisma` disponible                                              |
-| derechos de autor  | .py, .pyi                                                           | Dependencia `pyright` instalada                                          |
-| rubí-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Comandos `ruby` y `gem` disponibles                                      |
-| óxido              | .rs                                                                 | Comando `rust-analyzer` disponible                                       |
-| kit de fuente-lsp  | .swift, .objc, .objcpp                                              | `swift` instalado (`xcode` en macOS)                                     |
-| esbelto            | .esbelto                                                            | Autoinstalaciones para proyectos Svelte                                  |
-| terraformar        | .tf, .tfvars                                                        | Instalaciones automáticas desde versiones GitHub                         |
-| diminuto           | .tipo, .tipo                                                        | Instalaciones automáticas desde versiones GitHub                         |
-| mecanografiado     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependencia en proyecto                                     |
-| vista              | .vue                                                                | Autoinstalaciones para proyectos Vue                                     |
+| pyright            | .py, .pyi                                                           | Dependencia `pyright` instalada                                          |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Comandos `ruby` y `gem` disponibles                                      |
+| rust               | .rs                                                                 | Comando `rust-analyzer` disponible                                       |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` instalado (`xcode` en macOS)                                     |
+| svelte             | .svelte                                                             | Autoinstalaciones para proyectos Svelte                                  |
+| terraform          | .tf, .tfvars                                                        | Instalaciones automáticas desde versiones GitHub                         |
+| tinymist           | .typ, .typc                                                         | Instalaciones automáticas desde versiones GitHub                         |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependencia en proyecto                                     |
+| vue                | .vue                                                                | Autoinstalaciones para proyectos Vue                                     |
 | yaml-ls            | .yaml, .yml                                                         | Autoinstala Red Hat yaml-language-server                                 |
 | zls                | .zig, .zon                                                          | Comando `zig` disponible                                                 |
 
@@ -56,14 +56,14 @@ Puede deshabilitar las descargas automáticas del servidor LSP configurando la v
 
 ## Cómo funciona
 
-Cuando opencode abre un archivo,:
+Cuando opencode abre un archivo:
 
 1. Comprueba la extensión del archivo con todos los servidores LSP habilitados.
 2. Inicia el servidor LSP apropiado si aún no se está ejecutando.
 
 ---
 
-## Configurar
+## Configuración
 
 Puede personalizar los servidores LSP a través de la sección `lsp` en su configuración opencode.
 
@@ -178,11 +178,11 @@ Puede agregar servidores LSP personalizados especificando el comando y las exten
 
 ## Información adicional
 
-### PHP Intelefense
+### PHP Intelephense
 
 PHP Intelephense ofrece funciones premium a través de una clave de licencia. Puede proporcionar una clave de licencia colocando (únicamente) la clave en un archivo de texto en:
 
-- El macOS/Linux: `$HOME/intelephense/licence.txt`
-- El Windows: `%USERPROFILE%/intelephense/licence.txt`
+- En macOS/Linux: `$HOME/intelephense/license.txt`
+- En Windows: `%USERPROFILE%/intelephense/license.txt`
 
 El archivo debe contener sólo la clave de licencia sin contenido adicional.

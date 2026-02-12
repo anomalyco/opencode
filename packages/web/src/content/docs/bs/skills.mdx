@@ -1,9 +1,9 @@
 ---
-title: "Skills agenata"
+title: Vještine agenata
 description: "Definisite ponasanje koje se moze ponovo koristiti"
 ---
 
-Agent skills omogucavaju OpenCode-u da pronade uputstva koja se mogu ponovo koristiti iz repozitorija ili home direktorija.
+Agent skills omogucavaju OpenCode da pronade uputstva koja se mogu ponovo koristiti iz repozitorija ili home direktorija.
 Skills se ucitavaju po potrebi kroz ugradeni `skill` alat - agenti vide dostupne skills i ucitavaju puni sadrzaj kad zatreba.
 
 ---
@@ -31,7 +31,7 @@ Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.m
 
 ---
 
-## Napisite frontmatter
+## Pisanje frontmatter-a
 
 Svaki `SKILL.md` mora poceti YAML frontmatter-om.
 Prepoznaju se samo ova polja:
@@ -64,14 +64,14 @@ Ekvivalentni regex:
 
 ---
 
-## Pratite pravila duzine
+## Pravila dužine
 
 `description` mora imati 1-1024 karaktera.
 Neka bude dovoljno precizan da agent moze pravilno odabrati.
 
 ---
 
-## Koristite primjer
+## Primjer
 
 Kreirajte `.opencode/skills/git-release/SKILL.md` ovako:
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Prepoznajte opis alata
+## Opis alata
 
 OpenCode navodi dostupne skills u opisu `skill` alata.
 Svaki unos sadrzi naziv i opis skill-a:
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## Konfigurisite dozvole
+## Konfiguracija dozvola
 
 Kontrolisite kojim skills agenti mogu pristupiti pomocu dozvola baziranih na obrascima u `opencode.json`:
 
@@ -149,7 +149,7 @@ Obrasci podrzavaju wildcard znakove: `internal-*` poklapa `internal-docs`, `inte
 
 ---
 
-## Nadjacajte po agentu
+## Nadjačavanje po agentu
 
 Dajte odredenim agentima drugacije dozvole od globalnih defaulta.
 
@@ -181,7 +181,7 @@ permission:
 
 ---
 
-## Iskljucite skill alat
+## Isključivanje skill alata
 
 Potpuno iskljucite skills za agente koji ih ne bi trebali koristiti:
 
@@ -212,7 +212,7 @@ Kada je iskljuceno, sekcija `<available_skills>` se potpuno izostavlja.
 
 ---
 
-## Rjesavanje problema s ucitavanjem
+## Rješavanje problema s učitavanjem
 
 Ako se skill ne pojavi:
 

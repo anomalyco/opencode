@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 OpenCode pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
 
-Pokretanje OpenCode-a pokreće TUI za trenutni direktorij.
+Pokretanje OpenCode pokreće TUI za trenutni direktorij.
 
 ```bash
 opencode
@@ -27,7 +27,7 @@ Give me a quick summary of the codebase.
 
 ---
 
-## Reference fajlova
+## Reference datoteka
 
 Možete referencirati datoteke u svojim porukama koristeći `@`. Ovo vrši nejasnu pretragu datoteka u trenutnom radnom direktoriju.
 
@@ -43,7 +43,7 @@ Sadržaj datoteke se automatski dodaje u razgovor.
 
 ---
 
-## Bash komande
+## Bash naredbe
 
 Započnite poruku sa `!` da pokrenete komandu ljuske.
 
@@ -55,7 +55,7 @@ Izlaz naredbe se dodaje u razgovor kao rezultat alata.
 
 ---
 
-## Komande
+## Naredbe
 
 Kada koristite OpenCode TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
 
@@ -117,7 +117,7 @@ Otvorite vanjski uređivač za sastavljanje poruka. Koristi editor postavljen u 
 
 ### exit
 
-Izađite iz OpenCode-a. _Aliases_: `/quit`, `/q`
+Izađite iz OpenCode. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -292,7 +292,7 @@ Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabl
 <Tabs>
   <TabItem label="Linux/macOS">
 
-```bash
+    ```bash
     # Example for nano or vim
     export EDITOR=nano
     export EDITOR=vim
@@ -300,9 +300,7 @@ Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabl
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
     export EDITOR="code --wait"
-
-
-```
+    ```
 
     Da biste ga učinili trajnim, dodajte ovo u svoj shell profil;
     `~/.bashrc`, `~/.zshrc`, itd.
@@ -311,15 +309,13 @@ Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabl
 
   <TabItem label="Windows (CMD)">
 
-```bash
+    ```bash
     set EDITOR=notepad
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
     set EDITOR=code --wait
-
-
-```
+    ```
 
     Da biste ga učinili trajnim, koristite **Svojstva sistema** > **Okruženje
     Varijable**.
@@ -328,15 +324,13 @@ Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabl
 
   <TabItem label="Windows (PowerShell)">
 
-```powershell
+    ```powershell
     $env:EDITOR = "notepad"
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
     $env:EDITOR = "code --wait"
-
-
-```
+    ```
 
     Da biste ga učinili trajnim, dodajte ovo u svoj PowerShell profil.
 
@@ -346,13 +340,13 @@ Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabl
 Popularne opcije uređivača uključuju:
 
 - `code` - ​​Visual Studio Code
-- `cursor` - ​​Kursor
-- `windsurf` - ​​jedrenje na dasci
+- `cursor` - ​​Cursor
+- `windsurf` - ​​Windsurf
 - `nvim` - ​​Neovim editorom
 - `vim` - ​​Vim editor
 - `nano` - ​​Nano editor
 - `notepad` - ​​Windows Notepad
-- `subl` - ​​Uzvišeni tekst
+- `subl` - ​​Sublime Text
 
 :::note
 Neki uređivači kao što je VS Code moraju biti pokrenuti sa `--wait` zastavicom.
@@ -362,7 +356,7 @@ Nekim uređivačima su potrebni argumenti komandne linije da bi se pokrenuli u n
 
 ---
 
-## Konfiguriši
+## Konfiguracija
 
 Možete prilagoditi TUI ponašanje putem vašeg OpenCode konfiguracionog fajla.
 
