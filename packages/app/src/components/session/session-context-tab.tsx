@@ -168,34 +168,27 @@ export function SessionContextTab(props: SessionContextTabProps) {
     return language.t("context.breakdown.other")
   }
 
-  const stats = createMemo(() => {
-    const c = ctx()
-    const count = counts()
-    return [
-      { label: language.t("context.stats.session"), value: props.info()?.title ?? params.id ?? "—" },
-      { label: language.t("context.stats.messages"), value: count.all.toLocaleString(language.locale()) },
-      { label: language.t("context.stats.provider"), value: providerLabel() },
-      { label: language.t("context.stats.model"), value: modelLabel() },
-      { label: language.t("context.stats.limit"), value: formatter().number(c?.limit) },
-      { label: language.t("context.stats.totalTokens"), value: formatter().number(c?.total) },
-      { label: language.t("context.stats.usage"), value: formatter().percent(c?.usage) },
-      { label: language.t("context.stats.inputTokens"), value: formatter().number(c?.input) },
-      { label: language.t("context.stats.outputTokens"), value: formatter().number(c?.output) },
-      { label: language.t("context.stats.reasoningTokens"), value: formatter().number(c?.reasoning) },
-      {
-        label: language.t("context.stats.cacheTokens"),
-        value: `${formatter().number(c?.cacheRead)} / ${formatter().number(c?.cacheWrite)}`,
-      },
-      { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString(language.locale()) },
-      {
-        label: language.t("context.stats.assistantMessages"),
-        value: count.assistant.toLocaleString(language.locale()),
-      },
-      { label: language.t("context.stats.totalCost"), value: cost() },
-      { label: language.t("context.stats.sessionCreated"), value: formatter().time(props.info()?.time.created) },
-      { label: language.t("context.stats.lastActivity"), value: formatter().time(c?.message.time.created) },
-    ] satisfies { label: string; value: JSX.Element }[]
-  })
+  const stats = [
+    { label: "context.stats.session", value: () => props.info()?.title ?? params.id ?? "—" },
+    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.locale()) },
+    { label: "context.stats.provider", value: providerLabel },
+    { label: "context.stats.model", value: modelLabel },
+    { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
+    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
+    { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
+    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
+    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.output) },
+    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.reasoning) },
+    {
+      label: "context.stats.cacheTokens",
+      value: () => `${formatter().number(ctx()?.cacheRead)} / ${formatter().number(ctx()?.cacheWrite)}`,
+    },
+    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.locale()) },
+    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.locale()) },
+    { label: "context.stats.totalCost", value: cost },
+    { label: "context.stats.sessionCreated", value: () => formatter().time(props.info()?.time.created) },
+    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+  ] satisfies { label: string; value: () => JSX.Element }[]
 
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
@@ -257,7 +250,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
     >
       <div class="px-6 pt-4 flex flex-col gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
-          <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
+          <For each={stats}>
+            {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
+          </For>
         </div>
 
         <Show when={breakdown().length > 0}>

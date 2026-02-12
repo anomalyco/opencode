@@ -101,11 +101,15 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     const all = store.all
     const index = all.findIndex((x) => x.id === id)
     if (index === -1) return
-    const filtered = all.filter((x) => x.id !== id)
-    const active = store.active === id ? filtered[0]?.id : store.active
+    const active = store.active === id ? (index === 0 ? all[1]?.id : all[0]?.id) : store.active
     batch(() => {
-      setStore("all", filtered)
       setStore("active", active)
+      setStore(
+        "all",
+        produce((draft) => {
+          draft.splice(index, 1)
+        }),
+      )
     })
   }
 
@@ -157,10 +161,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
             title: pty.data?.title ?? "Terminal",
             titleNumber: nextNumber,
           }
-          setStore("all", (all) => {
-            const newAll = [...all, newTerminal]
-            return newAll
-          })
+          setStore("all", store.all.length, newTerminal)
           setStore("active", id)
         })
         .catch((error: unknown) => {
@@ -168,8 +169,11 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
-      const previous = store.all.find((x) => x.id === pty.id)
-      if (previous) setStore("all", (all) => all.map((item) => (item.id === pty.id ? { ...item, ...pty } : item)))
+      const index = store.all.findIndex((x) => x.id === pty.id)
+      const previous = index >= 0 ? store.all[index] : undefined
+      if (index >= 0) {
+        setStore("all", index, (item) => ({ ...item, ...pty }))
+      }
       sdk.client.pty
         .update({
           ptyID: pty.id,
@@ -178,7 +182,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         })
         .catch((error: unknown) => {
           if (previous) {
-            setStore("all", (all) => all.map((item) => (item.id === pty.id ? previous : item)))
+            const currentIndex = store.all.findIndex((item) => item.id === pty.id)
+            if (currentIndex >= 0) setStore("all", currentIndex, previous)
           }
           console.error("Failed to update terminal", error)
         })
@@ -232,15 +237,21 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       setStore("active", store.all[prevIndex]?.id)
     },
     async close(id: string) {
-      batch(() => {
-        const filtered = store.all.filter((x) => x.id !== id)
-        if (store.active === id) {
-          const index = store.all.findIndex((f) => f.id === id)
-          const next = index > 0 ? index - 1 : 0
-          setStore("active", filtered[next]?.id)
-        }
-        setStore("all", filtered)
-      })
+      const index = store.all.findIndex((f) => f.id === id)
+      if (index !== -1) {
+        batch(() => {
+          if (store.active === id) {
+            const next = index > 0 ? store.all[index - 1]?.id : store.all[1]?.id
+            setStore("active", next)
+          }
+          setStore(
+            "all",
+            produce((all) => {
+              all.splice(index, 1)
+            }),
+          )
+        })
+      }
 
       await sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
         console.error("Failed to close terminal", error)

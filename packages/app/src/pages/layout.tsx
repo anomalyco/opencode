@@ -124,7 +124,7 @@ export default function Layout(props: ParentProps) {
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
-    busyWorkspaces: new Set<string>(),
+    busyWorkspaces: {} as Record<string, boolean>,
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -134,14 +134,18 @@ export default function Layout(props: ParentProps) {
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = workspaceKey(directory)
-    setState("busyWorkspaces", (prev) => {
-      const next = new Set(prev)
-      if (value) next.add(key)
-      else next.delete(key)
-      return next
-    })
+    if (value) {
+      setState("busyWorkspaces", key, true)
+      return
+    }
+    setState(
+      "busyWorkspaces",
+      produce((draft) => {
+        delete draft[key]
+      }),
+    )
   }
-  const isBusy = (directory: string) => state.busyWorkspaces.has(workspaceKey(directory))
+  const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
 
   const aim = createAim({
@@ -518,10 +522,10 @@ export default function Layout(props: ParentProps) {
 
   const setWorkspaceName = (directory: string, next: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
-    setStore("workspaceName", (prev) => ({ ...(prev ?? {}), [key]: next }))
+    setStore("workspaceName", key, next)
     if (!projectId) return
     if (!branch) return
-    setStore("workspaceBranchName", projectId, (prev) => ({ ...(prev ?? {}), [branch]: next }))
+    setStore("workspaceBranchName", projectId, branch, next)
   }
 
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>

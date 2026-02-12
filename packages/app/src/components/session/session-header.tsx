@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -404,23 +404,25 @@ export function SessionHeader() {
                                     setPrefs("app", value as OpenApp)
                                   }}
                                 >
-                                  {options().map((o) => (
-                                    <DropdownMenu.RadioItem
-                                      value={o.id}
-                                      onSelect={() => {
-                                        setMenu("open", false)
-                                        openDir(o.id)
-                                      }}
-                                    >
-                                      <div class="flex size-5 shrink-0 items-center justify-center">
-                                        <AppIcon id={o.icon} class={openIconSize(o.icon)} />
-                                      </div>
-                                      <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                      <DropdownMenu.ItemIndicator>
-                                        <Icon name="check-small" size="small" class="text-icon-weak" />
-                                      </DropdownMenu.ItemIndicator>
-                                    </DropdownMenu.RadioItem>
-                                  ))}
+                                  <For each={options()}>
+                                    {(o) => (
+                                      <DropdownMenu.RadioItem
+                                        value={o.id}
+                                        onSelect={() => {
+                                          setMenu("open", false)
+                                          openDir(o.id)
+                                        }}
+                                      >
+                                        <div class="flex size-5 shrink-0 items-center justify-center">
+                                          <AppIcon id={o.icon} class={openIconSize(o.icon)} />
+                                        </div>
+                                        <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
+                                        <DropdownMenu.ItemIndicator>
+                                          <Icon name="check-small" size="small" class="text-icon-weak" />
+                                        </DropdownMenu.ItemIndicator>
+                                      </DropdownMenu.RadioItem>
+                                    )}
+                                  </For>
                                 </DropdownMenu.RadioGroup>
                               </DropdownMenu.Group>
                               <DropdownMenu.Separator />
