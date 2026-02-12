@@ -40,6 +40,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
+import { extractPromptFromParts } from "@/utils/prompt"
 import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
@@ -306,6 +307,12 @@ export default function Page() {
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const visibleMessages = createMemo(() => {
+    const all = messages()
+    const revert = revertMessageID()
+    if (!revert) return all
+    return all.filter((m) => m.id < revert)
+  })
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -1650,6 +1657,15 @@ export default function Page() {
                     lastUserMessageID={lastUserMessage()?.id}
                     expanded={store.expanded}
                     onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
+                    onEdit={async (messageID) => {
+                      const parts = sync.data.part[messageID]
+                      if (parts) {
+                        const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+                        prompt.set(restored)
+                        prompt.setEditingID(messageID)
+                        focusInput()
+                      }
+                    }}
                   />
                 </Show>
               </Match>
@@ -1729,7 +1745,7 @@ export default function Page() {
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
           vm={{
-            messages,
+            messages: visibleMessages,
             visibleUserMessages,
             view,
             info,

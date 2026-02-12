@@ -500,6 +500,7 @@ export const dict = {
   "common.delete": "削除",
   "common.close": "閉じる",
   "common.edit": "編集",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "さらに読み込む",
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "メニューを切り替え",

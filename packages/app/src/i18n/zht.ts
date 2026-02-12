@@ -553,6 +553,7 @@ export const dict = {
   "common.delete": "刪除",
   "common.close": "關閉",
   "common.edit": "編輯",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "載入更多",
 
   "common.key.esc": "ESC",

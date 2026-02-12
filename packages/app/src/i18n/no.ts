@@ -565,6 +565,7 @@ export const dict = {
   "common.delete": "Slett",
   "common.close": "Lukk",
   "common.edit": "Rediger",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "Last flere",
   "common.key.esc": "ESC",
 

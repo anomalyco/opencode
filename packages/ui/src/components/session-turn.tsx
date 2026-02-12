@@ -191,6 +191,7 @@ export function SessionTurn(
     lastUserMessageID?: string
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
+    onEdit?: (messageID: string) => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -626,13 +627,13 @@ export function SessionTurn(
                   <Match when={true}>
                     <Show when={attachmentParts().length > 0}>
                       <div data-slot="session-turn-attachments" aria-live="off">
-                        <Message message={msg()} parts={attachmentParts()} />
+                        <Message message={msg()} parts={attachmentParts()} onEdit={props.onEdit} />
                       </div>
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message message={msg()} parts={stickyParts()} />
+                        <Message message={msg()} parts={stickyParts()} onEdit={props.onEdit} />
                       </div>
 
                       {/* Trigger (sticky) */}

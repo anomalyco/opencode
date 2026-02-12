@@ -557,6 +557,7 @@ export const dict = {
   "common.delete": "ลบ",
   "common.close": "ปิด",
   "common.edit": "แก้ไข",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "โหลดเพิ่มเติม",
   "common.key.esc": "ESC",
 

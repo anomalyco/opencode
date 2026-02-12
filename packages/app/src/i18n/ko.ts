@@ -501,6 +501,7 @@ export const dict = {
   "common.delete": "삭제",
   "common.close": "닫기",
   "common.edit": "편집",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "더 불러오기",
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "메뉴 토글",

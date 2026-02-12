@@ -496,6 +496,7 @@ export const dict = {
   "common.delete": "حذف",
   "common.close": "إغلاق",
   "common.edit": "تحرير",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "تحميل المزيد",
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "تبديل القائمة",

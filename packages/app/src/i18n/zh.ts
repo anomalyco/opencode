@@ -555,6 +555,7 @@ export const dict = {
   "common.delete": "删除",
   "common.close": "关闭",
   "common.edit": "编辑",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "加载更多",
   "common.key.esc": "ESC",
 

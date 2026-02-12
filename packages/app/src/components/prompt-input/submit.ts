@@ -37,6 +37,8 @@ type PromptSubmitInput = {
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
+  editingID: Accessor<string | undefined>
+  setEditingID: (id: string | undefined) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
@@ -130,6 +132,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: language.t("prompt.toast.modelAgentRequired.description"),
       })
       return
+    }
+
+    const editingID = input.editingID()
+    const sessionID = params.id
+
+    if (editingID && sessionID) {
+      if (input.working()) {
+        await sdk.client.session.abort({ sessionID }).catch(() => {})
+      }
+      await sdk.client.session.revert({ sessionID, messageID: editingID })
+      input.setEditingID(undefined)
     }
 
     input.addToHistory(currentPrompt, mode)

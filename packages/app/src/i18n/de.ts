@@ -510,6 +510,7 @@ export const dict = {
   "common.delete": "Löschen",
   "common.close": "Schließen",
   "common.edit": "Bearbeiten",
+  "ui.common.edit.message": "Editing message",
   "common.loadMore": "Mehr laden",
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "Menü umschalten",

@@ -2,9 +2,11 @@ import { For, Show } from "solid-js"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { BasicTool } from "@opencode-ai/ui/basic-tool"
+import { Icon } from "@opencode-ai/ui/icon"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
+import { usePrompt } from "@/context/prompt"
 
 export function SessionPromptDock(props: {
   centered: boolean
@@ -22,6 +24,8 @@ export function SessionPromptDock(props: {
   onSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
+  const prompt = usePrompt()
+
   return (
     <div
       ref={props.setPromptDockRef}
@@ -122,6 +126,22 @@ export function SessionPromptDock(props: {
               </div>
             }
           >
+            <Show when={prompt.editingID()}>
+              <div class="flex items-center justify-between bg-surface-base border border-border-base rounded-t-lg px-4 py-2 border-b-0 -mb-1">
+                <div class="flex items-center gap-2 text-12-medium text-text-weak">
+                  <Icon name="edit" size="small" />
+                  <span>{props.t("ui.common.edit.message")}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="small"
+                  onClick={() => prompt.reset()}
+                  class="h-6 text-12-medium hover:text-text-strong"
+                >
+                  {props.t("ui.common.cancel")}
+                </Button>
+              </div>
+            </Show>
             <PromptInput
               ref={props.inputRef}
               newSessionWorktree={props.newSessionWorktree}

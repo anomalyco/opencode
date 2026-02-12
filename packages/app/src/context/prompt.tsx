@@ -160,12 +160,14 @@ function createPromptSession(dir: string, id: string | undefined) {
     createStore<{
       prompt: Prompt
       cursor?: number
+      editingID?: string
       context: {
         items: (ContextItem & { key: string })[]
       }
     }>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,
+      editingID: undefined,
       context: {
         items: [],
       },
@@ -178,6 +180,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     ready,
     current: createMemo(() => store.prompt),
     cursor: createMemo(() => store.cursor),
+    editingID: createMemo(() => store.editingID),
     dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
     context: {
       items: createMemo(() => store.context.items),
@@ -189,6 +192,9 @@ function createPromptSession(dir: string, id: string | undefined) {
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
+    },
+    setEditingID(id: string | undefined) {
+      setStore("editingID", id)
     },
     set: actions.set,
     reset: actions.reset,
@@ -246,14 +252,19 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       ready: () => session().ready(),
       current: () => session().current(),
       cursor: () => session().cursor(),
+      editingID: () => session().editingID(),
       dirty: () => session().dirty(),
       context: {
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
       },
+      setEditingID: (id: string | undefined) => session().setEditingID(id),
       set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      reset: () => {
+        session().setEditingID(undefined)
+        session().reset()
+      },
     }
   },
 })
