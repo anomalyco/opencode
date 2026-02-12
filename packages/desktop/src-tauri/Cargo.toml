@@ -51,6 +51,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 chrono = "0.4"
+tokio-stream = { version = "0.1.18", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
