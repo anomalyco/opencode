@@ -228,8 +228,8 @@ export function SessionTurn(
                 </div>
                 <Show when={working() && assistantPartCount() === 0 && !error()}>
                   <div data-slot="session-turn-thinking">
-                    <Spinner style={{ width: "16px" }} />
                     <span>Thinking</span>
+                    <Spinner style={{ width: "16px" }} />
                   </div>
                 </Show>
                 <Show when={assistantMessages().length > 0}>

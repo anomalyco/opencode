@@ -417,19 +417,19 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
                     <div data-slot="basic-tool-tool-trigger-content">
-                      <Show when={running}>
-                        <div data-slot="basic-tool-tool-indicator">
-                          <Spinner style={{ width: "16px" }} />
-                        </div>
-                      </Show>
                       <div data-slot="basic-tool-tool-info">
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
                             <span data-slot="basic-tool-tool-title">{trigger.title}</span>
-                            <Show when={trigger.subtitle}>
+                            <Show when={running}>
+                              <span data-slot="basic-tool-tool-spinner">
+                                <Spinner style={{ width: "16px" }} />
+                              </span>
+                            </Show>
+                            <Show when={!running && trigger.subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger.subtitle}</span>
                             </Show>
-                            <Show when={trigger.args?.length}>
+                            <Show when={!running && trigger.args?.length}>
                               <For each={trigger.args}>
                                 {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                               </For>
@@ -1185,19 +1185,18 @@ ToolRegistry.register({
                     {(item) => {
                       const info = createMemo(() => getToolInfo(item.tool, item.state.input))
                       const subtitle = createMemo(() => {
+                        if (item.state.status !== "completed") return
                         if (info().subtitle) return info().subtitle
-                        if (item.state.status === "completed" || item.state.status === "running") {
-                          return item.state.title
-                        }
+                        return item.state.title
                       })
                       return (
                         <div data-slot="task-tool-item">
+                          <span data-slot="task-tool-title">{info().title}</span>
                           <Show when={item.state.status === "pending" || item.state.status === "running"}>
                             <div data-slot="task-tool-indicator">
                               <Spinner style={{ width: "16px" }} />
                             </div>
                           </Show>
-                          <span data-slot="task-tool-title">{info().title}</span>
                           <Show when={subtitle()}>
                             <span data-slot="task-tool-subtitle">{subtitle()}</span>
                           </Show>
@@ -1278,6 +1277,7 @@ ToolRegistry.register({
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const filename = () => getFilename(props.input.filePath ?? "")
+    const pending = () => props.status === "pending" || props.status === "running"
     return (
       <BasicTool
         {...props}
@@ -1287,16 +1287,23 @@ ToolRegistry.register({
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
                 <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
-                <span data-slot="message-part-title-filename">{filename()}</span>
+                <Show when={pending()}>
+                  <span data-slot="message-part-title-spinner">
+                    <Spinner style={{ width: "16px" }} />
+                  </span>
+                </Show>
+                <Show when={!pending()}>
+                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </Show>
               </div>
-              <Show when={props.input.filePath?.includes("/")}>
+              <Show when={!pending() && props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </div>
               </Show>
             </div>
             <div data-slot="message-part-actions">
-              <Show when={props.metadata.filediff}>
+              <Show when={!pending() && props.metadata.filediff}>
                 <DiffChanges changes={props.metadata.filediff} />
               </Show>
             </div>
@@ -1331,6 +1338,7 @@ ToolRegistry.register({
     const codeComponent = useCodeComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const filename = () => getFilename(props.input.filePath ?? "")
+    const pending = () => props.status === "pending" || props.status === "running"
     return (
       <BasicTool
         {...props}
@@ -1340,9 +1348,16 @@ ToolRegistry.register({
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
                 <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
-                <span data-slot="message-part-title-filename">{filename()}</span>
+                <Show when={pending()}>
+                  <span data-slot="message-part-title-spinner">
+                    <Spinner style={{ width: "16px" }} />
+                  </span>
+                </Show>
+                <Show when={!pending()}>
+                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </Show>
               </div>
-              <Show when={props.input.filePath?.includes("/")}>
+              <Show when={!pending() && props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </div>
