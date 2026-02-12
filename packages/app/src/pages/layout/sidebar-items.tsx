@@ -188,21 +188,53 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   }
 
   const item = (
-    <SessionRow
-      session={props.session}
-      slug={props.slug}
-      mobile={props.mobile}
-      dense={props.dense}
-      tint={tint}
-      isWorking={isWorking}
-      hasPermissions={hasPermissions}
-      hasError={hasError}
-      unseenCount={unseenCount}
-      clearHoverProjectSoon={props.clearHoverProjectSoon}
-      sidebarOpened={layout.sidebar.opened}
-      warmPress={() => warm(2, "high")}
-      warmFocus={() => warm(2, "high")}
-    />
+    <A
+      href={`${props.slug}/session/${props.session.id}`}
+      activeClass="active"
+      class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+      onPointerEnter={scheduleHoverPrefetch}
+      onPointerLeave={cancelHoverPrefetch}
+      onMouseEnter={scheduleHoverPrefetch}
+      onMouseLeave={cancelHoverPrefetch}
+      onFocus={() => props.prefetchSession(props.session, "high")}
+      onClick={() => {
+        props.setHoverSession(undefined)
+        if (layout.sidebar.opened()) return
+        props.clearHoverProjectSoon()
+      }}
+    >
+      <div class="flex items-center gap-1 w-full">
+        <div
+          class="shrink-0 size-6 flex items-center justify-center"
+          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+        >
+          <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
+            <Match when={isWorking()}>
+              <Spinner class="size-[15px]" />
+            </Match>
+            <Match when={hasPermissions()}>
+              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+            </Match>
+            <Match when={hasError()}>
+              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+            </Match>
+            <Match when={unseenCount() > 0}>
+              <div class="size-1.5 rounded-full bg-text-interactive-base" />
+            </Match>
+          </Switch>
+        </div>
+        <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+          {props.session.title}
+        </span>
+        <Show when={props.session.summary}>
+          {(summary) => (
+            <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+              <DiffChanges changes={summary()} />
+            </div>
+          )}
+        </Show>
+      </div>
+    </A>
   )
 
   return (

@@ -22,7 +22,7 @@
   --color-surface-float-base: var(--surface-float-base);
   --color-surface-float-base-hover: var(--surface-float-base-hover);
   --color-surface-raised-base-hover: var(--surface-raised-base-hover);
-  --color-surface-raised-base-active: var(--surface-raised-base-active);
+  --color-surface-raised-base-active: light-dark(#d4ee77, #2f371a);
   --color-surface-raised-strong: var(--surface-raised-strong);
   --color-surface-raised-strong-hover: var(--surface-raised-strong-hover);
   --color-surface-raised-stronger: var(--surface-raised-stronger);
