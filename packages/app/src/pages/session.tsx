@@ -25,6 +25,7 @@ import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useData } from "@opencode-ai/ui/context"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
 import { useCommand } from "@/context/command"
@@ -40,6 +41,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
+import { extractPromptFromParts } from "@/utils/prompt"
 import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
@@ -100,6 +102,7 @@ export default function Page() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
+  const data = useData()
   const comments = useComments()
   const permission = usePermission()
 
@@ -116,6 +119,18 @@ export default function Page() {
   })
 
   const blocked = createMemo(() => !!permRequest() || !!questionRequest())
+
+  createEffect(
+    on(data.pendingRestore, (parts) => {
+      if (!parts) return
+      const restored = extractPromptFromParts(parts, {
+        directory: sdk.directory,
+        attachmentName: language.t("common.attachment"),
+      })
+      data.consumeRestore()
+      requestAnimationFrame(() => prompt.set(restored))
+    }),
+  )
 
   const [ui, setUi] = createStore({
     responding: false,
