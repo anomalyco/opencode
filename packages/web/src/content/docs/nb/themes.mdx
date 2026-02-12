@@ -14,7 +14,7 @@ Som standard bruker opencode vårt eget `opencode`-tema.
 For at temaer skal vises riktig med fullfargepalett, må terminalen din støtte **truecolor** (24-biters farger). De fleste moderne terminaler støtter dette som standard, men du må kanskje aktivere det:
 
 - **Sjekk støtte**: Kjør `echo $COLORTERM` - den skal gi ut `truecolor` eller `24bit`
-- **Aktiver truecolor**: Sett miljøvariabelen `COLORTERM=truecolor` i skallprofilen din
+- **Aktiver truecolor**: Sett miljøvariabelen `COLORTERM=truecolor` i shell-profilen din
 - **Terminalkompatibilitet**: Sørg for at terminalemulatoren din støtter 24-bits farger (de fleste moderne terminaler som iTerm2, Alacritty, Kitty, Windows Terminal og nyere versjoner av GNOME Terminal gjør det)
 
 Uten truecolor-støtte kan temaer vises med redusert fargenøyaktighet eller falle tilbake til nærmeste 256-fargers tilnærming.
@@ -45,23 +45,23 @@ Og mer, vi legger stadig til nye temaer.
 
 ## Systemtema
 
-`system`-temaet er designet for å automatisk tilpasse seg terminalens fargevalg. I motsetning til tradisjonelle temaer som bruker faste farger, er _system_-temaet:
+`system`-temaet er designet for å automatisk tilpasse seg terminalens fargeskjema. I motsetning til tradisjonelle temaer som bruker faste farger, er _system_-temaet:
 
-- **Genererer gråskala**: Oppretter en tilpasset gråskala basert på terminalens bakgrunnsfarge, og sikrer optimal kontrast.
-- **Bruker ANSI farger**: Bruker standard ANSI farger (0-15) for syntaksutheving og UI elementer, som respekterer terminalens fargepalett.
+- **Genererer gråtone**: Oppretter en tilpasset gråskala basert på terminalens bakgrunnsfarge, og sikrer optimal kontrast.
+- **Bruker ANSI-farger**: Bruker standard ANSI farger (0-15) for syntaksutheving og UI elementer, som respekterer terminalens fargepalett.
 - **Bevarer terminalens standardinnstillinger**: Bruker `none` for tekst- og bakgrunnsfarger for å opprettholde terminalens opprinnelige utseende.
 
 Systemtemaet er for brukere som:
 
 - Vil at opencode skal matche terminalens utseende
-- Bruk tilpassede terminalfargeskjemaer
+- Bruker tilpassede terminalfargeskjemaer
 - Foretrekker et konsistent utseende på tvers av alle terminalapplikasjoner
 
 ---
 
 ## Bruke et tema
 
-Du kan velge et tema ved å hente frem temavalg med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
+Du kan velge et tema ved å åpne temavelgeren med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
 
 ```json title="opencode.json" {3}
 {
@@ -95,7 +95,7 @@ Hvis flere kataloger inneholder et tema med samme navn, vil temaet fra katalogen
 
 For å lage et tilpasset tema, lag en JSON-fil i en av temakatalogene.
 
-For brukeromfattende temaer:
+For brukerspesifikke temaer:
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
@@ -111,12 +111,12 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### JSON format
+### JSON-format
 
 Temaer bruker et fleksibelt JSON-format med støtte for:
 
-- **Sekskantfarger**: `"#ffffff"`
-- **ANSI farger**: `3` (0-255)
+- **Hex-farger**: `"#ffffff"`
+- **ANSI-farger**: `3` (0-255)
 - **Fargereferanser**: `"primary"` eller egendefinerte definisjoner
 - **Mørke/lyse varianter**: `{"dark": "#000", "light": "#fff"}`
 - **Ingen farge**: `"none"` - Bruker terminalens standardfarge eller transparent

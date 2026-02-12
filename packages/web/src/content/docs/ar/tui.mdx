@@ -1,11 +1,11 @@
 ---
 title: TUI
-description: استخدام واجهة المستخدم الطرفية (TUI) في OpenCode.
+description: استخدام واجهة المستخدم TUI في OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يوفّر OpenCode واجهة طرفية تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
+يوفّر OpenCode واجهة terminal تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
 
 يؤدي تشغيل OpenCode إلى بدء واجهة TUI للدليل الحالي.
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## أوامر Bash
 
-ابدأ الرسالة بـ `!` لتشغيل أمر في الصدفة.
+ابدأ الرسالة بـ `!` لتشغيل أمر في shell.
 
 ```bash frame="none"
 !ls -la
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## الأوامر
 
-عند استخدام واجهة OpenCode الطرفية، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
+عند استخدام واجهة OpenCode في terminal، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
 
 ```bash frame="none"
 /help
@@ -288,28 +288,28 @@ How is auth handled in @packages/functions/src/api/index.ts?
 يستخدم الأمران `/editor` و`/export` المحرر المحدد في متغير البيئة `EDITOR`.
 
 <Tabs>
-  <TabItem label="لينكس/macOS">
+  <TabItem label="Linux/macOS">
     ```bash
-    # Example for nano or vim
+    # مثال لـ nano أو vim
     export EDITOR=nano
     export EDITOR=vim
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     export EDITOR="code --wait"
     ```
 
-    لجعل ذلك دائما، أضف هذا إلى ملف تهيئة الصدفة لديك؛
+    لجعل ذلك دائما، أضف هذا إلى ملف تهيئة shell لديك؛
     `~/.bashrc`، `~/.zshrc`، إلخ.
 
   </TabItem>
 
-  <TabItem label="ويندوز (CMD)">
+  <TabItem label="Windows (CMD)">
     ```bash
     set EDITOR=notepad
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     set EDITOR=code --wait
     ```
 
@@ -317,12 +317,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
   </TabItem>
 
-  <TabItem label="ويندوز (PowerShell)">
+  <TabItem label="Windows (PowerShell)">
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     $env:EDITOR = "code --wait"
     ```
 
@@ -346,7 +346,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 تحتاج بعض المحررات مثل VS Code إلى التشغيل مع الخيار `--wait`.
 :::
 
-تحتاج بعض المحررات إلى وسائط سطر الأوامر لتعمل بوضع الحجب. يجعل الخيار `--wait` عملية المحرر تنتظر حتى يتم إغلاقها.
+تحتاج بعض المحررات إلى وسائط CLI لتعمل بوضع الحجب. يجعل الخيار `--wait` عملية المحرر تنتظر حتى يتم إغلاقها.
 
 ---
 

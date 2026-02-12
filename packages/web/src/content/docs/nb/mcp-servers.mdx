@@ -1,9 +1,9 @@
 ---
-title: MCP servere
+title: MCP-servere
 description: Legg til lokale og eksterne MCP-verktøy.
 ---
 
-Du kan legge til eksterne verktøy i opencode ved å bruke _Model Context Protocol_ eller MCP. opencode støtter både lokale og eksterne servere.
+Du kan legge til eksterne verktøy i OpenCode ved å bruke _Model Context Protocol_ eller MCP. OpenCode støtter både lokale og eksterne servere.
 
 Når de er lagt til, er MCP-verktøy automatisk tilgjengelige for LLM sammen med innebygde verktøy.
 
@@ -14,16 +14,16 @@ Når de er lagt til, er MCP-verktøy automatisk tilgjengelige for LLM sammen med
 Når du bruker en MCP-server, legger den til konteksten. Dette kan fort gå opp hvis du har mange verktøy. Så vi anbefaler å være forsiktig med hvilke MCP-servere du bruker.
 
 :::tip
-MCP servere legger til konteksten din, så du vil være forsiktig med hvilke du aktiverer.
+MCP-servere legger til konteksten din, så du vil være forsiktig med hvilke du aktiverer.
 :::
 
 Enkelte MCP-servere, som GitHub MCP-serveren, har en tendens til å legge til mange tokens og kan lett overskride kontekstgrensen.
 
 ---
 
-## Aktiver
+## Aktivering
 
-Du kan definere MCP-servere i [opencode Config](https://opencode.ai/docs/config/) under `mcp`. Legg til hver MCP med et unikt navn. Du kan referere til den MCP ved navn når du ber om LLM.
+Du kan definere MCP-servere i [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Legg til hver MCP med et unikt navn. Du kan referere til den MCP ved navn når du spør LLM-en.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -44,7 +44,7 @@ Du kan også deaktivere en server ved å sette `enabled` til `false`. Dette er n
 
 ---
 
-### Overstyrer fjernstandarder
+### Overstyring av fjernstandarder
 
 Organisasjoner kan tilby standard MCP-servere via deres `.well-known/opencode`-endepunkt. Disse serverne kan være deaktivert som standard, slik at brukere kan melde seg på de de trenger.
 
@@ -104,7 +104,7 @@ For eksempel, her er hvordan du kan legge til test [`@modelcontextprotocol/serve
 }
 ```
 
-Og for å bruke den kan jeg legge til `use the mcp_everything tool` i ledetekstene mine.
+Og for å bruke den kan du legge til `use the mcp_everything tool` i ledetekstene mine.
 
 ```txt "mcp_everything"
 use the mcp_everything tool to add the number 3 and 4
@@ -116,17 +116,17 @@ use the mcp_everything tool to add the number 3 and 4
 
 Her er alle alternativene for å konfigurere en lokal MCP-server.
 
-| Alternativ    | Skriv  | Påkrevd | Beskrivelse                                                                              |
-| ------------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
-| `type`        | String | Y       | Type MCP servertilkobling, må være `"local"`.                                            |
-| `command`     | Array  | Y       | Kommando og argumenter for å kjøre MCP-serveren.                                         |
-| `environment` | Objekt |         | Miljøvariabler som skal angis når serveren kjøres.                                       |
-| `enabled`     | Boolsk |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
-| `timeout`     | Nummer |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
+| Alternativ    | Type    | Påkrevd | Beskrivelse                                                                              |
+| ------------- | ------- | ------- | ---------------------------------------------------------------------------------------- |
+| `type`        | String  | Y       | Type MCP servertilkobling, må være `"local"`.                                            |
+| `command`     | Array   | Y       | Kommando og argumenter for å kjøre MCP-serveren.                                         |
+| `environment` | Object  |         | Miljøvariabler som skal angis når serveren kjøres.                                       |
+| `enabled`     | Boolean |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
+| `timeout`     | Number  |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
 ---
 
-## Fjernkontroll
+## Ekstern
 
 Legg til eksterne MCP-servere ved å sette `type` til `"remote"`.
 
@@ -146,26 +146,26 @@ Legg til eksterne MCP-servere ved å sette `type` til `"remote"`.
 }
 ```
 
-`url` er URL til den eksterne MCP serveren og med alternativet `headers` kan du sende inn en liste over overskrifter.
+`url` er URL til den eksterne MCP serveren og med alternativet `headers` kan du sende inn en liste over headere.
 
 ---
 
 #### Alternativer
 
-| Alternativ | Skriv  | Påkrevd | Beskrivelse                                                                              |
-| ---------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
-| `type`     | String | Y       | Type MCP servertilkobling, må være `"remote"`.                                           |
-| `url`      | String | Y       | URL av den eksterne MCP-serveren.                                                        |
-| `enabled`  | Boolsk |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
-| `headers`  | Objekt |         | Overskrifter å sende med forespørselen.                                                  |
-| `oauth`    | Objekt |         | OAuth-autentiseringskonfigurasjon. Se delen [OAuth](#oauth) nedenfor.                    |
-| `timeout`  | Nummer |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
+| Alternativ | Type    | Påkrevd | Beskrivelse                                                                              |
+| ---------- | ------- | ------- | ---------------------------------------------------------------------------------------- |
+| `type`     | String  | Y       | Type MCP servertilkobling, må være `"remote"`.                                           |
+| `url`      | String  | Y       | URL av den eksterne MCP-serveren.                                                        |
+| `enabled`  | Boolean |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
+| `headers`  | Object  |         | Headere å sende med forespørselen.                                                       |
+| `oauth`    | Object  |         | OAuth-autentiseringskonfigurasjon. Se delen [OAuth](#oauth) nedenfor.                    |
+| `timeout`  | Number  |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
 ---
 
 ## OAuth
 
-opencode håndterer automatisk OAuth-autentisering for eksterne MCP-servere. Når en server krever autentisering, vil opencode:
+OpenCode håndterer automatisk OAuth-autentisering for eksterne MCP-servere. Når en server krever autentisering, vil OpenCode:
 
 1. Oppdag 401-svaret og start OAuth-flyten
 2. Bruk **Dynamisk klientregistrering (RFC 7591)** hvis det støttes av serveren
@@ -189,7 +189,7 @@ For de fleste OAuth-aktiverte MCP-servere er ingen spesiell konfigurasjon nødve
 }
 ```
 
-Hvis serveren krever autentisering, vil opencode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `opencode mcp auth <server-name>`.
+Hvis serveren krever autentisering, vil OpenCode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `opencode mcp auth <server-name>`.
 
 ---
 
@@ -216,7 +216,7 @@ Hvis du har klientlegitimasjon fra MCP-serverleverandøren, kan du konfigurere d
 
 ---
 
-### Autentiserer
+### Autentisering
 
 Du kan utløse autentisering manuelt eller administrere legitimasjon.
 
@@ -238,11 +238,11 @@ Fjern lagret legitimasjon:
 opencode mcp logout my-oauth-server
 ```
 
-Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil opencode lagre tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
+Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil OpenCode lagre tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
-#### Deaktiverer OAuth
+#### Deaktivering av OAuth
 
 Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere som bruker API-nøkler i stedet), setter du `oauth` til `false`:
 
@@ -266,9 +266,9 @@ Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere som br
 
 #### OAuth-alternativer
 
-| Alternativ     | Skriv inn       | Beskrivelse                                                                            |
+| Alternativ     | Type            | Beskrivelse                                                                            |
 | -------------- | --------------- | -------------------------------------------------------------------------------------- |
-| `oauth`        | Objekt \| usant | OAuth-konfigurasjonsobjekt, eller `false` for å deaktivere automatisk OAuth-deteksjon. |
+| `oauth`        | Object \| false | OAuth-konfigurasjonsobjekt, eller `false` for å deaktivere automatisk OAuth-deteksjon. |
 | `clientId`     | String          | OAuth-klient ID. Hvis ikke oppgitt, vil dynamisk klientregistrering bli forsøkt.       |
 | `clientSecret` | String          | OAuth-klienthemmelighet, hvis det kreves av autorisasjonsserveren.                     |
 | `scope`        | String          | OAuth-omfang å be om under autorisasjon.                                               |
@@ -289,9 +289,9 @@ Kommandoen `mcp debug` viser gjeldende autentiseringsstatus, tester HTTP-tilkobl
 
 ---
 
-## Administrer
+## Administrering
 
-MCP-ene dine er tilgjengelige som verktøy i opencode, sammen med innebygde verktøy. Så du kan administrere dem gjennom opencode-konfigurasjonen som alle andre verktøy.
+MCP-ene dine er tilgjengelige som verktøy i OpenCode, sammen med innebygde verktøy. Så du kan administrere dem gjennom OpenCode-konfigurasjonen som alle andre verktøy.
 
 ---
 
@@ -400,7 +400,7 @@ Nedenfor er eksempler på noen vanlige MCP-servere. Du kan sende inn en PR hvis 
 
 ---
 
-### Vaktvakt
+### Sentry
 
 Legg til [Sentry MCP-serveren](https://mcp.sentry.dev) for å samhandle med Sentry-prosjektene og problemene dine.
 
@@ -423,7 +423,7 @@ Etter å ha lagt til konfigurasjonen, autentiser med Sentry:
 opencode mcp auth sentry
 ```
 
-Dette åpner et nettleservindu for å fullføre OAuth-flyten og koble opencode til Sentry-kontoen din.
+Dette åpner et nettleservindu for å fullføre OAuth-flyten og koble OpenCode til Sentry-kontoen din.
 
 Når du er autentisert, kan du bruke Sentry-verktøy i ledetekstene dine for å spørre etter problemer, prosjekter og feildata.
 
@@ -433,7 +433,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### Kontekst7
+### Context7
 
 Legg til [Context7 MCP-serveren](https://github.com/upstash/context7) for å søke gjennom dokumenter.
 
@@ -482,7 +482,7 @@ When you need to search docs, use `context7` tools.
 
 ---
 
-### Grep av Vercel
+### Grep by Vercel
 
 Legg til [Grep by Vercel](https://grep.app) MCP-serveren for å søke gjennom kodebiter på GitHub.
 
@@ -509,3 +509,116 @@ Alternativt kan du legge til noe slikt til din [AGENTS.md](/docs/rules/).
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Helicone
+
+[Helicone](https://helicone.ai) er en LLM observerbarhetsplattform som gir logging, overvåking og analyser for AI-applikasjonene dine. Helicone AI Gateway ruter forespørslene dine til riktig leverandør automatisk basert på modellen.
+
+1. Gå over til [Helicone](https://helicone.ai), opprett en konto og generer en API nøkkel fra dashbordet.
+
+2. Kjør kommandoen `/connect` og søk etter **Helicone**.
+
+   ```txt
+   /connect
+   ```
+
+3. Skriv inn Helicone API-nøkkelen.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Kjør kommandoen `/models` for å velge en modell.
+
+   ```txt
+   /models
+   ```
+
+For flere leverandører og avanserte funksjoner som bufring og hastighetsbegrensning, sjekk [Helicone-dokumentasjonen](https://docs.helicone.ai).
+
+#### Valgfrie konfigurasjoner
+
+I tilfelle du ser en funksjon eller modell fra Helicone som ikke konfigureres automatisk gjennom OpenCode, kan du alltid konfigurere den selv.
+
+Her er [Helicone's Model Directory](https://helicone.ai/models), du trenger denne for å hente ID-ene til modellene du vil legge til.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### Egendefinerte headere
+
+Helicone støtter tilpassede headere for funksjoner som bufring, brukersporing og øktadministrasjon. Legg dem til leverandørkonfigurasjonen din ved å bruke `options.headers`:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Sesjonssporing
+
+Helicones [Sessions](https://docs.helicone.ai/features/sessions) funksjon lar deg gruppere relaterte LLM forespørsler sammen. Bruk [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk å logge hver OpenCode-samtale som en økt i Helicone.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+Legg den til i konfigurasjonen din.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+Programtillegget injiserer `Helicone-Session-Id` og `Helicone-Session-Name` overskrifter i forespørslene dine. På Helicones Sessions-side vil du se hver OpenCode-samtale oppført som en separat økt.
+
+##### Vanlige Helicone-headere
+
+| Overskrift                 | Beskrivelse                                                                |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Aktiver responsbufring (`true`/`false`)                                    |
+| `Helicone-User-Id`         | Spor beregninger etter bruker                                              |
+| `Helicone-Property-[Name]` | Legg til egendefinerte egenskaper (f.eks. `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | Knytt forespørsler til spørsmålsversjoner                                  |
+
+Se [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for alle tilgjengelige overskrifter.

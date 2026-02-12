@@ -52,7 +52,6 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
-  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   const state = Instance.state(
     () => {
@@ -1030,9 +1029,9 @@ export namespace SessionPrompt {
                       }
                     }
                   }
-                  offset = Math.max(start - 1, 0)
+                  offset = Math.max(start, 1)
                   if (end) {
-                    limit = end - offset
+                    limit = end - (offset - 1)
                   }
                 }
                 const args = { filePath: filepath, offset, limit }

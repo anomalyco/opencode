@@ -44,7 +44,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ---
 
-### How it works
+### Jak to działa
 
 Kiedy uruchomisz `opencode`, uruchomi się TUI i serwer. Gdzie jest TUI
 klient komunikujący się z serwerem. Serwer udostępnia specyfikację OpenAPI 3.1
@@ -54,14 +54,14 @@ punkt końcowy. Ten punkt końcowy jest również używany do generowania [SDK](
 Użyj serwera opencode do programowej interakcji z opencode.
 :::
 
-Ta architektura umożliwia obsługę wielu klientów przez kod otwarty i programową interakcję z kodem otwartym.
+Ta architektura umożliwia obsługę wielu klientów przez opencode i programową interakcję z kodem otwartym.
 
 Możesz uruchomić `opencode serve`, aby uruchomić samodzielny serwer. Jeśli masz
 opencode TUI działa, `opencode serve` uruchomi nowy serwer.
 
 ---
 
-#### Połącz się z istniejącym serwerem
+#### Połączenie z istniejącym serwerem
 
 Po uruchomieniu TUI losowo przypisuje port i nazwę hosta. Zamiast tego możesz przekazać `--hostname` i `--port` [flagi](/docs/cli). Następnie użyj tego, aby połączyć się z serwerem.
 
@@ -69,7 +69,7 @@ Punktu końcowego [`/tui`](#TUI) można użyć do sterowania TUI przez serwer. M
 
 ---
 
-## Spec
+## Specyfikacja
 
 Serwer publikuje specyfikację OpenAPI 3.1, którą można obejrzeć pod adresem:
 
@@ -81,13 +81,13 @@ Na przykład `http://localhost:4096/doc`. Użyj specyfikacji, aby wygenerować k
 
 ---
 
-## APIs
+## API
 
 Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Global
+### Globalne
 
 | Method | Path             | Description                    | Response                             |
 | ------ | ---------------- | ------------------------------ | ------------------------------------ |
@@ -96,7 +96,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Project
+### Projekt
 
 | Method | Path               | Description                | Response                                      |
 | ------ | ------------------ | -------------------------- | --------------------------------------------- |
@@ -105,7 +105,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Path & VCS
+### Ścieżka i VCS
 
 | Method | Path    | Description                                   | Response                                    |
 | ------ | ------- | --------------------------------------------- | ------------------------------------------- |
@@ -114,7 +114,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Instance
+### Instancja
 
 | Method | Path                | Description            | Response  |
 | ------ | ------------------- | ---------------------- | --------- |
@@ -122,7 +122,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Config
+### Konfiguracja
 
 | Method  | Path                | Description                         | Response                                                                                 |
 | ------- | ------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -143,7 +143,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Sessions
+### Sesje
 
 | Method   | Path                                     | Description                                 | Notes                                                                              |
 | -------- | ---------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -168,7 +168,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Messages
+### Wiadomości
 
 | Method | Path                              | Description                                     | Notes                                                                                                                                                                    |
 | ------ | --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -176,12 +176,12 @@ Serwer opencode udostępnia następujące interfejsy API.
 | `POST` | `/session/:id/message`            | Wyślij wiadomość i poczekaj na odpowiedź        | treść: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}` |
 | `GET`  | `/session/:id/message/:messageID` | Uzyskaj szczegóły wiadomości                    | Zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                                                            |
 | `POST` | `/session/:id/prompt_async`       | Wyślij wiadomość asynchronicznie (bez czekania) | treść: taka sama jak `/session/:id/message`, zwraca `204 No Content`                                                                                                     |
-| `POST` | `/session/:id/command`            | Wykonaj polecenie ukośnika                      | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
-| `POST` | `/session/:id/shell`              | Uruchom polecenie powłoki                       | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
+| `POST` | `/session/:id/command`            | Wykonaj slash command                           | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | Uruchom polecenie shell                         | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
 
 ---
 
-### Komendy
+### Polecenia
 
 | Metoda | Ścieżka    | Opis                     | Odpowiedź                                     |
 | ------ | ---------- | ------------------------ | --------------------------------------------- |
@@ -210,7 +210,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Tools (Experimental)
+### Narzędzia (Eksperymentalne)
 
 | Method | Path                                        | Description                                  | Response                                     |
 | ------ | ------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
@@ -219,7 +219,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### LSP, Formatters & MCP
+### LSP, Formatery i MCP
 
 | Method | Path         | Description                  | Response                                                 |
 | ------ | ------------ | ---------------------------- | -------------------------------------------------------- |
@@ -230,7 +230,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Agents
+### Agenci
 
 | Method | Path     | Description                         | Response                                    |
 | ------ | -------- | ----------------------------------- | ------------------------------------------- |
@@ -238,7 +238,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Logging
+### Logowanie
 
 | Method | Path   | Description                                                  | Response  |
 | ------ | ------ | ------------------------------------------------------------ | --------- |
@@ -250,13 +250,13 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 | Method | Path                    | Description                                  | Response                |
 | ------ | ----------------------- | -------------------------------------------- | ----------------------- |
-| `POST` | `/tui/append-prompt`    | Dołącz tekst do zachęty                      | `boolean`               |
+| `POST` | `/tui/append-prompt`    | Dołącz tekst do promptu                      | `boolean`               |
 | `POST` | `/tui/open-help`        | Otwórz okno pomocy                           | `boolean`               |
 | `POST` | `/tui/open-sessions`    | Otwórz selektor sesji                        | `boolean`               |
 | `POST` | `/tui/open-themes`      | Otwórz selektor motywów                      | `boolean`               |
 | `POST` | `/tui/open-models`      | Otwórz selektor modelu                       | `boolean`               |
-| `POST` | `/tui/submit-prompt`    | Prześlij bieżący monit                       | `boolean`               |
-| `POST` | `/tui/clear-prompt`     | Wyczyść monit                                | `boolean`               |
+| `POST` | `/tui/submit-prompt`    | Prześlij bieżący prompt                      | `boolean`               |
+| `POST` | `/tui/clear-prompt`     | Wyczyść prompt                               | `boolean`               |
 | `POST` | `/tui/execute-command`  | Wykonaj polecenie (`{ command }`)            | `boolean`               |
 | `POST` | `/tui/show-toast`       | Pokaż toast (`{ title?, message, variant }`) | `boolean`               |
 | `GET`  | `/tui/control/next`     | Poczekaj na następne żądanie kontroli        | Obiekt żądania kontroli |
@@ -264,7 +264,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Auth
+### Uwierzytelnianie
 
 | Method | Path        | Description                                                           | Response  |
 | ------ | ----------- | --------------------------------------------------------------------- | --------- |
@@ -272,7 +272,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Events
+### Zdarzenia
 
 | Method | Path     | Description                                                                                                          | Response                                |
 | ------ | -------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -280,7 +280,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ---
 
-### Docs
+### Dokumentacja
 
 | Method | Path   | Description              | Response                            |
 | ------ | ------ | ------------------------ | ----------------------------------- |

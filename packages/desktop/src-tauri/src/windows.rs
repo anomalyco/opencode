@@ -1,4 +1,7 @@
-use crate::constants::{UPDATER_ENABLED, window_state_flags};
+use crate::{
+    constants::{UPDATER_ENABLED, window_state_flags},
+    server::get_wsl_config,
+};
 use std::{ops::Deref, time::Duration};
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
@@ -29,6 +32,11 @@ impl MainWindow {
             .map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\"")))
             .unwrap_or_else(|| "null".to_string());
 
+        let wsl_enabled = get_wsl_config(app.clone())
+            .ok()
+            .map(|v| v.enabled)
+            .unwrap_or(false);
+
         let window_builder = base_window_config(
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
             app,
@@ -44,6 +52,7 @@ impl MainWindow {
             window.__OPENCODE__ ??= {{}};
             window.__OPENCODE__.updaterEnabled = {UPDATER_ENABLED};
             window.__OPENCODE__.initialPath = {initial_path_js};
+            window.__OPENCODE__.wsl = {wsl_enabled};
           "#
         ));
 

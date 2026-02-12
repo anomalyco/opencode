@@ -7,15 +7,15 @@ opencode 与您的 GitHub 工作流程集成。在评论中提及 `/opencode` �
 
 ---
 
-## 特徵
+## 功能
 
-- **分类问题**：要求 opencode 调查问题并向您解释。
-- **修复和实施**：要求 opencode 修复问题或实施功能。将在一个新的分支中工作并提交包含所有更改的 PR。
-- **安全**：opencode 在 GitHub 的运行器中运行。
+- **Triage issues**: 要求 opencode 调查问题并向您解释。
+- **Fix and implement**: 要求 opencode 修复问题或实施功能。将在一个新的分支中工作并提交包含所有更改的 PR。
+- **Secure**: opencode 在 GitHub 的运行器中运行。
 
 ---
 
-## 安裝
+## 安装
 
 在 GitHub 存储库中的项目中运行以下命令：
 
@@ -27,17 +27,17 @@ opencode github install
 
 ---
 
-### 手動設置
+### 手动设置
 
-或者您可以手動設置。
+或者您可以手动设置。
 
-1. 错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
+1. **Install the GitHub app**
 
-   前往[**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent)。确保它​​已安装在目标存储库上。
+   前往 [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent)。确保它​​已安装在目标存储库上。
 
-2. **添加工作流程**
+2. **Add the workflow**
 
-   将以下工作流程文件添加到存储库中的`.github/workflows/opencode.yml`中。确保在`env`中设置适当的`model`和所需的API按键。
+   将以下工作流程文件添加到存储库中的 `.github/workflows/opencode.yml` 中。确保在 `model` 中设置适当的 `env` 和所需的 API 密钥。
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -73,21 +73,21 @@ opencode github install
              # github_token: xxxx
    ```
 
-3. 错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
+3. **Store the API keys in secrets**
 
-   在您的组织或项目的**设置**中，展开左侧的**秘密和变量**，然后选择**操作**。并添加所需的API钥匙。
+   在您的组织或项目的 **Settings** 中，展开左侧的 **Secrets and variables**，然后选择 **Actions**。并添加所需的 API 密钥。
 
 ---
 
 ## 配置
 
-- `model`：与 opencode 一起使用的模型。采用 `provider/model` 格式。这是**必需的**。
+- `model`：与 opencode 一起使用的模型。采用 `provider/model` 格式。这是 **必需的**。
 - `agent`：要使用的代理。必须是一级代理。如果未找到，则从配置回退到 `default_agent` 或 `"build"`。
-- `share`：是否共享opencode会话。对于公共存储库，默认为**true**。
+- `share`：是否共享 opencode 会话。对于公共存储库，默认为 **true**。
 - `prompt`：可选的自定义提示以覆盖默认行为。使用它来自定义 opencode 处理请求的方式。
-- `token`：可选的 GitHub 访问令牌，用于执行创建评论、提交更改和打开拉取请求等操作。默认情况下，opencode 使用来自 opencode GitHub 应用程序的安装访问令牌，因此提交、评论和拉取请求显示为来自应用。
+- `token`：可选的 GitHub 访问 Token，用于执行创建评论、提交更改和打开拉取请求等操作。默认情况下，opencode 使用来自 opencode GitHub 应用程序的安装访问 Token，因此提交、评论和拉取请求显示为来自应用。
 
-  或者，您可以使用 GitHub Action 运行程序的[内置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而无需安装 opencode GitHub 应用程序。只需确保在您的工作流程中所需的权限：
+  或者，您可以使用 GitHub Action 运行程序的 [内置 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而无需安装 opencode GitHub 应用程序。只需确保在您的工作流程中所需的权限：
 
   ```yaml
   permissions:
@@ -97,26 +97,26 @@ opencode github install
     issues: write
   ```
 
-  错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
+  您可以在 GitHub Actions 文档中了解有关配置工作流程的更多信息。
 
 ---
 
-## 支持的活動
+## 支持的事件
 
 opencode 可以由以下 GitHub 事件触发：
 
-| 事件類型                      | 觸發者                       | 詳情                                                                                    |
+| 事件类型                      | 触发方式                     | 详情                                                                                    |
 | ----------------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
 | `issue_comment`               | 对问题或 PR 发表评论         | 在评论中提及 `/opencode` 或 `/oc`。 opencode 读取上下文并可以创建分支、打开 PR 或回复。 |
-| `pull_request_review_comment` | 对 PR 中的特定代码行进行评论 | 在检查代码时提及`/opencode` 或`/oc`。 opencode 接收文件路径、行号和 diff 上下文。       |
-| `issues`                      | 问题已打开或已编辑           | 创建或修改问题时自动触发opencode。需要`prompt` 输入。                                   |
-| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 opencode。对于自动评论很有用。                     |
+| `pull_request_review_comment` | 对 PR 中的特定代码行进行评论 | 在检查代码时提及 `/opencode` 或 `/oc`。 opencode 接收文件路径、行号和 diff 上下文。     |
+| `issues`                      | 问题已打开或已编辑           | 创建或修改问题时自动触发 opencode。需要 `prompt` 输入。                                 |
+| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 opencode。对于自动评论很有帮助。                   |
 | `schedule`                    | 基于 Cron 的计划             | 按计划运行 opencode。需要 `prompt` 输入。输出进入日志和 PR（没有可评论的问题）。        |
 | `workflow_dispatch`           | 从 GitHub UI 手动触发        | 通过“操作”选项卡触发 opencode。需要 `prompt` 输入。输出进入日志和 PR。                  |
 
-### 時間表示例
+### 计划示例
 
-按计划运行opencode以执行自动化任务：
+按计划运行 opencode 以执行自动化任务：
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,13 +150,13 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-对于计划事件，`prompt` 输入是**必需的**，因为没有注释可以从中提取指令。希望计划工作流在没有用户上下文的情况下运行并进行权限检查，因此如果您 opencode 创建分支或 PR，工作流必须支持 `contents: write` 和 `pull-requests: write`。
+对于计划事件，`prompt` 输入是 **必需的**，因为没有注释可以从中提取指令。希望计划工作流在没有用户上下文的情况下运行并进行权限检查，因此如果您 opencode 创建分支或 PR，工作流必须支持 `contents: write` 和 `pull-requests: write`。
 
 ---
 
-### 拉取請求示例
+### Pull Request 示例
 
-或更新公关时间自动审核：
+或更新 PR 时自动审核：
 
 ```yaml title=".github/workflows/opencode-review.yml"
 name: opencode-review
@@ -191,13 +191,13 @@ jobs:
             - Suggest improvements
 ```
 
-对于`pull_request`事件，如果未提供`prompt`，opencode将默认审核拉取请求。
+对于 `pull_request` 事件，如果未提供 `prompt`，opencode 将默认审核拉取请求。
 
 ---
 
-### 問題分類示例
+### Issue 分类示例
 
-自動分類新問題。此示例過濾超過 30 天的帳戶以減少垃圾郵件：
+自动分类新问题。此示例过滤超过 30 天的账户以减少垃圾邮件：
 
 ```yaml title=".github/workflows/opencode-triage.yml"
 name: Issue Triage
@@ -246,11 +246,11 @@ jobs:
             Otherwise, do not comment.
 ```
 
-对于 `issues` 事件，`prompt` 输入是**必需的**，因为没有注释可足以提取指令。
+对于 `issues` 事件，`prompt` 输入是 **必需的**，因为没有注释可以从中提取指令。
 
 ---
 
-## 自定義提示
+## 自定义提示
 
 覆盖默认提示，为您的工作流程自定义 opencode 的行为。
 
@@ -265,7 +265,7 @@ jobs:
       - Suggest improvements
 ```
 
-這對於執行與您的項目相關的特定審查標準、編碼標准或重點領域非常有用。
+这对于执行与您的项目相关的特定审查标准、编码标准或重点领域非常有用。
 
 ---
 
@@ -273,7 +273,7 @@ jobs:
 
 以下是如何在 GitHub 中使用 opencode 的一些示例。
 
-- **解釋一個問題**
+- **Explain an issue**
 
   在 GitHub 问题中添加此评论。
 
@@ -281,9 +281,9 @@ jobs:
   /opencode explain this issue
   ```
 
-  opencode 将阅读整个线程，包括所有评论，并回复并提供语音解释。
+  opencode 将阅读整个线程，包括所有评论，并回复并提供清晰的解释。
 
-- **解決問題**
+- **Fix an issue**
 
   在 GitHub 问题中，说：
 
@@ -293,7 +293,7 @@ jobs:
 
   opencode 将创建一个新分支，实施更改，并使用更改打开 PR。
 
-- **审查 PR 并进行更改**
+- **Review PRs and make changes**
 
   在 GitHub PR 上留下以下评论。
 
@@ -301,21 +301,21 @@ jobs:
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
+  opencode 将实施请求的更改并提交到同一个 PR。
 
-- **查看特定代碼行**
+- **Review specific code lines**
 
-  直接在PR的“文件”选项卡中的代码行上留下评论。opencode自动检测文件、行号和差异上下文以提供准确的响应。
+  直接在 PR 的“文件”选项卡中的代码行上留下评论。opencode 自动检测文件、行号和差异上下文以提供准确的响应。
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
-  - 正在審查的確切文件
-  - 具體代碼行
+  当评论特定行时，opencode 接收：
+  - 正在审查的确切文件
+  - 具体代码行
   - 周围的差异上下文
-  - 行號信息
+  - 行号信息
 
-  這允許更有針對性的請求，而無需手動指定文件路徑或行號。
+  这允许更有针对性的请求，而无需手动指定文件路径或行号。

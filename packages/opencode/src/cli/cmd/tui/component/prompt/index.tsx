@@ -1,5 +1,5 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -54,6 +54,7 @@ export type PromptRef = {
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -133,6 +134,16 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
+
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => {
+        setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
+      },
+      { defer: true },
+    ),
+  )
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -736,6 +747,15 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const placeholderText = createMemo(() => {
+    if (props.sessionID) return undefined
+    if (store.mode === "shell") {
+      const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
+      return `Run a command... "${example}"`
+    }
+    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -797,7 +817,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+              placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
@@ -850,6 +870,7 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
+                  setStore("placeholder", Math.floor(Math.random() * SHELL_PLACEHOLDERS.length))
                   setStore("mode", "shell")
                   e.preventDefault()
                   return

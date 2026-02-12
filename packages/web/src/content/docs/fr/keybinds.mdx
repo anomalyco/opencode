@@ -105,7 +105,7 @@ OpenCode a une liste de raccourcis clavier que vous pouvez personnaliser via la 
 
 ---
 
-## Clé du leader
+## Touche Leader
 
 OpenCode utilise une touche `leader` pour la plupart des raccourcis clavier. Cela évite les conflits dans votre terminal.
 
@@ -117,7 +117,7 @@ Vous n'avez pas besoin d'utiliser une touche leader pour vos raccourcis clavier,
 
 ## Désactiver le raccourci clavier
 
-Vous pouvez désactiver un raccourci clavier en ajoutant la clé à votre configuration avec la valeur « aucun ».
+Vous pouvez désactiver un raccourci clavier en ajoutant la clé à votre configuration avec la valeur `none`.
 
 ```json title="opencode.json"
 {
@@ -130,9 +130,9 @@ Vous pouvez désactiver un raccourci clavier en ajoutant la clé à votre config
 
 ---
 
-## Raccourcis d'invite du bureau
+## Raccourcis de saisie desktop
 
-L'entrée d'invite de l'application de bureau OpenCode prend en charge les raccourcis courants de style Readline/Emacs pour l'édition de texte. Ceux-ci sont intégrés et actuellement non configurables via `opencode.json`.
+Le champ de saisie de l'application de bureau OpenCode prend en charge les raccourcis courants de style Readline/Emacs pour l'édition de texte. Ceux-ci sont intégrés et actuellement non configurables via `opencode.json`.
 
 | Raccourci | Actions                                                   |
 | --------- | --------------------------------------------------------- |
@@ -143,10 +143,10 @@ L'entrée d'invite de l'application de bureau OpenCode prend en charge les racco
 | `alt+b`   | Reculer le curseur d'un mot                               |
 | `alt+f`   | Avancer le curseur d'un mot                               |
 | `ctrl+d`  | Supprimer le caractère sous le curseur                    |
-| `ctrl+k`  | Tuer jusqu'au bout de la ligne                            |
-| `ctrl+u`  | Tuer au début de la ligne                                 |
-| `ctrl+w`  | Tuer le mot précédent                                     |
-| `alt+d`   | Tuer le mot suivant                                       |
+| `ctrl+k`  | Couper jusqu'à la fin de la ligne                         |
+| `ctrl+u`  | Couper jusqu'au début de la ligne                         |
+| `ctrl+w`  | Couper le mot précédent                                   |
+| `alt+d`   | Couper le mot suivant                                     |
 | `ctrl+t`  | Transposer les caractères                                 |
 | `ctrl+g`  | Annuler les popovers/abandonner l'exécution de la réponse |
 
@@ -156,15 +156,15 @@ L'entrée d'invite de l'application de bureau OpenCode prend en charge les racco
 
 Certains terminaux n'envoient pas de touches de modification avec Entrée par défaut. Vous devrez peut-être configurer votre terminal pour envoyer `Shift+Enter` comme séquence d'échappement.
 
-### Borne Windows
+### Windows Terminal
 
-Ouvrez votre `settings.json` à :
+Ouvrez votre `settings.json` à :
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
-Ajoutez ceci au tableau `actions` de niveau racine :
+Ajoutez ceci au tableau `actions` de niveau racine :
 
 ```json
 "actions": [
@@ -178,7 +178,7 @@ Ajoutez ceci au tableau `actions` de niveau racine :
 ]
 ```
 
-Ajoutez ceci au tableau `keybindings` de niveau racine :
+Ajoutez ceci au tableau `keybindings` de niveau racine :
 
 ```json
 "keybindings": [

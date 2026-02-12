@@ -48,6 +48,7 @@ declare global {
       serverPassword?: string
       deepLinks?: string[]
       initialPath?: string | null
+      wsl?: boolean
     }
   }
 }

@@ -1,6 +1,6 @@
 ---
-title: ACP Support
-description: Use opencode in any ACP-compatible editor.
+title: ACP 지원
+description: ACP 호환 편집기에서 opencode를 사용하세요.
 ---
 
 opencode는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
@@ -23,14 +23,14 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-##### Zed를
+##### Zed
 
-[Zed] (https://zed.dev) 구성 (`~/.config/zed/settings.json`)에 추가 :
+[Zed](https://zed.dev) 구성 (`~/.config/zed/settings.json`)에 추가 :
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "opencode": {
+    "OpenCode": {
       "command": "opencode",
       "args": ["acp"]
     }
@@ -51,7 +51,7 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
         {
           "agent": {
             "custom": {
-              "name": "opencode",
+              "name": "OpenCode",
               "command": {
                 "command": "opencode",
                 "args": ["acp"]
@@ -67,14 +67,14 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-#### JetBrains IDEs의 특징
+#### JetBrains IDEs
 
 [JetBrains IDE]에 추가하십시오 (https://www.jetbrains.com/) [documentation]에 따라 acp.json (https://www.jetbrains.com/help/ai-assistant/acp.html):
 
 ```json title="acp.json"
 {
   "agent_servers": {
-    "opencode": {
+    "OpenCode": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -86,9 +86,9 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-#### Avante.nvim의
+#### Avante.nvim
 
-[Avante.nvim] (https://github.com/yetone/avante.nvim) 구성에 추가하십시오:
+[Avante.nvim](https://github.com/yetone/avante.nvim) 구성에 추가하십시오:
 
 ```lua
 {
@@ -140,15 +140,15 @@ require("codecompanion").setup({
 
 환경 변수 (`OPENCODE_API_KEY`와 같은)를 전달해야하는 경우, CodeCompanion.nvim 문서에서 [Configuring Adapters: Environment variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참조하십시오.
 
-## 지원
+## 지원 기능
 
-opencode는 터미널에서 같은 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
+opencode는 터미널과 동일하게 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
 
 :::note
 `/undo` 및 `/redo`와 같은 일부 내장 슬래시 명령은 현재 지원되지 않습니다.
 :::
 
-- 내장 도구 (파일 작업, 터미널 명령 등)
+- 내장 도구 (파일 작업, terminal 명령 등)
 - 사용자 정의 도구 및 슬래시 명령
 - opencode config에서 설정된 MCP 서버
 - `AGENTS.md`의 프로젝트 별 규칙

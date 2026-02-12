@@ -15,7 +15,7 @@ Los comandos personalizados se suman a los comandos integrados como `/init`, `/u
 
 ## Crear archivos de comando
 
-Cree archivos de rebajas en el directorio `commands/` para definir comandos personalizados.
+Cree archivos de Markdown en el directorio `commands/` para definir comandos personalizados.
 
 Crear `.opencode/commands/test.md`:
 
@@ -40,9 +40,9 @@ Utilice el comando escribiendo `/` seguido del nombre del comando.
 
 ---
 
-## Configurar
+## Configuración
 
-Puede agregar comandos personalizados a través de la configuración OpenCode o creando archivos de rebajas en el directorio `commands/`.
+Puede agregar comandos personalizados a través de la configuración OpenCode o creando archivos de Markdown en el directorio `commands/`.
 
 ---
 
@@ -75,9 +75,9 @@ Ahora puedes ejecutar este comando en TUI:
 
 ---
 
-### Rebaja
+### Markdown
 
-También puede definir comandos utilizando archivos de rebajas. Colócalos en:
+También puede definir comandos utilizando archivos de Markdown. Colócalos en:
 
 - Global: `~/.config/opencode/commands/`
 - Por proyecto: `.opencode/commands/`
@@ -93,8 +93,8 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-El nombre del archivo de rebajas se convierte en el nombre del comando. Por ejemplo, `test.md` permite
-tu corres:
+El nombre del archivo de Markdown se convierte en el nombre del comando. Por ejemplo, `test.md` permite
+que lo ejecutes:
 
 ```bash frame="none"
 /test
@@ -102,7 +102,7 @@ tu corres:
 
 ---
 
-## Configuración rápida
+## Configuración de indicaciones
 
 Las indicaciones para los comandos personalizados admiten varios marcadores de posición y sintaxis especiales.
 
@@ -312,7 +312,7 @@ Esta es una opción de configuración **opcional**.
 
 ---
 
-## Incorporado
+## Integrados
 
 opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
 

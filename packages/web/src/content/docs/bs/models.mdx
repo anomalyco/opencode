@@ -3,7 +3,7 @@ title: Modeli
 description: Konfiguriranje LLM provajdera i modela.
 ---
 
-## OpenCode koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) za podršku **75+ LLM provajdera** i podržava pokretanje lokalnih modela.
+OpenCode koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) za podršku **75+ LLM providera**, uključujući lokalne modele.
 
 ## Provajderi
 
@@ -12,7 +12,7 @@ Saznajte više o [providers](/docs/providers).
 
 ---
 
-## Odaberite model
+## Odabir modela
 
 Nakon što konfigurirate svog provajdera, možete odabrati model koji želite upisivanjem:
 
@@ -30,18 +30,18 @@ Razmislite o korištenju jednog od modela koje preporučujemo.
 :::
 
 Međutim, postoji samo nekoliko njih koji su dobri i u generiranju koda i u pozivanju alata.
-Evo nekoliko modela koji dobro rade sa OpenCodeom, bez posebnog redosleda. (Ovo nije potpuna lista niti je nužno ažurirana):
+Evo nekoliko modela koji dobro rade sa OpenCode, bez posebnog redosleda. (Ovo nije potpuna lista niti je nužno ažurirana):
 
 - GPT 5.2
-- Kodeks GPT 5.1
+- Codex GPT 5.1
 - Claude Opus 4.5
-- Claude Sonet 4.5
+- Claude Sonnet 4.5
 - Minimax M2.1
 - Gemini 3 Pro
 
 ---
 
-## Postavite zadano
+## Postavljanje zadanog
 
 Da postavite jedan od ovih kao zadani model, možete postaviti ključ `model` u svom
 OpenCode config.
@@ -58,7 +58,7 @@ Ako ste konfigurirali [prilagođenog provajdera](/docs/providers#custom), `provi
 
 ---
 
-## Konfigurišite modele
+## Konfiguracija modela
 
 Možete globalno konfigurirati opcije modela kroz config.
 
@@ -134,7 +134,7 @@ Mnogi modeli podržavaju više varijanti sa različitim konfiguracijama. OpenCod
 ### Ugrađene varijante
 
 OpenCode se isporučuje sa zadanim varijantama za mnoge provajdere:
-**Antropski**:
+**Anthropic**:
 
 - `high` - Visok budžet za razmišljanje (zadano)
 - `max` - Maksimalni budžet za razmišljanje
@@ -180,9 +180,9 @@ Možete nadjačati postojeće varijante ili dodati svoje:
 }
 ```
 
-### Varijante ciklusa
+### Kruženje kroz varijante
 
-## Koristite vezu `variant_cycle` za brzo prebacivanje između varijanti. [Saznajte više](/docs/keybinds).
+Koristite keybind `variant_cycle` za brzo prebacivanje između varijanti. [Saznajte više](/docs/keybinds).
 
 ## Učitavanje modela
 

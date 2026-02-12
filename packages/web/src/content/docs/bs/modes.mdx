@@ -9,19 +9,19 @@ Načini se sada konfiguriraju preko opcije `agent` u konfiguraciji otvorenog kod
 :::
 
 Režimi u otvorenom kodu omogućavaju vam da prilagodite ponašanje, alate i upite za različite slučajeve upotrebe.
-Dolazi sa dva ugrađena načina rada: **gradite** i **planirajte**. Možete prilagoditi
+Dolazi sa dva ugrađena načina rada: **build** i **plan**. Možete prilagoditi
 ove ili konfigurirajte svoje putem opencode config.
 Možete se prebacivati ​​između režima tokom sesije ili ih konfigurisati u svom konfiguracionom fajlu.
 
 ---
 
-## Ugrađeno
+## Ugrađeni
 
-## opencode dolazi sa dva ugrađena načina rada.
+opencode dolazi sa dva ugrađena načina rada.
 
 ### Build
 
-## Izrada je **podrazumevani** režim sa svim omogućenim alatima. Ovo je standardni način rada na razvoju gdje vam je potreban pun pristup operacijama datoteka i sistemskim komandama.
+Build je **podrazumijevani** režim sa svim omogućenim alatima. Ovo je standardni način rada za razvoj kada vam treba pun pristup fajlovima i sistemskim komandama.
 
 ### Plan
 
@@ -42,7 +42,7 @@ Vidi također: [Formatters](/docs/formatters) za informacije o konfiguraciji for
 
 ---
 
-## Konfiguriši
+## Konfiguracija
 
 Možete prilagoditi ugrađene načine rada ili kreirati vlastite kroz konfiguraciju. Modovi se mogu konfigurirati na dva načina:
 
@@ -77,7 +77,7 @@ Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
 
 ### Markdown konfiguracija
 
-Također možete definirati načine rada koristeći mardown datoteke. Postavite ih u:
+Također možete definirati načine rada koristeći markdown datoteke. Postavite ih u:
 
 - Globalno: `~/.config/opencode/modes/`
 - Projekat: `.opencode/modes/`
@@ -164,9 +164,9 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 }
 ```
 
-## Ako temperatura nije navedena, opencode koristi zadane postavke specifične za model (obično 0 za većinu modela, 0,55 za Qwen modele).
+Ako temperatura nije navedena, opencode koristi podrazumijevane postavke specifične za model (obično 0 za većinu modela i 0.55 za Qwen modele).
 
-### Prompt
+### Upit
 
 Navedite prilagođenu sistemsku datoteku prompta za ovaj način rada s konfiguracijom `prompt`. Datoteka s promptom treba da sadrži upute specifične za svrhu načina rada.
 
@@ -206,7 +206,7 @@ Kontrolirajte koji su alati dostupni u ovom načinu rada pomoću `tools` konfigu
 }
 ```
 
-## Ako nijedan alat nije specificiran, svi alati su omogućeni prema zadanim postavkama.
+Ako nijedan alat nije specificiran, svi alati su omogućeni po defaultu.
 
 #### Dostupni alati
 
@@ -252,7 +252,7 @@ Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfig
 }
 ```
 
-### Korištenje mardown fajlova
+### Korištenje markdown fajlova
 
 Kreirajte fajlove načina u `.opencode/modes/` za specifične načine rada ili `~/.config/opencode/modes/` za globalne načine:
 
@@ -308,9 +308,9 @@ Priorities:
 
 Evo nekoliko uobičajenih slučajeva upotrebe za različite načine rada.
 
-- **Način izgradnje**: Potpuni razvojni rad sa svim omogućenim alatima
-- **Način planiranja**: Analiza i planiranje bez izmjena
+- **Build mode**: Potpuni razvojni rad sa svim omogućenim alatima
+- **Plan mode**: Analiza i planiranje bez izmjena
 - **Review mode**: Pregled koda sa pristupom samo za čitanje plus alati za dokumentaciju
-- **Režim za otklanjanje grešaka**: Fokusiran na istragu sa omogućenim bash i alatima za čitanje
-- **Režim dokumenata**: Pisanje dokumentacije sa operacijama datoteka, ali bez sistemskih naredbi
+- **Debug mode**: Fokusiran na istragu sa omogućenim bash i alatima za čitanje
+- **Docs mode**: Pisanje dokumentacije sa operacijama datoteka, ali bez sistemskih naredbi
   Možda ćete također otkriti da su različiti modeli dobri za različite slučajeve upotrebe.

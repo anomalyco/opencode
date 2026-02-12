@@ -1,5 +1,5 @@
 ---
-title: Config
+title: Konfiguracija
 description: Korištenje OpenCode JSON konfiguracije.
 ---
 
@@ -14,7 +14,7 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Konfiguracija teme
+  // Theme configuration
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
@@ -25,10 +25,10 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 
 ## Lokacije
 
-Možete postaviti svoju konfiguraciju na nekoliko različitih lokacija i one imaju a
-drugačiji redosled prioriteta.
+Možete postaviti svoju konfiguraciju na nekoliko različitih lokacija i one imaju drugačiji redoslijed prioriteta.
+
 :::note
-Konfiguracijski fajlovi su **spojeni zajedno**, a ne zamijenjeni.
+Konfiguracijski fajlovi se **spajaju**, ne zamjenjuju.
 :::
 Konfiguracijski fajlovi se spajaju, ne zamjenjuju. Kombiniraju se postavke sa sljedećih konfiguracijskih lokacija. Kasnije konfiguracije poništavaju prethodne samo za konfliktne ključeve. Nekonfliktne postavke iz svih konfiguracija su sačuvane.
 Na primjer, ako vaša globalna konfiguracija postavlja `theme: "opencode"` i `autoupdate: true`, a vaša projektna konfiguracija postavlja `model: "anthropic/claude-sonnet-4-5"`, konačna konfiguracija će uključivati ​​sve tri postavke.
@@ -39,12 +39,13 @@ Na primjer, ako vaša globalna konfiguracija postavlja `theme: "opencode"` i `au
 
 Izvori konfiguracije se učitavaju ovim redoslijedom (kasniji izvori poništavaju ranije):
 
-1. **Udaljena konfiguracija** (od `.well-known/opencode`) - organizacione postavke
+1. **Udaljena konfiguracija** (od `.well-known/opencode`) - organizacijske postavke
 2. **Globalna konfiguracija** (`~/.config/opencode/opencode.json`) - korisničke postavke
-3. **Prilagođena konfiguracija** (`OPENCODE_CONFIG` env var) - prilagođena zaobilaženja
+3. **Prilagođena konfiguracija** (`OPENCODE_CONFIG` env var) - prilagođena preinačenja
 4. **Konfiguracija projekta** (`opencode.json` u projektu) - postavke specifične za projekat
 5. **`.opencode` direktoriji** - agenti, komande, dodaci
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime nadjačava
+6. **Inline konfiguracija** (`OPENCODE_CONFIG_CONTENT` env var) - runtime preinačenja
+
    To znači da konfiguracije projekta mogu nadjačati globalne zadane postavke, a globalne konfiguracije mogu nadjačati postavke udaljene organizacije.
    :::note
    Direktoriji `.opencode` i `~/.config/opencode` koriste **imena u množini** za poddirektorije: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` i `themes/`. Pojedinačna imena (npr. `agent/`) su također podržana za kompatibilnost unatrag.
@@ -52,9 +53,9 @@ Izvori konfiguracije se učitavaju ovim redoslijedom (kasniji izvori poništavaj
 
 ---
 
-### Daljinski
+### Udaljeno (Remote)
 
-Organizacije mogu pružiti zadanu konfiguraciju preko `.well-known/opencode` krajnje točke. Ovo se automatski preuzima kada se autentifikujete kod provajdera koji to podržava.
+Organizacije mogu pružiti zadanu konfiguraciju preko `.well-known/opencode` krajnje tačke. Ovo se automatski preuzima kada se autentifikujete kod provajdera koji to podržava.
 Prvo se učitava udaljena konfiguracija koja služi kao osnovni sloj. Svi ostali izvori konfiguracije (globalni, projektni) mogu nadjačati ove zadane postavke.
 Na primjer, ako vaša organizacija nudi MCP servere koji su po defaultu onemogućeni:
 
@@ -86,14 +87,14 @@ Možete omogućiti određene servere u vašoj lokalnoj konfiguraciji:
 
 ---
 
-### Global
+### Globalno
 
 Postavite svoju globalnu OpenCode konfiguraciju u `~/.config/opencode/opencode.json`. Koristite globalnu konfiguraciju za korisničke preferencije kao što su teme, provajderi ili veze tipki.
 Globalna konfiguracija poništava zadane postavke udaljene organizacije.
 
 ---
 
-### Nakon projekta
+### Projekt
 
 Dodajte `opencode.json` u korijen projekta. Konfiguracija projekta ima najveći prioritet među standardnim konfiguracijskim datotekama - ona nadjačava globalne i udaljene konfiguracije.
 :::tip
@@ -104,7 +105,7 @@ Ovo je također sigurno provjeriti u Git i koristi istu shemu kao globalna.
 
 ---
 
-### Custom track
+### Prilagođena konfiguracija
 
 Navedite prilagođenu putanju konfiguracijske datoteke koristeći varijablu okruženja `OPENCODE_CONFIG`.
 
@@ -117,27 +118,23 @@ Prilagođena konfiguracija se učitava između globalne i projektne konfiguracij
 
 ---
 
-### Prilagođeni imenik
+### Prilagođeni direktorij
 
-Navedite prilagođeni konfiguracijski direktorij koristeći `OPENCODE_CONFIG_DIR`
-varijabla okruženja. U ovom direktoriju će se tražiti agenti, komande,
-modove i dodatke baš kao standardni `.opencode` direktorij, i trebali bi
-prate istu strukturu.
+Navedite prilagođeni konfiguracijski direktorij koristeći `OPENCODE_CONFIG_DIR` varijablu okruženja. U ovom direktoriju će se tražiti agenti, komande, modovi i dodaci baš kao standardni `.opencode` direktorij, i trebali bi pratiti istu strukturu.
 
 ```bash
 export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
-
 ```
 
 Prilagođeni direktorij se učitava nakon direktorija globalne konfiguracije i `.opencode`, tako da **može nadjačati** njihove postavke.
 
 ---
 
-## Shema
+## Šema
 
 Konfiguracijski fajl ima šemu koja je definirana u [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
-Vaš uređivač bi trebao biti u mogućnosti da potvrdi i autodovršava na osnovu šeme.
+Vaš editor bi trebao biti u mogućnosti da validira i autodovršava na osnovu šeme.
 
 ---
 
@@ -163,13 +160,13 @@ Dostupne opcije:
 - `scroll_acceleration.enabled` - Omogući ubrzanje skrolovanja u macOS stilu. **Ima prednost nad `scroll_speed`.**
 - `scroll_speed` - Prilagođeni množitelj brzine pomicanja (podrazumevano: `3`, minimalno: `1`). Zanemareno ako je `scroll_acceleration.enabled` `true`.
 - `diff_style` - Kontrola prikaza razlike. `"auto"` se prilagođava širini terminala, `"stacked"` uvijek prikazuje jednu kolonu.
-  [Ovdje saznajte više o korištenju TUI](/docs/tui).
+  [Saznajte više o korištenju TUI](/docs/tui) ovdje.
 
 ---
 
 ### Server
 
-Možete konfigurirati postavke servera za komande `opencode serve` i `opencode web` putem opcije `server`.
+Možete konfigurirati postavke servera za naredbe `opencode serve` i `opencode web` putem opcije `server`.
 
 ```json title="opencode.json"
 {
@@ -187,15 +184,15 @@ Možete konfigurirati postavke servera za komande `opencode serve` i `opencode w
 Dostupne opcije:
 
 - `port` - Port za slušanje.
-- `hostname` - Ime hosta za slušanje. Kada je `mdns` omogućen i nije postavljeno ime hosta, podrazumevano je `0.0.0.0`.
-- `mdns` - Omogući otkrivanje mDNS usluge. Ovo omogućava drugim uređajima na mreži da otkriju vaš OpenCode server.
-- `mdnsDomain` - Prilagođeno ime domene za mDNS uslugu. Zadano je `opencode.local`. Korisno za pokretanje više instanci na istoj mreži.
-- `cors` - Dodatni izvori koji omogućavaju CORS kada koristite HTTP server iz klijenta baziranog na pretraživaču. Vrijednosti moraju biti punog porijekla (šema + host + opcijski port), npr. `https://app.example.com`.
+- `hostname` - Hostname za slušanje. Kada je `mdns` omogućen i nije postavljeno ime hosta, podrazumevano je `0.0.0.0`.
+- `mdns` - Omogući mDNS otkrivanje servisa. Ovo omogućava drugim uređajima na mreži da otkriju vaš OpenCode server.
+- `mdnsDomain` - Prilagođeno ime domene za mDNS servis. Zadano je `opencode.local`. Korisno za pokretanje više instanci na istoj mreži.
+- `cors` - Dodatni origini koji omogućavaju CORS kada koristite HTTP server iz klijenta baziranog na pretraživaču. Vrijednosti moraju biti puni origin (shema + host + opcijski port), npr. `https://app.example.com`.
   [Saznajte više o serveru](/docs/server) ovdje.
 
 ---
 
-### Uvijek
+### Alati
 
 Možete upravljati alatima koje LLM može koristiti putem opcije `tools`.
 
@@ -245,7 +242,7 @@ Opcije provajdera mogu uključivati ​​`timeout` i `setCacheKey`:
 
 - `timeout` - Vrijeme čekanja zahtjeva u milisekundama (podrazumevano: 300000). Postavite na `false` da onemogućite.
 - `setCacheKey` - Osigurajte da je ključ keš memorije uvijek postavljen za određenog provajdera.
-  Također možete konfigurirati [lokalni modeli](/docs/models#local). [Saznajte više](/docs/models).
+  Također možete konfigurirati [lokalne modele](/docs/models#local). [Saznajte više](/docs/models).
 
 ---
 
@@ -273,8 +270,8 @@ Amazon Bedrock podržava konfiguraciju specifičnu za AWS:
 ```
 
 - `region` - AWS regija za Bedrock (zadano na `AWS_REGION` env var ili `us-east-1`)
-- `profile` - AWS imenovan profil od `~/.aws/credentials` (podrazumevano na `AWS_PROFILE` env var)
-- `endpoint` - URL prilagođene krajnje tačke za VPC krajnje tačke. Ovo je pseudonim za generičku opciju `baseURL` koristeći terminologiju specifičnu za AWS. Ako su oba navedena, `endpoint` ima prednost.
+- `profile` - AWS imenovani profil iz `~/.aws/credentials` (zadano na `AWS_PROFILE` env var)
+- `endpoint` - URL prilagođene krajnje tačke za VPC krajnje tačke. Ovo je alias za generičku opciju `baseURL` koristeći terminologiju specifičnu za AWS. Ako su oba navedena, `endpoint` ima prednost.
   :::note
   Tokeni nosioca (`AWS_BEARER_TOKEN_BEDROCK` ili `/connect`) imaju prednost nad autentifikacijom zasnovanom na profilu. Pogledajte [prednost autentifikacije](/docs/providers#authentication-precedence) za detalje.
   :::
@@ -282,7 +279,7 @@ Amazon Bedrock podržava konfiguraciju specifičnu za AWS:
 
 ---
 
-### Domaći
+### Tema
 
 Možete konfigurirati temu koju želite koristiti u svojoj OpenCode konfiguraciji putem opcije `theme`.
 
@@ -319,7 +316,7 @@ Možete konfigurirati specijalizirane agente za određene zadatke putem opcije `
 }
 ```
 
-Također možete definirati agente koristeći mardown datoteke u `~/.config/opencode/agents/` ili `.opencode/agents/`. [Saznajte više ovdje](/docs/agents).
+Također možete definirati agente koristeći markdown datoteke u `~/.config/opencode/agents/` ili `.opencode/agents/`. [Saznajte više ovdje](/docs/agents).
 
 ---
 
@@ -334,7 +331,7 @@ Možete postaviti zadanog agenta koristeći opciju `default_agent`. Ovo određuj
 }
 ```
 
-Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](/docs/agents) koji ste definirali. Ako navedeni agent ne postoji ili je subagent, OpenCode će se vratiti na `"build"` s upozorenjem.
+Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](/docs/agents) koji ste definirali. Ako navedeni agent ne postoji ili je podagent, OpenCode će se vratiti na `"build"` s upozorenjem.
 Ova postavka se primjenjuje na sva sučelja: TUI, CLI (`opencode run`), desktop aplikaciju i GitHub Action.
 
 ---
@@ -350,18 +347,18 @@ Možete konfigurirati funkciju [share](/docs/share) putem opcije `share`.
 }
 ```
 
-Ovo traje:
+Ovo prihvata:
 
-- `"manual"` - Dozvoli ručno dijeljenje putem komandi (podrazumevano)
+- `"manual"` - Dozvoli ručno dijeljenje putem naredbi (podrazumevano)
 - `"auto"` - Automatski dijelite nove razgovore
 - `"disabled"` - Onemogući dijeljenje u potpunosti
   Podrazumevano, dijeljenje je postavljeno na ručni način rada gdje trebate eksplicitno dijeliti razgovore pomoću naredbe `/share`.
 
 ---
 
-### komandante
+### Naredbe
 
-Možete konfigurirati prilagođene komande za ponavljanje zadataka putem opcije `command`.
+Možete konfigurirati prilagođene naredbe za ponavljanje zadataka putem opcije `command`.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -381,13 +378,13 @@ Možete konfigurirati prilagođene komande za ponavljanje zadataka putem opcije 
 }
 ```
 
-Također možete definirati komande koristeći mardown fajlove u `~/.config/opencode/commands/` ili `.opencode/commands/`. [Saznajte više ovdje](/docs/commands).
+Također možete definirati naredbe koristeći markdown fajlove u `~/.config/opencode/commands/` ili `.opencode/commands/`. [Saznajte više ovdje](/docs/commands).
 
 ---
 
-### Keybinds
+### Prečice tipki
 
-Možete prilagoditi svoje veze ključeva putem opcije `keybinds`.
+Možete prilagoditi svoje veze tipki putem opcije `keybinds`.
 
 ```json title="opencode.json"
 {
@@ -416,7 +413,7 @@ Imajte na umu da ovo funkcionira samo ako nije instalirano pomoću upravitelja p
 
 ---
 
-### Trenerke
+### Formateri
 
 Možete konfigurirati formatere koda putem opcije `formatter`.
 
@@ -438,13 +435,13 @@ Možete konfigurirati formatere koda putem opcije `formatter`.
 }
 ```
 
-[Saznajte više o formatterima](/docs/formatters) ovdje.
+[Saznajte više o formaterima](/docs/formatters) ovdje.
 
 ---
 
 ### Dozvole
 
-Prema zadanim postavkama, opencode **dopušta sve operacije** bez potrebe za eksplicitnim dopuštenjem. Ovo možete promijeniti koristeći opciju `permission`.
+Prema zadanim postavkama, OpenCode **dopušta sve operacije** bez potrebe za eksplicitnim dopuštenjem. Ovo možete promijeniti koristeći opciju `permission`.
 Na primjer, da osigurate da alati `edit` i `bash` zahtijevaju odobrenje korisnika:
 
 ```json title="opencode.json"
@@ -457,11 +454,11 @@ Na primjer, da osigurate da alati `edit` i `bash` zahtijevaju odobrenje korisnik
 }
 ```
 
-[Ovdje saznajte više o ](/docs/permissions) dozvolama.
+[Saznajte više o dozvolama](/docs/permissions) ovdje.
 
 ---
 
-### Compaction
+### Sažimanje
 
 Možete kontrolirati ponašanje sažimanja konteksta putem opcije `compaction`.
 
@@ -480,7 +477,7 @@ Možete kontrolirati ponašanje sažimanja konteksta putem opcije `compaction`.
 
 ---
 
-### Watcher
+### Promatrač (Watcher)
 
 Možete konfigurirati obrasce ignoriranja promatrača datoteka putem opcije `watcher`.
 
@@ -512,7 +509,7 @@ Možete konfigurirati MCP servere koje želite koristiti putem opcije `mcp`.
 
 ---
 
-### Extras
+### Dodaci
 
 [Plugins](/docs/plugins) proširuju OpenCode sa prilagođenim alatima, kukicama i integracijama.
 Postavite datoteke dodataka u `.opencode/plugins/` ili `~/.config/opencode/plugins/`. Također možete učitati dodatke iz npm-a preko opcije `plugin`.
@@ -539,8 +536,7 @@ Možete konfigurirati upute za model koji koristite putem opcije `instructions`.
 }
 ```
 
-Ovo uzima niz putanja i uzoraka globusa do datoteka instrukcija. [Saznajte više
-o pravilima ovdje](/docs/rules).
+Ovo uzima niz putanja i glob uzoraka do datoteka instrukcija. [Saznajte više o pravilima ovdje](/docs/rules).
 
 ---
 
@@ -561,7 +557,7 @@ Možete onemogućiti dobavljače koji se automatski učitavaju preko opcije `dis
 Opcija `disabled_providers` prihvata niz ID-ova provajdera. Kada je provajder onemogućen:
 
 - Neće se učitati čak i ako su varijable okruženja postavljene.
-- Neće se učitati čak i ako su API ključevi konfigurirani putem `/connect` komande.
+- Neće se učitati čak i ako su API ključevi konfigurirani putem `/connect` naredbe.
 - Modeli dobavljača se neće pojaviti na listi za odabir modela.
 
 ---
@@ -577,7 +573,7 @@ Možete odrediti listu dozvoljenih dobavljača putem opcije `enabled_providers`.
 }
 ```
 
-Ovo je korisno kada želite da ograničite OpenCode da koristi samo određene provajdere umesto da ih onemogućavate jednog po jednog.
+Ovo je korisno kada želite da ograničite OpenCode da koristi samo određene provajdere umjesto da ih onemogućavate jednog po jednog.
 :::note
 `disabled_providers` ima prioritet nad `enabled_providers`.
 :::
@@ -608,7 +604,7 @@ Možete koristiti zamjenu varijabli u vašim konfiguracijskim datotekama da bist
 
 ---
 
-### Env vars
+### Varijable okruženja
 
 Koristite `{env:VARIABLE_NAME}` za zamjenu varijabli okruženja:
 
@@ -631,7 +627,7 @@ Ako varijabla okruženja nije postavljena, bit će zamijenjena praznim nizom.
 
 ---
 
-### Fajlovi
+### Datoteke
 
 Koristite `{file:path/to/file}` da zamijenite sadržaj fajla:
 

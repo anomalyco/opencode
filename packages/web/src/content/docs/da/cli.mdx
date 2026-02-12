@@ -50,7 +50,7 @@ OpenCode CLI har også følgende kommandoer.
 
 ### agent
 
-Administratoragent for OpenCode.
+Administrer agenter i OpenCode.
 
 ```bash
 opencode agent [command]
@@ -58,7 +58,7 @@ opencode agent [command]
 
 ---
 
-### vedhæft
+### attach
 
 Tilslut en terminal til en allerede kørende OpenCode backend-server startet via `serve` eller `web` kommandoer.
 
@@ -85,9 +85,9 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### oprette
+#### create
 
-Opret en ny agent med tilpasset konfiguration.
+Opret en ny agent med brugerdefineret konfiguration.
 
 ```bash
 opencode agent create
@@ -97,7 +97,7 @@ Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefin
 
 ---
 
-#### liste
+#### list
 
 Liste over alle tilgængelige agenter.
 
@@ -119,7 +119,7 @@ opencode auth [command]
 
 #### login
 
-OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `opencode auth login` til at konfigurere API nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/opencode/auth.json`.
+OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `opencode auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
@@ -129,7 +129,7 @@ Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvi
 
 ---
 
-#### liste
+#### list
 
 Viser alle de godkendte udbydere som gemt i legitimationsfilen.
 
@@ -145,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### log ud
+#### logout
 
 Logger dig ud af en udbyder ved at rydde den fra legitimationsfilen.
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### installationsprogram
+#### install
 
 Installatør GitHub-agenten i dit lager.
 
@@ -177,7 +177,7 @@ Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem kon
 
 ---
 
-#### løb
+#### run
 
 Kør GitHub-agenten. Dette bruges typisk i GitHub Actions.
 
@@ -204,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### tilføje
+#### add
 
 Tilføj en MCP-server til din konfiguration.
 
@@ -216,7 +216,7 @@ Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern 
 
 ---
 
-#### liste
+#### list
 
 Liste over alle konfigurerede MCP-servere og deres forbindelsesstatus.
 
@@ -256,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### log ud
+#### logout
 
 Fjern OAuth-legitimationsoplysninger for en MCP-server.
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### fejlretning
+#### debug
 
 Fejlfinding af OAuth-forbindelsesproblemer for en MCP-server.
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### modeller
+### models
 
 Liste over alle tilgængelige modeller fra konfigurerede udbydere.
 
@@ -309,7 +309,7 @@ opencode models --refresh
 
 ---
 
-### løb
+### run
 
 Kør opencode i ikke-interaktiv tilstand ved at sende en prompt direkte.
 
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ---
 
-### server
+### serve
 
 Start en hovedløs OpenCode-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
 
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### liste
+#### list
 
 Liste over alle OpenCode sessioner.
 
@@ -400,7 +400,7 @@ opencode session list
 
 ---
 
-### statistik
+### stats
 
 Vis tokenbrug og omkostningsstatistikker for dine OpenCode-sessioner.
 
@@ -419,7 +419,7 @@ opencode stats
 
 ---
 
-### eksport
+### export
 
 Eksporter sessionsdata som JSON.
 
@@ -489,7 +489,7 @@ Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjæ
 
 ---
 
-### afinstaller
+### uninstall
 
 Afinstaller OpenCode og fjern alle relaterede filer.
 
@@ -508,9 +508,9 @@ opencode uninstall
 
 ---
 
-###opgradering
+### upgrade
 
-Opdaterer opencode til den seneste version eller en specifik version.
+Opdaterer OpenCode til den nyeste version eller en specifik version.
 
 ```bash
 opencode upgrade [target]
@@ -528,24 +528,24 @@ For at opgradere til en bestemt version.
 opencode upgrade v0.1.48
 ```
 
-#### Flag
+#### upgrade
 
-| Flag       | Kort | Beskrivelse                                                          |
-| ---------- | ---- | -------------------------------------------------------------------- |
-| `--method` | `-m` | Installationsmetoden, der blev brugt; krølle, npm, pnpm, bolle, bryg |
+| Flag       | Kort | Beskrivelse                                                      |
+| ---------- | ---- | ---------------------------------------------------------------- |
+| `--method` | `-m` | Installationsmetoden, der blev brugt; curl, npm, pnpm, bun, brew |
 
 ---
 
-## Globalt flag
+## Globale flag
 
 opencode CLI tager følgende globale flag.
 
-| Flag           | Kort | Beskrivelse                             |
-| -------------- | ---- | --------------------------------------- |
-| `--help`       | `-h` | Vis hjælp                               |
-| `--version`    | `-v` | Udskriftsversionsnummer                 |
-| `--print-logs` |      | Udskriv logfiler til stderr             |
-| `--log-level`  |      | Logniveau (DEBUG, INFO, ADVARSEL, FEJL) |
+| Flag           | Kort | Beskrivelse                          |
+| -------------- | ---- | ------------------------------------ |
+| `--help`       | `-h` | Vis hjælp                            |
+| `--version`    | `-v` | Udskriftsversionsnummer              |
+| `--print-logs` |      | Udskriv logfiler til stderr          |
+| `--log-level`  |      | Logniveau (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
@@ -582,7 +582,7 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
 ---
 
-### Eksperimentel
+### Flag
 
 Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres eller fjernes.
 

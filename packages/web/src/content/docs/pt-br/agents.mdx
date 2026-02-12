@@ -6,7 +6,7 @@ description: Configure e use agentes especializados.
 Agentes são assistentes de IA especializados que podem ser configurados para tarefas e fluxos de trabalho específicos. Eles permitem que você crie ferramentas focadas com prompts, modelos e acesso a ferramentas personalizados.
 
 :::tip
-Use o agente de planejamento para analisar código e revisar sugestões sem fazer alterações no código.
+Use o agente de planejamento (plan) para analisar código e revisar sugestões sem fazer alterações no código.
 :::
 
 Você pode alternar entre agentes durante uma sessão ou invocá-los com a menção `@`.
@@ -40,13 +40,13 @@ opencode vem com dois subagentes integrados, **General** e **Explore**. Vamos ve
 
 ---
 
-## Integrado
+## Integrados
 
 opencode vem com dois agentes primários integrados e dois subagentes integrados.
 
 ---
 
-### Usar build
+### build
 
 _Modo_: `primary`
 
@@ -54,7 +54,7 @@ Build é o agente primário **padrão** com todas as ferramentas habilitadas. Es
 
 ---
 
-### Usar plan
+### plan
 
 _Modo_: `primary`
 
@@ -68,7 +68,7 @@ Este agente é útil quando você deseja que o LLM analise código, sugira alter
 
 ---
 
-### Usar general
+### general
 
 _Modo_: `subagent`
 
@@ -76,7 +76,7 @@ Um agente de propósito geral para pesquisar questões complexas e executar tare
 
 ---
 
-### Usar explore
+### explore
 
 _Modo_: `subagent`
 
@@ -84,7 +84,7 @@ Um agente rápido e somente leitura para explorar bases de código. Não pode mo
 
 ---
 
-### Usar compaction
+### compaction
 
 _Modo_: `primary`
 
@@ -92,7 +92,7 @@ Agente de sistema oculto que compacta longos contextos em um resumo menor. Ele �
 
 ---
 
-### Usar title
+### title
 
 _Modo_: `primary`
 
@@ -100,7 +100,7 @@ Agente de sistema oculto que gera títulos curtos para sessões. Ele é executad
 
 ---
 
-### Usar summary
+### summary
 
 _Modo_: `primary`
 
@@ -128,7 +128,7 @@ Agente de sistema oculto que cria resumos de sessões. Ele é executado automati
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode personalizar os agentes integrados ou criar os seus próprios através da configuração. Os agentes podem ser configurados de duas maneiras:
 
@@ -162,10 +162,10 @@ Configure os agentes em seu arquivo de configuração `opencode.json`:
       }
     },
     "code-reviewer": {
-      "description": "Revisa o código em busca de melhores práticas e problemas potenciais",
+      "description": "Revisa código para melhores práticas e potenciais problemas",
       "mode": "subagent",
       "model": "anthropic/claude-sonnet-4-20250514",
-      "prompt": "Você é um revisor de código. Foque em segurança, desempenho e manutenibilidade.",
+      "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
       "tools": {
         "write": false,
         "edit": false
@@ -186,7 +186,7 @@ Você também pode definir agentes usando arquivos markdown. Coloque-os em:
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
-description: Revisa o código em busca de qualidade e melhores práticas
+description: Revisa código para qualidade e melhores práticas
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -199,7 +199,7 @@ tools:
 Você está no modo de revisão de código. Foque em:
 
 - Qualidade do código e melhores práticas
-- Bugs potenciais e casos extremos
+- Bugs potenciais e casos de borda
 - Implicações de desempenho
 - Considerações de segurança
 
@@ -224,7 +224,7 @@ Use a opção `description` para fornecer uma breve descrição do que o agente 
 {
   "agent": {
     "review": {
-      "description": "Revisa o código em busca de melhores práticas e problemas potenciais"
+      "description": "Revisa código para melhores práticas e potenciais problemas"
     }
   }
 }
@@ -292,7 +292,7 @@ Se isso não for definido, o agente continuará a iterar até que o modelo decid
   "agent": {
     "quick-thinker": {
       "description": "Raciocínio rápido com iterações limitadas",
-      "prompt": "Você é um pensador rápido. Resolva problemas com o mínimo de etapas.",
+      "prompt": "Você é um pensador rápido. Resolva problemas com etapas mínimas.",
       "steps": 5
     }
   }
@@ -662,7 +662,7 @@ Execute `opencode models` para ver uma lista dos modelos disponíveis.
 
 ---
 
-## Criar agentes
+## Criando agentes
 
 Você pode criar novos agentes usando o seguinte comando:
 
@@ -712,7 +712,7 @@ tools:
   bash: false
 ---
 
-Você é um redator técnico. Crie documentação clara e abrangente.
+Você é um escritor técnico. Crie documentação clara e abrangente.
 
 Foque em:
 
@@ -735,7 +735,7 @@ tools:
   edit: false
 ---
 
-Você é um especialista em segurança. Foque em identificar problemas potenciais de segurança.
+Você é um especialista em segurança. Foque em identificar potenciais problemas de segurança.
 
 Procure por:
 

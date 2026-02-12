@@ -3,7 +3,7 @@ title: 按鍵綁定
 description: 自定義您的按鍵綁定。
 ---
 
-opencode 有一個按鍵綁定列表，您可以通過 opencode 配置進行自定義。
+opencode 有一個按鍵綁定列表，您可以透過 opencode 設定進行自定義。
 
 ```json title="opencode.json"
 {
@@ -105,19 +105,19 @@ opencode 有一個按鍵綁定列表，您可以通過 opencode 配置進行自�
 
 ---
 
-## 領袖鑰匙
+## Leader 鍵
 
-opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端中的衝突。
+opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機中的衝突。
 
-默認情況下，`ctrl+x` 是主鍵，大多數操作要求您先按主鍵，然後再按快捷鍵。例如，要開始新會話，請先按`ctrl+x`，然後按`n`。
+預設情況下，`ctrl+x` 是 Leader 鍵，大多數操作要求您先按 Leader 鍵，然後再按快速鍵。例如，要開始新工作階段，請先按 `ctrl+x`，然後按 `n`。
 
-您不需要為鍵綁定使用主鍵，但我們建議您這樣做。
+您不需要為鍵綁定使用 Leader 鍵，但我們建議您這樣做。
 
 ---
 
 ## 禁用按鍵綁定
 
-您可以通過將鍵添加到您的配置中並使用值“none”來禁用鍵綁定。
+您可以透過將鍵添加到您的設定中並使用值「none」來禁用鍵綁定。
 
 ```json title="opencode.json"
 {
@@ -130,41 +130,41 @@ opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端中�
 
 ---
 
-## 桌面提示快捷方式
+## 桌面提示快速鍵
 
-opencode 桌面應用程序提示輸入支持常見的 Readline/Emacs 風格的文本編輯快捷方式。這些是內置的，目前無法通過`opencode.json`進行配置。
+opencode 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的文字編輯快速鍵。這些是內建的，目前無法透過 `opencode.json` 進行設定。
 
-| 快捷方式 | 行動                      |
+| 快速鍵   | 動作                      |
 | -------- | ------------------------- |
 | `ctrl+a` | 移至當前行開頭            |
 | `ctrl+e` | 移至當前行尾              |
-| `ctrl+b` | 將光標向後移動一個字符    |
-| `ctrl+f` | 將光標向前移動一個字符    |
-| `alt+b`  | 將光標向後移動一個字      |
-| `alt+f`  | 將光標向前移動一個字      |
-| `ctrl+d` | 刪除光標下的字符          |
-| `ctrl+k` | 殺到行尾                  |
-| `ctrl+u` | 殺至行首                  |
-| `ctrl+w` | 刪除前一個單詞            |
-| `alt+d`  | 殺死下一個詞              |
-| `ctrl+t` | 轉置字符                  |
-| `ctrl+g` | 取消彈出窗口/中止運行響應 |
+| `ctrl+b` | 將游標向後移動一個字元    |
+| `ctrl+f` | 將游標向前移動一個字元    |
+| `alt+b`  | 將游標向後移動一個字      |
+| `alt+f`  | 將游標向前移動一個字      |
+| `ctrl+d` | 刪除游標下的字元          |
+| `ctrl+k` | 刪除至行尾                |
+| `ctrl+u` | 刪除至行首                |
+| `ctrl+w` | 刪除前一個單字            |
+| `alt+d`  | 刪除下一個單字            |
+| `ctrl+t` | 調換字元                  |
+| `ctrl+g` | 取消彈出視窗/中止執行回應 |
 
 ---
 
 ## Shift+Enter
 
-默認情況下，某些終端不發送帶有 Enter 的修飾鍵。您可能需要將終端配置為發送 `Shift+Enter` 作為轉義序列。
+預設情況下，某些終端機不發送帶有 Enter 的輔助鍵。您可能需要將終端機設定為發送 `Shift+Enter` 作為跳脫序列。
 
-### Windows 終端
+### Windows Terminal
 
-打開您的`settings.json`：
+打開您的 `settings.json`：
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
-將其添加到根級 `actions` 數組：
+將其添加到根級 `actions` 陣列：
 
 ```json
 "actions": [
@@ -178,7 +178,7 @@ opencode 桌面應用程序提示輸入支持常見的 Readline/Emacs 風格的�
 ]
 ```
 
-將其添加到根級 `keybindings` 數組：
+將其添加到根級 `keybindings` 陣列：
 
 ```json
 "keybindings": [
@@ -189,4 +189,4 @@ opencode 桌面應用程序提示輸入支持常見的 Readline/Emacs 風格的�
 ]
 ```
 
-保存文件並重新啟動 Windows 終端或打開新選項卡。
+儲存檔案並重新啟動 Windows Terminal 或打開新分頁。

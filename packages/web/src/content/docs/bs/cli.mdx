@@ -9,10 +9,9 @@ OpenCode CLI po defaultu pokreće [TUI](/docs/tui) kada se pokrene bez ikakvih a
 
 ```bash
 opencode
-
 ```
 
-Ali takođe prihvata komande kao što je dokumentovano na ovoj stranici. Ovo vam omogućava programsku interakciju sa OpenCodeom.
+Ali takođe prihvata naredbe kao što je dokumentovano na ovoj stranici. Ovo vam omogućava programsku interakciju sa OpenCode.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -22,37 +21,36 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Pokrenite korisnički interfejs OpenCode terminala.
+Pokrenite OpenCode terminalski korisnički interfejs.
 
 ```bash
 opencode [project]
-
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava      | Kratko | Opis                                                                     |
+| Opcija       | Kratko | Opis                                                                     |
 | ------------ | ------ | ------------------------------------------------------------------------ |
 | `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
 | `--session`  | `-s`   | ID sesije za nastavak                                                    |
 | `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
-| `--prompt`   |        | Uputstvo za upotrebu                                                     |
-| `--model`    | `-m`   | Model za korištenje u obliku dobavljača/modela                           |
+| `--prompt`   |        | Prompt za upotrebu                                                       |
+| `--model`    | `-m`   | Model za korištenje u obliku provider/model                              |
 | `--agent`    |        | Agent za korištenje                                                      |
-| `--port`     |        | Port za slušanje na                                                      |
-| `--hostname` |        | Slušajte ime hosta                                                       |
+| `--port`     |        | Port na kojem treba slušati                                              |
+| `--hostname` |        | Hostname na kojem treba slušati                                          |
 
 ---
 
-## komandante
+## Naredbe
 
-OpenCode CLI takođe ima sledeće komande.
+OpenCode CLI takođe ima sljedeće naredbe.
 
 ---
 
 ### agent
 
-Upravljajte agentima za OpenCode.
+Upravljajte OpenCode agentima.
 
 ```bash
 opencode agent [command]
@@ -60,16 +58,15 @@ opencode agent [command]
 
 ---
 
-### prilog
+### attach
 
-Priključite terminal na već pokrenut OpenCode backend server pokrenut putem `serve` ili `web` komandi.
+Priključite terminal na već pokrenut OpenCode backend server pokrenut putem `serve` ili `web` naredbi.
 
 ```bash
 opencode attach [url]
-
 ```
 
-Ovo omogućava korištenje TUI-ja sa udaljenim OpenCode backend-om. na primjer:
+Ovo omogućava korištenje TUI-ja sa udaljenim OpenCode backend-om. Na primjer:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -79,29 +76,28 @@ opencode web --port 4096 --hostname 0.0.0.0
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava     | Kratko | Opis                                 |
+| Opcija      | Kratko | Opis                                 |
 | ----------- | ------ | ------------------------------------ |
-| `--dir`     |        | Radni direktorij za pokretanje TUI u |
+| `--dir`     |        | Radni direktorij za pokretanje TUI-a |
 | `--session` | `-s`   | ID sesije za nastavak                |
 
 ---
 
-#### kreiraj
+#### create
 
 Kreirajte novog agenta s prilagođenom konfiguracijom.
 
 ```bash
 opencode agent create
-
 ```
 
-Ova komanda će vas voditi kroz kreiranje novog agenta sa prilagođenim sistemskim promptom i konfiguracijom alata.
+Ova naredba će vas voditi kroz kreiranje novog agenta sa prilagođenim sistemskim promptom i konfiguracijom alata.
 
 ---
 
-#### lista
+#### list
 
 Navedite sve dostupne agente.
 
@@ -117,12 +113,11 @@ Naredba za upravljanje vjerodajnicama i prijavom za provajdere.
 
 ```bash
 opencode auth [command]
-
 ```
 
 ---
 
-#### aplikacija
+#### login
 
 OpenCode pokreće lista provajdera na [Models.dev](https://models.dev), tako da možete koristiti `opencode auth login` da konfigurirate API ključeve za bilo kojeg provajdera kojeg želite koristiti. Ovo je pohranjeno u `~/.local/share/opencode/auth.json`.
 
@@ -134,13 +129,12 @@ Kada se OpenCode pokrene, učitava dobavljače iz datoteke vjerodajnica. I ako p
 
 ---
 
-#### lista
+#### list
 
-Navodi sve autentifikovane dobavljače pohranjene u datoteci akreditiva.
+Navodi sve autentifikovane dobavljače pohranjene u datoteci vjerodajnica.
 
 ```bash
-opencode auth lista
-
+opencode auth list
 ```
 
 Ili kratka verzija.
@@ -151,20 +145,19 @@ opencode auth ls
 
 ---
 
-#### odjava
+#### logout
 
 Odjavljuje vas s provajdera tako što ga briše iz datoteke vjerodajnica.
 
 ```bash
 opencode auth logout
-
 ```
 
 ---
 
 ### github
 
-Upravljajte GitHub agentom za automatizaciju spremišta.
+Upravljajte GitHub agentom za automatizaciju repozitorija.
 
 ```bash
 opencode github [command]
@@ -172,48 +165,46 @@ opencode github [command]
 
 ---
 
-#### instaliraj
+#### install
 
-Instalirajte GitHub agenta u svoje spremište.
+Instalirajte GitHub agenta u svoj repozitorij.
 
 ```bash
-opencode github instalacija
-
+opencode github install
 ```
 
 Ovo postavlja neophodni tok rada GitHub Actions i vodi vas kroz proces konfiguracije. [Saznajte više](/docs/github).
 
 ---
 
-#### trči
+#### run
 
-Pokrenite GitHub agent. Ovo se obično koristi u GitHub akcijama.
+Pokrenite GitHub agent. Ovo se obično koristi u GitHub Actions.
 
 ```bash
 opencode github run
 ```
 
-##### Zastave
+##### Opcije
 
-| Zastava   | Opis                                         |
-| --------- | -------------------------------------------- |
-| `--event` | GitHub lažni događaj za pokretanje agenta za |
-| `--token` | GitHub token ličnog pristupa                 |
+| Opcija    | Opis                                   |
+| --------- | -------------------------------------- |
+| `--event` | GitHub mock event za pokretanje agenta |
+| `--token` | GitHub Personal Access Token           |
 
 ---
 
 ### mcp
 
-Upravljajte serverima protokola konteksta modela.
+Upravljajte Model Context Protocol (MCP) serverima.
 
 ```bash
 opencode mcp [command]
-
 ```
 
 ---
 
-#### dodaj
+#### add
 
 Dodajte MCP server svojoj konfiguraciji.
 
@@ -221,17 +212,16 @@ Dodajte MCP server svojoj konfiguraciji.
 opencode mcp add
 ```
 
-Ova komanda će vas voditi kroz dodavanje lokalnog ili udaljenog MCP servera.
+Ova naredba će vas voditi kroz dodavanje lokalnog ili udaljenog MCP servera.
 
 ---
 
-#### lista
+#### list
 
 Navedite sve konfigurirane MCP servere i njihov status veze.
 
 ```bash
-opencode mcp lista
-
+opencode mcp list
 ```
 
 Ili koristite kratku verziju.
@@ -248,11 +238,10 @@ Autentifikujte se sa MCP serverom koji je omogućen za OAuth.
 
 ```bash
 opencode mcp auth [name]
-
 ```
 
 Ako ne navedete ime servera, od vas će biti zatraženo da izaberete neki od dostupnih servera koji podržavaju OAuth.
-Također možete navesti servere koji podržavaju OAuth i njihov status provjere autentičnosti.
+Također možete navesti servere koji podržavaju OAuth i njihov status autentifikacije.
 
 ```bash
 opencode mcp auth list
@@ -262,12 +251,11 @@ Ili koristite kratku verziju.
 
 ```bash
 opencode mcp auth ls
-
 ```
 
 ---
 
-#### odjava
+#### logout
 
 Uklonite OAuth vjerodajnice za MCP server.
 
@@ -277,18 +265,17 @@ opencode mcp logout [name]
 
 ---
 
-#### otklanjanje grešaka
+#### debug
 
-Otklanjanje grešaka OAuth veze sa MCP serverom.
+Otklanjanje grešaka (debug) OAuth veze sa MCP serverom.
 
 ```bash
 opencode mcp debug <name>
-
 ```
 
 ---
 
-### model
+### models
 
 Navedite sve dostupne modele konfiguriranih provajdera.
 
@@ -302,17 +289,16 @@ Opciono možete proslijediti ID provajdera za filtriranje modela po tom dobavlja
 
 ```bash
 opencode models anthropic
-
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava     | Opis                                                                     |
+| Opcija      | Opis                                                                     |
 | ----------- | ------------------------------------------------------------------------ |
-| `--refresh` | Osvježite predmemoriju modela sa models.dev                              |
+| `--refresh` | Osvježite keš modela sa models.dev                                       |
 | `--verbose` | Koristite detaljniji izlaz modela (uključuje metapodatke poput troškova) |
 
-Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u OpenCode-u.
+Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u OpenCode.
 
 ```bash
 opencode models --refresh
@@ -320,16 +306,15 @@ opencode models --refresh
 
 ---
 
-### trči
+### run
 
-Pokrenite opencode u neinteraktivnom modu tako što ćete direktno proslijediti prompt.
+Pokrenite OpenCode u neinteraktivnom modu tako što ćete direktno proslijediti prompt.
 
 ```bash
 opencode run [message..]
-
 ```
 
-Ovo je korisno za skriptiranje, automatizaciju ili kada želite brz odgovor bez pokretanja punog TUI-ja. Na primjer.
+Ovo je korisno za skriptiranje, automatizaciju ili kada želite brz odgovor bez pokretanja punog TUI-ja. Na primjer:
 
 ```bash "opencode run"
 opencode run Explain the use of context in Go
@@ -340,16 +325,16 @@ Također možete priključiti pokrenutu `opencode serve` instancu kako biste izb
 ```bash
 # Start a headless server in one terminal
 opencode serve
-# U drugom terminalu, pokrenite komande koje se vezuju za njega
-opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava      | Kratko | Opis                                                                     |
+| Opcija       | Kratko | Opis                                                                     |
 | ------------ | ------ | ------------------------------------------------------------------------ |
-| `--command`  |        | Naredba za pokretanje, koristite poruku za args                          |
+| `--command`  |        | Naredba za pokretanje, koristite poruku za argumente                     |
 | `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
 | `--session`  | `-s`   | ID sesije za nastavak                                                    |
 | `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
@@ -359,44 +344,43 @@ opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 | `--file`     | `-f`   | Fajlovi koje treba priložiti poruci                                      |
 | `--format`   |        | Format: default (formatiran) ili json (sirovi JSON događaji)             |
 | `--title`    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)     |
-| `--attach`   |        | Priključite na pokrenuti opencode server (npr. http://localhost:4096)    |
+| `--attach`   |        | Priključite na pokrenuti OpenCode server (npr. http://localhost:4096)    |
 | `--port`     |        | Port za lokalni server (zadano na nasumični port)                        |
 
 ---
 
-### poslužiti
+### serve
 
-Pokrenite OpenCode server bez glave za pristup API-ju. Pogledajte [server docs](/docs/server) za kompletan HTTP interfejs.
+Pokrenite OpenCode headless server za API pristup. Pogledajte [server docs](/docs/server) za kompletan HTTP interfejs.
 
 ```bash
 opencode serve
 ```
 
-Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti otvorenog koda bez TUI interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez TUI interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
-#### Zastave
+#### Opcije
 
-| Zastava      | Opis                                                 |
-| ------------ | ---------------------------------------------------- |
-| `--port`     | Port za slušanje na                                  |
-| `--hostname` | Ime hosta za slušanje                                |
-| `--mdns`     | Omogući mDNS otkrivanje                              |
-| `--cors`     | Dodatni izvor(a) pretraživača koji dozvoljavaju CORS |
+| Opcija       | Opis                                                  |
+| ------------ | ----------------------------------------------------- |
+| `--port`     | Port na kojem treba slušati                           |
+| `--hostname` | Hostname na kojem treba slušati                       |
+| `--mdns`     | Omogući mDNS otkrivanje                               |
+| `--cors`     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
 
 ---
 
-### sesija
+### session
 
 Upravljajte OpenCode sesijama.
 
 ```bash
-opencode sesija [naredba]
-
+opencode session [command]
 ```
 
 ---
 
-#### lista
+#### list
 
 Navedite sve OpenCode sesije.
 
@@ -404,36 +388,35 @@ Navedite sve OpenCode sesije.
 opencode session list
 ```
 
-##### Zastave
+##### Opcije
 
-| Zastava       | Kratko | Opis                                      |
-| ------------- | ------ | ----------------------------------------- |
-| `--max-count` | `-n`   | Ograničenje na N najnovijih sesija        |
-| `--format`    |        | Izlazni format: tablica ili json (tabela) |
+| Opcija        | Kratko | Opis                                   |
+| ------------- | ------ | -------------------------------------- |
+| `--max-count` | `-n`   | Ograničenje na N najnovijih sesija     |
+| `--format`    |        | Izlazni format: table ili json (table) |
 
 ---
 
-### statistika
+### stats
 
 Prikaži statistiku upotrebe tokena i troškova za vaše OpenCode sesije.
 
 ```bash
 opencode stats
-
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava     | Opis                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------- |
-| `--days`    | Prikaži statistiku za zadnjih N dana (sva vremena)                                                          |
-| `--tools`   | Broj alata za prikaz (svi)                                                                                  |
-| `--models`  | Prikaži raščlambu korištenja modela (skriveno prema zadanim postavkama). Proslijedite broj za prikaz vrha N |
-| `--project` | Filtriraj po projektu (svi projekti, prazan niz: trenutni projekt)                                          |
+| Opcija      | Opis                                                                                                       |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `--days`    | Prikaži statistiku za zadnjih N dana (sva vremena)                                                         |
+| `--tools`   | Broj alata za prikaz (svi)                                                                                 |
+| `--models`  | Prikaži raščlambu korištenja modela (skriveno prema zadanim postavkama). Proslijedite broj za prikaz top N |
+| `--project` | Filtriraj po projektu (svi projekti, prazan niz: trenutni projekt)                                         |
 
 ---
 
-### izvoz
+### export
 
 Izvezite podatke sesije kao JSON.
 
@@ -445,13 +428,12 @@ Ako ne unesete ID sesije, od vas će biti zatraženo da odaberete neku od dostup
 
 ---
 
-### uvoz
+### import
 
 Uvezite podatke sesije iz JSON datoteke ili OpenCode dijeljenog URL-a.
 
 ```bash
 opencode import <file>
-
 ```
 
 Možete uvesti iz lokalne datoteke ili OpenCode dijeljenog URL-a.
@@ -465,23 +447,22 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Pokrenite OpenCode server bez glave sa web interfejsom.
+Pokrenite OpenCode headless server sa web interfejsom.
 
 ```bash
 opencode web
-
 ```
 
-Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCodeu preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
-#### Zastave
+#### Opcije
 
-| Zastava      | Opis                                                 |
-| ------------ | ---------------------------------------------------- |
-| `--port`     | Port za slušanje na                                  |
-| `--hostname` | Ime hosta za slušanje                                |
-| `--mdns`     | Omogući mDNS otkrivanje                              |
-| `--cors`     | Dodatni izvor(a) pretraživača koji dozvoljavaju CORS |
+| Opcija       | Opis                                                  |
+| ------------ | ----------------------------------------------------- |
+| `--port`     | Port na kojem treba slušati                           |
+| `--hostname` | Hostname na kojem treba slušati                       |
+| `--mdns`     | Omogući mDNS otkrivanje                               |
+| `--cors`     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
 
 ---
 
@@ -493,33 +474,32 @@ Pokrenite ACP (Agent Client Protocol) server.
 opencode acp
 ```
 
-Ova komanda pokreće ACP server koji komunicira preko stdin/stdout koristeći nd-JSON.
+Ova naredba pokreće ACP server koji komunicira preko stdin/stdout koristeći nd-JSON.
 
-#### Zastave
+#### Opcije
 
-| Zastava      | Opis                |
-| ------------ | ------------------- |
-| `--cwd`      | Radni imenik        |
-| `--port`     | Port za slušanje na |
-| `--hostname` | Slušajte ime hosta  |
+| Opcija       | Opis                        |
+| ------------ | --------------------------- |
+| `--cwd`      | Radni direktorij            |
+| `--port`     | Port na kojem treba slušati |
+| `--hostname` | Hostname na kojem slušati   |
 
 ---
 
-### deinstaliraj
+### uninstall
 
 Deinstalirajte OpenCode i uklonite sve povezane datoteke.
 
 ```bash
 opencode uninstall
-
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava         | Kratko | Opis                                          |
+| Opcija          | Kratko | Opis                                          |
 | --------------- | ------ | --------------------------------------------- |
-| `--keep-config` | `-c`   | Čuvajte konfiguracijske datoteke              |
-| `--keep-data`   | `-d`   | Čuvajte podatke i snimke sesije               |
+| `--keep-config` | `-c`   | Sačuvajte konfiguracijske datoteke            |
+| `--keep-data`   | `-d`   | Sačuvajte podatke i snimke sesije             |
 | `--dry-run`     |        | Pokažite šta bi bilo uklonjeno bez uklanjanja |
 | `--force`       | `-f`   | Preskoči upite za potvrdu                     |
 
@@ -527,7 +507,7 @@ opencode uninstall
 
 ### upgrade
 
-Ažurira opencode na najnoviju verziju ili određenu verziju.
+Ažurira OpenCode na najnoviju verziju ili određenu verziju.
 
 ```bash
 opencode upgrade [target]
@@ -537,7 +517,6 @@ Za nadogradnju na najnoviju verziju.
 
 ```bash
 opencode upgrade
-
 ```
 
 Za nadogradnju na određenu verziju.
@@ -546,73 +525,76 @@ Za nadogradnju na određenu verziju.
 opencode upgrade v0.1.48
 ```
 
-#### Zastave
+#### Opcije
 
-| Zastava    | Kratko | Opis                                                    |
+| Opcija     | Kratko | Opis                                                    |
 | ---------- | ------ | ------------------------------------------------------- |
 | `--method` | `-m`   | Korišteni način instalacije; curl, npm, pnpm, bun, brew |
 
 ---
 
-## Globalne zastave
+## Globalne opcije
 
-CLI otvorenog koda uzima sljedeće globalne zastavice.
-| Zastava | Kratko | Opis
-|-------------- | ----- | ------------------------------------ |
-| `--help` | `-h` | Prikaži pomoć |
-| `--version` | `-v` | Odštampaj broj verzije |
-| `--print-logs` | | Ispis zapisnika u stderr |
-| `--log-level` | | Nivo dnevnika (DEBUG, INFO, WARN, ERROR) |
+OpenCode CLI prihvata sljedeće globalne zastavice.
+
+| Opcija         | Kratko | Opis                                      |
+| -------------- | ------ | ----------------------------------------- |
+| `--help`       | `-h`   | Prikaži pomoć                             |
+| `--version`    | `-v`   | Ispiši broj verzije                       |
+| `--print-logs` |        | Ispis logova u stderr                     |
+| `--log-level`  |        | Nivo logovanja (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
 ## Varijable okruženja
 
 OpenCode se može konfigurirati pomoću varijabli okruženja.
-| Varijabilna | Vrsta | Opis
-|------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE` | boolean | Automatski dijeli sesije |
-| `OPENCODE_GIT_BASH_PATH` | string | Putanja do Git Bash izvršne datoteke na Windows |
-| `OPENCODE_CONFIG` | string | Put do konfiguracionog fajla |
-| `OPENCODE_CONFIG_DIR` | string | Put do konfiguracijskog direktorija |
-| `OPENCODE_CONFIG_CONTENT` | string | Inline json konfiguracijski sadržaj |
-| `OPENCODE_DISABLE_AUTOUPDATE` | boolean | Onemogući automatske provjere ažuriranja |
-| `OPENCODE_DISABLE_PRUNE` | boolean | Onemogući orezivanje starih podataka |
-| `OPENCODE_DISABLE_TERMINAL_TITLE` | boolean | Onemogući automatsko ažuriranje naslova terminala |
-| `OPENCODE_PERMISSION` | string | Umetnuta json konfiguracija dozvola |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | boolean | Onemogući podrazumevane dodatke |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD` | boolean | Onemogući automatsko preuzimanje LSP servera |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Omogući eksperimentalne modele |
-| `OPENCODE_DISABLE_AUTOCOMPACT` | boolean | Onemogući automatsko sažimanje konteksta |
-| `OPENCODE_DISABLE_CLAUDE_CODE` | boolean | Onemogući čitanje sa `.claude` (prompt + vještine) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Onemogući čitanje `~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Onemogući učitavanje `.claude/skills` |
-| `OPENCODE_DISABLE_MODELS_FETCH` | boolean | Onemogući dohvaćanje modela iz udaljenih izvora |
-| `OPENCODE_FAKE_VCS` | string | Lažni VCS provajder za potrebe testiranja |
-| `OPENCODE_DISABLE_FILETIME_CHECK` | boolean | Onemogući provjeru vremena datoteke radi optimizacije |
-| `OPENCODE_CLIENT` | string | Identifikator klijenta (zadano na `cli`) |
-| `OPENCODE_ENABLE_EXA` | boolean | Omogući Exa alate za web pretraživanje |
-| `OPENCODE_SERVER_PASSWORD` | string | Omogući osnovnu autorizaciju za `OPENCODE_GIT_BASH_PATH`/`OPENCODE_CONFIG` |
-| `OPENCODE_SERVER_USERNAME` | string | Poništi osnovno korisničko ime autentifikacije (zadano `opencode`) |
-| `OPENCODE_MODELS_URL` | string | Prilagođeni URL za dohvaćanje konfiguracije modela |
+
+| Varijabla                             | Tip     | Opis                                                               |
+| ------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Automatski dijeli sesije                                           |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Putanja do Git Bash izvršne datoteke na Windows-u                  |
+| `OPENCODE_CONFIG`                     | string  | Putanja do konfiguracijskog fajla                                  |
+| `OPENCODE_CONFIG_DIR`                 | string  | Putanja do konfiguracijskog direktorija                            |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json konfiguracijski sadržaj                                |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Onemogući automatske provjere ažuriranja                           |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Onemogući brisanje (pruning) starih podataka                       |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Onemogući automatsko ažuriranje naslova terminala                  |
+| `OPENCODE_PERMISSION`                 | string  | Inline json konfiguracija dozvola                                  |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Onemogući podrazumijevane dodatke (plugins)                        |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Onemogući automatsko preuzimanje LSP servera                       |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Omogući eksperimentalne modele                                     |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Onemogući automatsko sažimanje konteksta                           |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Onemogući čitanje iz `.claude` (prompt + vještine)                 |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Onemogući čitanje `~/.claude/CLAUDE.md`                            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Onemogući učitavanje `.claude/skills`                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Onemogući dohvaćanje modela iz udaljenih izvora                    |
+| `OPENCODE_FAKE_VCS`                   | string  | Lažni VCS provajder za potrebe testiranja                          |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Onemogući provjeru vremena datoteke radi optimizacije              |
+| `OPENCODE_CLIENT`                     | string  | Identifikator klijenta (zadano na `cli`)                           |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Omogući Exa alate za web pretraživanje                             |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Omogući osnovnu autentifikaciju za `serve`/`web`                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | Poništi osnovno korisničko ime autentifikacije (zadano `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | Prilagođeni URL za dohvaćanje konfiguracije modela                 |
 
 ---
 
 ### Eksperimentalno
 
 Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mogu promijeniti ili ukloniti.
-| Varijabilna | Vrsta | Opis
-|----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL` | boolean | Omogući sve eksperimentalne funkcije |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | boolean | Omogući otkrivanje ikona |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | boolean | Onemogući kopiranje pri odabiru u TUI |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | broj | Zadano vremensko ograničenje za bash komande u ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | broj | Maksimalni izlazni tokeni za LLM odgovore |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER` | boolean | Omogući praćenje datoteka za cijeli dir |
-| `OPENCODE_EXPERIMENTAL_OXFMT` | boolean | Omogući oxfmt formatter |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL` | boolean | Omogući eksperimentalni LSP alat |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER` | boolean | Onemogući praćenje datoteka |
-| `OPENCODE_EXPERIMENTAL_EXA` | boolean | Omogući eksperimentalne Exa funkcije |
-| `OPENCODE_EXPERIMENTAL_LSP_TY` | boolean | Omogući eksperimentalnu provjeru tipa LSP |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN` | boolean | Omogući eksperimentalne funkcije smanjenja |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE` | boolean | Omogući režim plana |
+
+| Varijabla                                       | Tip     | Opis                                              |
+| ----------------------------------------------- | ------- | ------------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Omogući sve eksperimentalne funkcije              |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Omogući otkrivanje ikona                          |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Onemogući kopiranje pri odabiru u TUI             |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Zadano vremensko ograničenje za bash naredbe u ms |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Maksimalni izlazni tokeni za LLM odgovore         |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Omogući praćenje datoteka za cijeli direktorij    |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Omogući oxfmt formatter                           |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Omogući eksperimentalni LSP alat                  |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Onemogući praćenje datoteka                       |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Omogući eksperimentalne Exa funkcije              |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Omogući eksperimentalnu provjeru tipa LSP         |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Omogući eksperimentalne Markdown funkcije         |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Omogući Plan mod                                  |

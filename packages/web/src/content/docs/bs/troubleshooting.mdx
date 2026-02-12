@@ -3,7 +3,7 @@ title: Rješavanje problema
 description: Uobičajeni problemi i kako ih riješiti.
 ---
 
-Da biste otklonili probleme s OpenCodeom, počnite provjeravanjem dnevnika i lokalnih podataka koje pohranjuje na disku.
+Da biste otklonili probleme s OpenCode, počnite provjeravanjem dnevnika i lokalnih podataka koje pohranjuje na disku.
 
 ---
 
@@ -20,9 +20,9 @@ Možete postaviti nivo dnevnika pomoću opcije komandne linije `--log-level` da 
 
 ---
 
-## Skladištenje
+## Pohrana
 
-opencode pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
+OpenCode pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode`
@@ -49,7 +49,7 @@ OpenCode Desktop pokreće lokalni OpenCode server (`opencode-cli` sidecar) u poz
 
 ---
 
-### Onemogući dodatke
+### Onemogućavanje dodataka
 
 Ako se desktop aplikacija ruši pri pokretanju, visi ili se čudno ponaša, počnite s onemogućavanjem dodataka.
 
@@ -70,7 +70,7 @@ Ako imate konfigurirane dodatke, privremeno ih onemogućite uklanjanjem ključa 
 }
 ```
 
-#### Provjerite imenike dodataka
+#### Provjera direktorija dodataka
 
 OpenCode također može učitati lokalne dodatke s diska. Privremeno ih maknite s puta (ili preimenujte folder) i ponovo pokrenite desktop aplikaciju:
 
@@ -84,7 +84,7 @@ Ako aplikacija ponovo počne raditi, ponovo omogućite dodatke jedan po jedan ka
 
 ---
 
-### Očisti keš memoriju
+### Brisanje keš memorije
 
 Ako onemogućavanje dodataka ne pomogne (ili se instalacija dodatka zaglavila), obrišite keš memoriju kako bi ga OpenCode mogao ponovo izgraditi.
 
@@ -99,7 +99,7 @@ Ako onemogućavanje dodataka ne pomogne (ili se instalacija dodatka zaglavila), 
 
 ---
 
-### Popravite probleme sa vezom na serveru
+### Rješavanje problema sa vezom na serveru
 
 OpenCode Desktop može ili pokrenuti svoj lokalni server (podrazumevano) ili se povezati na URL servera koji ste konfigurisali.
 
@@ -130,7 +130,7 @@ Na Linuxu, neka podešavanja Waylanda mogu uzrokovati prazne prozore ili greške
 
 ---
 
-### Windows: WebView2 runtime
+### Windows: WebView2 izvršno okruženje
 
 Na Windows-u, OpenCode Desktop zahtijeva Microsoft Edge **WebView2 Runtime**. Ako se aplikacija otvori u praznom prozoru ili se ne pokrene, instalirajte/ažurirajte WebView2 i pokušajte ponovo.
 
@@ -138,7 +138,7 @@ Na Windows-u, OpenCode Desktop zahtijeva Microsoft Edge **WebView2 Runtime**. Ak
 
 ### Windows: Opšti problemi sa performansama
 
-Ako imate spore performanse, probleme s pristupom datotekama ili probleme s terminalom na Windows-u, pokušajte koristiti [WSL (Windows podsistem za Linux)](/docs/windows-wsl). WSL pruža Linux okruženje koje radi neprimetnije sa OpenCode-ovim karakteristikama.
+Ako imate spore performanse, probleme s pristupom datotekama ili probleme s terminalom na Windows-u, pokušajte koristiti [WSL (Windows podsistem za Linux)](/docs/windows-wsl). WSL pruža Linux okruženje koje radi neprimetnije sa OpenCode karakteristikama.
 
 ---
 
@@ -151,7 +151,7 @@ OpenCode Desktop prikazuje sistemska obavještenja samo kada:
 
 ---
 
-### Poništi pohranu desktop aplikacija (posljednje rješenje)
+### Resetovanje pohrane desktop aplikacije
 
 Ako se aplikacija ne pokrene i ne možete izbrisati postavke unutar korisničkog sučelja, resetirajte spremljeno stanje desktop aplikacije.
 
@@ -169,9 +169,9 @@ Da brzo pronađete direktorij:
 
 ---
 
-## Dobivanje pomoći
+## Traženje pomoći
 
-Ako imate problema s OpenCodeom:
+Ako imate problema s OpenCode:
 
 1. **Prijavite probleme na GitHub**
 
@@ -195,7 +195,7 @@ Evo nekih uobičajenih problema i kako ih riješiti.
 
 ---
 
-### OpenCode se neće pokrenuti
+### OpenCode se ne pokreće
 
 1. Provjerite dnevnike za poruke o greškama
 2. Pokušajte pokrenuti sa `--print-logs` da vidite izlaz u terminalu
@@ -242,8 +242,6 @@ Da biste ovo riješili:
 
 ```bash
    rm -rf ~/.local/share/opencode
-
-
 ```
 
 Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\opencode`
@@ -254,7 +252,7 @@ Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\openco
 
 ### AI_APICallError i problemi sa paketom dobavljača
 
-Ako naiđete na greške API poziva, to može biti zbog zastarjelih paketa dobavljača. opencode dinamički instalira pakete dobavljača (OpenAI, Anthropic, Google, itd.) po potrebi i kešira ih lokalno.
+Ako naiđete na greške API poziva, to može biti zbog zastarjelih paketa dobavljača. OpenCode dinamički instalira pakete dobavljača (OpenAI, Anthropic, Google, itd.) po potrebi i kešira ih lokalno.
 
 Da biste riješili probleme s paketom dobavljača:
 
@@ -262,15 +260,13 @@ Da biste riješili probleme s paketom dobavljača:
 
 ```bash
    rm -rf ~/.cache/opencode
-
-
 ```
 
 Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.cache\opencode`
 
-2. Ponovo pokrenite opencode da ponovo instalirate najnovije pakete dobavljača
+2. Ponovo pokrenite OpenCode da ponovo instalirate najnovije pakete dobavljača
 
-Ovo će prisiliti opencode da preuzme najnovije verzije paketa dobavljača, što često rješava probleme kompatibilnosti s parametrima modela i promjenama API-ja.
+Ovo će prisiliti OpenCode da preuzme najnovije verzije paketa dobavljača, što često rješava probleme kompatibilnosti s parametrima modela i promjenama API-ja.
 
 ---
 
@@ -301,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode će otkriti da li koristite Wayland i preferirate `wl-clipboard`, u suprotnom će pokušati pronaći alate međuspremnika po redoslijedu: `xclip` i `xsel`.
+OpenCode će otkriti da li koristite Wayland i preferirate `wl-clipboard`, u suprotnom će pokušati pronaći alate međuspremnika po redoslijedu: `xclip` i `xsel`.

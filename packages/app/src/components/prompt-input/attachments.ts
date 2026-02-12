@@ -3,6 +3,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -33,7 +34,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID?.() ?? Math.random().toString(16).slice(2),
+        id: uuid(),
         filename: file.name,
         mime: file.type,
         dataUrl,

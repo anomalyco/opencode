@@ -3,19 +3,19 @@ title: Modeller
 description: Konfigurere en LLM leverandør og modell.
 ---
 
-opencode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
+OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
 
 ---
 
 ## Leverandører
 
-De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter opencode.
+De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter OpenCode.
 
 Finn ut mer om [leverandører](/docs/providers).
 
 ---
 
-## Velg en modell
+## Velge en modell
 
 Når du har konfigurert leverandøren din, kan du velge modellen du ønsker ved å skrive inn:
 
@@ -35,7 +35,7 @@ Vurder å bruke en av modellene vi anbefaler.
 
 Imidlertid er det bare noen få av dem som er gode til både å generere kode og verktøykalling.
 
-Her er flere modeller som fungerer godt med opencode, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
+Her er flere modeller som fungerer godt med OpenCode, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,7 +49,7 @@ Her er flere modeller som fungerer godt med opencode, uten spesiell rekkefølge.
 ## Angi en standard
 
 For å angi en av disse som standardmodell, kan du angi `model`-tasten i din
-opencode-konfigurasjon.
+OpenCode-konfigurasjon.
 
 ```json title="opencode.json" {3}
 {
@@ -141,11 +141,11 @@ Mange modeller støtter flere varianter med forskjellige konfigurasjoner. openco
 
 ### Innebygde varianter
 
-opencode leveres med standardvarianter for mange leverandører:
+OpenCode leveres med standardvarianter for mange leverandører:
 
-**Antropisk**:
+**Anthropic**:
 
-- `high` - Høyt budsjett (standard)
+- `high` - Høyt tenkebudsjett (standard)
 - `max` - Maksimalt tenkebudsjett
 
 **OpenAI**:
@@ -195,19 +195,19 @@ Du kan overstyre eksisterende varianter eller legge til dine egne:
 }
 ```
 
-### Syklusvarianter
+### Bytt varianter
 
 Bruk tastebindingen `variant_cycle` for raskt å bytte mellom varianter. [Finn ut mer](/docs/keybinds).
 
 ---
 
-## Laster modeller
+## Lasting av modeller
 
-Når opencode starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
+Når OpenCode starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
 
 1. Kommandolinjeflagget `--model` eller `-m`. Formatet er det samme som i konfigurasjonsfilen: `provider_id/model_id`.
 
-2. Modelllisten i opencode-konfigurasjonen.
+2. Modelllisten i OpenCode-konfigurasjonen.
 
    ```json title="opencode.json"
    {

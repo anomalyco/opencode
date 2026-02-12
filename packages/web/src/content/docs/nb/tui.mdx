@@ -5,7 +5,7 @@ description: Bruke opencode-terminalbrukergrensesnittet.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode gir et interaktivt terminalgrensesnitt eller TUI for å jobbe med prosjektene dine med en LLM.
+opencode gir et interaktivt terminalgrensesnitt (TUI) for å jobbe med prosjektene dine med en LLM.
 
 Å kjøre opencode starter TUI for gjeldende katalog.
 
@@ -13,13 +13,13 @@ opencode gir et interaktivt terminalgrensesnitt eller TUI for å jobbe med prosj
 opencode
 ```
 
-Eller du kan starte den for en bestemt arbeidskatalog.
+Eller du kan starte den for en spesifikk arbeidskatalog.
 
 ```bash
 opencode /path/to/project
 ```
 
-Når du er i TUI, kan du spørre den med en melding.
+Når du er i TUI, kan du stille den spørsmål med en prompt.
 
 ```text
 Give me a quick summary of the codebase.
@@ -29,7 +29,7 @@ Give me a quick summary of the codebase.
 
 ## Filreferanser
 
-Du kan referere til filer i meldingene dine ved å bruke `@`. Dette gjør et uklar filsøk i gjeldende arbeidskatalog.
+Du kan referere til filer i meldingene dine ved å bruke `@`. Dette gjør et fuzzy-filsøk i gjeldende arbeidskatalog.
 
 :::tip
 Du kan også bruke `@` til å referere til filer i meldingene dine.
@@ -45,7 +45,7 @@ Innholdet i filen legges automatisk til samtalen.
 
 ## Bash-kommandoer
 
-Start en melding med `!` for å kjøre en shell-kommando.
+Start en melding med `!` for å kjøre en skallkommando.
 
 ```bash frame="none"
 !ls -la
@@ -63,13 +63,13 @@ Når du bruker opencode TUI, kan du skrive `/` etterfulgt av et kommandonavn for
 /help
 ```
 
-De fleste kommandoer har også tastebinding som bruker `ctrl+x` som ledernøkkel, der `ctrl+x` er standard ledernøkkel. [Finn ut mer](/docs/keybinds).
+De fleste kommandoer har også tastebinding som bruker `ctrl+x` som leader-tast, der `ctrl+x` er standard leader-tast. [Finn ut mer](/docs/keybinds).
 
-Her er alle tilgjengelige skråstrekkommandoer:
+Her er alle tilgjengelige slash-kommandoer:
 
 ---
 
-### koble til
+### connect
 
 Legg til en leverandør til opencode. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
 
@@ -79,7 +79,7 @@ Legg til en leverandør til opencode. Lar deg velge fra tilgjengelige leverandø
 
 ---
 
-### kompakt
+### compact
 
 Komprimer gjeldende økt. _Alias_: `/summarize`
 
@@ -91,9 +91,9 @@ Komprimer gjeldende økt. _Alias_: `/summarize`
 
 ---
 
-### detaljer
+### details
 
-Veksle verktøyutførelsesdetaljer.
+Veksle visning av verktøydetaljer.
 
 ```bash frame="none"
 /details
@@ -103,9 +103,9 @@ Veksle verktøyutførelsesdetaljer.
 
 ---
 
-### redaktør
+### editor
 
-Åpne eksternt redigeringsprogram for å skrive meldinger. Bruker redigeringssettet i miljøvariabelen `EDITOR`. [Finn ut mer](#editor-setup).
+Åpne eksternt tekstredigeringsprogram for å skrive meldinger. Bruker redigeringssettet i miljøvariabelen `EDITOR`. [Finn ut mer](#editor-setup).
 
 ```bash frame="none"
 /editor
@@ -115,7 +115,7 @@ Veksle verktøyutførelsesdetaljer.
 
 ---
 
-### avslutt
+### exit
 
 Avslutt opencode. _Aliaser_: `/quit`, `/q`
 
@@ -127,7 +127,7 @@ Avslutt opencode. _Aliaser_: `/quit`, `/q`
 
 ---
 
-### eksport
+### export
 
 Eksporter gjeldende samtale til Markdown og åpne i standardredigeringsprogrammet. Bruker redigeringssettet i miljøvariabelen `EDITOR`. [Finn ut mer](#editor-setup).
 
@@ -139,7 +139,7 @@ Eksporter gjeldende samtale til Markdown og åpne i standardredigeringsprogramme
 
 ---
 
-### hjelp
+### help
 
 Vis hjelpedialogen.
 
@@ -163,7 +163,7 @@ Opprett eller oppdater `AGENTS.md`-fil. [Finn ut mer](/docs/rules).
 
 ---
 
-### modeller
+### models
 
 Liste over tilgjengelige modeller.
 
@@ -175,7 +175,7 @@ Liste over tilgjengelige modeller.
 
 ---
 
-### ny
+### new
 
 Start en ny økt. _Alias_: `/clear`
 
@@ -187,7 +187,7 @@ Start en ny økt. _Alias_: `/clear`
 
 ---
 
-### gjør om
+### redo
 
 Gjenta en tidligere angret melding. Kun tilgjengelig etter bruk av `/undo`.
 
@@ -196,7 +196,7 @@ Eventuelle filendringer vil også bli gjenopprettet.
 :::
 
 Internt bruker dette Git til å administrere filendringene. Så ditt prosjekt **må
-være et Git-depot**.
+være et Git-repo**.
 
 ```bash frame="none"
 /redo
@@ -206,7 +206,7 @@ være et Git-depot**.
 
 ---
 
-### økter
+### sessions
 
 List opp og bytt mellom økter. _Aliaser_: `/resume`, `/continue`
 
@@ -218,7 +218,7 @@ List opp og bytt mellom økter. _Aliaser_: `/resume`, `/continue`
 
 ---
 
-### del
+### share
 
 Del gjeldende økt. [Finn ut mer](/docs/share).
 
@@ -230,7 +230,7 @@ Del gjeldende økt. [Finn ut mer](/docs/share).
 
 ---
 
-### temaer
+### theme
 
 Liste over tilgjengelige temaer.
 
@@ -242,7 +242,7 @@ Liste over tilgjengelige temaer.
 
 ---
 
-### tenker
+### thinking
 
 Veksle mellom synligheten av tenke-/resonneringsblokker i samtalen. Når den er aktivert, kan du se modellens resonneringsprosess for modeller som støtter utvidet tenkning.
 
@@ -256,7 +256,7 @@ Denne kommandoen kontrollerer bare om tenkeblokker **vises** - den aktiverer ell
 
 ---
 
-### angre
+### undo
 
 Angre siste melding i samtalen. Fjerner den siste brukermeldingen, alle påfølgende svar og eventuelle filendringer.
 
@@ -265,7 +265,7 @@ Eventuelle filendringer vil også bli tilbakestilt.
 :::
 
 Internt bruker dette Git til å administrere filendringene. Så ditt prosjekt **må
-være et Git-depot**.
+være et Git-repo**.
 
 ```bash frame="none"
 /undo
@@ -275,7 +275,7 @@ være et Git-depot**.
 
 ---
 
-### avbryt deling
+### unshare
 
 Opphev deling av gjeldende økt. [Finn ut mer](/docs/share#un-sharing).
 
@@ -285,9 +285,9 @@ Opphev deling av gjeldende økt. [Finn ut mer](/docs/share#un-sharing).
 
 ---
 
-## Redaktøroppsett
+## Oppsett av editor
 
-Både kommandoene `/editor` og `/export` bruker redigeringsprogrammet som er spesifisert i miljøvariabelen `EDITOR`.
+Både kommandoene `/editor` og `/export` bruker editoren som er spesifisert i miljøvariabelen `EDITOR`.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -301,7 +301,7 @@ Både kommandoene `/editor` og `/export` bruker redigeringsprogrammet som er spe
     export EDITOR="code --wait"
     ```
 
-    For å gjøre det permanent, legg dette til i skallprofilen din;
+    For å gjøre det permanent, legg dette til i shell-profilen din;
     `~/.bashrc`, `~/.zshrc` osv.
 
   </TabItem>
@@ -334,26 +334,26 @@ Både kommandoene `/editor` og `/export` bruker redigeringsprogrammet som er spe
   </TabItem>
 </Tabs>
 
-Populære redigeringsalternativer inkluderer:
+Populære editor-alternativer inkluderer:
 
 - `code` - Visual Studio Code
 - `cursor` - Cursor
-- `windsurf` - Vindsurfing
-- `nvim` - Neovim-redaktør
+- `windsurf` - Windsurf
+- `nvim` - Neovim-editor
 - `vim` - Vim editor
 - `nano` - Nano-editor
 - `notepad` - Windows Notisblokk
-- `subl` - Sublim tekst
+- `subl` - Sublime Text
 
 :::note
-Noen redaktører som VS Code må startes med flagget `--wait`.
+Noen editorer som VS Code må startes med flagget `--wait`.
 :::
 
-Noen redaktører trenger kommandolinjeargumenter for å kjøre i blokkeringsmodus. `--wait`-flagget gjør at redigeringsprosessen blokkeres til den lukkes.
+Noen editorer trenger kommandolinjeargumenter for å kjøre i blokkeringsmodus. `--wait`-flagget gjør at editor-prosessen blokkeres til den lukkes.
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
 Du kan tilpasse TUI-oppførselen gjennom opencode-konfigurasjonsfilen.
 

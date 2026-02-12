@@ -1,21 +1,21 @@
 ---
 title: コマンド
-description: 反復的なタスク用のカスタム コマンドを作成します。
+description: 反復的なタスク用のカスタムコマンドを作成します。
 ---
 
-カスタム コマンドを使用すると、TUI でコマンドを実行するときに実行するプロンプトを指定できます。
+カスタムコマンドを使用すると、TUI でコマンドを実行するときに実行するプロンプトを指定できます。
 
 ```bash frame="none"
 /my-command
 ```
 
-カスタム コマンドは、`/init`、`/undo`、`/redo`、`/share`、`/help` などの組み込みコマンドに追加されます。 [詳細はこちら](/docs/tui#commands)。
+カスタムコマンドは、`/init`、`/undo`、`/redo`、`/share`、`/help` などの組み込みコマンドに追加されます。 [詳細はこちら](/docs/tui#commands)。
 
 ---
 
 ## コマンドファイルの作成
 
-カスタム コマンドを定義するには、`commands/` ディレクトリにマークダウン ファイルを作成します。
+カスタムコマンドを定義するには、`commands/` ディレクトリに Markdown ファイルを作成します。
 
 `.opencode/commands/test.md` を作成します。
 
@@ -40,15 +40,15 @@ Focus on the failing tests and suggest fixes.
 
 ---
 
-## 設定する
+## 設定
 
-カスタム コマンドは、OpenCode 構成を通じて、または `commands/` ディレクトリにマークダウン ファイルを作成することによって追加できます。
+カスタムコマンドは、OpenCode 設定を通じて、または `commands/` ディレクトリに Markdown ファイルを作成することによって追加できます。
 
 ---
 
 ### JSON
 
-OpenCode で `command` オプションを使用します [config](/docs/config):
+OpenCode [設定](/docs/config)で `command` オプションを使用します:
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -75,12 +75,12 @@ OpenCode で `command` オプションを使用します [config](/docs/config):
 
 ---
 
-### マークダウン
+### Markdown
 
-マークダウン ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
+Markdown ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
 
-- グローバル: `~/.config/opencode/agents/`
-- プロジェクトごと: `.opencode/agents/`
+- グローバル: `~/.config/opencode/commands/`
+- プロジェクトごと: `.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -93,7 +93,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-マークダウンファイル名がコマンド名になります。たとえば、`test.md` を使用すると、
+Markdown ファイル名がコマンド名になります。たとえば、`test.md` を使用すると、
 あなたは実行します:
 
 ```bash frame="none"
@@ -104,7 +104,7 @@ Focus on the failing tests and suggest fixes.
 
 ## プロンプト構成
 
-カスタム コマンドのプロンプトは、いくつかの特別なプレースホルダーと構文をサポートしています。
+カスタムコマンドのプロンプトは、いくつかの特別なプレースホルダーと構文をサポートしています。
 
 ---
 
@@ -163,9 +163,9 @@ with the following content: $3
 
 ### シェル出力
 
-_!`command`_ を使用して、[bash command](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
+_!`command`_ を使用して、[bash コマンド](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
 
-たとえば、テスト カバレッジを分析するカスタム コマンドを作成するには、次のようにします。
+たとえば、テストカバレッジを分析するカスタムコマンドを作成するには、次のようにします。
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
@@ -191,7 +191,7 @@ Recent git commits:
 Review these changes and suggest any improvements.
 ```
 
-コマンドはプロジェクトのルート ディレクトリで実行され、その出力はプロンプトの一部になります。
+コマンドはプロジェクトのルートディレクトリで実行され、その出力はプロンプトの一部になります。
 
 ---
 
@@ -214,7 +214,7 @@ Check for performance issues and suggest improvements.
 
 ## オプション
 
-構成オプションを詳しく見てみましょう。
+設定オプションを詳しく見てみましょう。
 
 ---
 
@@ -232,7 +232,7 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-これは**必須**の構成オプションです。
+これは**必須**の設定オプションです。
 
 ---
 
@@ -270,14 +270,14 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-これは**オプション**の構成オプションです。指定しない場合、デフォルトで現在のエージェントが使用されます。
+これは**オプション**の設定オプションです。指定しない場合、デフォルトで現在のエージェントが使用されます。
 
 ---
 
 ### サブタスク
 
 `subtask` ブール値を使用して、コマンドが [subagent](/docs/agents/#subagents) 呼び出しを強制的にトリガーします。
-これは、コマンドがプライマリ コンテキストを汚染せず、エージェントがサブエージェントとして動作するように**強制**する場合に便利です。
+これは、コマンドがプライマリコンテキストを汚染せず、エージェントがサブエージェントとして動作するように**強制**する場合に便利です。
 [agent](/docs/agents) 設定で `mode` が `primary` に設定されている場合でも。
 
 ```json title="opencode.json"
@@ -290,13 +290,13 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-これは**オプション**の構成オプションです。
+これは**オプション**の設定オプションです。
 
 ---
 
 ### モデル
 
-`model` 設定を使用して、このコマンドのデフォルト モデルをオーバーライドします。
+`model` 設定を使用して、このコマンドのデフォルトモデルをオーバーライドします。
 
 ```json title="opencode.json"
 {
@@ -308,15 +308,15 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-これは**オプション**の構成オプションです。
+これは**オプション**の設定オプションです。
 
 ---
 
-## 内蔵
+## 組み込み
 
-opencode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
+OpenCode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
 
 :::note
-カスタム コマンドは組み込みコマンドをオーバーライドできます。
+カスタムコマンドは組み込みコマンドをオーバーライドできます。
 :::
-If コマンドを定義すると、組み込みコマンドがオーバーライドされます。
+同じ名前のカスタムコマンドを定義すると、組み込みコマンドがオーバーライドされます。

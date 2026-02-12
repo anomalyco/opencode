@@ -9,11 +9,11 @@ OpenCode unterstützt [Agent Client Protocol](https://agentclientprotocol.com) o
 Eine Liste der Editoren und Tools, die ACP unterstützen, finden Sie unter [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
-ACP ist ein offenes Protokoll, das die Kommunikation zwischen Code-Editoren und AI-Codierungsagenten standardisiert.
+ACP ist ein offenes Protokoll, das die Kommunikation zwischen Code-Editoren und AI-Coding-Agenten standardisiert.
 
 ---
 
-## Konfigurieren
+## Konfiguration
 
 Um OpenCode über ACP zu verwenden, konfigurieren Sie Ihren Editor für die Ausführung des Befehls `opencode acp`.
 
@@ -69,7 +69,7 @@ Sie können auch eine Tastenkombination binden, indem Sie Ihren `keymap.json` be
 
 ### JetBrains IDEs
 
-Fügen Sie zu Ihrem [JetBrains IDE](https://www.jetbrains.com/) acp.json gemäß [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) hinzu:
+Fügen Sie zu Ihrem [JetBrains IDE](https://www.jetbrains.com/) acp.json gemäß [Dokumentation](https://www.jetbrains.com/help/ai-assistant/acp.html) hinzu:
 
 ```json title="acp.json"
 {
@@ -82,7 +82,7 @@ Fügen Sie zu Ihrem [JetBrains IDE](https://www.jetbrains.com/) acp.json gemäß
 }
 ```
 
-Um es zu öffnen, verwenden Sie den neuen Agenten „OpenCode“ in der Chat-Agentenauswahl AI.
+Um es zu öffnen, verwenden Sie den neuen Agenten „OpenCode“ in der AI Chat Agent Selector.
 
 ---
 
@@ -140,12 +140,12 @@ Diese Konfiguration richtet CodeCompanion so ein, dass OpenCode als ACP-Agent f�
 
 Wenn Sie Umgebungsvariablen (wie `OPENCODE_API_KEY`) übergeben müssen, finden Sie ausführliche Informationen zu [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) in der Dokumentation zu CodeCompanion.nvim.
 
-## Support
+## Unterstützung
 
 OpenCode funktioniert über ACP genauso wie im Terminal. Alle Funktionen werden unterstützt:
 
 :::note
-Einige integrierte Schrägstrichbefehle wie `/undo` und `/redo` werden derzeit nicht unterstützt.
+Einige integrierte Slash-Befehle wie `/undo` und `/redo` werden derzeit nicht unterstützt.
 :::
 
 - Integrierte Tools (Dateioperationen, Terminalbefehle usw.)

@@ -3,7 +3,7 @@ title: Tillatelser
 description: Kontroller hvilke handlinger som krever godkjenning for å kjøre.
 ---
 
-opencode bruker `permission`-konfigurasjonen for å bestemme om en gitt handling skal kjøres automatisk, spørre deg eller blokkeres.
+OpenCode bruker `permission`-konfigurasjonen for å bestemme om en gitt handling skal kjøres automatisk, spørre deg eller blokkeres.
 
 Fra og med `v1.1.1` er den eldre `tools` boolske konfigurasjonen avviklet og har blitt slått sammen til `permission`. Den gamle `tools`-konfigurasjonen støttes fortsatt for bakoverkompatibilitet.
 
@@ -88,7 +88,7 @@ Du kan bruke `~` eller `$HOME` i starten av et mønster for å referere til hjem
 
 ### Eksterne kataloger
 
-Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der opencode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash`-kommandoer).
+Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der OpenCode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash`-kommandoer).
 
 Hjemmeutvidelse (som `~/...`) påvirker bare hvordan et mønster skrives. Den gjør ikke en ekstern bane til en del av det gjeldende arbeidsområdet, så stier utenfor arbeidskatalogen må fortsatt tillates via `external_directory`.
 
@@ -127,7 +127,7 @@ Hold listen fokusert på klarerte baner, og lag ekstra tillat eller avslå regle
 
 ## Tilgjengelige tillatelser
 
-opencode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakter:
+OpenCode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakter:
 
 - `read` — lesing av en fil (tilsvarer filbanen)
 - `edit` — alle filendringer (dekker `edit`, `write`, `patch`, `multiedit`)
@@ -135,22 +135,22 @@ opencode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakte
 - `grep` — innholdssøk (samsvarer med regex-mønsteret)
 - `list` — viser filer i en katalog (tilsvarer katalogbanen)
 - `bash` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
-- `task` — lansering av subagenter (tilsvarer subagenttypen)
-- `skill` — laster en ferdighet (tilsvarer ferdighetsnavnet)
+- `task` — start av subagenter (tilsvarer subagenttypen)
+- `skill` — laster en ferdighet (tilsvarer navnet på ferdigheten)
 - `lsp` — kjører LSP-spørringer (for øyeblikket ikke-granulære)
 - `todoread`, `todowrite` — lesing/oppdatering av gjøremålslisten
 - `webfetch` — henter en URL (tilsvarer URL)
 - `websearch`, `codesearch` - nett-/kodesøk (samsvarer med søket)
 - `external_directory` - utløses når et verktøy berører stier utenfor prosjektets arbeidskatalog
-- `doom_loop` — utløses når det samme verktøykallet gjentas 3 ganger med identisk inngang
+- `doom_loop` — utløses når det samme verktøykallet gjentas 3 ganger med identisk inndata
 
 ---
 
-## Standard
+## Standarder
 
-Hvis du ikke spesifiserer noe, starter opencode fra tillatte standardinnstillinger:
+Hvis du ikke spesifiserer noe, starter OpenCode fra tillatte standardinnstillinger:
 
-- De fleste tillatelser er `"allow"` som standard.
+- De fleste tillatelser er satt til `"allow"` som standard.
 - `doom_loop` og `external_directory` er standard til `"ask"`.
 - `read` er `"allow"`, men `.env` filer nektes som standard:
 
@@ -169,12 +169,12 @@ Hvis du ikke spesifiserer noe, starter opencode fra tillatte standardinnstilling
 
 ---
 
-## Hva "Spør" gjør
+## Hva "ask" gjør
 
-Når opencode ber om godkjenning, gir UI tre utfall:
+Når OpenCode ber om godkjenning, gir brukergrensesnittet tre alternativer:
 
 - `once` — godkjenne nettopp denne forespørselen
-- `always` — godkjenn fremtidige forespørsler som samsvarer med de foreslåtte mønstrene (for resten av den nåværende opencode-økten)
+- `always` — godkjenn fremtidige forespørsler som samsvarer med de foreslåtte mønstrene (for resten av den nåværende OpenCode-økten)
 - `reject` — avslå forespørselen
 
 Settet med mønstre som `always` vil godkjenne, leveres av verktøyet (for eksempel, bash-godkjenninger hvitlister vanligvis et trygt kommandoprefiks som `git status*`).

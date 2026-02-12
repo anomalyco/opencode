@@ -19,9 +19,9 @@ opencode run "Explain how closures work in JavaScript"
 
 ---
 
-### トゥイ
+### tui
 
-OpenCode ターミナル ユーザー インターフェイスを開始します。
+OpenCode ターミナルユーザーインターフェイスを開始します。
 
 ```bash
 opencode [project]
@@ -29,16 +29,16 @@ opencode [project]
 
 #### フラグ
 
-| 旗           | ショート | 説明                                                                  |
-| ------------ | -------- | --------------------------------------------------------------------- |
-| `--continue` | `-c`     | 最後のセッションを続行                                                |
-| `--fork`     |          | 続行時にセッションをフォーク (`--continue` または `--session` と併用) |
-| `--session`  | `-s`     | 続行するセッション ID                                                 |
-| `--prompt`   |          | 使用のプロンプト                                                      |
-| `--model`    | `-m`     | プロバイダー/モデルの形式で使用するモデル                             |
-| `--agent`    |          | 使用するエージェント                                                  |
-| `--port`     |          | リッスンするポート                                                    |
-| `--hostname` |          | リッスンするホスト名                                                  |
+| フラグ       | ショート    | 説明                                                       |
+| ------------ | ----------- | ---------------------------------------------------------- |
+| `--continue` | `-c`        | 最後のセッションを続行                                     |
+| `--session`  |             | 続行時にセッションをフォーク (`-s` または `--fork` と併用) |
+| `--continue` | `--session` | 続行するセッション ID                                      |
+| `--prompt`   |             | 使用のプロンプト                                           |
+| `--model`    | `-m`        | プロバイダー/モデルの形式で使用するモデル                  |
+| `--agent`    |             | 使用するエージェント                                       |
+| `--port`     |             | リッスンするポート                                         |
+| `--hostname` |             | リッスンするホスト名                                       |
 
 ---
 
@@ -48,7 +48,7 @@ OpenCode CLI には次のコマンドもあります。
 
 ---
 
-### エージェント
+### agent
 
 OpenCode のエージェントを管理します。
 
@@ -58,9 +58,9 @@ opencode agent [command]
 
 ---
 
-### 付ける
+### attach
 
-`serve` または `web` コマンドを使用して起動された、すでに実行中の OpenCode バックエンド サーバーにターミナルを接続します。
+`serve` または `web` コマンドを使用して起動された、すでに実行中の OpenCode バックエンドサーバーにターミナルを接続します。
 
 ```bash
 opencode attach [url]
@@ -78,14 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### フラグ
 
-| 旗          | ショート | 説明                           |
+| フラグ      | ショート | 説明                           |
 | ----------- | -------- | ------------------------------ |
 | `--dir`     |          | TUI を開始する作業ディレクトリ |
 | `--session` | `-s`     | 続行するセッション ID          |
 
 ---
 
-#### 作成する
+#### create
 
 カスタム構成で新しいエージェントを作成します。
 
@@ -93,11 +93,11 @@ opencode attach http://10.20.30.40:4096
 opencode agent create
 ```
 
-このコマンドは、カスタム システム プロンプトとツール構成を使用して新しいエージェントを作成する手順を示します。
+このコマンドは、カスタムシステムプロンプトとツール構成を使用して新しいエージェントを作成する手順を示します。
 
 ---
 
-#### リスト
+#### list
 
 利用可能なエージェントをすべてリストします。
 
@@ -107,7 +107,7 @@ opencode agent list
 
 ---
 
-### 認証
+### auth
 
 プロバイダーの資格情報とログインを管理するコマンド。
 
@@ -117,9 +117,9 @@ opencode auth [command]
 
 ---
 
-#### ログイン
+#### login
 
-OpenCode は [Models.dev](https://models.dev) のプロバイダー リストを利用しているため、`opencode auth login` を使用して、使用したいプロバイダーの API キーを構成できます。これは`~/.local/share/opencode/auth.json`に保存されます。
+OpenCode は [Models.dev](https://models.dev) のプロバイダーリストを利用しているため、`opencode auth login` を使用して、使用したいプロバイダーの API キーを構成できます。これは `~/.local/share/opencode/auth.json` に保存されます。
 
 ```bash
 opencode auth login
@@ -129,7 +129,7 @@ OpenCode が起動すると、認証情報ファイルからプロバイダー�
 
 ---
 
-#### リスト
+#### list
 
 認証情報ファイルに保存されているすべての認証されたプロバイダーをリストします。
 
@@ -145,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### ログアウト
+#### logout
 
 資格情報ファイルからプロバイダーをクリアすることで、プロバイダーからログアウトします。
 
@@ -155,7 +155,7 @@ opencode auth logout
 
 ---
 
-### ギットハブ
+### github
 
 リポジトリ自動化のための GitHub エージェントを管理します。
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### インストール
+#### install
 
 GitHub エージェントをリポジトリにインストールします。
 
@@ -177,7 +177,7 @@ opencode github install
 
 ---
 
-#### 走る
+#### run
 
 GitHub エージェントを実行します。これは通常、GitHub Actions で使用されます。
 
@@ -187,16 +187,16 @@ opencode github run
 
 ##### フラグ
 
-| 旗        | 説明                                                |
+| フラグ    | 説明                                                |
 | --------- | --------------------------------------------------- |
 | `--event` | エージェントを実行するための GitHub モック イベント |
-| `--token` | GitHub個人アクセストークン                          |
+| `--token` | GitHub 個人アクセストークン                         |
 
 ---
 
 ### mcp
 
-モデル コンテキスト プロトコル サーバーを管理します。
+モデルコンテキストプロトコルサーバーを管理します。
 
 ```bash
 opencode mcp [command]
@@ -204,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### 追加
+#### add
 
 MCP サーバーを構成に追加します。
 
@@ -216,7 +216,7 @@ opencode mcp add
 
 ---
 
-#### リスト
+#### list
 
 構成されているすべての MCP サーバーとその接続ステータスをリストします。
 
@@ -232,7 +232,7 @@ opencode mcp ls
 
 ---
 
-#### 認証
+#### auth
 
 OAuth 対応の MCP サーバーで認証します。
 
@@ -256,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### ログアウト
+#### logout
 
 MCP サーバーの OAuth 資格情報を削除します。
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### デバッグ
+#### debug
 
 MCP サーバーの OAuth 接続の問題をデバッグします。
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### モデル
+### models
 
 構成されたプロバイダーから利用可能なすべてのモデルをリストします。
 
@@ -286,7 +286,7 @@ opencode models [provider]
 
 このコマンドは、構成されたプロバイダー全体で利用可能なすべてのモデルを `provider/model` の形式で表示します。
 
-これは、config](/docs/config/) で使用する正確なモデル名を把握するのに役立ちます。
+これは、[設定](/docs/config/) で使用する正確なモデル名を把握するのに役立ちます。
 
 オプションでプロバイダー ID を渡して、そのプロバイダーによってモデルをフィルターできます。
 
@@ -296,12 +296,12 @@ opencode models anthropic
 
 #### フラグ
 
-| 旗          | 説明                                                            |
+| フラグ      | 説明                                                            |
 | ----------- | --------------------------------------------------------------- |
-| `--refresh` | models.dev からモデル キャッシュを更新します。                  |
+| `--refresh` | models.dev からモデルキャッシュを更新します。                   |
 | `--verbose` | より詳細なモデル出力を使用します (コストなどのメタデータを含む) |
 
-`--refresh` フラグを使用して、キャッシュされたモデル リストを更新します。これは、新しいモデルがプロバイダーに追加され、それを OpenCode で確認したい場合に便利です。
+`--refresh` フラグを使用して、キャッシュされたモデルリストを更新します。これは、新しいモデルがプロバイダーに追加され、それを OpenCode で確認したい場合に便利です。
 
 ```bash
 opencode models --refresh
@@ -309,9 +309,9 @@ opencode models --refresh
 
 ---
 
-### 走る
+### run
 
-プロンプトを直接渡して、非対話モードでopencodeを実行します。
+プロンプトを直接渡して、非対話モードで opencode を実行します。
 
 ```bash
 opencode run [message..]
@@ -323,7 +323,7 @@ opencode run [message..]
 opencode run Explain the use of context in Go
 ```
 
-実行中の `opencode serve` インスタンスにアタッチして、実行ごとの MCP サーバーのコールド ブート時間を回避することもできます。
+実行中の `opencode serve` インスタンスにアタッチして、実行ごとの MCP サーバーのコールドブート時間を回避することもできます。
 
 ```bash
 # Start a headless server in one terminal
@@ -335,36 +335,36 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### フラグ
 
-| 旗           | ショート | 説明                                                                                      |
-| ------------ | -------- | ----------------------------------------------------------------------------------------- |
-| `--command`  |          | 実行するコマンド。引数には message を使用します。                                         |
-| `--continue` | `-c`     | 最後のセッションを続行                                                                    |
-| `--fork`     |          | 続行時にセッションをフォーク (`--continue` または `--session` と併用)                     |
-| `--session`  | `-s`     | 続行するセッション ID                                                                     |
-| `--share`    |          | セッションを共有する                                                                      |
-| `--model`    | `-m`     | プロバイダー/モデルの形式で使用するモデル                                                 |
-| `--agent`    |          | 使用するエージェント                                                                      |
-| `--file`     | `-f`     | メッセージに添付するファイル                                                              |
-| `--format`   |          | 形式: デフォルト (フォーマット済み) または json (生の JSON イベント)                      |
-| `--title`    |          | セッションのタイトル (値が指定されていない場合は、切り詰められたプロンプトが使用されます) |
-| `--attach`   |          | 実行中のopencodeサーバー (http://localhost:4096 など) に接続します。                      |
-| `--port`     |          | ローカルサーバーのポート (デフォルトはランダムポート)                                     |
+| フラグ       | ショート    | 説明                                                                                      |
+| ------------ | ----------- | ----------------------------------------------------------------------------------------- |
+| `--command`  |             | 実行するコマンド。引数には message を使用します。                                         |
+| `--continue` | `-c`        | 最後のセッションを続行                                                                    |
+| `--session`  |             | 続行時にセッションをフォーク (`-s` または `--fork` と併用)                                |
+| `--continue` | `--session` | 続行するセッション ID                                                                     |
+| `--share`    |             | セッションを共有する                                                                      |
+| `--model`    | `-m`        | プロバイダー/モデルの形式で使用するモデル                                                 |
+| `--agent`    |             | 使用するエージェント                                                                      |
+| `--file`     | `-f`        | メッセージに添付するファイル                                                              |
+| `--format`   |             | 形式: デフォルト (フォーマット済み) または json (生の JSON イベント)                      |
+| `--title`    |             | セッションのタイトル (値が指定されていない場合は、切り詰められたプロンプトが使用されます) |
+| `--attach`   |             | 実行中の opencode サーバー (http://localhost:4096 など) に接続します。                    |
+| `--port`     |             | ローカルサーバーのポート (デフォルトはランダムポート)                                     |
 
 ---
 
-### 仕える
+### serve
 
-API アクセスのためにヘッドレス OpenCode サーバーを起動します。完全な HTTP インターフェイスについては、[server docs](/docs/server) を確認してください。
+API アクセスのためにヘッドレス OpenCode サーバーを起動します。完全な HTTP インターフェイスについては、[サーバーのドキュメント](/docs/server) を確認してください。
 
 ```bash
 opencode serve
 ```
 
-これにより、TUI インターフェイスを使用せずにopencode機能への API アクセスを提供する HTTP サーバーが起動します。 `OPENCODE_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `opencode`)。
+これにより、TUI インターフェイスを使用せずに opencode 機能への API アクセスを提供する HTTP サーバーが起動します。 `OPENCODE_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `opencode`)。
 
 #### フラグ
 
-| 旗           | 説明                                    |
+| フラグ       | 説明                                    |
 | ------------ | --------------------------------------- |
 | `--port`     | リッスンするポート                      |
 | `--hostname` | リッスンするホスト名                    |
@@ -373,7 +373,7 @@ opencode serve
 
 ---
 
-### セッション
+### session
 
 OpenCode セッションを管理します。
 
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### リスト
+#### list
 
 すべての OpenCode セッションをリストします。
 
@@ -393,14 +393,14 @@ opencode session list
 
 ##### フラグ
 
-| 旗            | ショート | 説明                                     |
+| フラグ        | ショート | 説明                                     |
 | ------------- | -------- | ---------------------------------------- |
 | `--max-count` | `-n`     | 最新のセッションを N 個に制限            |
 | `--format`    |          | 出力形式: テーブルまたは json (テーブル) |
 
 ---
 
-### 統計
+### stats
 
 OpenCode セッションのトークンの使用状況とコストの統計を表示します。
 
@@ -410,18 +410,18 @@ opencode stats
 
 #### フラグ
 
-| Flag        | Description                                                                 |
-| ----------- | --------------------------------------------------------------------------- |
-| `--days`    | Show stats for the last N days (all time)                                   |
-| `--tools`   | Number of tools to show (all)                                               |
-| `--models`  | Show model usage breakdown (hidden by default). Pass a number to show top N |
-| `--project` | Filter by project (all projects, empty string: current project)             |
+| フラグ      | 説明                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `--days`    | 過去 N 日間の統計を表示 (全期間)                                                           |
+| `--tools`   | 表示するツールの数 (すべて)                                                                |
+| `--models`  | モデルの使用状況の内訳を表示 (デフォルトでは非表示)。上位 N 件を表示するには数値を渡します |
+| `--project` | プロジェクトでフィルタリング (全プロジェクト、空文字列: 現在のプロジェクト)                |
 
 ---
 
-### 輸出
+### export
 
-セッションデータをJSONとしてエクスポートします。
+セッションデータを JSON としてエクスポートします。
 
 ```bash
 opencode export [sessionID]
@@ -431,15 +431,15 @@ opencode export [sessionID]
 
 ---
 
-### 輸入
+### import
 
-JSON ファイルまたは OpenCode 共有 URL からセッション データをインポートします。
+JSON ファイルまたは OpenCode 共有 URL からセッションデータをインポートします。
 
 ```bash
 opencode import <file>
 ```
 
-ローカル ファイルまたは OpenCode 共有 URL からインポートできます。
+ローカルファイルまたは OpenCode 共有 URL からインポートできます。
 
 ```bash
 opencode import session.json
@@ -448,7 +448,7 @@ opencode import https://opncd.ai/s/abc123
 
 ---
 
-### ウェブ
+### web
 
 Web インターフェイスを使用してヘッドレス OpenCode サーバーを起動します。
 
@@ -460,7 +460,7 @@ opencode web
 
 #### フラグ
 
-| 旗           | 説明                                    |
+| フラグ       | 説明                                    |
 | ------------ | --------------------------------------- |
 | `--port`     | リッスンするポート                      |
 | `--hostname` | リッスンするホスト名                    |
@@ -471,7 +471,7 @@ opencode web
 
 ### acp
 
-ACP (エージェント クライアント プロトコル) サーバーを起動します。
+ACP (エージェントクライアントプロトコル) サーバーを起動します。
 
 ```bash
 opencode acp
@@ -481,7 +481,7 @@ opencode acp
 
 #### フラグ
 
-| 旗           | 説明                 |
+| フラグ       | 説明                 |
 | ------------ | -------------------- |
 | `--cwd`      | 作業ディレクトリ     |
 | `--port`     | リッスンするポート   |
@@ -489,7 +489,7 @@ opencode acp
 
 ---
 
-### アンインストールする
+### uninstall
 
 OpenCode をアンインストールし、関連ファイルをすべて削除します。
 
@@ -499,18 +499,18 @@ opencode uninstall
 
 #### フラグ
 
-| Flag            | Short | Description                                 |
-| --------------- | ----- | ------------------------------------------- |
-| `--keep-config` | `-c`  | Keep configuration files                    |
-| `--keep-data`   | `-d`  | Keep session data and snapshots             |
-| `--dry-run`     |       | Show what would be removed without removing |
-| `--force`       | `-f`  | Skip confirmation prompts                   |
+| フラグ          | ショート | 説明                                         |
+| --------------- | -------- | -------------------------------------------- |
+| `--keep-config` | `-c`     | 構成ファイルを保持する                       |
+| `--keep-data`   | `-d`     | セッションデータとスナップショットを保持する |
+| `--dry-run`     |          | 削除せずに削除される内容を表示する           |
+| `--force`       | `-f`     | 確認プロンプトをスキップする                 |
 
 ---
 
-### アップグレード
+### upgrade
 
-opencodeを最新バージョンまたは特定のバージョンに更新します。
+opencode を最新バージョンまたは特定のバージョンに更新します。
 
 ```bash
 opencode upgrade [target]
@@ -530,22 +530,22 @@ opencode upgrade v0.1.48
 
 #### フラグ
 
-| 旗         | ショート | 説明                                                      |
-| ---------- | -------- | --------------------------------------------------------- |
-| `--method` | `-m`     | 使用されたインストール方法。カール、npm、pnpm、バン、醸造 |
+| フラグ     | ショート | 説明                                                   |
+| ---------- | -------- | ------------------------------------------------------ |
+| `--method` | `-m`     | 使用されたインストール方法。curl, npm, pnpm, bun, brew |
 
 ---
 
 ## グローバルフラグ
 
-opencode CLI は次のグローバル フラグを受け取ります。
+opencode CLI は次のグローバルフラグを受け取ります。
 
-| 旗             | ショート | 説明                                   |
-| -------------- | -------- | -------------------------------------- |
-| `--help`       | `-h`     | ヘルプを表示                           |
-| `--version`    | `-v`     | バージョン番号を出力                   |
-| `--print-logs` |          | ログを標準エラー出力に出力             |
-| `--log-level`  |          | ログ レベル (DEBUG、INFO、WARN、ERROR) |
+| フラグ         | ショート | 説明                                  |
+| -------------- | -------- | ------------------------------------- |
+| `--help`       | `-h`     | ヘルプを表示                          |
+| `--version`    | `-v`     | バージョン番号を出力                  |
+| `--print-logs` |          | ログを標準エラー出力に出力            |
+| `--log-level`  |          | ログレベル (DEBUG、INFO、WARN、ERROR) |
 
 ---
 
@@ -562,7 +562,7 @@ OpenCode は環境変数を使用して構成できます。
 | `OPENCODE_CONFIG_CONTENT`             | 文字列   | インライン JSON 構成コンテンツ                                      |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | ブール値 | 自動更新チェックを無効にする                                        |
 | `OPENCODE_DISABLE_PRUNE`              | ブール値 | 古いデータのプルーニングを無効にする                                |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | ブール値 | 端末タイトルの自動更新を無効にする                                  |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | ブール値 | ターミナルタイトルの自動更新を無効にする                            |
 | `OPENCODE_PERMISSION`                 | 文字列   | インライン化された json 権限設定                                    |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | ブール値 | デフォルトのプラグインを無効にする                                  |
 | `OPENCODE_DISABLE_LSP_DOWNLOAD`       | ブール値 | LSP サーバーの自動ダウンロードを無効にする                          |
@@ -571,7 +571,7 @@ OpenCode は環境変数を使用して構成できます。
 | `OPENCODE_DISABLE_CLAUDE_CODE`        | ブール値 | `.claude` からの読み取りを無効にする (プロンプト + スキル)          |
 | `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | ブール値 | `~/.claude/CLAUDE.md` の読み取りを無効にする                        |
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | ブール値 | `.claude/skills` のロードを無効にする                               |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | ブール値 | リモート ソースからのモデルの取得を無効にする                       |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | ブール値 | リモートソースからのモデルの取得を無効にする                        |
 | `OPENCODE_FAKE_VCS`                   | 文字列   | テスト目的の偽の VCS プロバイダー                                   |
 | `OPENCODE_DISABLE_FILETIME_CHECK`     | ブール値 | 最適化のためにファイル時間チェックを無効にする                      |
 | `OPENCODE_CLIENT`                     | 文字列   | クライアント識別子 (デフォルトは `cli`)                             |
@@ -591,13 +591,13 @@ OpenCode は環境変数を使用して構成できます。
 | `OPENCODE_EXPERIMENTAL`                         | ブール値 | すべての実験的機能を有効にする                   |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | ブール値 | アイコン検出を有効にする                         |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | ブール値 | TUI で選択時のコピーを無効にする                 |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 番号     | bash コマンドのデフォルトのタイムアウト (ミリ秒) |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 番号     | LLM 応答の最大出力トークン                       |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数値     | bash コマンドのデフォルトのタイムアウト (ミリ秒) |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数値     | LLM 応答の最大出力トークン                       |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | ブール値 | ディレクトリ全体のファイル監視を有効にする       |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | ブール値 | oxfmt フォーマッタを有効にする                   |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | ブール値 | 実験的な LSP ツールを有効にする                  |
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | ブール値 | ファイルウォッチャーを無効にする                 |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | ブール値 | 実験的な Exa 機能を有効にする                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | ブール値 | 実験的な LSP タイプ チェックを有効にする         |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | ブール値 | 試験的なマークダウン機能を有効にする             |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | ブール値 | 実験的な LSP タイプチェックを有効にする          |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | ブール値 | 試験的な Markdown 機能を有効にする               |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | ブール値 | プランモードを有効にする                         |

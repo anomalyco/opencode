@@ -13,16 +13,16 @@ OpenCode Zen je lista testiranih i provjerenih modela koje obezbjeduje OpenCode 
 OpenCode Zen je trenutno u beta fazi.
 :::
 
-Zen radi kao i svaki drugi provajder u OpenCode-u. Prijavite se u OpenCode Zen i uzmete API kljuc. Ovo je **potpuno opcionalno** i ne morate ga koristiti da biste koristili OpenCode.
+Zen radi kao i svaki drugi provajder u OpenCode. Prijavite se u OpenCode Zen i uzmete API kljuc. Ovo je **potpuno opcionalno** i ne morate ga koristiti da biste koristili OpenCode.
 
 ---
 
-## Background
+## Pozadina
 
 Postoji veliki broj modela, ali samo mali dio radi dobro kao coding agent. Dodatno, vecina provajdera je drugacije konfigurisana, pa su performanse i kvalitet cesto neujednaceni.
 
 :::tip
-Testirali smo odabranu grupu modela i provajdera koji dobro rade s OpenCode-om.
+Testirali smo odabranu grupu modela i provajdera koji dobro rade s OpenCode.
 :::
 
 Ako model koristite preko servisa poput OpenRouter-a, cesto ne mozete biti sigurni da dobijate najbolju verziju zeljenog modela.
@@ -39,7 +39,7 @@ OpenCode Zen je AI gateway koji vam daje pristup tim modelima.
 
 ## Kako radi
 
-OpenCode Zen radi kao i svaki drugi provajder u OpenCode-u.
+OpenCode Zen radi kao i svaki drugi provajder u OpenCode.
 
 1. Prijavite se na **<a href={console}>OpenCode Zen</a>**, dodajte billing podatke i kopirajte API kljuc.
 2. U TUI-ju pokrenite `/connect`, izaberite OpenCode Zen i zalijepite API kljuc.
@@ -89,7 +89,7 @@ Nasim modelima mozete pristupiti i preko sljedecih API endpointa.
 
 ---
 
-### Models
+### Modeli
 
 Pun spisak dostupnih modela i metapodataka mozete preuzeti na:
 
@@ -99,7 +99,7 @@ https://opencode.ai/zen/v1/models
 
 ---
 
-## Pricing
+## Cijene
 
 Podrzavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 
@@ -147,16 +147,16 @@ Naknade kartica se prenose po stvarnom trosku (4.4% + $0.30 po transakciji) i ne
 
 Besplatni modeli:
 
-- GLM 4.7 Free je dostupan na OpenCode-u ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Kimi K2.5 Free je dostupan na OpenCode-u ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- MiniMax M2.1 Free je dostupan na OpenCode-u ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Big Pickle je stealth model koji je besplatan na OpenCode-u ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- GLM 4.7 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- Kimi K2.5 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- MiniMax M2.1 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- Big Pickle je stealth model koji je besplatan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
 
 Ako imate pitanja, <a href={email}>kontaktirajte nas</a>.
 
 ---
 
-### Auto-reload
+### Automatska dopuna
 
 Ako vam stanje padne ispod $5, Zen ce automatski dopuniti $20.
 
@@ -164,7 +164,7 @@ Iznos auto-reloada mozete promijeniti. Auto-reload mozete i potpuno iskljuciti.
 
 ---
 
-### Monthly limits
+### Mjesečni limiti
 
 Mozete postaviti mjesecni limit potrosnje za cijeli workspace i za svakog clana tima.
 
@@ -172,7 +172,7 @@ Na primjer, ako postavite mjesecni limit na $20, Zen nece potrositi vise od $20 
 
 ---
 
-## Privacy
+## Privatnost
 
 Svi nasi modeli su hostovani u SAD-u. Provajderi prate zero-retention politiku i ne koriste vase podatke za treniranje modela, uz sljedece izuzetke:
 
@@ -185,7 +185,7 @@ Svi nasi modeli su hostovani u SAD-u. Provajderi prate zero-retention politiku i
 
 ---
 
-## For Teams
+## Za timove
 
 Zen odlicno radi i za timove. Mozete pozvati clanove tima, dodijeliti uloge, birati modele koje tim koristi i jos mnogo toga.
 
@@ -197,7 +197,7 @@ Upravljanje workspace-om je trenutno besplatno za timove tokom beta faze. Vise d
 
 ---
 
-### Roles
+### Uloge
 
 Mozete pozvati clanove tima u workspace i dodijeliti uloge:
 
@@ -208,7 +208,7 @@ Admini mogu postaviti i mjesecne limite potrosnje po clanu da drze troskove pod 
 
 ---
 
-### Model access
+### Pristup modelima
 
 Admini mogu ukljuciti ili iskljuciti odredene modele za workspace. Zahtjevi prema iskljucenom modelu vracaju gresku.
 
@@ -216,7 +216,7 @@ Ovo je korisno kada zelite zabraniti model koji prikuplja podatke.
 
 ---
 
-### Bring your own key
+### Donesite vlastiti ključ
 
 Mozete koristiti vlastite OpenAI ili Anthropic API kljuceve i dalje koristiti ostale modele u Zen-u.
 
@@ -226,11 +226,11 @@ Na primjer, vasa organizacija mozda vec ima OpenAI ili Anthropic kljuc i zelite 
 
 ---
 
-## Goals
+## Ciljevi
 
 OpenCode Zen smo napravili da:
 
 1. **Benchmarkiramo** najbolje kombinacije model/provajder za coding agente.
 2. Omogucimo pristup opcijama **najviseg kvaliteta** bez degradacije performansi i preusmjeravanja na jeftinije provajdere.
 3. Prenesemo svaka **snizenja cijena** prodajom po trosku, tako da je jedini markup pokrice processing naknada.
-4. Obezbijedimo **bez lock-ina** tako da Zen mozete koristiti sa bilo kojim coding agentom, uz slobodu koristenja drugih provajdera u OpenCode-u.
+4. Obezbijedimo **bez lock-ina** tako da Zen mozete koristiti sa bilo kojim coding agentom, uz slobodu koristenja drugih provajdera u OpenCode.

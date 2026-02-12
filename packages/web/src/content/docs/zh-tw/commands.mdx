@@ -1,23 +1,23 @@
 ---
-title: 命令
-description: 為重複任務創建自定義命令。
+title: 指令
+description: 為重複任務建立自定義指令。
 ---
 
-自定義命令允許您指定在 TUI 中執行該命令時要運行的提示。
+自定義指令允許您指定在 TUI 中執行該指令時要執行的提示。
 
 ```bash frame="none"
 /my-command
 ```
 
-除了`/init`、`/undo`、`/redo`、`/share`、`/help` 等內置命令之外，還有自定義命令。 [了解更多](/docs/tui#commands)。
+除了 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令之外，還有自定義指令。 [了解更多](/docs/tui#commands)。
 
 ---
 
-## 創建命令文件
+## 建立指令檔案
 
-在`commands/`目錄中創建markdown文件來定義自定義命令。
+在 `commands/` 目錄中建立 markdown 檔案來定義自定義指令。
 
-創建`.opencode/commands/test.md`：
+建立 `.opencode/commands/test.md`：
 
 ```md title=".opencode/commands/test.md"
 ---
@@ -30,9 +30,9 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-frontmatter 定義命令屬性。內容成為模板。
+frontmatter 定義指令屬性。內容成為範本。
 
-通過鍵入 `/` 後跟命令名稱來使用該命令。
+透過輸入 `/` 後跟指令名稱來使用該指令。
 
 ```bash frame="none"
 "/test"
@@ -40,15 +40,15 @@ frontmatter 定義命令屬性。內容成為模板。
 
 ---
 
-## 配置
+## 設定
 
-您可以通過 opencode 配置或通過在 `commands/` 目錄中創建 markdown 文件來添加自定義命令。
+您 可以透過 opencode 設定或透過在 `commands/` 目錄中建立 markdown 檔案來新增自定義指令。
 
 ---
 
 ### JSON
 
-在 opencode [配置](/docs/config) 中使用 `command` 選項：
+在 opencode [設定](/docs/config) 中使用 `command` 選項：
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -67,7 +67,7 @@ frontmatter 定義命令屬性。內容成為模板。
 }
 ```
 
-現在您可以在 TUI 中運行此命令：
+現在您可以在 TUI 中執行此指令：
 
 ```bash frame="none"
 /test
@@ -75,12 +75,12 @@ frontmatter 定義命令屬性。內容成為模板。
 
 ---
 
-### 降價
+### Markdown
 
-您還可以使用 Markdown 文件定義命令。將它們放入：
+您也可以使用 Markdown 檔案定義指令。將它們放入：
 
-- 全球：`~/.config/opencode/commands/`
-- 每個項目：`.opencode/commands/`
+- 全域：`~/.config/opencode/commands/`
+- 每個專案：`.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -93,8 +93,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Markdown 文件名成為命令名。例如，`test.md` 讓
-你運行：
+Markdown 檔名成為指令名。例如，`test.md` 讓您執行：
 
 ```bash frame="none"
 /test
@@ -102,15 +101,15 @@ Markdown 文件名成為命令名。例如，`test.md` 讓
 
 ---
 
-## 提示配置
+## 提示設定
 
-自定義命令的提示支持幾個特殊的佔位符和語法。
+自定義指令的提示支援幾個特殊的預留位置和語法。
 
 ---
 
-### 論據
+### 參數 (Arguments)
 
-使用 `$ARGUMENTS` 佔位符將參數傳遞給命令。
+使用 `$ARGUMENTS` 預留位置將參數傳遞給指令。
 
 ```md title=".opencode/commands/component.md"
 ---
@@ -121,7 +120,7 @@ Create a new React component named $ARGUMENTS with TypeScript support.
 Include proper typing and basic structure.
 ```
 
-使用參數運行命令：
+使用參數執行指令：
 
 ```bash frame="none"
 /component Button
@@ -129,7 +128,7 @@ Include proper typing and basic structure.
 
 `$ARGUMENTS` 將替換為 `Button`。
 
-您還可以使用位置參數訪問各個參數：
+您也可以使用位置參數存取各個參數：
 
 - `$1` - 第一個參數
 - `$2` - 第二個參數
@@ -147,7 +146,7 @@ Create a file named $1 in the directory $2
 with the following content: $3
 ```
 
-運行命令：
+執行指令：
 
 ```bash frame="none"
 /create-file config.json src "{ \"key\": \"value\" }"
@@ -155,17 +154,17 @@ with the following content: $3
 
 這取代了：
 
-- `$1` 與`config.json`
-- `$2` 與`src`
-- `$3` 與`{ "key": "value" }`
+- `$1` 與 `config.json`
+- `$2` 與 `src`
+- `$3` 與 `{ "key": "value" }`
 
 ---
 
-### 外殼輸出
+### Shell 輸出
 
-使用 _!`command`_ 將 [bash命令](/docs/tui#bash-commands) 輸出注入到提示符中。
+使用 _!`command`_ 將 [bash 指令](/docs/tui#bash-commands) 輸出注入到提示中。
 
-例如，要創建分析測試覆蓋率的自定義命令：
+例如，要建立分析測試覆蓋率的自定義指令：
 
 ```md title=".opencode/commands/analyze-coverage.md"
 ---
@@ -178,7 +177,7 @@ Here are the current test results:
 Based on these results, suggest improvements to increase coverage.
 ```
 
-或者查看最近的更改：
+或者查看最近的變更：
 
 ```md title=".opencode/commands/review-changes.md"
 ---
@@ -191,13 +190,13 @@ Recent git commits:
 Review these changes and suggest any improvements.
 ```
 
-命令在項目的根目錄中運行，其輸出成為提示的一部分。
+指令在專案的根目錄中執行，其輸出成為提示的一部分。
 
 ---
 
-### 文件參考
+### 檔案參考
 
-使用 `@` 後跟文件名將文件包含在命令中。
+使用 `@` 後跟檔名將檔案包含在指令中。
 
 ```md title=".opencode/commands/review-component.md"
 ---
@@ -208,19 +207,19 @@ Review the component in @src/components/Button.tsx.
 Check for performance issues and suggest improvements.
 ```
 
-文件內容會自動包含在提示中。
+檔案內容會自動包含在提示中。
 
 ---
 
 ## 選項
 
-讓我們詳細看看配置選項。
+讓我們詳細看看設定選項。
 
 ---
 
-### 模板
+### 範本 (Template)
 
-`template` 選項定義執行命令時將發送到 LLM 的提示。
+`template` 選項定義執行指令時將發送到 LLM 的提示。
 
 ```json title="opencode.json"
 {
@@ -232,13 +231,13 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-這是一個**必需的**配置選項。
+這是一個**必需的**設定選項。
 
 ---
 
-### 描述
+### 描述 (Description)
 
-使用 `description` 選項提供命令功能的簡要描述。
+使用 `description` 選項提供指令功能的簡要描述。
 
 ```json title="opencode.json"
 {
@@ -250,15 +249,15 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-當您鍵入命令時，這將在 TUI 中顯示為描述。
+當您輸入指令時，這將在 TUI 中顯示為描述。
 
 ---
 
-### 代理人
+### 代理 (Agent)
 
-使用`agent` 配置可選擇指定哪個[代理人](/docs/agents) 應執行此命令。
-如果這是 [子代理](/docs/agents/#subagents) 該命令將默認觸發子代理調用。
-要禁用此行為，請將`subtask` 設置為`false`。
+使用 `agent` 設定可選擇指定哪個 [代理](/docs/agents) 應執行此指令。
+如果這是 [子代理](/docs/agents/#subagents)，該指令將預設觸發子代理呼叫。
+要禁用此行為，請將 `subtask` 設定為 `false`。
 
 ```json title="opencode.json"
 {
@@ -270,15 +269,15 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-這是一個**可選**配置選項。如果未指定，則默認為您當前的代理。
+這是一個**可選**設定選項。如果未指定，則預設為您當前的代理。
 
 ---
 
-### 子任務
+### 子任務 (Subtask)
 
-使用`subtask` 布爾值強制命令觸發[子代理](/docs/agents/#subagents) 調用。
-如果您希望命令不污染您的主要上下文並且將**強制**代理充當子代理，那麼這非常有用，
-即使`mode` 在[代理人](/docs/agents) 配置上設置為`primary`。
+使用 `subtask` 布林值強制指令觸發 [子代理](/docs/agents/#subagents) 呼叫。
+如果您希望指令不污染您的主要上下文並且將**強制**代理充當子代理，那麼這非常有用，
+即使 `mode` 在 [代理](/docs/agents) 設定上設定為 `primary`。
 
 ```json title="opencode.json"
 {
@@ -290,13 +289,13 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-這是一個**可選**配置選項。
+這是一個**可選**設定選項。
 
 ---
 
-### 模型
+### 模型 (Model)
 
-使用 `model` 配置覆蓋此命令的默認模型。
+使用 `model` 設定覆寫此指令的預設模型。
 
 ```json title="opencode.json"
 {
@@ -308,16 +307,16 @@ Check for performance issues and suggest improvements.
 }
 ```
 
-這是一個**可選**配置選項。
+這是一個**可選**設定選項。
 
 ---
 
-## 內建
+### 內建
 
-opencode包含`/init`、`/undo`、`/redo`、`/share`、`/help`等內置命令； [了解更多](/docs/tui#commands)。
+opencode 包含 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令； [了解更多](/docs/tui#commands)。
 
 :::note
-自定義命令可以覆蓋內置命令。
+自定義指令可以覆寫內建指令。
 :::
 
-如果您定義同名的自定義命令，它將覆蓋內置命令。
+如果您定義同名的自定義指令，它將覆寫內建指令。

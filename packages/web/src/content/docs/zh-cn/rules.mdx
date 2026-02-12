@@ -1,6 +1,6 @@
 ---
-title: 規則
-description: 設置opencode的自定義指令。
+title: 规则
+description: 设置opencode的自定義指令。
 ---
 
 您可以通过 `AGENTS.md` 文件创建 opencode 的自定义指令。这和 Cursor 的规则类似。它包含将包含在 LLM 上下文中的说明，方便您的特定项目自定义其行为。
@@ -48,19 +48,19 @@ This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for 
 - Import shared modules using workspace names: `@my-app/core/example`
 ```
 
-我們在此處添加特定於項目的說明，這將在您的團隊中共享。
+我们在此處添加特定于項目的說明，这将在您的團隊中共享。
 
 ---
 
-## 類型
+## 类型
 
 opencode 还支持从多个位置读取 `AGENTS.md` 文件。这有不同的目的。
 
-### 專案
+### 项目
 
 将 `AGENTS.md` 放置在项目根目录中以获取特定于项目的规则。这些仅适用于您在此目录或子目录中工作时。
 
-### 全球的
+### 全局
 
 您还可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局规则。这适用于所有opencode会话。
 
@@ -84,7 +84,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## 優先級
+## 优先级
 
 当opencode启动时，它会按以下顺序查找规则文件：
 
@@ -96,7 +96,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## 定制說明
+## 自定义指令
 
 您可以在 `opencode.json` 或全局 `~/.config/opencode/opencode.json` 中指定自定义指令文件。这允许您和您的团队重用现有规则，而不必将它们复制到 AGENTS.md。
 
@@ -118,7 +118,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 }
 ```
 
-遠程指令的獲取有 5 秒的超時時間。
+遠程指令的获取有 5 秒的超時時間。
 
 所有说明文件均与您的`AGENTS.md`文件合并。
 
@@ -130,7 +130,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ### 使用 opencode.json
 
-推荐的方法是在`opencode.json`中使用`instructions`字段：
+推荐的方法是在`instructions`中使用`opencode.json`字段：
 
 ```json title="opencode.json"
 {
@@ -168,9 +168,9 @@ For testing strategies and coverage requirements: @test/testing-guidelines.md
 Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
 ```
 
-這種方法允許您：
+这種方法允许您：
 
-- 創建模塊化、可重用的規則文件
+- 创建模塊化、可重用的规则文件
 - 通过符号链接或git子模块在项目之间共享规则
 - 保持 AGENTS.md 简洁，同时参考详细指南
 - 确保opencode仅在特定任务需要时加载文件

@@ -3,13 +3,13 @@ title: Nettverk
 description: Konfigurer proxyer og tilpassede sertifikater.
 ---
 
-opencode støtter standard proxy-miljøvariabler og tilpassede sertifikater for bedriftsnettverksmiljøer.
+OpenCode støtter standard proxy-miljøvariabler og tilpassede sertifikater for bedriftsnettverksmiljøer.
 
 ---
 
-## Proxy
+## Mellomtjener
 
-opencode respekterer standard proxy-miljøvariabler.
+OpenCode respekterer standard proxy-miljøvariabler.
 
 ```bash
 # HTTPS proxy (recommended)
@@ -23,32 +23,32 @@ export NO_PROXY=localhost,127.0.0.1
 ```
 
 :::caution
-TUI kommuniserer med en lokal HTTP server. Du må omgå proxyen for denne tilkoblingen for å forhindre rutingsløyfer.
+TUI-en kommuniserer med en lokal HTTP-server. Du må unngå proxy for denne tilkoblingen for å unngå rutingsløyfer.
 :::
 
-Du kan konfigurere serverens port og vertsnavn ved å bruke [CLI flagg](/docs/cli#run).
+Du kan konfigurere serverens port og vertsnavn ved å bruke [CLI-flagg](/docs/cli#run).
 
 ---
 
-### Autentiser
+### Autentisering
 
-Hvis proxyen din krever grunnleggende autentisering, inkluderer legitimasjon i URL.
+Hvis proxyen din krever grunnleggende autentisering, inkluder påloggingsinformasjon i URL-en.
 
 ```bash
 export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 ```
 
 :::caution
-Unngå hardkoding av passord. Bruk miljøvariabler eller sikker lagring av legitimasjon.
+Unngå hardkoding av passord. Bruk miljøvariabler eller sikker lagring av påloggingsinformasjon.
 :::
 
-For proxyer som krever avansert autentisering som NTLM eller Kerberos, bør du vurdere å bruke en LLM Gateway som støtter autentiseringsmetoden din.
+For proxyer som krever avansert autentisering som NTLM eller Kerberos, bør du vurdere en LLM Gateway som støtter din autentiseringsmetode.
 
 ---
 
 ## Egendefinerte sertifikater
 
-Hvis bedriften din bruker egendefinerte CA-er for HTTPS-tilkoblinger, konfigurer opencode til å stole på dem.
+Hvis bedriften din bruker egendefinerte CA-er for HTTPS-tilkoblinger, konfigurer OpenCode til å stole på dem.
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

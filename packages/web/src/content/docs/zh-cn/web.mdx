@@ -21,7 +21,7 @@ opencode web
 如果未设置`OPENCODE_SERVER_PASSWORD`，服务器将不安全。这对于本地使用来说很好，但应该针对网路访问进行设置。
 :::
 
-:::tip[Windows 使用者]
+:::tip[Windows 用户]
 For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
 :::
 
@@ -31,7 +31,7 @@ For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather
 
 您可以使用命令列标志或在[config file](/docs/config).conf 中配置Web服务器。
 
-### 港口
+### 端口
 
 默认情况下，opencode 选择一个可用的端口。您可以指定一个端口：
 
@@ -90,25 +90,25 @@ The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USE
 
 ---
 
-## 使用網路介面
+## 使用网络界面
 
 启动后，网路界面将提供对您的 opencode 会话的访问。
 
-### 會議
+### 会话
 
-從主頁檢視和管理您的會話。您可以檢視活動會話並開始新會話。
+從主頁查看和管理您的会话。您可以查看活动会话并開始新会话。
 
 ![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
-### 伺服器狀態
+### 服务器狀態
 
-單擊“檢視伺服器”可檢視連線的伺服器及其狀態。
+单击“查看服务器”可查看连接的服务器及其狀態。
 
 ![opencode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
-## 連線終端
+## 连接终端
 
 您可以将终端 TUI 连线到正在执行的 Web 服务器：
 
@@ -124,7 +124,7 @@ opencode attach http://localhost:4096
 
 ---
 
-## 配置檔案
+## 配置文件
 
 You can also configure server settings in your `opencode.json` config file:
 
@@ -139,4 +139,4 @@ You can also configure server settings in your `opencode.json` config file:
 }
 ```
 
-命令列標誌優先於配置檔案設定。
+命令行标志优先于配置文件设置。

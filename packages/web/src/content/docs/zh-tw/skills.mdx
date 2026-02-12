@@ -1,62 +1,62 @@
 ---
-title: 《代理技巧》
-description: “通過 SKILL.md 定義定義可重用行為”
+title: 代理技能
+description: 透過 SKILL.md 定義定義可重複使用行為
 ---
 
-代理技能讓 opencode 從您的存儲庫或主目錄中發現可重用的指令。
-技能通過本機 `skill` 工具按需加載 - 代理可以查看可用技能並可以在需要時加載完整內容。
+代理技能讓 opencode 從您的儲存庫或主目錄中發現可重複使用的指令。
+技能透過原生 `skill` 工具按需載入 - 代理可以查看可用技能並可以在需要時載入完整內容。
 
 ---
 
-## 放置文件
+## 放置檔案
 
-每個技能名稱創建一個文件夾，並在其中放入`SKILL.md`。
-opencode 搜索這些位置：
+每個技能名稱建立一個資料夾，並在其中放入 `SKILL.md`。
+opencode 搜尋這些位置：
 
-- 項目配置：`.opencode/skills/<name>/SKILL.md`
-- 全局配置：`~/.config/opencode/skills/<name>/SKILL.md`
-- 克勞德項目兼容：`.claude/skills/<name>/SKILL.md`
-- 全球克勞德兼容：`~/.claude/skills/<name>/SKILL.md`
-- 項目代理兼容：`.agents/skills/<name>/SKILL.md`
-- 全球代理兼容：`~/.agents/skills/<name>/SKILL.md`
+- 專案設定：`.opencode/skills/<name>/SKILL.md`
+- 全域設定：`~/.config/opencode/skills/<name>/SKILL.md`
+- Claude 專案相容：`.claude/skills/<name>/SKILL.md`
+- 全域 Claude 相容：`~/.claude/skills/<name>/SKILL.md`
+- 專案代理相容：`.agents/skills/<name>/SKILL.md`
+- 全域代理相容：`~/.agents/skills/<name>/SKILL.md`
 
 ---
 
 ## 了解發現
 
-對於項目本地路徑，opencode 將從當前工作目錄開始，直到到達 git 工作樹。
-它加載 `.opencode/` 中任何匹配的 `skills/*/SKILL.md` 以及一路上任何匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
+對於專案本地路徑，opencode 將從當前工作目錄開始，直到到達 git 工作樹。
+它載入 `skills/*/SKILL.md` 中任何匹配的 `.opencode/` 以及一路上任何匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
 
-全局定義也從`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和`~/.agents/skills/*/SKILL.md` 加載。
+全域定義也從 `~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和 `~/.agents/skills/*/SKILL.md` 載入。
 
 ---
 
-## 寫前言
+## 撰寫 Frontmatter
 
-每個`SKILL.md` 必須以 YAML frontmatter 開頭。
-僅識別這些字段：
+每個 `SKILL.md` 必須以 YAML frontmatter 開頭。
+僅識別這些欄位：
 
 - `name`（必填）
 - `description`（必填）
 - `license`（可選）
 - `compatibility`（可選）
-- `metadata`（可選，字符串到字符串映射）
+- `metadata`（可選，字串到字串對應）
 
-未知的 frontmatter 字段將被忽略。
+未知的 frontmatter 欄位將被忽略。
 
 ---
 
-## 驗證姓名
+## 驗證名稱
 
 `name` 必須：
 
-- 長度為 1–64 個字符
-- 為小寫字母數字並帶有單個連字符分隔符
+- 長度為 1–64 個字元
+- 為小寫字母數字並帶有單個連字號分隔符
 - 不以 `-` 開頭或結尾
-- 不包含連續`--`
-- 匹配包含`SKILL.md`的目錄名
+- 不包含連續 `--`
+- 匹配包含 `SKILL.md` 的目錄名
 
-等效的正則表達式：
+等效的正規表示式：
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -66,14 +66,14 @@ opencode 搜索這些位置：
 
 ## 遵循長度規則
 
-`description` 必須是 1-1024 個字符。
+`description` 必須是 1-1024 個字元。
 保持足夠具體，以便代理能夠正確選擇。
 
 ---
 
-## 使用一個例子
+## 使用一個範例
 
-像這樣創建`.opencode/skills/git-release/SKILL.md`：
+像這樣建立 `.opencode/skills/git-release/SKILL.md`：
 
 ```markdown
 ---
@@ -102,8 +102,8 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 識別工具說明
 
-opencode 在`skill` 工具描述中列出了可用的技能。
-每個條目都包含技能名稱和描述：
+opencode 在 `skill` 工具描述中列出了可用的技能。
+每個項目都包含技能名稱和描述：
 
 ```xml
 <available_skills>
@@ -114,7 +114,7 @@ opencode 在`skill` 工具描述中列出了可用的技能。
 </available_skills>
 ```
 
-代理通過調用工具來加載技能：
+代理透過呼叫工具來載入技能：
 
 ```
 skill({ name: "git-release" })
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 配置權限
 
-使用 `opencode.json` 中基於模式的權限控制客服人員可以訪問哪些技能：
+使用 `opencode.json` 中基於模式的權限控制代理可以存取哪些技能：
 
 ```json
 {
@@ -141,17 +141,17 @@ skill({ name: "git-release" })
 
 | 許可    | 行為                       |
 | ------- | -------------------------- |
-| `allow` | 技能立即加載               |
-| `deny`  | 技能對特工隱藏，訪問被拒絕 |
-| `ask`   | 加載前提示用戶批准         |
+| `allow` | 技能立即載入               |
+| `deny`  | 技能對代理隱藏，存取被拒絕 |
+| `ask`   | 載入前提示使用者批准       |
 
-模式支持通配符：`internal-*` 匹配`internal-docs`、`internal-tools` 等。
+模式支援通配符：`internal-*` 匹配 `internal-docs`、`internal-tools` 等。
 
 ---
 
-## 覆蓋每個代理
+## 覆寫每個代理
 
-為特定代理授予與全局默認權限不同的權限。
+為特定代理授予與全域預設權限不同的權限。
 
 **對於自定義代理**（在代理前言中）：
 
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**對於內置代理**（在 `opencode.json` 中）：
+**對於內建代理**（在 `opencode.json` 中）：
 
 ```json
 {
@@ -183,9 +183,9 @@ permission:
 
 ## 禁用技能工具
 
-完全禁用不應該使用技能的特工：
+完全禁用不應該使用技能的代理：
 
-**對於定制代理**：
+**對於自定義代理**：
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-**對於內置代理**：
+**對於內建代理**：
 
 ```json
 {
@@ -212,7 +212,7 @@ tools:
 
 ---
 
-## 解決加載問題
+## 解決載入問題
 
 如果某項技能沒有顯示：
 

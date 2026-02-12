@@ -60,6 +60,13 @@ export default function Layout(props: ParentProps) {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
 
+            const sessionHref = (sessionID: string) => {
+              if (params.dir) return `/${params.dir}/session/${sessionID}`
+              return `/session/${sessionID}`
+            }
+
+            const syncSession = (sessionID: string) => sync.session.sync(sessionID)
+
             return (
               <DataProvider
                 data={sync.data}
@@ -68,6 +75,8 @@ export default function Layout(props: ParentProps) {
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
+                onSessionHref={sessionHref}
+                onSyncSession={syncSession}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

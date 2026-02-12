@@ -1,6 +1,6 @@
 ---
-title: Tools
-description: Manage the tools an LLM can use.
+title: 도구
+description: LLM이 사용할 수 있는 도구를 관리합니다.
 ---
 
 도구는 LLM을 사용하여 코드베이스에서 작업을 수행 할 수 있습니다. opencode는 내장 도구 세트로 제공되지만, [custom tools](/docs/custom-tools) 또는 [MCP 서버](/docs/mcp-servers)로 확장할 수 있습니다.
@@ -47,7 +47,7 @@ description: Manage the tools an LLM can use.
 
 ###### bash
 
-프로젝트 환경에서 쉘 명령을 실행합니다.
+프로젝트 환경에서 shell 명령을 실행합니다.
 
 ```json title="opencode.json" {4}
 {
@@ -58,11 +58,11 @@ description: Manage the tools an LLM can use.
 }
 ```
 
-이 도구는 `npm install`, `git status` 또는 다른 쉘 명령과 같은 터미널 명령을 실행하는 LLM을 허용합니다.
+이 도구는 `npm install`, `git status` 또는 다른 shell 명령과 같은 terminal 명령을 실행하는 LLM을 허용합니다.
 
 ---
 
-### 편집
+### edit
 
 정확한 문자열 교체를 사용하여 기존 파일을 수정합니다.
 
@@ -75,11 +75,11 @@ description: Manage the tools an LLM can use.
 }
 ```
 
-이 도구는 정확한 텍스트 일치를 대체하여 파일에 정확한 편집을 수행합니다. LLM은 코드를 modify하는 1 차적인 방법입니다.
+이 도구는 정확한 텍스트 일치를 대체하여 파일에 정확한 편집을 수행합니다. LLM은 코드를 modify하는 주요 방법입니다.
 
 ---
 
-### 쓰기
+### write
 
 새로운 파일을 만들거나 기존의 것을 덮어쓰기.
 
@@ -100,7 +100,7 @@ LLM을 사용하여 새 파일을 만듭니다. 이미 존재하는 경우 기�
 
 ---
 
-### 읽기
+### read
 
 codebase에서 파일 내용을 읽으십시오.
 
@@ -117,7 +117,7 @@ codebase에서 파일 내용을 읽으십시오.
 
 ---
 
-#### 그라프
+#### grep
 
 정규 표현식을 사용하여 파일 내용을 검색합니다.
 
@@ -151,7 +151,7 @@ Codebase에서 빠른 콘텐츠 검색. 전체 regex 문법 및 파일 패턴 �
 
 ---
 
-### 리스트
+### list
 
 주어진 경로의 파일 및 디렉토리 목록.
 
@@ -168,7 +168,7 @@ Codebase에서 빠른 콘텐츠 검색. 전체 regex 문법 및 파일 패턴 �
 
 ---
 
-### lsp (실험)
+### lsp (실험적)
 
 정의, 참고, hover info 및 호출 hierarchy와 같은 코드 인텔리전스 기능을 얻기 위해 구성 된 LSP 서버와 인터랙트.
 
@@ -191,7 +191,7 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-## 패치
+## patch
 
 파일에 패치를 적용합니다.
 
@@ -212,7 +212,7 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-### 기술
+### skill
 
 [skill](/docs/skills) (`SKILL.md` 파일)을로드하고 대화의 내용을 반환합니다.
 
@@ -227,7 +227,7 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-## todowrite에
+## todowrite
 
 코딩 세션 중에 todo 목록을 관리합니다.
 
@@ -269,7 +269,7 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-#### 웹 사이트
+#### webfetch
 
 Fetch 웹 콘텐츠.
 
@@ -286,7 +286,7 @@ LLM을 fetch 및 웹 페이지를 읽을 수 있습니다. 온라인 리소스�
 
 ---
 
-#### 웹 검색
+#### websearch
 
 웹 검색
 
@@ -320,7 +320,7 @@ API 키가 필요하지 않습니다 - 도구는 인증없이 Exa AI의 호스�
 
 ---
 
-### 질문
+### question
 
 실행 중에 사용자의 질문 요청.
 

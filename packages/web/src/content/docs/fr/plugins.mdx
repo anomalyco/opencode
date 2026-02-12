@@ -26,7 +26,7 @@ Les fichiers de ces répertoires sont automatiquement chargés au démarrage.
 
 ---
 
-### De npm
+### Depuis npm
 
 Spécifiez les packages npm dans votre fichier de configuration.
 
@@ -37,7 +37,7 @@ Spécifiez les packages npm dans votre fichier de configuration.
 }
 ```
 
-Les packages npm standards et étendus sont pris en charge.
+Les packages npm scopés et standards sont pris en charge.
 
 Parcourez les plugins disponibles dans le [ecosystem](/docs/ecosystem#plugins).
 
@@ -53,7 +53,7 @@ Les **plugins locaux** sont chargés directement depuis le répertoire des plugi
 
 ### Ordre de chargement
 
-Les plugins sont chargés à partir de toutes les sources et tous les hooks s'exécutent dans l'ordre. L'ordre de chargement est le suivant :
+Les plugins sont chargés à partir de toutes les sources et tous les hooks s'exécutent dans l'ordre. L'ordre de chargement est le suivant :
 
 1. Configuration globale (`~/.config/opencode/opencode.json`)
 2. Configuration du projet (`opencode.json`)
@@ -66,8 +66,7 @@ Les packages npm en double avec le même nom et la même version sont chargés u
 
 ## Créer un plugin
 
-Un plugin est un **module JavaScript/TypeScript** qui exporte un ou plusieurs plugins
-fonctions. Chaque fonction reçoit un objet contextuel et renvoie un objet hooks.
+Un plugin est un **module JavaScript/TypeScript** qui exporte une ou plusieurs fonctions de plugin. Chaque fonction reçoit un objet contextuel et renvoie un objet hooks.
 
 ---
 
@@ -115,17 +114,17 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 
 La fonction plugin reçoit :
 
-- `project` : informations sur le projet actuel.
-- `directory` : le répertoire de travail actuel.
-- `worktree` : le chemin de l'arbre de travail git.
-- `client` : un client SDK opencode pour interagir avec l'IA.
-- `$` : [shell API](https://bun.com/docs/runtime/shell) de Bun pour l'exécution de commandes.
+- `project` : informations sur le projet actuel.
+- `directory` : le répertoire de travail actuel.
+- `worktree` : le chemin de l'arbre de travail git.
+- `client` : un client SDK opencode pour interagir avec l'IA.
+- `$` : [shell API](https://bun.com/docs/runtime/shell) de Bun pour l'exécution de commandes.
 
 ---
 
 ### Prise en charge de TypeScript
 
-Pour les plugins TypeScript, vous pouvez importer des types à partir du package du plugin :
+Pour les plugins TypeScript, vous pouvez importer des types à partir du package du plugin :
 
 ```ts title="my-plugin.ts" {1}
 import type { Plugin } from "@opencode-ai/plugin"
@@ -217,7 +216,7 @@ Voici quelques exemples de plugins que vous pouvez utiliser pour étendre openco
 
 ### Envoyer des notifications
 
-Envoyez des notifications lorsque certains événements se produisent :
+Envoyez des notifications lorsque certains événements se produisent :
 
 ```js title=".opencode/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -242,7 +241,7 @@ Si vous utilisez l'application de bureau OpenCode, elle peut envoyer automatique
 
 ### Protection .env
 
-Empêchez opencode de lire les fichiers `.env` :
+Empêchez opencode de lire les fichiers `.env` :
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -260,7 +259,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Injecter des variables d'environnement
 
-Injectez des variables d'environnement dans toutes les exécutions du shell (outils d'IA et terminaux utilisateur) :
+Injectez des variables d'environnement dans toutes les exécutions du shell (outils d'IA et terminal utilisateur) :
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -277,7 +276,7 @@ export const InjectEnvPlugin = async () => {
 
 ### Outils personnalisés
 
-Les plugins peuvent également ajouter des outils personnalisés à opencode :
+Les plugins peuvent également ajouter des outils personnalisés à opencode :
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -300,19 +299,19 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-L'assistant `tool` crée un outil personnalisé que opencode peut appeler. Il prend une fonction de schéma Zod et renvoie une définition d'outil avec :
+L'assistant `tool` crée un outil personnalisé que opencode peut appeler. Il prend une fonction de schéma Zod et renvoie une définition d'outil avec :
 
-- `description` : ce que fait l'outil
-- `args` : schéma Zod pour les arguments de l'outil
-- `execute` : Fonction qui s'exécute lorsque l'outil est appelé
+- `description` : ce que fait l'outil
+- `args` : schéma Zod pour les arguments de l'outil
+- `execute` : Fonction qui s'exécute lorsque l'outil est appelé
 
 Vos outils personnalisés seront disponibles pour opencode aux côtés des outils intégrés.
 
 ---
 
-### Enregistrement
+### Journalisation
 
-Utilisez `client.app.log()` au lieu de `console.log` pour la journalisation structurée :
+Utilisez `client.app.log()` au lieu de `console.log` pour la journalisation structurée :
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
@@ -327,13 +326,13 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Niveaux : `debug`, `info`, `warn`, `error`. Voir la [documentation du SDK](https://opencode.ai/docs/sdk) pour plus de détails.
+Niveaux : `debug`, `info`, `warn`, `error`. Voir la [documentation du SDK](https://opencode.ai/docs/sdk) pour plus de détails.
 
 ---
 
-### Crochets de compactage
+### Hooks de compactage
 
-Personnalisez le contexte inclus lorsqu'une session est compactée :
+Personnalisez le contexte inclus lorsqu'une session est compactée :
 
 ```ts title=".opencode/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -355,9 +354,9 @@ Include any state that should persist across compaction:
 }
 ```
 
-Le hook `experimental.session.compacting` se déclenche avant que le LLM ne génère un résumé de continuation. Utilisez-le pour injecter un contexte spécifique au domaine que l'invite de compactage par défaut manquerait.
+Le hook `experimental.session.compacting` se déclenche avant que le LLM ne génère un résumé de continuation. Utilisez-le pour injecter un contexte spécifique au domaine que le prompt de compactage par défaut manquerait.
 
-Vous pouvez également remplacer entièrement l'invite de compactage en définissant `output.prompt` :
+Vous pouvez également remplacer entièrement le prompt de compactage en définissant `output.prompt` :
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -382,4 +381,4 @@ Format as a structured prompt that a new agent can use to resume work.
 }
 ```
 
-Lorsque `output.prompt` est défini, il remplace complètement l'invite de compactage par défaut. Le tableau `output.context` est ignoré dans ce cas.
+Lorsque `output.prompt` est défini, il remplace complètement le prompt de compactage par défaut. Le tableau `output.context` est ignoré dans ce cas.

@@ -1,6 +1,6 @@
 ---
-title: 按鍵綁定
-description: 自定義您的按鍵綁定。
+title: 快捷键
+description: 自定义您的按键绑定。
 ---
 
 opencode 有一个按键绑定列表，您可以通过 opencode 配置进行自定义。
@@ -105,19 +105,19 @@ opencode 有一个按键绑定列表，您可以通过 opencode 配置进行自�
 
 ---
 
-## 領袖鑰匙
+## Leader 键
 
 opencode 对大多数按键绑定使用 `leader` 键。这可以避免终端中的冲突。
 
-默认情况下，`ctrl+x` 是主键，大多数操作要求您先按主键，再按键盘。例如，要开始新会话，请先按 `ctrl+x`，然后按 `n`。
+默认情况下，`ctrl+x` 是主键，大多数操作要求您先按主键，再按快捷键。例如，要开始新会话，请先按 `ctrl+x`，然后按 `n`。
 
-您不需要為鍵綁定使用主鍵，但我們建議您這樣做。
+您不需要为键绑定使用主键，但我们建议您这样做。
 
 ---
 
-## 禁用按鍵綁定
+## 禁用按键绑定
 
-您可以通过将按键添加到您的配置中并使用值“none”来取消按键绑定。
+您可以通过将按键添加到您的配置中并使用值“none”来禁用按键绑定。
 
 ```json title="opencode.json"
 {
@@ -130,41 +130,41 @@ opencode 对大多数按键绑定使用 `leader` 键。这可以避免终端中�
 
 ---
 
-## 桌面提示快捷方式
+## 桌面提示快捷键
 
 opencode 桌面应用程序提示输入支持常见的 Readline/Emacs 风格的文本编辑快捷方式。这些是内置的，目前无法通过 `opencode.json` 进行配置。
 
-| 快捷方式 | 行動                      |
+| 快捷键   | 动作                      |
 | -------- | ------------------------- |
 | `ctrl+a` | 移至当前行起点            |
 | `ctrl+e` | 移至当前行尾              |
-| `ctrl+b` | 将牙刷墨水移动一个字符    |
+| `ctrl+b` | 将光标向后移动一个字符    |
 | `ctrl+f` | 将光标向前移动一个字符    |
-| `alt+b`  | 将杭州墨水移动一个字      |
-| `alt+f`  | 将曼哈顿向前移动一个字    |
+| `alt+b`  | 将光标向后移动一个单词    |
+| `alt+f`  | 将光标向前移动一个单词    |
 | `ctrl+d` | 删除光标下的字符          |
-| `ctrl+k` | 尾巴狂奔                  |
-| `ctrl+u` | 杀至行首                  |
+| `ctrl+k` | 删除到行尾                |
+| `ctrl+u` | 删除到行首                |
 | `ctrl+w` | 删除前一个单词            |
-| `alt+d`  | 杀死下一个词              |
+| `alt+d`  | 删除下一个单词            |
 | `ctrl+t` | 转置字符                  |
-| `ctrl+g` | 取消彈出窗口/中止運行響應 |
+| `ctrl+g` | 取消弹出窗口/中止运行响应 |
 
 ---
 
 ## Shift+Enter
 
-默认情况下，某些终端不发送带有 Enter 的修饰配置键。您可能需要将终端发送 `Shift+Enter` 作为转义序列。
+默认情况下，某些终端不发送带有 Enter 的修饰键。您可能需要配置终端发送 `Shift+Enter` 作为转义序列。
 
-### Windows终端
+### Windows Terminal
 
-打开您的`settings.json`：
+打开您的 `settings.json`：
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
-将其添加到根级`actions`数据库：
+将其添加到根级 `actions` 数组：
 
 ```json
 "actions": [
@@ -178,7 +178,7 @@ opencode 桌面应用程序提示输入支持常见的 Readline/Emacs 风格的�
 ]
 ```
 
-将其添加到根级`keybindings`数据库：
+将其添加到根级 `keybindings` 数组：
 
 ```json
 "keybindings": [
@@ -189,4 +189,4 @@ opencode 桌面应用程序提示输入支持常见的 Readline/Emacs 风格的�
 ]
 ```
 
-保存文件并重新启动Windows终端或打开新选项卡。
+保存文件并重新启动 Windows Terminal 或打开新选项卡。

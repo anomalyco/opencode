@@ -1,17 +1,17 @@
 ---
-title: Tools
+title: Narzędzia
 description: Zarządzaj narzędziami, z których może korzystać LLM.
 ---
 
-Narzędzia umożliwiają LLM wykonywanie działań w bazie kodu. opencode ma zestaw wbudowanych narzędzi, ale możesz go rozszerzyć o [narzędzia niestandardowe](/docs/custom-tools) lub [serwery MCP](/docs/mcp-servers).
+Narzędzia umożliwiają LLM wykonywanie działań w bazie kodu. OpenCode posiada zestaw wbudowanych narzędzi, ale możesz go rozszerzyć o [narzędzia niestandardowe](/docs/custom-tools) lub [serwery MCP](/docs/mcp-servers).
 
-Domyślnie wszystkie narzędzia są **włączone** i nie wymagają pozwolenia na uruchomienie. Możesz kontrolować zachowanie narzędzia poprzez [uprawnienia](/docs/permissions).
+Domyślnie wszystkie narzędzia są **włączone** i nie wymagają zatwierdzenia przed uruchomieniem. Możesz kontrolować zachowanie narzędzi poprzez [uprawnienia](/docs/permissions).
 
 ---
 
-## Skonfiguruj
+## Konfiguracja
 
-Użyj pola `permission` do kontrolowania zachowania narzędzia. Dla każdego narzędzia możesz zezwolić, odmówić lub wymagać zatwierdzenia.
+Użyj pola `permission` do kontrolowania zachowania narzędzia. Dla każdego narzędzia możesz zezwolić (`allow`), odmówić (`deny`) lub wymagać zatwierdzenia (`ask`).
 
 ```json title="opencode.json"
 {
@@ -24,7 +24,7 @@ Użyj pola `permission` do kontrolowania zachowania narzędzia. Dla każdego nar
 }
 ```
 
-Możesz także używać symboli wieloznacznych do kontrolowania wielu narzędzi jednocześnie. Na przykład, aby wymagać zatwierdzenia wszystkich narzędzi z serwera MCP:
+Możesz także używać symboli wieloznacznych do kontrolowania wielu narzędzi jednocześnie. Na przykład, aby wymagać zatwierdzenia dla wszystkich narzędzi z serwera MCP:
 
 ```json title="opencode.json"
 {
@@ -39,15 +39,15 @@ Możesz także używać symboli wieloznacznych do kontrolowania wielu narzędzi 
 
 ---
 
-## Wbudowane
+## Wbudowane narzędzia
 
-Oto wszystkie wbudowane narzędzia dostępne w opencode.
+Oto wszystkie wbudowane narzędzia dostępne w OpenCode.
 
 ---
 
 ### bash
 
-Wykonuj polecenia powłoki w środowisku projektu.
+Wykonuj polecenia powłoki (shell) w środowisku projektu.
 
 ```json title="opencode.json" {4}
 {
@@ -64,7 +64,7 @@ To narzędzie umożliwia LLM uruchamianie poleceń terminalowych, takich jak `np
 
 ### edit
 
-Modify existing files using exact string replacements.
+Modyfikuj istniejące pliki poprzez precyzyjne zastępowanie tekstu.
 
 ```json title="opencode.json" {4}
 {
@@ -81,7 +81,7 @@ To narzędzie umożliwia precyzyjną edycję plików poprzez zastąpienie dokła
 
 ### write
 
-Utwórz nowe pliki lub nadpisz istniejące.
+Twórz nowe pliki lub nadpisuj istniejące.
 
 ```json title="opencode.json" {4}
 {
@@ -102,7 +102,7 @@ Narzędzie `write` jest kontrolowane przez uprawnienie `edit`, które obejmuje w
 
 ### read
 
-Przeczytaj zawartość pliku z bazy kodu.
+Odczytaj zawartość pliku z bazy kodu.
 
 ```json title="opencode.json" {4}
 {
@@ -119,7 +119,7 @@ Narzędzie to odczytuje pliki i zwraca ich zawartość. Obsługuje czytanie okre
 
 ### grep
 
-Search file contents using regular expressions.
+Przeszukuj zawartość plików za pomocą wyrażeń regularnych.
 
 ```json title="opencode.json" {4}
 {
@@ -136,7 +136,7 @@ Szybkie wyszukiwanie treści w całej bazie kodu. Obsługuje pełną składnię 
 
 ### glob
 
-Find files by pattern matching.
+Znajduj pliki na podstawie wzorców.
 
 ```json title="opencode.json" {4}
 {
@@ -147,11 +147,11 @@ Find files by pattern matching.
 }
 ```
 
-Szukaj plików przy użyciu wzorców globalnych, takich jak `**/*.js` lub `src/**/*.ts`. Zwraca pasujące ścieżki plików posortowane według czasu modyfikacji.
+Szukaj plików przy użyciu wzorców glob, takich jak `**/*.js` lub `src/**/*.ts`. Zwraca pasujące ścieżki plików posortowane według czasu modyfikacji.
 
 ---
 
-### lista
+### list
 
 Wyświetla listę plików i katalogów w podanej ścieżce.
 
@@ -164,13 +164,13 @@ Wyświetla listę plików i katalogów w podanej ścieżce.
 }
 ```
 
-To narzędzie wyświetla zawartość katalogu. Akceptuje wzorce globalne do filtrowania wyników.
+To narzędzie wyświetla zawartość katalogu. Akceptuje wzorce glob do filtrowania wyników.
 
 ---
 
-### LSP (experimental)
+### LSP (eksperymentalne)
 
-Wejdź w interakcję ze skonfigurowanymi serwerami LSP, aby uzyskać funkcje analizy kodu, takie jak definicje, odniesienia, informacje o najechaniu myszką i hierarchia połączeń.
+Interakcja ze skonfigurowanymi serwerami LSP w celu uzyskania funkcji analizy kodu, takich jak definicje, referencje, podpowiedzi (hover) i hierarchia wywołań.
 
 :::note
 To narzędzie jest dostępne tylko wtedy, gdy `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (lub `OPENCODE_EXPERIMENTAL=true`).
@@ -193,7 +193,7 @@ Aby skonfigurować, które serwery LSP są dostępne dla Twojego projektu, zobac
 
 ### patch
 
-Apply patches to files.
+Stosuj łatki (patches) do plików.
 
 ```json title="opencode.json" {4}
 {
@@ -204,7 +204,7 @@ Apply patches to files.
 }
 ```
 
-To narzędzie stosuje pliki poprawek do bazy kodu. Przydatne do stosowania różnic i poprawek z różnych źródeł.
+To narzędzie stosuje pliki różnicowe (diffs) do bazy kodu. Przydatne do stosowania zmian z różnych źródeł.
 
 :::note
 Narzędzie `patch` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`, `multiedit`).
@@ -229,7 +229,7 @@ Załaduj [umiejętność](/docs/skills) (plik `SKILL.md`) i zwróć jej treść 
 
 ### todowrite
 
-Zarządzaj listami rzeczy do zrobienia podczas sesji kodowania.
+Zarządzaj listami zadań (todo) podczas sesji kodowania.
 
 ```json title="opencode.json" {4}
 {
@@ -243,14 +243,14 @@ Zarządzaj listami rzeczy do zrobienia podczas sesji kodowania.
 Tworzy i aktualizuje listy zadań w celu śledzenia postępu podczas złożonych operacji. LLM wykorzystuje to do organizowania zadań wieloetapowych.
 
 :::note
-To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
+To narzędzie jest domyślnie wyłączone dla subagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
 :::
 
 ---
 
 ### todoread
 
-Read existing todo lists.
+Odczytuj istniejące listy zadań (todo).
 
 ```json title="opencode.json" {4}
 {
@@ -264,14 +264,14 @@ Read existing todo lists.
 Odczytuje bieżący stan listy rzeczy do zrobienia. Używany przez LLM do śledzenia zadań oczekujących lub ukończonych.
 
 :::note
-To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
+To narzędzie jest domyślnie wyłączone dla subagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Fetch web content.
+Pobieraj treści z sieci.
 
 ```json title="opencode.json" {4}
 {
@@ -282,7 +282,7 @@ Fetch web content.
 }
 ```
 
-Umożliwia LLM pobieranie i odczytywanie stron internetowych. Przydatne do wyszukiwania dokumentacji lub wyszukiwania zasobów online.
+Umożliwia LLM pobieranie i odczytywanie stron internetowych. Przydatne do wyszukiwania dokumentacji lub zasobów online.
 
 ---
 
@@ -291,9 +291,9 @@ Umożliwia LLM pobieranie i odczytywanie stron internetowych. Przydatne do wyszu
 Wyszukaj informacje w Internecie.
 
 :::note
-To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy opencode lub gdy zmienna środowiskowa `OPENCODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
+To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy OpenCode lub gdy zmienna środowiskowa `OPENCODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
 
-To enable when launching opencode:
+Aby włączyć przy uruchamianiu OpenCode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -310,12 +310,12 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Przeszukuje Internet za pomocą Exa AI, aby znaleźć odpowiednie informacje w Internecie. Przydatne do badania tematów, znajdowania bieżących wydarzeń lub zbierania informacji wykraczających poza limit danych szkoleniowych.
+Przeszukuje Internet za pomocą Exa AI, aby znaleźć odpowiednie informacje. Przydatne do badania tematów, znajdowania bieżących wydarzeń lub zbierania informacji wykraczających poza zbiór danych treningowych.
 
 Nie jest wymagany żaden klucz API — narzędzie łączy się bezpośrednio z usługą MCP hostowaną przez Exa AI bez uwierzytelniania.
 
 :::tip
-Użyj `websearch`, gdy chcesz znaleźć informacje (odkrycie), i `webfetch`, gdy musisz pobrać treść z określonego adresu URL (pobieranie).
+Użyj `websearch`, gdy chcesz znaleźć informacje (odkrywanie), i `webfetch`, gdy musisz pobrać treść z określonego adresu URL (pobieranie).
 :::
 
 ---
@@ -333,18 +333,18 @@ Zadawaj pytania użytkownikowi podczas wykonywania.
 }
 ```
 
-To narzędzie umożliwia LLM zadawanie pytań użytkownikowi podczas wykonywania zadania. Jest to przydatne dla:
+To narzędzie umożliwia LLM zadawanie pytań użytkownikowi podczas wykonywania zadania. Jest to przydatne do:
 
-- Gathering user preferences or requirements
-- Clarifying ambiguous instructions
-- Getting decisions on implementation choices
-- Offering choices about what direction to take
+- Zbierania preferencji i wymagań użytkownika
+- Doprecyzowania niejednoznacznych instrukcji
+- Podejmowania decyzji dotyczących implementacji
+- Proponowania możliwych kierunków działania
 
 Każde pytanie zawiera nagłówek, tekst pytania i listę opcji. Użytkownicy mogą wybierać spośród dostępnych opcji lub wpisać niestandardową odpowiedź. Jeśli pytań jest wiele, użytkownicy mogą nawigować między nimi przed przesłaniem wszystkich odpowiedzi.
 
 ---
 
-## Custom tools
+## Narzędzia niestandardowe
 
 Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM może wywołać. Są one zdefiniowane w pliku konfiguracyjnym i mogą wykonywać dowolny kod.
 
@@ -352,7 +352,7 @@ Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM mo
 
 ---
 
-## MCP servers
+## Serwery MCP
 
 Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych narzędzi i usług. Obejmuje to dostęp do baz danych, integracje API i usługi stron trzecich.
 
@@ -360,13 +360,13 @@ Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych nar
 
 ---
 
-## Internals
+## Szczegóły techniczne
 
-Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają pod maską [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że ​​pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
+Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
 
 ---
 
-### Ignore patterns
+### Ignorowanie plików
 
 Aby uwzględnić pliki, które normalnie byłyby ignorowane, utwórz plik `.ignore` w katalogu głównym projektu. Ten plik może jawnie zezwalać na określone ścieżki.
 

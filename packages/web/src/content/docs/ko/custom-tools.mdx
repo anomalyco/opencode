@@ -1,9 +1,9 @@
 ---
-title: Custom Tools
-description: Create tools the LLM can call in opencode.
+title: 사용자 정의 도구
+description: OpenCode에서 LLM이 호출할 수 있는 도구를 만듭니다.
 ---
 
-사용자 정의 도구는 LLM이 대화 중에 호출 할 수있는 기능을 만듭니다. 그들은 `read`, `write` 및 `bash`와 같은 opencode의 [붙박이 도구] (./tools)와 함께 작동합니다.
+사용자 정의 도구는 LLM이 대화 중에 호출 할 수있는 기능을 만듭니다. 그들은 `read`, `write` 및 `bash`와 같은 opencode의 [붙박이 도구](./tools)와 함께 작동합니다.
 
 ---
 
@@ -45,7 +45,7 @@ export default tool({
 
 ---
 
-### 파일 당 다수 공구
+### 파일당 여러 도구
 
 단일 파일에서 여러 도구를 수출할 수 있습니다. 각 수출은 ** 별도의 도구 ** 이름 ** `<filename>_<exportname>`**:
 
@@ -79,7 +79,7 @@ export const multiply = tool({
 
 ---
 
-#### 가격
+#### 스키마
 
 `tool.schema`를 사용할 수 있습니다, 그냥 [Zod](https://zod.dev), 인수 유형을 정의합니다.
 
@@ -108,7 +108,7 @@ export default {
 
 ---
 
-### 텍스트
+### 컨텍스트
 
 도구는 현재 세션에 대한 컨텍스트를받습니다.
 
@@ -167,4 +167,4 @@ export default tool({
 })
 ```
 
-여기에 우리는 [`Bun.$`](https://bun.com/docs/runtime/shell) 유틸리티를 사용하여 파이썬 스크립트를 실행합니다.
+여기에 우리는 [`Bun.$`](https://bun.com/docs/runtime/shell) 유틸리티를 사용하여 Python 스크립트를 실행합니다.

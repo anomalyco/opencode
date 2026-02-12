@@ -7,13 +7,13 @@ Gli strumenti personalizzati sono funzioni che crei e che l'LLM puo chiamare dur
 
 ---
 
-## Creating a tool
+## Creazione di uno strumento
 
 Gli strumenti sono definiti come file **TypeScript** o **JavaScript**. Tuttavia, la definizione dello strumento puo invocare script scritti in **qualsiasi linguaggio**: TypeScript o JavaScript vengono usati solo per la definizione in se.
 
 ---
 
-### Location
+### Posizione
 
 Possono essere definiti:
 
@@ -22,7 +22,7 @@ Possono essere definiti:
 
 ---
 
-### Structure
+### Struttura
 
 Il modo piu semplice per creare strumenti e usare l'helper `tool()` che fornisce type-safety e validazione.
 
@@ -45,7 +45,7 @@ Il **nome del file** diventa il **nome dello strumento**. L'esempio sopra crea l
 
 ---
 
-#### Multiple tools per file
+#### Strumenti multipli per file
 
 Puoi anche esportare piu strumenti da un singolo file. Ogni export diventa **uno strumento separato** con nome **`<filename>_<exportname>`**:
 
@@ -79,7 +79,7 @@ Questo crea due strumenti: `math_add` e `math_multiply`.
 
 ---
 
-### Arguments
+### Argomenti
 
 Puoi usare `tool.schema`, che e semplicemente [Zod](https://zod.dev), per definire i tipi degli argomenti.
 
@@ -108,7 +108,7 @@ export default {
 
 ---
 
-### Context
+### Contesto
 
 Gli strumenti ricevono un contesto sulla sessione corrente:
 
@@ -131,9 +131,9 @@ Usa `context.worktree` per la root del worktree git.
 
 ---
 
-## Examples
+## Esempi
 
-### Scrivi uno strumento in Python
+### Scrivere uno strumento in Python
 
 Puoi scrivere gli strumenti in qualunque linguaggio. Ecco un esempio che somma due numeri usando Python.
 

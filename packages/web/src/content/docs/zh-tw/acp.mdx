@@ -1,31 +1,31 @@
 ---
-title: ACP 支持
-description: 在任何 ACP 兼容編輯器中使用 opencode。
+title: ACP 支援
+description: 在任何 ACP 相容編輯器中使用 OpenCode。
 ---
 
-opencode 支持 [代理客戶端協議](https://agentclientprotocol.com) 或 (ACP)，允許您直接在兼容的編輯器和 IDE 中使用它。
+OpenCode 支援 [Agent Client Protocol](https://agentclientprotocol.com) 或 (ACP)，允許您直接在相容的編輯器和 IDE 中使用它。
 
 :::tip
-有關支持 ACP 的編輯器和工具的列表，請查看[非加太進程進度報告](https://zed.dev/blog/acp-progress-report#available-now)。
+有關支援 ACP 的編輯器和工具的列表，請查看 [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)。
 :::
 
-ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之間的通信。
+ACP 是一種開放協議，用於標準化程式碼編輯器和 AI 程式碼代理之間的通訊。
 
 ---
 
-## 配置
+## 設定
 
-要通過 ACP 使用 opencode，請將編輯器配置為運行 `opencode acp` 命令。
+要透過 ACP 使用 OpenCode，請將編輯器設定為執行 `opencode acp` 指令。
 
-該命令將 opencode 作為 ACP 兼容的子進程啟動，通過 stdio 通過 JSON-RPC 與您的編輯器進行通信。
+該指令將 OpenCode 作為 ACP 相容的子程序啟動，透過 stdio 透過 JSON-RPC 與您的編輯器進行通訊。
 
-以下是支持 ACP 的流行編輯器的示例。
+以下是支援 ACP 的流行編輯器的範例。
 
 ---
 
-### 澤德
+### Zed
 
-添加到您的[澤德](https://zed.dev)配置(`~/.config/zed/settings.json`)：
+新增到您的 [Zed](https://zed.dev) 設定 (`~/.config/zed/settings.json`)：
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -40,7 +40,7 @@ ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之
 
 要打開它，請使用 **命令面板** 中的 `agent: new thread` 操作。
 
-您還可以通過編輯`keymap.json`來綁定鍵盤快捷鍵：
+您還可以透過編輯 `keymap.json` 來綁定鍵盤快速鍵：
 
 ```json title="keymap.json"
 [
@@ -69,7 +69,7 @@ ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之
 
 ### JetBrains IDE
 
-根據[文件](https://www.jetbrains.com/help/ai-assistant/acp.html)添加到你的[JetBrains IDE](https://www.jetbrains.com/) acp.json：
+根據 [文件](https://www.jetbrains.com/help/ai-assistant/acp.html) 新增到你的 [JetBrains IDE](https://www.jetbrains.com/) acp.json：
 
 ```json title="acp.json"
 {
@@ -82,13 +82,13 @@ ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之
 }
 ```
 
-要打開它，請在 AI Chat 代理選擇器中使用新的“opencode”代理。
+要打開它，請在 AI Chat 代理選擇器中使用新的「opencode」代理。
 
 ---
 
-### 前衛
+### Avante.nvim
 
-添加到您的[前衛](https://github.com/yetone/avante.nvim)配置：
+新增到您的 [Avante.nvim](https://github.com/yetone/avante.nvim) 設定：
 
 ```lua
 {
@@ -101,7 +101,7 @@ ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之
 }
 ```
 
-如果需要傳遞環境變量：
+如果需要傳遞環境變數：
 
 ```lua {6-8}
 {
@@ -119,9 +119,9 @@ ACP 是一種開放協議，用於標準化代碼編輯器和 AI 編碼代理之
 
 ---
 
-### 代碼伴侶.nvim
+### CodeCompanion.nvim
 
-要將 opencode 用作 [代碼伴侶.nvim](https://github.com/olimorris/CodeCompanion.nvim) 中的 ACP 代理，請將以下內容添加到 Neovim 配置中：
+要將 OpenCode 用作 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中的 ACP 代理，請將以下內容新增到 Neovim 設定中：
 
 ```lua
 require("codecompanion").setup({
@@ -136,21 +136,21 @@ require("codecompanion").setup({
 })
 ```
 
-此配置將 CodeCompanion 設置為使用 opencode 作為聊天的 ACP 代理。
+此設定將 CodeCompanion 設定為使用 OpenCode 作為聊天的 ACP 代理。
 
-如果您需要傳遞環境變量（如 `OPENCODE_API_KEY`），請參閱 CodeCompanion.nvim 文檔中的 [配置適配器：環境變量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) 了解完整詳細信息。
+如果您需要傳遞環境變數（如 `OPENCODE_API_KEY`），請參閱 CodeCompanion.nvim 文件中的 [設定適配器：環境變數](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) 了解完整詳細資訊。
 
-## 支持
+## 支援
 
-opencode 通過 ACP 的工作方式與在終端中的工作方式相同。支持所有功能：
+OpenCode 透過 ACP 的工作方式與在終端機中的工作方式相同。支援所有功能：
 
 :::note
-目前不支持某些內置斜杠命令，例如 `/undo` 和 `/redo`。
+目前不支援某些內建斜線指令，例如 `/undo` 和 `/redo`。
 :::
 
-- 內置工具（文件操作、終端命令等）
-- 自定義工具和斜杠命令
-- 在 opencode 配置中配置的 MCP 服務器
-- `AGENTS.md` 的項目特定規則
-- 自定義格式化程序和 linter
+- 內建工具（檔案操作、終端機指令等）
+- 自定義工具和斜線指令
+- 在 OpenCode 設定中設定的 MCP 伺服器
+- `AGENTS.md` 的專案特定規則
+- 自定義格式化程式和 linter
 - 代理和權限系統

@@ -7,9 +7,9 @@ description: 常見問題以及如何解決它們。
 
 ---
 
-## 紀錄
+## 日志
 
-日誌檔案寫入：
+日誌文件寫入：
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
@@ -20,40 +20,40 @@ You can set the log level with the `--log-level` command-line option to get more
 
 ---
 
-## 貯存
+## 存储
 
 opencode程序将会话数据和其他应用程序数据存储在磁碟上：
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
 
-該目錄包含：
+该目录包含：
 
-- `auth.json` - 身份验证资料，例如API金密钥、OAuth令牌
+- `auth.json` - 身份验证凭据，例如 API 密钥、OAuth Tokens
 - `log/` - 应用日志
-- `project/` - 专案特定数据，例如会话和消息数据
-  - 如果專案位於 Git 儲存庫中，則它儲存在 `./<project-slug>/storage/` 中
+- `project/` - 项目特定数据，例如会话和消息数据
+  - 如果项目位于 Git 仓库中，则存储在 `./<project-slug>/storage/` 中
   - 如果不是 Git 存储库，则存储在 `./global/storage/` 中
 
 ---
 
-## 桌面應用程式
+## 桌面应用程序
 
 opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
 
-### 快速檢查
+### 快速检查
 
-- 完全退出並重新啟動應用程式。
-- 如果應用程式顯示錯誤螢幕，請單擊“**重新啟動**”並複制錯誤詳細資訊。
-- macOS only: `opencode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+- 完全退出并重新启动应用程序。
+- 如果应用程序显示错误界面，请单击“**重新启动**”并复制错误详细信息。
+- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
 
 ---
 
-### 禁用外掛
+### 禁用插件
 
-如果桌面應用程式在啟動時崩潰、掛起或行為異常，請首先禁用外掛。
+如果桌面应用程序在启动時崩潰、掛起或行为異常，请首先禁用插件。
 
-#### 檢查全域性配置
+#### 检查全域性配置
 
 开启全域性文件并查询`plugin`键。
 
@@ -61,7 +61,7 @@ opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in th
 - **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
 
-如果您配置了外掛，請透過刪除金鑰或將其設定為空陣列來暫時禁用它們：
+如果您配置了插件，请通过删除密钥或将其设置为空数组來暂时禁用它們：
 
 ```jsonc
 {
@@ -70,26 +70,26 @@ opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in th
 }
 ```
 
-#### 檢查外掛目錄
+#### 检查插件目录
 
 opencode 还可以从磁碟加载本地外挂。暂时将它们移开（或重新命名资料夹）并重新启动桌面应用程序：
 
-- **全域性外掛**
+- **全域性插件**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
   - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
-- **專案外掛**（僅當您使用每個專案配置時）
+- **专案插件**（仅当您使用每个专案配置時）
   - `<your-project>/.opencode/plugins/`
 
-如果應用程式再次開始工作，請一次重新啟用一個外掛，以找出導致問題的外掛。
+如果应用程序再次開始工作，请一次重新启用一个插件，以找出導致問題的插件。
 
 ---
 
-### 清除快取
+### 清除缓存
 
-如果取消外挂没有帮助（或者外挂安装被卡住），请清除快取，方便opencode可以重建它。
+如果取消外挂没有帮助（或者外挂安装被卡住），请清除缓存，方便opencode可以重建它。
 
 1. 完全退出 opencode 桌面。
-2. 刪除快取目錄：
+2. 删除缓存目录：
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
 - **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
@@ -99,7 +99,7 @@ opencode 还可以从磁碟加载本地外挂。暂时将它们移开（或重�
 
 ---
 
-### 修復伺服器連線問題
+### 修復服务器连接問題
 
 opencode Desktop 可以启动自己的本地服务器（默认配置）或连线到您的服务器 URL。
 
@@ -107,13 +107,13 @@ opencode Desktop 可以启动自己的本地服务器（默认配置）或连线
 
 #### 清除桌面桌面服务器 URL
 
-在主螢幕中，單擊伺服器名稱（帶有狀態點）以開啟伺服器選擇器。在“**預設伺服器**”部分中，單擊“**清除**”。
+在主屏幕中，单击服务器名称（带有状态点）以打开服务器选择器。在“**默认服务器**”部分中，单击“**清除**”。
 
 #### 从配置中删除 `server.port` / `server.hostname`
 
 If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
 
-#### 檢查環境變數
+#### 检查环境变量
 
 如果您在环境中设置了 `OPENCODE_PORT`，桌面应用程序将尝试将交换机用于本地服务器。
 
@@ -142,16 +142,16 @@ If you're experiencing slow performance, file access issues, or terminal problem
 
 ---
 
-### 通知不顯示
+### 通知不显示
 
 opencode 桌面仅在以下情况下显示系统通知：
 
 - 在您的作业系统中设置为 opencode 启用了通知，并且
-- 應用程式視窗未聚焦。
+- 应用程序視窗未聚焦。
 
 ---
 
-### 重置桌面應用程式儲存（最後的手段）
+### 重置桌面应用程序儲存（最后的手段）
 
 如果应用程序无法并且启动您无法从 UI 内部清除设置，请重置桌面应用程序的存储状态。
 
@@ -161,7 +161,7 @@ opencode 桌面仅在以下情况下显示系统通知：
 - `opencode.settings.dat` (desktop default server URL)
 - `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
 
-快速找到目錄：
+快速找到目录：
 
 - **macOS**：Finder -> `Cmd+Shift+G` -> `~/Library/Application Support`（然后搜索上面的档名）
 - **Linux**：在`~/.local/share`下搜索上述档名
@@ -169,7 +169,7 @@ opencode 桌面仅在以下情况下显示系统通知：
 
 ---
 
-## 尋求幫助
+## 寻求帮助
 
 如果您遇到 opencode 问题：
 
@@ -179,9 +179,9 @@ opencode 桌面仅在以下情况下显示系统通知：
 
    [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
-   在建立新問題之前，請搜尋現有問題以檢視您的問題是否已被報告。
+   在建立新問題之前，请搜索現有問題以查看您的問題是否已被報告。
 
-2. **加入我們的不和諧**
+2. **加入我们的不和諧**
 
    获得实时帮助和社群讨论，请加入我们的Discord服务器：
 
@@ -189,7 +189,7 @@ opencode 桌面仅在以下情况下显示系统通知：
 
 ---
 
-## 常見問題
+## 常见问题
 
 以下是一些常見問題以及解決方法。
 
@@ -197,29 +197,29 @@ opencode 桌面仅在以下情况下显示系统通知：
 
 ### opencode 无法启动
 
-1. 檢查日誌中是否有錯誤訊息
-2. 尝试使用 `--print-logs` 执行以检视终端中的输出
+1. 检查日誌中是否有错误消息
+2. 尝试使用 `--print-logs` 执行以查看终端中的输出
 3. Ensure you have the latest version with `opencode upgrade`
 
 ---
 
-### 身份驗證問題
+### 身份验证問題
 
 1. 尝试使用 TUI 中的 `/connect` 命令重新进行身份验证
-2. 检查您的API金钥匙是否有效
+2. 检查您的API 密钥是否有效
 3. 保证您的网路允许连线到达辉煌的API
 
 ---
 
-### 型號不可用
+### 模型不可用
 
-1. 檢查您是否已透過提供商的身份驗證
-2. 驗證配置中的型號名稱是否正確
-3. 某些型號可能需要特定的訪問許可權或訂閱
+1. 检查您是否已通过提供商的身份验证
+2. 驗證配置中的模型名称是否正确
+3. 某些模型可能需要特定的访问权限或訂閱
 
 如果您遇到 `ProviderModelNotFoundError` 您很可能是错误的
 在某處引用模型。
-模型應該像這樣引用：`<providerId>/<modelId>`
+模型应该像这樣引用：`<providerId>/<modelId>`
 
 示例：
 
@@ -231,14 +231,14 @@ To figure out what models you have access to, run `opencode models`
 
 ---
 
-### 提供者初始化錯誤
+### 提供商初始化错误
 
 如果遇到 ProviderInitError，您的配置可能无效或损坏。
 
-要解決這個問題：
+要解決这个問題：
 
 1. 首先，按照[提供商指南](/docs/providers) 验证您的事业是否已正确设置
-2. 如果問題仍然存在，請嘗試清除儲存的配置：
+2. 如果問題仍然存在，请嘗試清除儲存的配置：
 
    ```bash
    rm -rf ~/.local/share/opencode
@@ -250,13 +250,13 @@ To figure out what models you have access to, run `opencode models`
 
 ---
 
-### AI_API_CallError 和提供程序包问题
+### AI_API_CallError 和提供包问题
 
-如果您遇到 API 呼叫错误，这可能是由于过去提供程序包造成的。 opencode 根据需要动态安装提供程序包（OpenAI、Anthropic、Google 等）将其快取放在本地。
+如果您遇到 API 呼叫错误，这可能是由于过去提供包造成的。 opencode 根据需要动态安装提供包（OpenAI、Anthropic、Google 等）将其缓存放在本地。
 
-要解決提供程式包問題：
+要解決provider 包問題：
 
-1. 清除提供程式包快取：
+1. 清除provider 包缓存：
 
    ```bash
    rm -rf ~/.cache/opencode
@@ -264,13 +264,13 @@ To figure out what models you have access to, run `opencode models`
 
    On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
 
-2. 重新启动 opencode 以重新安装最新的提供程序包
+2. 重新启动 opencode 以重新安装最新的提供包
 
-这将需要 opencode 下载最新版本的提供程序包，这通常可以解决模型引数和 API 更改的相容性问题。
+这将需要 opencode 下载最新版本的提供包，这通常可以解决模型参数和 API 更改的兼容性问题。
 
 ---
 
-### 複製/paste 不适用 Linux
+### 复制/粘贴在 Linux 上不可用
 
 Linux 用户需要安装以下剪贴簿实用程序之一才能使 copy/paste 功能正常工作：
 
@@ -288,7 +288,7 @@ apt install -y xsel
 apt install -y wl-clipboard
 ```
 
-**對於無頭環境：**
+**对于無頭環境：**
 
 ```bash
 apt install -y xvfb
