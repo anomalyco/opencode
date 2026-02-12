@@ -217,7 +217,7 @@
 
 [data-component="tool-output"] {
   white-space: pre;
-  padding: 0;
+  padding: 8px 0;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -385,6 +385,8 @@
 
 [data-component="task-tools"] {
   padding: 0;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -394,6 +396,9 @@
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
 
     [data-slot="icon-svg"] {
       flex-shrink: 0;
@@ -418,9 +423,10 @@
   [data-slot="task-tool-title"] {
     font-family: var(--font-family-sans);
     font-size: 14px;
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
-    color: var(--text-weak);
+    color: var(--text-strong);
+    flex-shrink: 0;
   }
 
   [data-slot="task-tool-subtitle"] {
@@ -428,7 +434,10 @@
     font-size: 14px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
-    color: var(--text-weaker);
+    color: var(--text-base);
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

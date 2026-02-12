@@ -59,10 +59,10 @@
     font-family: var(--font-family-sans);
     font-size: 14px;
     font-style: normal;
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-base);
+    color: var(--text-strong);
 
     &.capitalize {
       text-transform: capitalize;
@@ -70,6 +70,7 @@
 
     &.agent-title {
       color: var(--text-strong);
+      font-weight: var(--font-weight-medium);
     }
   }
 
@@ -82,10 +83,10 @@
     font-family: var(--font-family-sans);
     font-size: 14px;
     font-style: normal;
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+    color: var(--text-base);
 
     &.clickable {
       cursor: pointer;
@@ -101,6 +102,7 @@
       color: var(--text-interactive-base);
       text-decoration: none;
       text-underline-offset: 2px;
+      font-weight: var(--font-weight-regular);
 
       &:hover {
         color: var(--text-interactive-base);
@@ -129,6 +131,6 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+    color: var(--text-base);
   }
 }
