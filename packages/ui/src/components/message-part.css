@@ -264,6 +264,19 @@
   }
 }
 
+[data-slot="collapsible-content"]:has([data-component="edit-content"]),
+[data-slot="collapsible-content"]:has([data-component="write-content"]) {
+  border: 1px solid var(--border-weak-base);
+  border-radius: 6px;
+  background: transparent;
+  overflow: hidden;
+}
+
+[data-slot="collapsible-content"]:has([data-component="edit-content"]) [data-component="edit-content"],
+[data-slot="collapsible-content"]:has([data-component="write-content"]) [data-component="write-content"] {
+  border-top: none;
+}
+
 [data-component="edit-trigger"],
 [data-component="write-trigger"] {
   display: flex;
