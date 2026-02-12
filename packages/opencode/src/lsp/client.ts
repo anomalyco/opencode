@@ -12,6 +12,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Flag } from "@/flag/flag"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
@@ -228,7 +229,7 @@ export namespace LSPClient {
               }
             })
           }),
-          3000,
+          Flag.OPENCODE_EXPERIMENTAL_LSP_DIAGNOSTICS_TIMEOUT_MS ?? 10_000,
         )
           .catch(() => {})
           .finally(() => {
