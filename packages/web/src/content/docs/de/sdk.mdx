@@ -13,7 +13,7 @@ Damit kannst du Integrationen bauen und opencode programmatisch steuern.
 
 ---
 
-## Install
+## Installation
 
 Installiere das SDK ueber npm:
 
@@ -80,7 +80,7 @@ const client = createOpencodeClient({
 })
 ```
 
-#### Options
+#### Optionen
 
 | Option          | Type       | Description                      | Default                 |
 | --------------- | ---------- | -------------------------------- | ----------------------- |
@@ -105,7 +105,7 @@ Alle Typen werden aus der OpenAPI-Spezifikation des Servers generiert und sind i
 
 ---
 
-## Errors
+## Fehler
 
 Das SDK kann Fehler werfen, die du abfangen und behandeln kannst:
 
@@ -133,7 +133,7 @@ Das SDK stellt alle Server-APIs ueber einen typsicheren Client bereit.
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 const health = await client.global.health()
@@ -151,7 +151,7 @@ console.log(health.data.version)
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Write a log entry
@@ -178,7 +178,7 @@ const agents = await client.app.agents()
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // List all projects
@@ -198,7 +198,7 @@ const currentProject = await client.project.current()
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Get current path information
@@ -216,7 +216,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 const config = await client.config.get()
@@ -252,7 +252,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Create and manage sessions
@@ -301,7 +301,7 @@ await client.session.prompt({
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Search and read files
@@ -340,7 +340,7 @@ const content = await client.file.read({
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Control TUI interface
@@ -363,7 +363,7 @@ await client.tui.showToast({
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 await client.auth.set({
@@ -382,7 +382,7 @@ await client.auth.set({
 
 ---
 
-#### Examples
+#### Beispiele
 
 ```javascript
 // Listen to real-time events

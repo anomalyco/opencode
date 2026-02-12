@@ -9,7 +9,7 @@ MCP araçları eklendikten sonra yerleşik araçların yanı sıra LLM tarafınd
 
 ---
 
-#### Caveats
+#### Uyarılar
 
 Bir MCP sunucusu kullandığınızda bağlama eklenir. Çok fazla aletiniz varsa, bu hızla artabilir. Bu nedenle hangi MCP sunucularını kullandığınıza dikkat etmenizi öneririz.
 
@@ -21,7 +21,7 @@ GitHub MCP sunucusu gibi belirli MCP sunucuları çok sayıda belirteç ekleme e
 
 ---
 
-## Olanak vermek
+## Etkinleştirme
 
 MCP sunucularını [opencode Config](https://opencode.ai/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
 
@@ -44,7 +44,7 @@ Ayrıca `enabled` öğesini `false` olarak ayarlayarak bir sunucuyu devre dış�
 
 ---
 
-### Overriding remote defaults
+### Uzak varsayılanları geçersiz kılma
 
 Kuruluşlar, `.well-known/opencode` uç noktaları aracılığıyla varsayılan MCP sunucularını sağlayabilir. Bu sunucular varsayılan olarak devre dışı bırakılarak kullanıcıların ihtiyaç duydukları sunucuları seçmelerine olanak tanınabilir.
 
@@ -112,7 +112,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-#### Options
+#### Seçenekler
 
 Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiştir.
 
@@ -150,7 +150,7 @@ Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiş
 
 ---
 
-#### Options
+#### Seçenekler
 
 | Seçenek   | Tür     | Gerekli | Açıklama                                                                                       |
 | --------- | ------- | ------- | ---------------------------------------------------------------------------------------------- |
@@ -173,7 +173,7 @@ opencode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olar
 
 ---
 
-### Automatic
+### Otomatik
 
 OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gerek yoktur. Uzak sunucuyu yapılandırmanız yeterli:
 
@@ -216,7 +216,7 @@ MCP sunucu sağlayıcısından istemci kimlik bilgileriniz varsa, bunları yapı
 
 ---
 
-### Authenticating
+### Kimlik doğrulama
 
 Kimlik doğrulamayı manuel olarak tetikleyebilir veya kimlik bilgilerini yönetebilirsiniz.
 
@@ -264,7 +264,7 @@ Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğ
 
 ---
 
-#### OAuth Options
+#### OAuth Seçenekleri
 
 | Seçenek        | Tür             | Açıklama                                                                         |
 | -------------- | --------------- | -------------------------------------------------------------------------------- |
@@ -273,7 +273,7 @@ Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğ
 | `clientSecret` | Dize            | Yetkilendirme sunucusu gerektiriyorsa OAuth istemci sırrı.                       |
 | `scope`        | String          | OAuth scopes to request during authorization.                                    |
 
-#### Debugging
+#### Hata Ayıklama
 
 Uzak bir MCP sunucusunun kimlik doğrulaması başarısız olursa aşağıdakileri kullanarak sorunları teşhis edebilirsiniz:
 
@@ -289,7 +289,7 @@ opencode mcp debug my-oauth-server
 
 ---
 
-## Üstesinden gelmek
+## Yönetim
 
 MCP'leriniz yerleşik araçların yanı sıra opencode'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi opencode yapılandırması aracılığıyla yönetebilirsiniz.
 
@@ -343,7 +343,7 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 
 ---
 
-### Temsilci başına
+### Agent başına
 
 Çok sayıda MCP sunucunuz varsa, bunları yalnızca aracı başına etkinleştirmek ve genel olarak devre dışı bırakmak isteyebilirsiniz. Bunu yapmak için:
 
@@ -375,7 +375,7 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 
 ---
 
-#### Glob patterns
+#### Glob desenleri
 
 Glob modeli, basit normal ifade globbing modellerini kullanır:
 
@@ -433,7 +433,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### Bağlam7
+### Context7
 
 Dokumanlar arasında arama yapmak için [Context7 MCP server](https://github.com/upstash/context7) ekleyin.
 
