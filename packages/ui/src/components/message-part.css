@@ -217,7 +217,8 @@
 
 [data-component="tool-output"] {
   white-space: pre;
-  padding: 8px 0;
+  padding: 0;
+  margin-bottom: 24px;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -439,7 +440,7 @@
   [data-slot="task-tool-title"] {
     font-family: var(--font-family-sans);
     font-size: 14px;
-    font-weight: var(--font-weight-regular);
+    font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     color: var(--text-strong);
     flex-shrink: 0;
