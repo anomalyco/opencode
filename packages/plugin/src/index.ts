@@ -224,4 +224,9 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+
+  "session.before.idle"?: (
+    input: { sessionID: string; parentSessionID?: string },
+    output: { resumePrompt?: string },
+  ) => Promise<void>
 }
