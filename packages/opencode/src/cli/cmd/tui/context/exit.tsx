@@ -1,4 +1,5 @@
 import { useRenderer } from "@opentui/solid"
+import { writeSync } from "fs"
 import { createSimpleContext } from "./helper"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 type Exit = ((reason?: unknown) => Promise<void>) & {
@@ -40,6 +41,11 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
           }
         }
         const text = store.get()
+        // Give the zig render thread time to finish its final frame
+        // before writing terminal restore sequences
+        await new Promise((r) => setTimeout(r, 50))
+        // Restore terminal: exit alternate screen, clear screen, show cursor, reset attrs
+        writeSync(1, "\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h\x1b[0m")
         if (text) process.stdout.write(text + "\n")
         process.exit(0)
       },

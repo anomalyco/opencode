@@ -111,6 +111,17 @@ export function tui(input: {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
+
+    // Catch SIGINT (Ctrl+C arriving as signal due to win32 guard race condition)
+    // to ensure terminal cleanup when the keyboard-event path isn't taken.
+    const { writeSync } = await import("fs")
+    process.on("SIGINT", () => {
+      try {
+        writeSync(1, "\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h\x1b[0m")
+      } catch {}
+      process.exit(0)
+    })
+
     const onExit = async () => {
       await input.onExit?.()
       resolve()
@@ -168,6 +179,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
+        exitSignals: [],
         useKittyKeyboard: {},
         autoFocus: false,
         consoleOptions: {
