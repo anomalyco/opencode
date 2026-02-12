@@ -21,6 +21,14 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
+import type { Message, UserMessage } from "@opencode-ai/sdk/v2/client"
+
+type SessionSidePanelViewModel = {
+  messages: () => Message[]
+  visibleUserMessages: () => UserMessage[]
+  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
+  info: () => ReturnType<ReturnType<typeof useSync>["session"]["get"]>
+}
 
 export function SessionSidePanel(props: {
   open: boolean
@@ -31,7 +39,6 @@ export function SessionSidePanel(props: {
   dialog: ReturnType<typeof useDialog>
   file: ReturnType<typeof useFile>
   comments: ReturnType<typeof useComments>
-  sync: ReturnType<typeof useSync>
   hasReview: boolean
   reviewCount: number
   reviewTab: boolean
@@ -43,10 +50,7 @@ export function SessionSidePanel(props: {
   openTab: (value: string) => void
   showAllFiles: () => void
   reviewPanel: () => JSX.Element
-  messages: () => unknown[]
-  visibleUserMessages: () => unknown[]
-  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  info: () => unknown
+  vm: SessionSidePanelViewModel
   handoffFiles: () => Record<string, SelectedLineRange | null> | undefined
   codeComponent: NonNullable<ValidComponent>
   addCommentToContext: (input: {
@@ -68,6 +72,8 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
 }) {
+  const openedTabs = createMemo(() => props.openedTabs())
+
   return (
     <Show when={props.open}>
       <aside
@@ -136,8 +142,8 @@ export function SessionSidePanel(props: {
                             </div>
                           </Tabs.Trigger>
                         </Show>
-                        <SortableProvider ids={props.openedTabs()}>
-                          <For each={props.openedTabs()}>
+                        <SortableProvider ids={openedTabs()}>
+                          <For each={openedTabs()}>
                             {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
                           </For>
                         </SortableProvider>
@@ -187,10 +193,10 @@ export function SessionSidePanel(props: {
                         <Show when={props.activeTab() === "context"}>
                           <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                             <SessionContextTab
-                              messages={props.messages as never}
-                              visibleUserMessages={props.visibleUserMessages as never}
-                              view={props.view as never}
-                              info={props.info as never}
+                              messages={props.vm.messages}
+                              visibleUserMessages={props.vm.visibleUserMessages}
+                              view={props.vm.view}
+                              info={props.vm.info}
                             />
                           </div>
                         </Show>
@@ -203,7 +209,7 @@ export function SessionSidePanel(props: {
                           tab={tab}
                           activeTab={props.activeTab}
                           tabs={props.tabs}
-                          view={props.view}
+                          view={props.vm.view}
                           handoffFiles={props.handoffFiles}
                           file={props.file}
                           comments={props.comments}

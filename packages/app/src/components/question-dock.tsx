@@ -38,43 +38,45 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
-  const reply = (answers: QuestionAnswer[]) => {
+  const reply = async (answers: QuestionAnswer[]) => {
     if (store.sending) return
 
     setStore("sending", true)
-    sdk.client.question
-      .reply({ requestID: props.request.id, answers })
-      .catch(fail)
-      .finally(() => setStore("sending", false))
+    try {
+      await sdk.client.question.reply({ requestID: props.request.id, answers })
+    } catch (err) {
+      fail(err)
+    } finally {
+      setStore("sending", false)
+    }
   }
 
-  const reject = () => {
+  const reject = async () => {
     if (store.sending) return
 
     setStore("sending", true)
-    sdk.client.question
-      .reject({ requestID: props.request.id })
-      .catch(fail)
-      .finally(() => setStore("sending", false))
+    try {
+      await sdk.client.question.reject({ requestID: props.request.id })
+    } catch (err) {
+      fail(err)
+    } finally {
+      setStore("sending", false)
+    }
   }
 
   const submit = () => {
-    reply(questions().map((_, i) => store.answers[i] ?? []))
+    void reply(questions().map((_, i) => store.answers[i] ?? []))
   }
 
   const pick = (answer: string, custom: boolean = false) => {
-    const answers = [...store.answers]
-    answers[store.tab] = [answer]
-    setStore("answers", answers)
+    setStore("answers", store.tab, [answer])
 
     if (custom) {
-      const inputs = [...store.custom]
-      inputs[store.tab] = answer
-      setStore("custom", inputs)
+      setStore("custom", store.tab, answer)
     }
 
     if (single()) {
-      reply([[answer]])
+      void reply([[answer]])
       return
     }
 
@@ -82,15 +84,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   const toggle = (answer: string) => {
-    const existing = store.answers[store.tab] ?? []
-    const next = [...existing]
-    const index = next.indexOf(answer)
-    if (index === -1) next.push(answer)
-    if (index !== -1) next.splice(index, 1)
-
-    const answers = [...store.answers]
-    answers[store.tab] = next
-    setStore("answers", answers)
+    setStore("answers", store.tab, (current = []) => {
+      if (current.includes(answer)) return current.filter((item) => item !== answer)
+      return [...current, answer]
+    })
   }
 
   const selectTab = (index: number) => {
@@ -126,13 +123,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     }
 
     if (multi()) {
-      const existing = store.answers[store.tab] ?? []
-      const next = [...existing]
-      if (!next.includes(value)) next.push(value)
-
-      const answers = [...store.answers]
-      answers[store.tab] = next
-      setStore("answers", answers)
+      setStore("answers", store.tab, (current = []) => {
+        if (current.includes(value)) return current
+        return [...current, value]
+      })
       setStore("editing", false)
       return
     }
@@ -225,9 +219,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   value={input()}
                   disabled={store.sending}
                   onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
+                    setStore("custom", store.tab, e.currentTarget.value)
                   }}
                 />
                 <Button type="submit" variant="primary" size="small" disabled={store.sending}>
