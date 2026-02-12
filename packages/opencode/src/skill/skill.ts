@@ -178,6 +178,10 @@ export namespace Skill {
     return state().then((x) => x.skills[name])
   }
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function all() {
     return state().then((x) => Object.values(x.skills))
   }

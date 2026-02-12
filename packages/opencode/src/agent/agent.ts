@@ -253,6 +253,10 @@ export namespace Agent {
     return state().then((x) => x[agent])
   }
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function list() {
     const cfg = await Config.get()
     return pipe(

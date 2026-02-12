@@ -144,6 +144,10 @@ export namespace Command {
     return state().then((x) => x[name])
   }
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function list() {
     return state().then((x) => Object.values(x))
   }

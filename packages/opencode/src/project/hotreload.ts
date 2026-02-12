@@ -1,12 +1,29 @@
 import path from "path"
 import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
+import { Agent } from "@/agent/agent"
+import { Command } from "@/command"
+import { Config } from "@/config/config"
 import { FileWatcher } from "@/file/watcher"
 import { Flag } from "@/flag/flag"
+import { SessionStatus } from "@/session/status"
+import { Skill } from "@/skill"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
+import z from "zod"
 
 export namespace HotReload {
   const log = Log.create({ service: "project.hotreload" })
+
+  export const Event = {
+    Applied: BusEvent.define(
+      "opencode.hotreload.applied",
+      z.object({
+        file: z.string(),
+        event: z.enum(["add", "change", "unlink"]),
+      }),
+    ),
+  }
 
   const watched = new Set([
     "agent",
@@ -99,6 +116,7 @@ export namespace HotReload {
       let timer: ReturnType<typeof setTimeout> | undefined
       let busy = false
       let last = 0
+      let queued = false
       let latest:
         | {
             file: string
@@ -106,38 +124,72 @@ export namespace HotReload {
           }
         | undefined
 
-      const flush = () => {
+      const active = () =>
+        Object.values(SessionStatus.list()).filter((status) => status.type === "busy" || status.type === "retry").length
+
+      const reload = async () => {
+        await Config.reset()
+        await Skill.reset()
+        await Agent.reset()
+        await Command.reset()
+      }
+
+      const flush = (reason: "timer" | "session") => {
         timer = undefined
         if (busy) return
-
-        const now = Date.now()
-        const wait = cooldown - (now - last)
-        if (wait > 0) {
-          timer = setTimeout(flush, wait)
-          return
-        }
 
         const hit = latest
         if (!hit) return
 
+        const sessions = active()
+        if (sessions > 0) {
+          if (!queued) {
+            log.info("hot reload queued", {
+              file: hit.file,
+              event: hit.event,
+              sessions,
+            })
+          }
+          queued = true
+          return
+        }
+
+        const now = Date.now()
+        const wait = cooldown - (now - last)
+        if (wait > 0) {
+          timer = setTimeout(() => flush(reason), wait)
+          return
+        }
+
         busy = true
+        queued = false
+        latest = undefined
         last = now
-        log.info("hot reload triggered", { file: hit.file, event: hit.event })
-        void Instance.dispose()
+        log.info("hot reload triggered", { file: hit.file, event: hit.event, reason })
+        void reload()
+          .then(() =>
+            Bus.publish(Event.Applied, {
+              file: hit.file,
+              event: hit.event,
+            }),
+          )
           .catch((error) => {
             log.error("hot reload failed", { error, file: hit.file, event: hit.event })
           })
           .finally(() => {
             busy = false
+            if (!latest) return
+            if (timer) clearTimeout(timer)
+            timer = setTimeout(() => flush("timer"), debounce)
           })
       }
 
       const schedule = () => {
         if (timer) clearTimeout(timer)
-        timer = setTimeout(flush, debounce)
+        timer = setTimeout(() => flush("timer"), debounce)
       }
 
-      const unsub = Bus.subscribe(FileWatcher.Event.Updated, (event) => {
+      const unsubFile = Bus.subscribe(FileWatcher.Event.Updated, (event) => {
         const rel = classify(Instance.directory, event.properties.file)
         if (!rel) return
         latest = {
@@ -147,9 +199,16 @@ export namespace HotReload {
         schedule()
       })
 
+      const unsubSession = Bus.subscribe(SessionStatus.Event.Status, () => {
+        if (!queued) return
+        if (timer) return
+        timer = setTimeout(() => flush("session"), 0)
+      })
+
       log.info("hot reload enabled", { debounce, cooldown })
       return {
-        unsub,
+        unsubFile,
+        unsubSession,
         clear() {
           if (!timer) return
           clearTimeout(timer)
@@ -158,7 +217,8 @@ export namespace HotReload {
       }
     },
     async (entry) => {
-      entry.unsub?.()
+      entry.unsubFile?.()
+      entry.unsubSession?.()
       entry.clear?.()
     },
   )
