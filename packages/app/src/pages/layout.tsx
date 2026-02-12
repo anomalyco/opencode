@@ -537,6 +537,9 @@ export default function Layout(props: ParentProps) {
     setStore("workspaceName", key, next)
     if (!projectId) return
     if (!branch) return
+    if (!store.workspaceBranchName[projectId]) {
+      setStore("workspaceBranchName", projectId, {})
+    }
     setStore("workspaceBranchName", projectId, branch, next)
   }
 
