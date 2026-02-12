@@ -52,12 +52,28 @@ export namespace Auth {
   /**
    * Get credential for a provider.
    * Uses activeAccount if set, otherwise returns first available.
+   * Supports environment variable overrides:
+   * - OPENCODE_ACCOUNT_<PROVIDER>: e.g., OPENCODE_ACCOUNT_OPENAI=work
+   * - OPENCODE_ACCOUNT: general override for any provider
    */
   export async function get(providerID: string): Promise<Info | undefined> {
     const store = await load()
     const provider = store[providerID]
     
     if (!provider || !provider.accounts) return undefined
+    
+    // Check for environment variable overrides
+    const envVarName = `OPENCODE_ACCOUNT_${providerID.toUpperCase()}`
+    const envAccount = process.env[envVarName] || process.env["OPENCODE_ACCOUNT"]
+    
+    if (envAccount) {
+      // Use the specific account from env var
+      const account = provider.accounts[envAccount]
+      if (account && !account.disabled) {
+        return account
+      }
+      // If account not found or disabled, fall through to active account
+    }
     
     // Use active account if set
     if (provider.activeAccount && provider.accounts[provider.activeAccount]) {
