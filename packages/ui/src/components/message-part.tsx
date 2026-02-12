@@ -1178,6 +1178,7 @@ ToolRegistry.register({
                 onScroll={autoScroll.handleScroll}
                 data-component="tool-output"
                 data-scrollable
+                data-subagent={props.input.subagent_type || "task"}
               >
                 <div ref={autoScroll.contentRef} data-component="task-tools">
                   <For each={childToolParts()}>

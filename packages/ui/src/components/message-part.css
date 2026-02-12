@@ -257,6 +257,11 @@
       overflow: visible;
     }
   }
+
+  &[data-scrollable][data-subagent="explore"] {
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 [data-component="edit-trigger"],
