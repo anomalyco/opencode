@@ -18,7 +18,7 @@ import { buildNotificationIndex } from "./notification-index"
 type NotificationBase = {
   directory?: string
   session?: string
-  metadata?: any
+  metadata?: unknown
   time: number
   viewed: boolean
 }
@@ -84,15 +84,80 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const index = createMemo(() => buildNotificationIndex(store.list))
 
-    const lookup = (directory: string, sessionID?: string) => {
-      if (!sessionID) return Promise.resolve(undefined)
+    const lookup = async (directory: string, sessionID?: string) => {
+      if (!sessionID) return undefined
       const [syncStore] = globalSync.child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-      if (match.found) return Promise.resolve(syncStore.session[match.index])
+      if (match.found) return syncStore.session[match.index]
       return globalSDK.client.session
         .get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
+    }
+
+    const viewedInCurrentSession = (directory: string, sessionID?: string) => {
+      const activeDirectory = currentDirectory()
+      const activeSession = currentSession()
+      if (!activeDirectory) return false
+      if (!activeSession) return false
+      if (!sessionID) return false
+      if (directory !== activeDirectory) return false
+      return sessionID === activeSession
+    }
+
+    const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
+      const sessionID = event.properties.sessionID
+      void lookup(directory, sessionID).then((session) => {
+        if (meta.disposed) return
+        if (!session) return
+        if (session.parentID) return
+
+        playSound(soundSrc(settings.sounds.agent()))
+
+        append({
+          directory,
+          time,
+          viewed: viewedInCurrentSession(directory, sessionID),
+          type: "turn-complete",
+          session: sessionID,
+        })
+
+        const href = `/${base64Encode(directory)}/session/${sessionID}`
+        if (settings.notifications.agent()) {
+          void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, href)
+        }
+      })
+    }
+
+    const handleSessionError = (
+      directory: string,
+      event: { properties: { sessionID?: string; error?: EventSessionError["properties"]["error"] } },
+      time: number,
+    ) => {
+      const sessionID = event.properties.sessionID
+      void lookup(directory, sessionID).then((session) => {
+        if (meta.disposed) return
+        if (session?.parentID) return
+
+        playSound(soundSrc(settings.sounds.errors()))
+
+        const error = "error" in event.properties ? event.properties.error : undefined
+        append({
+          directory,
+          time,
+          viewed: viewedInCurrentSession(directory, sessionID),
+          type: "error",
+          session: sessionID ?? "global",
+          error,
+        })
+        const description =
+          session?.title ??
+          (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+        const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+        if (settings.notifications.errors()) {
+          void platform.notify(language.t("notification.session.error.title"), description, href)
+        }
+      })
     }
 
     const unsub = globalSDK.event.listen((e) => {
@@ -101,72 +166,11 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
       const directory = e.name
       const time = Date.now()
-      const viewed = (sessionID?: string) => {
-        const activeDirectory = currentDirectory()
-        const activeSession = currentSession()
-        if (!activeDirectory) return false
-        if (!activeSession) return false
-        if (!sessionID) return false
-        if (directory !== activeDirectory) return false
-        return sessionID === activeSession
+      if (event.type === "session.idle") {
+        handleSessionIdle(directory, event, time)
+        return
       }
-      switch (event.type) {
-        case "session.idle": {
-          const sessionID = event.properties.sessionID
-          void lookup(directory, sessionID).then((session) => {
-            if (meta.disposed) return
-            if (!session) return
-            if (session.parentID) return
-
-            playSound(soundSrc(settings.sounds.agent()))
-
-            append({
-              directory,
-              time,
-              viewed: viewed(sessionID),
-              type: "turn-complete",
-              session: sessionID,
-            })
-
-            const href = `/${base64Encode(directory)}/session/${sessionID}`
-            if (settings.notifications.agent()) {
-              void platform.notify(
-                language.t("notification.session.responseReady.title"),
-                session.title ?? sessionID,
-                href,
-              )
-            }
-          })
-          break
-        }
-        case "session.error": {
-          const sessionID = event.properties.sessionID
-          void lookup(directory, sessionID).then((session) => {
-            if (meta.disposed) return
-            if (session?.parentID) return
-
-            playSound(soundSrc(settings.sounds.errors()))
-
-            const error = "error" in event.properties ? event.properties.error : undefined
-            append({
-              directory,
-              time,
-              viewed: viewed(sessionID),
-              type: "error",
-              session: sessionID ?? "global",
-              error,
-            })
-            const description =
-              session?.title ??
-              (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-            const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
-            if (settings.notifications.errors()) {
-              void platform.notify(language.t("notification.session.error.title"), description, href)
-            }
-          })
-          break
-        }
-      }
+      handleSessionError(directory, event, time)
     })
     onCleanup(() => {
       meta.disposed = true

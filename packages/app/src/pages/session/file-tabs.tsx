@@ -12,6 +12,13 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 
+const formatCommentLabel = (range: SelectedLineRange) => {
+  const start = Math.min(range.start, range.end)
+  const end = Math.max(range.start, range.end)
+  if (start === end) return `line ${start}`
+  return `lines ${start}-${end}`
+}
+
 export function FileTabContent(props: {
   tab: string
   activeTab: () => string
@@ -76,7 +83,6 @@ export function FileTabContent(props: {
     showToast({
       variant: "error",
       title: props.language.t("toast.file.loadFailed.title"),
-      description: "Invalid base64 content.",
     })
   })
   const svgPreviewUrl = createMemo(() => {
@@ -116,34 +122,6 @@ export function FileTabContent(props: {
     draftTop: undefined as number | undefined,
   })
 
-  const openedComment = () => note.openedComment
-  const setOpenedComment = (
-    value: typeof note.openedComment | ((value: typeof note.openedComment) => typeof note.openedComment),
-  ) => setNote("openedComment", value)
-
-  const commenting = () => note.commenting
-  const setCommenting = (value: typeof note.commenting | ((value: typeof note.commenting) => typeof note.commenting)) =>
-    setNote("commenting", value)
-
-  const draft = () => note.draft
-  const setDraft = (value: typeof note.draft | ((value: typeof note.draft) => typeof note.draft)) =>
-    setNote("draft", value)
-
-  const positions = () => note.positions
-  const setPositions = (value: typeof note.positions | ((value: typeof note.positions) => typeof note.positions)) =>
-    setNote("positions", value)
-
-  const draftTop = () => note.draftTop
-  const setDraftTop = (value: typeof note.draftTop | ((value: typeof note.draftTop) => typeof note.draftTop)) =>
-    setNote("draftTop", value)
-
-  const commentLabel = (range: SelectedLineRange) => {
-    const start = Math.min(range.start, range.end)
-    const end = Math.max(range.start, range.end)
-    if (start === end) return `line ${start}`
-    return `lines ${start}-${end}`
-  }
-
   const getRoot = () => {
     const el = wrap
     if (!el) return
@@ -174,8 +152,8 @@ export function FileTabContent(props: {
     const el = wrap
     const root = getRoot()
     if (!el || !root) {
-      setPositions({})
-      setDraftTop(undefined)
+      setNote("positions", {})
+      setNote("draftTop", undefined)
       return
     }
 
@@ -186,21 +164,21 @@ export function FileTabContent(props: {
       next[comment.id] = markerTop(el, marker)
     }
 
-    setPositions(next)
+    setNote("positions", next)
 
-    const range = commenting()
+    const range = note.commenting
     if (!range) {
-      setDraftTop(undefined)
+      setNote("draftTop", undefined)
       return
     }
 
     const marker = findMarker(root, range)
     if (!marker) {
-      setDraftTop(undefined)
+      setNote("draftTop", undefined)
       return
     }
 
-    setDraftTop(markerTop(el, marker))
+    setNote("draftTop", markerTop(el, marker))
   }
 
   const scheduleComments = () => {
@@ -213,10 +191,10 @@ export function FileTabContent(props: {
   })
 
   createEffect(() => {
-    const range = commenting()
+    const range = note.commenting
     scheduleComments()
     if (!range) return
-    setDraft("")
+    setNote("draft", "")
   })
 
   createEffect(() => {
@@ -229,8 +207,8 @@ export function FileTabContent(props: {
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
 
-    setOpenedComment(target.id)
-    setCommenting(null)
+    setNote("openedComment", target.id)
+    setNote("commenting", null)
     props.file.setSelectedLines(p, target.selection)
     requestAnimationFrame(() => props.comments.clearFocus())
   })
@@ -390,16 +368,16 @@ export function FileTabContent(props: {
           const p = path()
           if (!p) return
           props.file.setSelectedLines(p, range)
-          if (!range) setCommenting(null)
+          if (!range) setNote("commenting", null)
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           if (!range) {
-            setCommenting(null)
+            setNote("commenting", null)
             return
           }
 
-          setOpenedComment(null)
-          setCommenting(range)
+          setNote("openedComment", null)
+          setNote("commenting", range)
         }}
         overflow="scroll"
         class="select-text"
@@ -408,10 +386,10 @@ export function FileTabContent(props: {
         {(comment) => (
           <LineCommentView
             id={comment.id}
-            top={positions()[comment.id]}
-            open={openedComment() === comment.id}
+            top={note.positions[comment.id]}
+            open={note.openedComment === comment.id}
             comment={comment.comment}
-            selection={commentLabel(comment.selection)}
+            selection={formatCommentLabel(comment.selection)}
             onMouseEnter={() => {
               const p = path()
               if (!p) return
@@ -420,22 +398,22 @@ export function FileTabContent(props: {
             onClick={() => {
               const p = path()
               if (!p) return
-              setCommenting(null)
-              setOpenedComment((current) => (current === comment.id ? null : comment.id))
+              setNote("commenting", null)
+              setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
               props.file.setSelectedLines(p, comment.selection)
             }}
           />
         )}
       </For>
-      <Show when={commenting()}>
+      <Show when={note.commenting}>
         {(range) => (
-          <Show when={draftTop() !== undefined}>
+          <Show when={note.draftTop !== undefined}>
             <LineCommentEditor
-              top={draftTop()}
-              value={draft()}
-              selection={commentLabel(range())}
-              onInput={(value) => setDraft(value)}
-              onCancel={() => setCommenting(null)}
+              top={note.draftTop}
+              value={note.draft}
+              selection={formatCommentLabel(range())}
+              onInput={(value) => setNote("draft", value)}
+              onCancel={() => setNote("commenting", null)}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
@@ -445,7 +423,7 @@ export function FileTabContent(props: {
                   comment: value,
                   origin: "file",
                 })
-                setCommenting(null)
+                setNote("commenting", null)
               }}
               onPopoverFocusOut={(e: FocusEvent) => {
                 const current = e.currentTarget as HTMLDivElement
@@ -454,7 +432,7 @@ export function FileTabContent(props: {
 
                 setTimeout(() => {
                   if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setCommenting(null)
+                    setNote("commenting", null)
                   }
                 }, 0)
               }}
