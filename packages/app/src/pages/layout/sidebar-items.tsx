@@ -145,6 +145,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const item = (
     <A
       href={`${props.slug}/session/${props.session.id}`}
+      activeClass="active"
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerEnter={scheduleHoverPrefetch}
       onPointerLeave={cancelHoverPrefetch}
