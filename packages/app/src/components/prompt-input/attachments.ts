@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -31,7 +32,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID?.() ?? Math.random().toString(16).slice(2),
+        id: uuid(),
         filename: file.name,
         mime: file.type,
         dataUrl,
@@ -88,6 +89,9 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     if (!plainText) return
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
+    if (inserted) return
+
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 

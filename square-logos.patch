@@ -1,0 +1,234 @@
+From 90904222b6f8c86a6d0a8ebed9661950f632a4e8 Mon Sep 17 00:00:00 2001
+From: OpenCode Bot <opencode@sst.dev>
+Date: Wed, 11 Feb 2026 18:44:27 +0000
+Subject: [PATCH] add square logo variants to brand page
+
+---
+ .../asset/brand/opencode-logo-dark-square.png | Bin 0 -> 697 bytes
+ .../asset/brand/opencode-logo-dark-square.svg |  18 ++++++
+ .../brand/opencode-logo-light-square.png      | Bin 0 -> 697 bytes
+ .../brand/opencode-logo-light-square.svg      |  18 ++++++
+ .../preview-opencode-logo-dark-square.png     | Bin 0 -> 1477 bytes
+ .../preview-opencode-logo-light-square.png    | Bin 0 -> 1467 bytes
+ .../console/app/src/routes/brand/index.tsx    |  60 ++++++++++++++++++
+ 7 files changed, 96 insertions(+)
+ create mode 100644 packages/console/app/src/asset/brand/opencode-logo-dark-square.png
+ create mode 100644 packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
+ create mode 100644 packages/console/app/src/asset/brand/opencode-logo-light-square.png
+ create mode 100644 packages/console/app/src/asset/brand/opencode-logo-light-square.svg
+ create mode 100644 packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png
+ create mode 100644 packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png
+
+diff --git a/packages/console/app/src/asset/brand/opencode-logo-dark-square.png b/packages/console/app/src/asset/brand/opencode-logo-dark-square.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..673c7e3a20f917fae56719ed1c35b4614ecd5f53
+GIT binary patch
+literal 697
+zcmeAS@N?(olHy`uVBq!ia0y~yV2S`?CT5_>VU7ZSAjOjI=<CS9u(6-}Pa-RjuaN8!
+z<jcTNrN+R}(89p*3n<j^f`OsbfPvvv0t1893<d`Af;qbaZGaLy0X`wFK>FjGH{Nb;
+zK*kCWpQS*Gu_VYZn8D%MjWiG^$=lt9p@UV{1IXbl@Q5sCU=ULUVMfm&l@CBc_7YED
+zSN2y-+(O#2cjOjy1NC%xx;TbZ+<JS?ke5M0fMtVmr)P-K<_$G=ESI!0Hc3x^;^R#P
+z@VYyUYYSCCTI00A1HzVGb*Dn;c)vb-jcFpozT1*PW*Wd~QY~?fC`m~yNwrEYN(E93
+zMg~S^x&}tNhK3=A7FH&PRz^nJ1_o9J26?+;7NKa!%}>cptHiBA{`nI*paup{S3j3^
+HP6<r_YMlsn
+
+literal 0
+HcmV?d00001
+
+diff --git a/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg b/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
+new file mode 100644
+index 0000000..6a67f62
+--- /dev/null
++++ b/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
+@@ -0,0 +1,18 @@
++<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
++<g transform="translate(30, 0)">
++<g clip-path="url(#clip0_1401_86283)">
++<mask id="mask0_1401_86283" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="300">
++<path d="M240 0H0V300H240V0Z" fill="white"/>
++</mask>
++<g mask="url(#mask0_1401_86283)">
++<path d="M180 240H60V120H180V240Z" fill="#4B4646"/>
++<path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="#F1ECEC"/>
++</g>
++</g>
++</g>
++<defs>
++<clipPath id="clip0_1401_86283">
++<rect width="240" height="300" fill="white"/>
++</clipPath>
++</defs>
++</svg>
+diff --git a/packages/console/app/src/asset/brand/opencode-logo-light-square.png b/packages/console/app/src/asset/brand/opencode-logo-light-square.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..5c710474abc4668504cb9678da1de6ad33458af9
+GIT binary patch
+literal 697
+zcmeAS@N?(olHy`uVBq!ia0y~yV2S`?CT5_>VU7ZSAjOjI=<CS9u(6-}Pa-RjuaN8!
+z<jcTNrN+R}(89p*3n<j^f`OsbfPvvv0t1893<d`Af;qbaZGaLy0X`wFKw42w?)<s4
+zK*kyVm4AQ~V@Z%-FoVOh8)+a;lDE4HLkFv@2av;A;1OBOz#ygy!i=6lDj$G?>?NMQ
+zuI#UvxP`Q3@5n9a2I}eXba4!+xb^m&Auof10LupBPR|gd%^Pa$ST1R0Y?7Y-#K)To
+z;B|Kx*A}XPw8m+J2ZSxX>Q05w@qT^w8q-9EeYYip%rt<}q*~${QIe8al4_M)lnSI6
+zj0}v-bPbGj4GlvKEv!rot&EJc4GgRd4DxoxEJD$co1c=IR*74K{PQPrKn)C@u6{1-
+HoD!M<*)j+`
+
+literal 0
+HcmV?d00001
+
+diff --git a/packages/console/app/src/asset/brand/opencode-logo-light-square.svg b/packages/console/app/src/asset/brand/opencode-logo-light-square.svg
+new file mode 100644
+index 0000000..a738ad8
+--- /dev/null
++++ b/packages/console/app/src/asset/brand/opencode-logo-light-square.svg
+@@ -0,0 +1,18 @@
++<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
++<g transform="translate(30, 0)">
++<g clip-path="url(#clip0_1401_86274)">
++<mask id="mask0_1401_86274" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="300">
++<path d="M240 0H0V300H240V0Z" fill="white"/>
++</mask>
++<g mask="url(#mask0_1401_86274)">
++<path d="M180 240H60V120H180V240Z" fill="#CFCECD"/>
++<path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="#211E1E"/>
++</g>
++</g>
++</g>
++<defs>
++<clipPath id="clip0_1401_86274">
++<rect width="240" height="300" fill="white"/>
++</clipPath>
++</defs>
++</svg>
+diff --git a/packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png b/packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..604ad7aa7a87c71d4a3972f18da4044e53f745fe
+GIT binary patch
+literal 1477
+zcmeAS@N?(olHy`uVBq!ia0y~yV4MKL9LzwG?TN?!0V$SrM_)$<hK>E)e-c@Ne1&9>
+zAYTTCDm4a%h86~fUqGRT7Yq!g1`G_Z5*Qe)W-u^_7tGleXakf83GfMV1=1hiyun28
+zU%gs1cdnz2jklZIqq}#b!@|5=U4d+%%7=IEM1_VzxRD_to-Qsx1sTc7KrJ6$zXlo@
+zFuxY$Hi42LzhDLii5Gug>4^i8#NSshUI=lk@B-x+lf2zs7&=&GJ%Aj}0*}aI1_m)z
+z5N7lYQuzQBWH0gbb!C6W#4V()m9m%>=ouDUPZ!6Kid%0la{4g^2(UVS^9^9Ux#z#*
+zUM9{NA)j{pe@M$Rs$BIl=U=S8$$a1WzrRdo{gl+0z}h6r5vC9^6c`^Bx}VO;+bO}5
+zvNP)ZgKMjwCMdj@`|<2Y_0Pt}1ZL)gY-~-uJS@@@9A*XrISC3k4mfNWo)RazbGPm0
+z-*LChSmMOL4?kJISKi=fE3%ne|KQy6WQCxi5SK$J*`YY~T7$y$*OKq5Bzd2d?Vs~N
+z@B8fph5p+U-+hzde)4_q^MCH|=dNhx2_G663hFce=0A)TEv>6k&v^?1%NErV*NBpo
+z#FA92<f2p{#b9J$WTtCiq-$sxVrXGyVr*q(scm3jWnhruaU&H)LvDUbW?Cg~4U(b>
+RH-Q=$JYD@<);T3K0RY|)#{mEU
+
+literal 0
+HcmV?d00001
+
+diff --git a/packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png b/packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..3964d8528440323730053e56f9d957539937b99d
+GIT binary patch
+literal 1467
+zcmeAS@N?(olHy`uVBq!ia0y~yV4MKL9LzwG?TN?!0V$SrM_)$<hK>E)e-c@Ne1&9>
+zAYTTCDm4a%h86~fUqGRT7Yq!g1`G_Z5*Qe)W-u^_7tGleXakh+3-AeX1=5Oga+pX-
+zUcR`n@W%CP=g*zh*VWm(dpD2)RHh&+YpAEUZ|@!;cmKY<7tWv4*U?$OZY@wf(5P=q
+zw@e07{3Stt!3+!%FaEyL69*!Rzpq|wUamVGD8-oM?e4<R!7A$k<Zu>vL>4nJh^c}w
+zqi2xH2cRH(iKnkC`zt1HA#JUc#jHSIuvmGzIEGZ*dV8@wmnlGi)v?HEMncg4sk@lD
+zIaT_<lxtU%8_(QxrNqqsn)KQ9%h&DxCN=JfRETIyU~LlR2pb9vn-fWv%cJ$!m?PI+
+zGv4tv%TnURa`rlle{ppQ3O5coY-nsuU}iqZ#@58k!y+xgVP+tZGdv|e#VtQu_MLV6
+z?L5Ea#y9-;OWOY?C_F#SfA^^jN9a(9$sv^JP@HNicjD`}`}Y4=-!3(o@cVI9<8Hfm
+z&5bti(|7$Y)|v3Q^Zn-UpA;4kk?aKV*|pOO`<V}&_gU>d_YAOLQ7v(eC`m~yNwrEY
+zN(E93Mg~S^x&}tNhK3=A7FH(4Rz{ZE1_o9J1{oeVQc*PI=BH$)RpQnlDVlH-sDZ)L
+L)z4*}Q$iB}B`L3|
+
+literal 0
+HcmV?d00001
+
+diff --git a/packages/console/app/src/routes/brand/index.tsx b/packages/console/app/src/routes/brand/index.tsx
+index eda3c84..9140462 100644
+--- a/packages/console/app/src/routes/brand/index.tsx
++++ b/packages/console/app/src/routes/brand/index.tsx
+@@ -7,18 +7,24 @@ import { useI18n } from "~/context/i18n"
+ import { LocaleLinks } from "~/component/locale-links"
+ import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
+ import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
++import previewLogoLightSquare from "../../asset/brand/preview-opencode-logo-light-square.png"
++import previewLogoDarkSquare from "../../asset/brand/preview-opencode-logo-dark-square.png"
+ import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
+ import previewWordmarkDark from "../../asset/brand/preview-opencode-wordmark-dark.png"
+ import previewWordmarkSimpleLight from "../../asset/brand/preview-opencode-wordmark-simple-light.png"
+ import previewWordmarkSimpleDark from "../../asset/brand/preview-opencode-wordmark-simple-dark.png"
+ import logoLightPng from "../../asset/brand/opencode-logo-light.png"
+ import logoDarkPng from "../../asset/brand/opencode-logo-dark.png"
++import logoLightSquarePng from "../../asset/brand/opencode-logo-light-square.png"
++import logoDarkSquarePng from "../../asset/brand/opencode-logo-dark-square.png"
+ import wordmarkLightPng from "../../asset/brand/opencode-wordmark-light.png"
+ import wordmarkDarkPng from "../../asset/brand/opencode-wordmark-dark.png"
+ import wordmarkSimpleLightPng from "../../asset/brand/opencode-wordmark-simple-light.png"
+ import wordmarkSimpleDarkPng from "../../asset/brand/opencode-wordmark-simple-dark.png"
+ import logoLightSvg from "../../asset/brand/opencode-logo-light.svg"
+ import logoDarkSvg from "../../asset/brand/opencode-logo-dark.svg"
++import logoLightSquareSvg from "../../asset/brand/opencode-logo-light-square.svg"
++import logoDarkSquareSvg from "../../asset/brand/opencode-logo-dark-square.svg"
+ import wordmarkLightSvg from "../../asset/brand/opencode-wordmark-light.svg"
+ import wordmarkDarkSvg from "../../asset/brand/opencode-wordmark-dark.svg"
+ import wordmarkSimpleLightSvg from "../../asset/brand/opencode-wordmark-simple-light.svg"
+@@ -135,6 +141,60 @@ export default function Brand() {
+                   </button>
+                 </div>
+               </div>
++              <div>
++                <img src={previewLogoLightSquare} alt="OpenCode brand guidelines" />
++                <div data-component="actions">
++                  <button onClick={() => downloadFile(logoLightSquarePng, "opencode-logo-light-square.png")}>
++                    PNG
++                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
++                      <path
++                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
++                        stroke="currentColor"
++                        stroke-width="1.5"
++                        stroke-linecap="square"
++                      />
++                    </svg>
++                  </button>
++                  <button onClick={() => downloadFile(logoLightSquareSvg, "opencode-logo-light-square.svg")}>
++                    SVG
++                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
++                      <path
++                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
++                        stroke="currentColor"
++                        stroke-width="1.5"
++                        stroke-linecap="square"
++                      />
++                    </svg>
++                  </button>
++                </div>
++              </div>
++              <div>
++                <img src={previewLogoDarkSquare} alt="OpenCode brand guidelines" />
++                <div data-component="actions">
++                  <button onClick={() => downloadFile(logoDarkSquarePng, "opencode-logo-dark-square.png")}>
++                    PNG
++                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
++                      <path
++                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
++                        stroke="currentColor"
++                        stroke-width="1.5"
++                        stroke-linecap="square"
++                      />
++                    </svg>
++                  </button>
++                  <button onClick={() => downloadFile(logoDarkSquareSvg, "opencode-logo-dark-square.svg")}>
++                    SVG
++                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
++                      <path
++                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
++                        stroke="currentColor"
++                        stroke-width="1.5"
++                        stroke-linecap="square"
++                      />
++                    </svg>
++                  </button>
++                </div>
++              </div>
+               <div>
+                 <img src={previewWordmarkLight} alt="OpenCode brand guidelines" />
+                 <div data-component="actions">
+-- 
+2.39.5
+
