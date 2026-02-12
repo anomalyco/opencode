@@ -13,7 +13,7 @@ description: 创建 LLM 可以在 opencode 中调用的工具。
 
 ---
 
-### Location
+### 位置
 
 它们可以定义为：
 
@@ -22,7 +22,7 @@ description: 创建 LLM 可以在 opencode 中调用的工具。
 
 ---
 
-### Structure
+### 结构
 
 创建工具最简单的方法是使用 `tool()` 帮助程序，它提供类型安全和验证。
 
@@ -79,7 +79,7 @@ export const multiply = tool({
 
 ---
 
-### Arguments
+### 参数
 
 您可以使用 `tool.schema`（即 [Zod](https://zod.dev)）来定义参数类型。
 
@@ -108,7 +108,7 @@ export default {
 
 ---
 
-### Context
+### 上下文
 
 工具接收有关当前会话的上下文：
 

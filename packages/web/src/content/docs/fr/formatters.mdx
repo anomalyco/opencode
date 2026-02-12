@@ -1,17 +1,17 @@
 ---
 title: Formateurs
-description: OpenCode utilise des formateurs spécifiques à la langue.
+description: OpenCode utilise des formateurs spécifiques au langage.
 ---
 
-OpenCode formate automatiquement les fichiers après leur écriture ou leur modification à l'aide de formateurs spécifiques à la langue. Cela garantit que le code généré suit les styles de code de votre projet.
+OpenCode formate automatiquement les fichiers après leur écriture ou leur modification à l'aide de formateurs spécifiques au langage. Cela garantit que le code généré suit les styles de code de votre projet.
 
 ---
 
-## Intégré
+## Formateurs intégrés
 
 OpenCode est livré avec plusieurs formateurs intégrés pour les langages et frameworks populaires. Vous trouverez ci-dessous une liste des formateurs, des extensions de fichiers prises en charge et des commandes ou options de configuration dont il a besoin.
 
-| Formateur            | Rallonges                                                                                              | Exigences                                                                                                             |
+| Formateur            | Extensions                                                                                             | Prérequis                                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | gofmt                | .go                                                                                                    | Commande `gofmt` disponible                                                                                           |
 | mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                           | Commande `mix` disponible                                                                                             |
@@ -44,7 +44,7 @@ Ainsi, si votre projet a `prettier` dans votre `package.json`, OpenCode l'utilis
 
 ## Comment ça marche
 
-Lorsque OpenCode écrit ou modifie un fichier, il :
+Lorsque OpenCode écrit ou modifie un fichier, il :
 
 1. Vérifie l'extension du fichier par rapport à tous les formateurs activés.
 2. Exécute la commande de formatage appropriée sur le fichier.
@@ -54,7 +54,7 @@ Ce processus se déroule en arrière-plan, garantissant que vos styles de code s
 
 ---
 
-## Configurer
+## Configuration
 
 Vous pouvez personnaliser les formateurs via la section `formatter` de votre configuration OpenCode.
 
@@ -65,9 +65,9 @@ Vous pouvez personnaliser les formateurs via la section `formatter` de votre con
 }
 ```
 
-Chaque configuration du formateur prend en charge les éléments suivants :
+Chaque configuration du formateur prend en charge les éléments suivants :
 
-| Propriété     | Tapez    | Descriptif                                                           |
+| Propriété     | Type     | Description                                                          |
 | ------------- | -------- | -------------------------------------------------------------------- |
 | `disabled`    | booléen  | Définissez ceci sur `true` pour désactiver le formateur              |
 | `command`     | chaîne[] | La commande à exécuter pour le formatage                             |
@@ -80,7 +80,7 @@ Regardons quelques exemples.
 
 ### Désactivation des formateurs
 
-Pour désactiver **tous** les formateurs globalement, définissez `formatter` sur `false` :
+Pour désactiver **tous** les formateurs globalement, définissez `formatter` sur `false` :
 
 ```json title="opencode.json" {3}
 {
@@ -89,7 +89,7 @@ Pour désactiver **tous** les formateurs globalement, définissez `formatter` su
 }
 ```
 
-Pour désactiver un formateur **spécifique**, définissez `disabled` sur `true` :
+Pour désactiver un formateur **spécifique**, définissez `disabled` sur `true` :
 
 ```json title="opencode.json" {5}
 {
@@ -106,7 +106,7 @@ Pour désactiver un formateur **spécifique**, définissez `disabled` sur `true`
 
 ### Formateurs personnalisés
 
-Vous pouvez remplacer les formateurs intégrés ou en ajouter de nouveaux en spécifiant la commande, les variables d'environnement et les extensions de fichier :
+Vous pouvez remplacer les formateurs intégrés ou en ajouter de nouveaux en spécifiant la commande, les variables d'environnement et les extensions de fichier :
 
 ```json title="opencode.json" {4-14}
 {
