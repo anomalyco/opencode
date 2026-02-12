@@ -141,7 +141,7 @@ export const GrepTool = Tool.define("grep", {
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
+        matches: totalMatches,
         truncated,
       },
       output: outputLines.join("\n"),
