@@ -167,7 +167,7 @@
 
   [data-component="markdown"] {
     margin-top: 24px;
-    font-style: italic !important;
+    font-style: normal;
 
     p:has(strong) {
       margin-top: 24px;
@@ -217,7 +217,7 @@
 
 [data-component="tool-output"] {
   white-space: pre;
-  padding: 8px 12px;
+  padding: 0;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -379,7 +379,7 @@
 }
 
 [data-component="task-tools"] {
-  padding: 8px 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -412,7 +412,7 @@
 
   [data-slot="task-tool-title"] {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     color: var(--text-weak);
@@ -420,7 +420,7 @@
 
   [data-slot="task-tool-subtitle"] {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     color: var(--text-weaker);
@@ -435,7 +435,7 @@
   min-height: 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   cursor: pointer;
 
@@ -449,17 +449,8 @@
   }
 
   [data-slot="collapsible-arrow"] {
-    opacity: 0;
     color: var(--icon-weaker);
-    transition: opacity 0.15s ease;
   }
-}
-
-[data-slot="collapsible-trigger"]:hover [data-component="context-tool-group-trigger"] [data-slot="collapsible-arrow"],
-[data-slot="collapsible-trigger"]:focus-visible
-  [data-component="context-tool-group-trigger"]
-  [data-slot="collapsible-arrow"] {
-  opacity: 1;
 }
 
 [data-component="context-tool-group-list"] {

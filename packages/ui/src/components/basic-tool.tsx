@@ -49,11 +49,11 @@ export function BasicTool(props: BasicToolProps) {
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
-            <div data-slot="basic-tool-tool-indicator">
-              <Show when={pending()} fallback={<Icon name={props.icon} size="small" />}>
+            <Show when={pending()}>
+              <div data-slot="basic-tool-tool-indicator">
                 <Spinner style={{ width: "16px" }} />
-              </Show>
-            </div>
+              </div>
+            </Show>
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>

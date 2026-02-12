@@ -1186,14 +1186,11 @@ ToolRegistry.register({
                       })
                       return (
                         <div data-slot="task-tool-item">
-                          <div data-slot="task-tool-indicator">
-                            <Show
-                              when={item.state.status === "pending" || item.state.status === "running"}
-                              fallback={<Icon name={info().icon} size="small" />}
-                            >
+                          <Show when={item.state.status === "pending" || item.state.status === "running"}>
+                            <div data-slot="task-tool-indicator">
                               <Spinner style={{ width: "16px" }} />
-                            </Show>
-                          </div>
+                            </div>
+                          </Show>
                           <span data-slot="task-tool-title">{info().title}</span>
                           <Show when={subtitle()}>
                             <span data-slot="task-tool-subtitle">{subtitle()}</span>
