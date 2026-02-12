@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,8 +11,10 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import type { DialogContext } from "../../ui/dialog"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean; dialog?: DialogContext }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -63,6 +65,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const directory = useDirectory()
   const kv = useKV()
 
+  const [titleHovered, setTitleHovered] = createSignal(false)
+
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
@@ -83,9 +87,22 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
-              <text fg={theme.text}>
-                <b>{session().title}</b>
-              </text>
+              <box
+                backgroundColor={titleHovered() ? theme.borderSubtle : undefined}
+                paddingLeft={titleHovered() ? 1 : 0}
+                paddingRight={titleHovered() ? 1 : 0}
+                onMouseOver={() => setTitleHovered(true)}
+                onMouseOut={() => setTitleHovered(false)}
+                onMouseUp={() => {
+                  if (props.dialog) {
+                    props.dialog.replace(() => <DialogSessionRename session={props.sessionID} />)
+                  }
+                }}
+              >
+                <text fg={theme.text}>
+                  <b>{session().title}</b>
+                </text>
+              </box>
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
