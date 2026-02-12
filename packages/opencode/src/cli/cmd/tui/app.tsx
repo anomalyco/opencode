@@ -178,6 +178,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
+        exitSignals: [],
         useKittyKeyboard: {},
         autoFocus: false,
         consoleOptions: {
