@@ -72,6 +72,13 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
+function visible(part: PartType) {
+  if (part.type === "tool") return true
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
+  return false
+}
+
 function AssistantMessageItem(props: { message: AssistantMessage; showAssistantCopyPartID?: string }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -193,10 +200,10 @@ export function SessionTurn(
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
-  const assistantPartCount = createMemo(() =>
+  const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter(Boolean).length
+      return count + parts.filter(visible).length
     }, 0),
   )
 
@@ -226,7 +233,7 @@ export function SessionTurn(
                 <div data-slot="session-turn-message-content" aria-live="off">
                   <Message message={msg()} parts={parts()} />
                 </div>
-                <Show when={working() && assistantPartCount() === 0 && !error()}>
+                <Show when={working() && assistantVisible() === 0 && !error()}>
                   <div data-slot="session-turn-thinking">
                     <span>Thinking</span>
                     <Spinner style={{ width: "16px" }} />

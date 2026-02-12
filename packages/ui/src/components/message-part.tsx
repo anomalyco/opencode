@@ -293,7 +293,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     case "glob":
       return {
-        title: i18n.t("ui.tool.glob"),
+        title: "Search",
         subtitle: getDirectory(path),
         args: pattern ? ["pattern=" + pattern] : [],
       }
@@ -302,7 +302,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       if (pattern) args.push("pattern=" + pattern)
       if (include) args.push("include=" + include)
       return {
-        title: i18n.t("ui.tool.grep"),
+        title: "Search",
         subtitle: getDirectory(path),
         args,
       }
@@ -316,6 +316,17 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
   }
+}
+
+function contextToolSummary(parts: ToolPart[]) {
+  const read = parts.filter((part) => part.tool === "read").length
+  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
+  const list = parts.filter((part) => part.tool === "list").length
+  return [
+    read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
+    search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
+    list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+  ].filter((value): value is string => !!value)
 }
 
 export function registerPartComponent(type: string, component: PartComponent) {
@@ -365,7 +376,7 @@ export function AssistantMessageDisplay(props: {
         start = -1
         return
       }
-      push(`context:${first.id}:${last.id}`, {
+      push(`context:${first.id}`, {
         type: "context",
         parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
       })
@@ -417,14 +428,24 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
   const pending = createMemo(() =>
     props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
+  const summary = createMemo(() => contextToolSummary(props.parts))
+  const details = createMemo(() => {
+    const items = summary()
+    if (items.length === 0) return ""
+    return `: ${items.join(", ")}`
+  })
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
-          <Show when={pending()} fallback={<span data-slot="context-tool-group-title">Gathered context</span>}>
+          <Show
+            when={pending()}
+            fallback={<span data-slot="context-tool-group-title">Gathered context{details()}</span>}
+          >
             <span data-slot="context-tool-group-title">
               <TextShimmer text="Gathering context" />
+              {details()}
             </span>
           </Show>
           <Collapsible.Arrow />
@@ -993,29 +1014,55 @@ ToolRegistry.register({
   name: "webfetch",
   render(props) {
     const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const url = createMemo(() => {
+      const value = props.input.url
+      if (typeof value !== "string") return ""
+      return value
+    })
+    const format = createMemo(() => {
+      const value = props.input.format
+      if (typeof value !== "string") return ""
+      return value
+    })
     return (
       <BasicTool
         {...props}
+        hideDetails
         icon="window-cursor"
-        trigger={{
-          title: i18n.t("ui.tool.webfetch"),
-          subtitle: props.input.url || "",
-          args: props.input.format ? ["format=" + props.input.format] : [],
-          action: (
-            <div data-component="tool-action">
-              <Icon name="square-arrow-top-right" size="small" />
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">{i18n.t("ui.tool.webfetch")}</span>
+              <Show when={pending()}>
+                <span data-slot="basic-tool-tool-spinner">
+                  <Spinner style={{ width: "16px" }} />
+                </span>
+              </Show>
+              <Show when={!pending() && url()}>
+                <a
+                  data-slot="basic-tool-tool-subtitle"
+                  class="clickable subagent-link"
+                  href={url()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {url()}
+                </a>
+              </Show>
+              <Show when={!pending() && format()}>
+                <span data-slot="basic-tool-tool-arg">format={format()}</span>
+              </Show>
             </div>
-          ),
-        }}
-      >
-        <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
-        </Show>
-      </BasicTool>
+            <Show when={!pending() && url()}>
+              <div data-component="tool-action">
+                <Icon name="square-arrow-top-right" size="small" />
+              </div>
+            </Show>
+          </div>
+        }
+      />
     )
   },
 })
