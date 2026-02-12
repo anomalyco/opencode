@@ -18,6 +18,8 @@ export namespace LSP {
     Updated: BusEvent.define("lsp.updated", z.object({})),
   }
 
+  let cachedState: Awaited<ReturnType<typeof state>> | undefined
+
   export const Range = z
     .object({
       start: z.object({
@@ -144,7 +146,9 @@ export namespace LSP {
   )
 
   export async function init() {
-    return state()
+    const current = await state()
+    cachedState = current
+    return current
   }
 
   export const Status = z
@@ -174,8 +178,15 @@ export namespace LSP {
     })
   }
 
-  async function getClients(file: string) {
-    const s = await state()
+  function getClients(file: string): LSPClient.Info[] {
+    if (!cachedState) {
+      void state().then((current) => {
+        cachedState = current
+      })
+      return []
+    }
+    const s = cachedState
+
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
 
@@ -224,38 +235,42 @@ export namespace LSP {
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
 
-      const root = await server.root(file)
-      if (!root) continue
-      if (s.broken.has(root + server.id)) continue
-
-      const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
-      if (match) {
-        result.push(match)
-        continue
+      const ready = s.clients.find(
+        (client) =>
+          client.serverID === server.id &&
+          (file === client.root || file.startsWith(client.root + path.sep)),
+      )
+      if (ready) {
+        result.push(ready)
       }
 
-      const inflight = s.spawning.get(root + server.id)
-      if (inflight) {
-        const client = await inflight
-        if (!client) continue
-        result.push(client)
-        continue
-      }
+      void server
+        .root(file)
+        .then((root) => {
+          if (!root) return
+          const key = root + server.id
+          if (s.broken.has(key)) return
 
-      const task = schedule(server, root, root + server.id)
-      s.spawning.set(root + server.id, task)
+          const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
+          if (match) return
 
-      task.finally(() => {
-        if (s.spawning.get(root + server.id) === task) {
-          s.spawning.delete(root + server.id)
-        }
-      })
+          if (s.spawning.has(key)) return
 
-      const client = await task
-      if (!client) continue
-
-      result.push(client)
-      Bus.publish(Event.Updated, {})
+          const task = schedule(server, root, key)
+            .then((client) => {
+              if (client) Bus.publish(Event.Updated, {})
+              return client
+            })
+            .finally(() => {
+              if (s.spawning.get(key) === task) {
+                s.spawning.delete(key)
+              }
+            })
+          s.spawning.set(key, task)
+        })
+        .catch((err) => {
+          log.error(`Failed to resolve LSP root for ${server.id}`, { error: err })
+        })
     }
 
     return result
@@ -276,7 +291,7 @@ export namespace LSP {
 
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     log.info("touching file", { file: input })
-    const clients = await getClients(input)
+    const clients = getClients(input)
     await Promise.all(
       clients.map(async (client) => {
         const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
@@ -461,7 +476,7 @@ export namespace LSP {
   }
 
   async function run<T>(file: string, input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
-    const clients = await getClients(file)
+    const clients = getClients(file)
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)
   }
