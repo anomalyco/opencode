@@ -3,31 +3,31 @@ title: GitHub
 description: Bruk opencode i GitHub-problemer og pull-forespørsler.
 ---
 
-opencode integreres med GitHub-arbeidsflyten din. Nevn `/opencode` eller `/oc` i kommentaren din, og opencode vil utføre oppgaver i din GitHub Actions-løper.
+OpenCode integreres med GitHub-arbeidsflyten din. Nevn `/opencode` eller `/oc` i kommentaren din, og OpenCode vil utføre oppgaver i din GitHub Actions-løper.
 
 ---
 
 ## Funksjoner
 
-- **Triage-problemer**: Be opencode se på et problem og forklare det for deg.
-- **Fiks og implementer**: Be opencode om å fikse et problem eller implementere en funksjon. Og den vil fungere i en ny gren og sender inn en PR med alle endringene.
-- **Sikkert**: opencode kjører inne i GitHubs løpere.
+- **Triage saker**: Be OpenCode se på en sak og forklare den for deg.
+- **Fiks og implementer**: Be OpenCode om å fikse en sak eller implementere en funksjon. Den vil jobbe i en ny gren og sende inn en PR med alle endringene.
+- **Sikkert**: OpenCode kjører i GitHub-runners.
 
 ---
 
 ## Installasjon
 
-Kjør følgende kommando i et prosjekt som er i en GitHub-repo:
+Kjør følgende kommando i et prosjekt som er et GitHub-repo:
 
 ```bash
 opencode github install
 ```
 
-Dette vil lede deg gjennom å installere GitHub-appen, lage arbeidsflyten og sette opp hemmeligheter.
+Dette vil lede deg gjennom å installere GitHub-appen, lage arbeidsflyten og sette opp secrets (hemmeligheter).
 
 ---
 
-### Manuell oppsett
+### Manuelt oppsett
 
 Eller du kan sette den opp manuelt.
 
@@ -37,7 +37,7 @@ Eller du kan sette den opp manuelt.
 
 2. **Legg til arbeidsflyten**
 
-   Legg til følgende arbeidsflytfil til `.github/workflows/opencode.yml` i repoen. Sørg for å sette riktige `model` og nødvendige API nøkler i `env`.
+   Legg til følgende arbeidsflytfil til `.github/workflows/opencode.yml` i repoen. Sørg for å sette riktig `model` og nødvendige API-nøkler i `env`.
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -75,19 +75,19 @@ Eller du kan sette den opp manuelt.
 
 3. **Lagre API-nøklene i hemmeligheter**
 
-   Utvid **Hemmeligheter og variabler** til venstre i **innstillingene** for organisasjonen eller prosjektet og velg **Handlinger**. Og legg til de nødvendige API-nøklene.
+   Utvid **Hemmeligheter og variabler** til venstre i **innstillingene** for organisasjonen eller prosjektet og velg **Actions**. Og legg til de nødvendige API-nøklene.
 
 ---
 
 ## Konfigurasjon
 
-- `model`: Modellen som skal brukes med opencode. Tar formatet `provider/model`. Dette er **obligatorisk**.
+- `model`: Modellen som skal brukes med OpenCode. Tar formatet `provider/model`. Dette er **obligatorisk**.
 - `agent`: Agenten som skal brukes. Må være en primær agent. Faller tilbake til `default_agent` fra config eller `"build"` hvis ikke funnet.
-- `share`: Om opencode-økten skal deles. Standard er **true** for offentlige depoter.
-- `prompt`: Valgfri egendefinert melding for å overstyre standard oppførsel. Bruk dette til å tilpasse hvordan opencode behandler forespørsler.
-- `token`: Valgfritt GitHub-tilgangstoken for å utføre operasjoner som å lage kommentarer, foreta endringer og åpne pull-forespørsler. Som standard bruker opencode installasjonstilgangstokenet fra opencode GitHub-appen, så forpliktelser, kommentarer og pull-forespørsler ser ut til å komme fra appen.
+- `share`: Om OpenCode-økten skal deles. Standard er **true** for offentlige depoter.
+- `prompt`: Valgfri egendefinert melding for å overstyre standard oppførsel. Bruk dette til å tilpasse hvordan OpenCode behandler forespørsler.
+- `token`: Valgfritt GitHub-tilgangstoken for å utføre operasjoner som å lage kommentarer, foreta endringer og åpne pull-forespørsler. Som standard bruker OpenCode installasjonstilgangstokenet fra OpenCode GitHub-appen, så commits, kommentarer og pull-forespørsler ser ut til å komme fra appen.
 
-  Alternativt kan du bruke GitHub Action-løperens [innebygde `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) uten å installere opencode GitHub-appen. Bare sørg for å gi de nødvendige tillatelsene i arbeidsflyten din:
+  Alternativt kan du bruke GitHub Action-løperens [innebygde `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) uten å installere OpenCode GitHub-appen. Bare sørg for å gi de nødvendige tillatelsene i arbeidsflyten din:
 
   ```yaml
   permissions:
@@ -103,20 +103,20 @@ Eller du kan sette den opp manuelt.
 
 ## Støttede hendelser
 
-opencode kan utløses av følgende GitHub-hendelser:
+OpenCode kan utløses av følgende GitHub-hendelser:
 
 | Hendelsestype                 | Utløst av                               | Detaljer                                                                                                                |
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Kommenter et problem eller PR           | Nevn `/opencode` eller `/oc` i kommentaren din. opencode leser kontekst og kan opprette grener, åpne PR-er eller svare. |
-| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. opencode mottar filbane, linjenummer og diff-kontekst.          |
-| `issues`                      | Utgave åpnet eller redigert             | Utløs opencode automatisk når problemer opprettes eller endres. Krever `prompt` inngang.                                |
-| `pull_request`                | PR åpnet eller oppdatert                | Utløs opencode automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.         |
-| `schedule`                    | Cron-basert tidsplan                    | Kjør opencode etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen problem å kommentere).     |
-| `workflow_dispatch`           | Manuell utløser fra GitHub UI           | Utløs opencode på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.            |
+| `issue_comment`               | Kommentar på sak eller PR               | Nevn `/opencode` eller `/oc` i kommentaren din. OpenCode leser kontekst og kan opprette grener, åpne PR-er eller svare. |
+| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. OpenCode mottar filbane, linjenummer og diff-kontekst.          |
+| `issues`                      | Sak åpnet eller redigert                | Utløs OpenCode automatisk når saker opprettes eller endres. Krever `prompt` inngang.                                    |
+| `pull_request`                | PR åpnet eller oppdatert                | Utløs OpenCode automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.         |
+| `schedule`                    | Cron-basert tidsplan                    | Kjør OpenCode etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen sak å kommentere).         |
+| `workflow_dispatch`           | Manuell utløser fra GitHub UI           | Utløs OpenCode på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.            |
 
-### Tidsplan Eksempel
+### Eksempel på tidsplan
 
-Kjør opencode på en tidsplan for å utføre automatiserte oppgaver:
+Kjør OpenCode på en tidsplan for å utføre automatiserte oppgaver:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,11 +150,11 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-For planlagte arrangementer er `prompt`-inngangen **påkrevd** siden det ikke er noen kommentarer å trekke ut instruksjoner fra. Planlagte arbeidsflyter kjører uten brukerkontekst for tillatelsessjekking, så arbeidsflyten må gi `contents: write` og `pull-requests: write` hvis du forventer at opencode oppretter grener eller PR-er.
+For planlagte arrangementer er `prompt`-inngangen **påkrevd** siden det ikke er noen kommentarer å trekke ut instruksjoner fra. Planlagte workflows kjører uten brukerkontekst for tillatelsessjekking, så arbeidsflyten må gi `contents: write` og `pull-requests: write` hvis du forventer at OpenCode oppretter grener eller PR-er.
 
 ---
 
-### Pull Request Eksempel
+### Eksempel på Pull Request
 
 Gjennomgå PR-er automatisk når de åpnes eller oppdateres:
 
@@ -191,13 +191,13 @@ jobs:
             - Suggest improvements
 ```
 
-For `pull_request`-hendelser, hvis ingen `prompt` er oppgitt, går opencode som standard gjennom pull-forespørselen.
+For `pull_request`-hendelser, hvis ingen `prompt` er oppgitt, går OpenCode som standard gjennom PR-en.
 
 ---
 
-### Issues Triage Eksempel
+### Eksempel på triage av saker
 
-Triage automatisk nye problemer. Dette eksemplet filtrerer til kontoer eldre enn 30 dager for å redusere spam:
+Automatisk triage av nye saker. Dette eksemplet filtrerer til kontoer eldre enn 30 dager for å redusere spam:
 
 ```yaml title=".github/workflows/opencode-triage.yml"
 name: Issue Triage
@@ -250,9 +250,9 @@ For `issues`-hendelser er `prompt`-inngangen **påkrevd** siden det ikke er noen
 
 ---
 
-## Egendefinerte meldinger
+## Egendefinerte prompter
 
-Overstyr standardmeldingen for å tilpasse oppførselen til opencode for arbeidsflyten din.
+Overstyr standardprompten for å tilpasse oppførselen til OpenCode for arbeidsflyten din.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,29 +271,33 @@ Dette er nyttig for å håndheve spesifikke vurderingskriterier, kodestandarder 
 
 ## Eksempler
 
-Her er noen eksempler på hvordan du kan bruke opencode i GitHub.
+Her er noen eksempler på hvordan du kan bruke OpenCode i GitHub.
 
-- **Forklar et problem**
+:::tip
+Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
+:::
 
-  Legg til denne kommentaren i en GitHub-utgave.
+- **Forklar en sak (issue)**
+
+  Legg til denne kommentaren i en GitHub-sak.
 
   ```
   /opencode explain this issue
   ```
 
-  opencode vil lese hele tråden, inkludert alle kommentarer, og svare med en tydelig forklaring.
+  OpenCode vil lese hele tråden, inkludert alle kommentarer, og svare med en tydelig forklaring.
 
-- **Fiks et problem**
+- **Fiks en sak**
 
-  I en GitHub-utgave, si:
+  I en GitHub-sak, si:
 
   ```
   /opencode fix this
   ```
 
-  Og opencode vil opprette en ny gren, implementere endringene og åpne en PR med endringene.
+  Og OpenCode vil opprette en ny gren, implementere endringene og åpne en PR med endringene.
 
-- **Gjennomgå PR-er og gjør endringer**
+- **Se gjennom PR-er og gjør endringer**
 
   Legg igjen følgende kommentar på en GitHub PR.
 
@@ -301,21 +305,21 @@ Her er noen eksempler på hvordan du kan bruke opencode i GitHub.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  opencode vil implementere den forespurte endringen og forplikte den til samme PR.
+  OpenCode vil implementere den forespurte endringen og committe den til samme PR.
 
-- **Se gjennom spesifikke kodelinjer**
+- **Review av spesifikke kodelinjer**
 
-  Legg igjen en kommentar direkte på kodelinjer i PRs "Filer"-fane. opencode oppdager automatisk filen, linjenumrene og diff-konteksten for å gi presise svar.
+  Legg igjen en kommentar direkte på kodelinjer i PRs "Filer"-fane. OpenCode oppdager automatisk filen, linjenumrene og diff-konteksten for å gi presise svar.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  Når du kommenterer spesifikke linjer, mottar opencode:
+  Når du kommenterer spesifikke linjer, mottar OpenCode:
   - Den nøyaktige filen blir gjennomgått
   - De spesifikke kodelinjene
-  - Den ulik konteksten rundt
+  - Den omkringliggende diff-konteksten
   - Linjenummerinformasjon
 
   Dette gir mulighet for mer målrettede forespørsler uten å måtte spesifisere filstier eller linjenumre manuelt.

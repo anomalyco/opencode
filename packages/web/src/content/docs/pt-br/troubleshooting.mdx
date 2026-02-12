@@ -22,7 +22,7 @@ Você pode definir o nível de log com a opção de linha de comando `--log-leve
 
 ## Armazenamento
 
-opencode armazena dados de sessão e outros dados do aplicativo no disco em:
+O opencode armazena dados de sessão e outros dados do aplicativo no disco em:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: Pressione `WIN+R` e cole `%USERPROFILE%\.local\share\opencode`
@@ -39,21 +39,21 @@ Este diretório contém:
 
 ## Aplicativo de Desktop
 
-opencode Desktop executa um servidor opencode local (o sidecar `opencode-cli`) em segundo plano. A maioria dos problemas é causada por um plugin com mau funcionamento, um cache corrompido ou uma configuração de servidor incorreta.
+O opencode Desktop executa um servidor opencode local (o sidecar `opencode-cli`) em segundo plano. A maioria dos problemas é causada por um plugin com mau funcionamento, um cache corrompido ou uma configuração de servidor incorreta.
 
 ### Verificações rápidas
 
 - Saia completamente do aplicativo e reinicie-o.
 - Se o aplicativo mostrar uma tela de erro, clique em **Reiniciar** e copie os detalhes do erro.
-- Apenas macOS: menu `opencode` -> **Recarregar Webview** (ajuda se a interface estiver em branco/congelada).
+- Apenas macOS: menu `OpenCode` -> **Recarregar Webview** (ajuda se a interface estiver em branco/congelada).
 
 ---
 
-### Desativar plugins
+### Desativando plugins
 
 Se o aplicativo de desktop estiver travando ao iniciar, pendurado ou se comportando de maneira estranha, comece desativando os plugins.
 
-#### Verifique a configuração global
+#### Verificando a configuração global
 
 Abra seu arquivo de configuração global e procure uma chave `plugin`.
 
@@ -70,9 +70,9 @@ Se você tiver plugins configurados, desative-os temporariamente removendo a cha
 }
 ```
 
-#### Verifique os diretórios de plugins
+#### Verificando os diretórios de plugins
 
-opencode também pode carregar plugins locais do disco. Mova-os temporariamente para fora do caminho (ou renomeie a pasta) e reinicie o aplicativo de desktop:
+O opencode também pode carregar plugins locais do disco. Mova-os temporariamente para fora do caminho (ou renomeie a pasta) e reinicie o aplicativo de desktop:
 
 - **Plugins globais**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -84,7 +84,7 @@ Se o aplicativo voltar a funcionar, reative os plugins um por um para descobrir 
 
 ---
 
-### Limpar o cache
+### Limpando o cache
 
 Se desativar plugins não ajudar (ou se a instalação de um plugin estiver travada), limpe o cache para que o opencode possa reconstruí-lo.
 
@@ -99,21 +99,21 @@ Se desativar plugins não ajudar (ou se a instalação de um plugin estiver trav
 
 ---
 
-### Corrigir problemas de conexão com o servidor
+### Corrigindo problemas de conexão com o servidor
 
-opencode Desktop pode iniciar seu próprio servidor local (padrão) ou conectar-se a uma URL de servidor que você configurou.
+O opencode Desktop pode iniciar seu próprio servidor local (padrão) ou conectar-se a uma URL de servidor que você configurou.
 
 Se você ver um diálogo **"Conexão Falhou"** (ou o aplicativo nunca passa da tela de inicialização), verifique se há uma URL de servidor personalizada.
 
-#### Limpar a URL do servidor padrão do desktop
+#### Limpando a URL do servidor padrão do desktop
 
 Na tela inicial, clique no nome do servidor (com o ponto de status) para abrir o seletor de Servidor. Na seção **Servidor padrão**, clique em **Limpar**.
 
-#### Remover `server.port` / `server.hostname` da sua configuração
+#### Removendo `server.port` / `server.hostname` da sua configuração
 
 Se seu `opencode.json(c)` contiver uma seção `server`, remova-a temporariamente e reinicie o aplicativo de desktop.
 
-#### Verifique as variáveis de ambiente
+#### Verificando as variáveis de ambiente
 
 Se você tiver `OPENCODE_PORT` definido em seu ambiente, o aplicativo de desktop tentará usar essa porta para o servidor local.
 
@@ -130,7 +130,7 @@ No Linux, algumas configurações do Wayland podem causar janelas em branco ou e
 
 ---
 
-### Windows: WebView2 runtime
+### Windows: Runtime do WebView2
 
 No Windows, o opencode Desktop requer o **WebView2 Runtime** do Microsoft Edge. Se o aplicativo abrir em uma janela em branco ou não iniciar, instale/atualize o WebView2 e tente novamente.
 
@@ -151,7 +151,7 @@ O opencode Desktop só mostra notificações do sistema quando:
 
 ---
 
-### Redefinir o armazenamento do aplicativo de desktop (último recurso)
+### Redefinindo o armazenamento do aplicativo de desktop (último recurso)
 
 Se o aplicativo não iniciar e você não conseguir limpar as configurações pela interface, redefina o estado salvo do aplicativo de desktop.
 
@@ -195,7 +195,7 @@ Aqui estão alguns problemas comuns e como resolvê-los.
 
 ---
 
-### opencode não inicia
+### O opencode não inicia
 
 1. Verifique os logs em busca de mensagens de erro
 2. Tente executar com `--print-logs` para ver a saída no terminal
@@ -251,7 +251,7 @@ Para resolver isso:
 
 ### AI_APICallError e problemas com pacotes de provedores
 
-Se você encontrar erros de chamada de API, isso pode ser devido a pacotes de provedores desatualizados. opencode instala dinamicamente pacotes de provedores (OpenAI, Anthropic, Google, etc.) conforme necessário e os armazena em cache localmente.
+Se você encontrar erros de chamada de API, isso pode ser devido a pacotes de provedores desatualizados. O opencode instala dinamicamente pacotes de provedores (OpenAI, Anthropic, Google, etc.) conforme necessário e os armazena em cache localmente.
 
 Para resolver problemas com pacotes de provedores:
 
@@ -277,7 +277,7 @@ Usuários do Linux precisam ter um dos seguintes utilitários de área de transf
 
 ```bash
 apt install -y xclip
-# ou
+# or
 apt install -y xsel
 ```
 
@@ -291,9 +291,9 @@ apt install -y wl-clipboard
 
 ```bash
 apt install -y xvfb
-# e execute:
+# and run:
 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode detectará se você está usando Wayland e preferirá `wl-clipboard`, caso contrário, tentará encontrar ferramentas de área de transferência na ordem: `xclip` e `xsel`.
+O opencode detectará se você está usando Wayland e preferirá `wl-clipboard`, caso contrário, tentará encontrar ferramentas de área de transferência na ordem: `xclip` e `xsel`.

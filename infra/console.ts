@@ -166,14 +166,10 @@ const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
-let logProcessor
-if ($app.stage === "production" || $app.stage === "frank") {
-  const HONEYCOMB_API_KEY = new sst.Secret("HONEYCOMB_API_KEY")
-  logProcessor = new sst.cloudflare.Worker("LogProcessor", {
-    handler: "packages/console/function/src/log-processor.ts",
-    link: [HONEYCOMB_API_KEY],
-  })
-}
+const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
+  handler: "packages/console/function/src/log-processor.ts",
+  link: [new sst.Secret("HONEYCOMB_API_KEY")],
+})
 
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
@@ -211,7 +207,7 @@ new sst.cloudflare.x.SolidStart("Console", {
       transform: {
         worker: {
           placement: { mode: "smart" },
-          tailConsumers: logProcessor ? [{ service: logProcessor.nodes.worker.scriptName }] : [],
+          tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],
         },
       },
     },

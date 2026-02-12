@@ -1,5 +1,5 @@
 ---
-title: ЛСП Серверы
+title: LSP-серверы
 description: opencode интегрируется с вашими серверами LSP.
 ---
 
@@ -7,44 +7,44 @@ opencode интегрируется с вашим протоколом язык�
 
 ---
 
-## Встроенный
+## Встроенные
 
 opencode поставляется с несколькими встроенными LSP-серверами для популярных языков:
 
-| LSP Server         | Extensions                                                          | Requirements                                                 |
-| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| astro              | .astro                                                              | Auto-installs for Astro projects                             |
-| bash               | .sh, .bash, .zsh, .ksh                                              | Auto-installs bash-language-server                           |
-| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Auto-installs for C/C++ projects                             |
-| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
-| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` command available                              |
-| dart               | .dart                                                               | `dart` command available                                     |
-| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` command available (auto-detects deno.json/deno.jsonc) |
-| elixir-ls          | .ex, .exs                                                           | `elixir` command available                                   |
-| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
-| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
-| gleam              | .gleam                                                              | `gleam` command available                                    |
-| gopls              | .go                                                                 | `go` command available                                       |
-| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` command available          |
-| jdtls              | .java                                                               | `Java SDK (version 21+)` installed                           |
-| kotlin-ls          | .kt, .kts                                                           | Auto-installs for Kotlin projects                            |
-| lua-ls             | .lua                                                                | Auto-installs for Lua projects                               |
-| nixd               | .nix                                                                | `nixd` command available                                     |
-| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
-| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
-| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
-| prisma             | .prisma                                                             | `prisma` command available                                   |
-| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
-| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
-| rust               | .rs                                                                 | `rust-analyzer` command available                            |
-| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
-| svelte             | .svelte                                                             | Auto-installs for Svelte projects                            |
-| terraform          | .tf, .tfvars                                                        | Auto-installs from GitHub releases                           |
-| tinymist           | .typ, .typc                                                         | Auto-installs from GitHub releases                           |
-| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
-| vue                | .vue                                                                | Auto-installs for Vue projects                               |
-| yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
-| zls                | .zig, .zon                                                          | `zig` command available                                      |
+| LSP Server         | Extensions                                                          | Requirements                                                              |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| astro              | .astro                                                              | Автоматически устанавливается для проектов Astro                          |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Автоматически устанавливает bash-language-server                          |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Автоматически устанавливается для проектов C/C++                          |
+| csharp             | .cs                                                                 | `.NET SDK` установлен                                                     |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` команда доступна                                            |
+| dart               | .dart                                                               | `dart` команда доступна                                                   |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` команда доступна (автоматически обнаруживает deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` команда доступна                                                 |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` зависимость в проекте                                            |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` установлен                                                     |
+| gleam              | .gleam                                                              | `gleam` команда доступна                                                  |
+| gopls              | .go                                                                 | `go` команда доступна                                                     |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` команда доступна                        |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` установлен                                       |
+| kotlin-ls          | .kt, .kts                                                           | Автоматически устанавливается для проектов Kotlin                         |
+| lua-ls             | .lua                                                                | Автоматически устанавливается для проектов Lua                            |
+| nixd               | .nix                                                                | `nixd` команда доступна                                                   |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` команда доступна                                               |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` зависимость в проекте                                            |
+| php intelephense   | .php                                                                | Автоматически устанавливается для проектов PHP                            |
+| prisma             | .prisma                                                             | `prisma` команда доступна                                                 |
+| pyright            | .py, .pyi                                                           | `pyright` зависимость установлена                                         |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` и `gem` команды доступны                                           |
+| rust               | .rs                                                                 | `rust-analyzer` команда доступна                                          |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` установлен (`xcode` на macOS)                                     |
+| svelte             | .svelte                                                             | Автоматически устанавливается для проектов Svelte                         |
+| terraform          | .tf, .tfvars                                                        | Автоматически устанавливается из релизов GitHub                           |
+| tinymist           | .typ, .typc                                                         | Автоматически устанавливается из релизов GitHub                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` зависимость в проекте                                        |
+| vue                | .vue                                                                | Автоматически устанавливается для проектов Vue                            |
+| yaml-ls            | .yaml, .yml                                                         | Автоматически устанавливает Red Hat yaml-language-server                  |
+| zls                | .zig, .zon                                                          | `zig` команда доступна                                                    |
 
 Серверы LSP автоматически включаются при обнаружении одного из указанных выше расширений файлов и выполнении требований.
 
@@ -63,7 +63,7 @@ opencode поставляется с несколькими встроенным
 
 ---
 
-## Настроить
+## Настройка
 
 Вы можете настроить серверы LSP через раздел `lsp` в конфигурации opencode.
 
@@ -182,7 +182,7 @@ opencode поставляется с несколькими встроенным
 
 PHP Intelephense предлагает дополнительные функции через лицензионный ключ. Вы можете предоставить лицензионный ключ, поместив (только) ключ в текстовый файл по адресу:
 
-- В macOS/Linux: `$HOME/intelephense/licence.txt`
-- В Windows: `%USERPROFILE%/intelephense/licence.txt`
+- В macOS/Linux: `$HOME/intelephense/license.txt`
+- В Windows: `%USERPROFILE%/intelephense/license.txt`
 
 Файл должен содержать только лицензионный ключ без какого-либо дополнительного содержимого.

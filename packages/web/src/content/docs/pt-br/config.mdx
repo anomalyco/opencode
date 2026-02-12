@@ -1,5 +1,5 @@
 ---
-title: Config
+title: Configuração
 description: Usando a configuração JSON do opencode.
 ---
 
@@ -14,7 +14,7 @@ O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Configuração do tema
+  // Theme configuration
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
@@ -23,9 +23,9 @@ O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 
 ---
 
-## Localizações
+## Locais
 
-Você pode colocar sua configuração em algumas localizações diferentes e elas têm uma
+Você pode colocar sua configuração em alguns locais diferentes e eles têm uma
 ordem de precedência diferente.
 
 :::note
@@ -65,7 +65,7 @@ A configuração remota é carregada primeiro, servindo como a camada base. Toda
 
 Por exemplo, se sua organização fornece servidores MCP que estão desativados por padrão:
 
-```json title="Configuração remota de .well-known/opencode"
+```json title="Remote config from .well-known/opencode"
 {
   "mcp": {
     "jira": {
@@ -320,11 +320,11 @@ Você pode configurar agentes especializados para tarefas específicas através 
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "code-reviewer": {
-      "description": "Revisa o código em busca de melhores práticas e problemas potenciais",
+      "description": "Revisa código para melhores práticas e potenciais problemas",
       "model": "anthropic/claude-sonnet-4-5",
-      "prompt": "Você é um revisor de código. Foque em segurança, desempenho e manutenibilidade.",
+      "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
       "tools": {
-        // Desabilitar ferramentas de modificação de arquivos para agente somente de revisão
+        // Desabilitar ferramentas de modificação de arquivo para agente de apenas revisão
         "write": false,
         "edit": false,
       },
@@ -384,14 +384,14 @@ Você pode configurar comandos personalizados para tarefas repetitivas através 
   "$schema": "https://opencode.ai/config.json",
   "command": {
     "test": {
-      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nFoque nos testes que falharam e sugira correções.",
-      "description": "Executar testes com cobertura",
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções.",
+      "description": "Execute testes com cobertura",
       "agent": "build",
       "model": "anthropic/claude-haiku-4-5",
     },
     "component": {
       "template": "Crie um novo componente React chamado $ARGUMENTS com suporte a TypeScript.\nInclua tipagem adequada e estrutura básica.",
-      "description": "Criar um novo componente",
+      "description": "Crie um novo componente",
     },
   },
 }

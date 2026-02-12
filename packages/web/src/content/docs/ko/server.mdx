@@ -1,6 +1,6 @@
 ---
-title: Server
-description: Interact with opencode server over HTTP.
+title: 서버
+description: HTTP를 통해 OpenCode 서버와 상호 작용합니다.
 ---
 
 import config from "../../../../config.mjs"
@@ -44,7 +44,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ---
 
-### 어떻게 작동합니까?
+### 작동 방식
 
 `opencode`를 실행하면 TUI와 서버를 시작합니다. TUI는 어디에 있습니까?
 서버와 대화하는 클라이언트. 서버는 OpenAPI 3.1 spec을 노출
@@ -122,7 +122,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 ---
 
-### 콘피그
+### 구성
 
 | 방법    | 경로                | 설명                       | 응답                                                                                     |
 | ------- | ------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
@@ -145,7 +145,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 ## 세션
 
-| 방법     | 경로                                     | 설명                               | 주                                                                            |
+| 메서드   | 경로                                     | 설명                               | 비고                                                                          |
 | -------- | ---------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
 | `GET`    | `/session`                               | 모든 세션 일람표                   | 반환 <a href={typesUrl}><code>Session[]</code></a>                            |
 | `POST`   | `/session`                               | 새 세션 만들기                     | 몸: `{ parentID?, title? }`, 반환 <a href={typesUrl}><code>Session</code></a> |
@@ -153,9 +153,9 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `GET`    | `/session/:id`                           | 세션 상세보기                      | 반품 <a href={typesUrl}><code>Session</code></a>                              |
 | `DELETE` | `/session/:id`                           | 세션 삭제 및 모든 데이터           | `boolean`                                                                     |
 | `PATCH`  | `/session/:id`                           | 업데이트 세션 속성                 | 본체: `{ title? }`, 반환 <a href={typesUrl}><code>Session</code></a>          |
-| `GET`    | `/session/:id/children`                  | 세션의 어린이 세션                 | 리턴 <a href={typesUrl}><code>Session[]</code></a>                            |
-| `GET`    | `/session/:id/todo`                      | 세션별 도우미 목록 받기            | <a href={typesUrl}><code>Todo[]</code></a>                                    |
-| `POST`   | `/session/:id/init`                      | 분석 응용 프로그램 및 `AGENTS.md`  | 몸: `{ messageID, providerID, modelID }`, 반환 `boolean`                      |
+| `GET`    | `/session/:id/children`                  | 세션의 하위 세션                   | 리턴 <a href={typesUrl}><code>Session[]</code></a>                            |
+| `GET`    | `/session/:id/todo`                      | 세션의 할 일(Todo) 목록 받기       | <a href={typesUrl}><code>Todo[]</code></a>                                    |
+| `POST`   | `/session/:id/init`                      | 앱 초기화 및 `AGENTS.md` 분석      | 몸: `{ messageID, providerID, modelID }`, 반환 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 메시지의 기존 세션                 | 몸: `{ messageID? }`, 반환 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 운영 중인 세션                     | 반품 `boolean`                                                                |
 | `POST`   | `/session/:id/share`                     | 세션 공유                          | <a href={typesUrl}><code>Session</code></a>                                   |
@@ -163,7 +163,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `GET`    | `/session/:id/diff`                      | `/session/:id/diff`                | `messageID?`, 반환 <a href={typesUrl}><code>FileDiff[]</code></a>             |
 | `POST`   | `/session/:id/summarize`                 | 세션을 요약                        | 본체: `{ providerID, modelID }`, `boolean` 반환                               |
 | `POST`   | `/session/:id/revert`                    | 메시지 재생                        | 몸: `{ messageID, partID? }`, 반환 `boolean`                                  |
-| `POST`   | `/session/:id/unrevert`                  | 통일된 모든 메시지                 | 반품 `boolean`                                                                |
+| `POST`   | `/session/:id/unrevert`                  | 메시지 되돌리기 취소               | 반품 `boolean`                                                                |
 | `POST`   | `/session/:id/permissions/:permissionID` | 허가 요청 대응                     | 본체: `{ response, remember? }`, `boolean`                                    |
 
 ---
@@ -177,7 +177,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `GET`  | `/session/:id/message/:messageID` | 메시지 보내기                          | `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
 | `POST` | `/session/:id/prompt_async`       | 비동기적으로 메시지 보내기             | 몸: `/session/:id/message`와 동일, `204 No Content`를 반환                                                                                                       |
 | `POST` | `/session/:id/command`            | 슬래시 명령어 실행                     | 본체: `{ messageID?, agent?, model?, command, arguments }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`             |
-| `POST` | `/session/:id/shell`              | 쉘 명령 실행                           | 체: `{ agent, model?, command }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | shell 명령 실행                        | 체: `{ agent, model?, command }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 
@@ -210,7 +210,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 ---
 
-## 도구 (실험)
+## 도구 (실험적)
 
 | 방법  | 경로                                        | 설명                    | 응답                                          |
 | ----- | ------------------------------------------- | ----------------------- | --------------------------------------------- |
@@ -219,7 +219,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 ---
 
-### LSP의 체재자 & MCP
+### LSP, 포매터 & MCP
 
 | 방법   | 경로         | 설명                   | 응답                                                     |
 | ------ | ------------ | ---------------------- | -------------------------------------------------------- |
@@ -276,7 +276,7 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 | 방법  | 경로     | 설명                                                                            | 응답                     |
 | ----- | -------- | ------------------------------------------------------------------------------- | ------------------------ |
-| `GET` | `/event` | 서버 침묵 이벤트 스트림. 첫 번째 이벤트는 `server.connected`, 그 후 버스 이벤트 | Server-sent event stream |
+| `GET` | `/event` | 서버 전송 이벤트 스트림. 첫 번째 이벤트는 `server.connected`, 그 후 버스 이벤트 | Server-sent event stream |
 
 ---
 

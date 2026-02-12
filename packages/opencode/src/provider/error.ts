@@ -12,15 +12,13 @@ export namespace ProviderError {
     /input token count.*exceeds the maximum/i, // Google (Gemini)
     /maximum prompt length is \d+/i, // xAI (Grok)
     /reduce the length of the messages/i, // Groq
-    /maximum context length is \d+ tokens/i, // OpenRouter
+    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek
     /exceeds the limit of \d+/i, // GitHub Copilot
     /exceeds the available context size/i, // llama.cpp server
     /greater than the context length/i, // LM Studio
     /context window exceeds limit/i, // MiniMax
-    /exceeded model token limit/i, // Kimi For Coding
+    /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
-    /too many tokens/i, // Generic fallback
-    /token limit exceeded/i, // Generic fallback
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {

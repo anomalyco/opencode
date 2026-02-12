@@ -1,9 +1,9 @@
 ---
 title: カスタムツール
-description: LLM がopencodeで呼び出すことができるツールを作成します。
+description: LLM が OpenCode で呼び出すことができるツールを作成します。
 ---
 
-カスタム ツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、opencode の組み込みツール ](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
+カスタムツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、OpenCode の[組み込みツール](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
 
 ---
 
@@ -13,7 +13,7 @@ description: LLM がopencodeで呼び出すことができるツールを作成�
 
 ---
 
-### 位置
+### 場所
 
 それらは次のように定義できます。
 
@@ -24,7 +24,7 @@ description: LLM がopencodeで呼び出すことができるツールを作成�
 
 ### 構造
 
-ツールを作成する最も簡単な方法は、タイプ セーフティと検証を提供する `tool()` ヘルパーを使用することです。
+ツールを作成する最も簡単な方法は、型安全性と検証を提供する `tool()` ヘルパーを使用することです。
 
 ```ts title=".opencode/tools/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
@@ -89,7 +89,7 @@ args: {
 }
 ```
 
-[Zod](https://zod.dev) を直接インポートしてプレーン オブジェクトを返すこともできます。
+[Zod](https://zod.dev) を直接インポートしてプレーンオブジェクトを返すこともできます。
 
 ```ts {6}
 import { z } from "zod"
@@ -108,7 +108,7 @@ export default {
 
 ---
 
-### コンテクスト
+### コンテキスト
 
 ツールは現在のセッションに関するコンテキストを受け取ります。
 
@@ -126,14 +126,14 @@ export default tool({
 })
 ```
 
-セッション作業ディレクトリには `context.directory` を使用します。
-git ワークツリー ルートには `context.worktree` を使用します。
+セッションの作業ディレクトリには `context.directory` を使用します。
+git ワークツリーのルートには `context.worktree` を使用します。
 
 ---
 
 ## 例
 
-### Python でツールを作成する
+### Python でのツールの作成
 
 ツールは任意の言語で作成できます。以下は、Python を使用して 2 つの数値を加算する例です。
 
