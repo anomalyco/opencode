@@ -82,14 +82,13 @@ export namespace Project {
           const roots = await git(["rev-list", "--max-parents=0", "--all"], {
             cwd: sandbox,
           })
-            .then(async (result) => {
-              if (result.exitCode !== 0) return undefined
-              return (await result.text())
+            .then(async (result) =>
+              (await result.text())
                 .split("\n")
                 .filter(Boolean)
                 .map((x) => x.trim())
-                .toSorted()
-            })
+                .toSorted(),
+            )
             .catch(() => undefined)
 
           if (!roots) {
@@ -121,12 +120,7 @@ export namespace Project {
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => {
-            if (result.exitCode !== 0) return undefined
-            const text = (await result.text()).trim()
-            if (!text) return undefined
-            return path.resolve(sandbox, text)
-          })
+          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
           .catch(() => undefined)
 
         if (!top) {
@@ -144,7 +138,6 @@ export namespace Project {
           cwd: sandbox,
         })
           .then(async (result) => {
-            if (result.exitCode !== 0) return undefined
             const dirname = path.dirname((await result.text()).trim())
             if (dirname === ".") return sandbox
             return dirname
