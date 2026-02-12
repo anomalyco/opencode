@@ -6,6 +6,7 @@ import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
+import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -184,10 +185,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           models.setVisibility(model, visible)
         },
         variant: {
-          current() {
+          configured() {
+            const a = agent.current()
+            const m = current()
+            if (!a || !m) return undefined
+            return getConfiguredAgentVariant({
+              agent: { model: a.model, variant: a.variant },
+              model: { providerID: m.provider.id, modelID: m.id, variants: m.variants },
+            })
+          },
+          selected() {
             const m = current()
             if (!m) return undefined
             return models.variant.get({ providerID: m.provider.id, modelID: m.id })
+          },
+          current() {
+            return resolveModelVariant({
+              variants: this.list(),
+              selected: this.selected(),
+              configured: this.configured(),
+            })
           },
           list() {
             const m = current()
@@ -203,17 +220,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const currentVariant = this.current()
-            if (!currentVariant) {
-              this.set(variants[0])
-              return
-            }
-            const index = variants.indexOf(currentVariant)
-            if (index === -1 || index === variants.length - 1) {
-              this.set(undefined)
-              return
-            }
-            this.set(variants[index + 1])
+            this.set(
+              cycleModelVariant({
+                variants,
+                selected: this.selected(),
+                configured: this.configured(),
+              }),
+            )
           },
         },
       }

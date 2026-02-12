@@ -1,0 +1,287 @@
+---
+title: 伺服器
+description: 透過 HTTP 與 opencode 伺服器互動。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+`opencode serve` 指令執行一個無介面 HTTP 伺服器，該伺服器公開 opencode 客戶端可以使用的 OpenAPI 端點。
+
+---
+
+### 用法
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### 選項
+
+| 旗標            | 描述                      | 預設             |
+| --------------- | ------------------------- | ---------------- |
+| `--port`        | 監聽連接埠                | `4096`           |
+| `--hostname`    | 監聽的主機名稱            | `127.0.0.1`      |
+| `--mdns`        | 啟用 mDNS 探索            | `false`          |
+| `--mdns-domain` | mDNS 服務的自定義網域名稱 | `opencode.local` |
+| `--cors`        | 允許的其他瀏覽器來源      | `[]`             |
+
+`--cors` 可以多次傳遞：
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### 身分驗證
+
+設定 `OPENCODE_SERVER_PASSWORD` 以使用 HTTP 基本身分驗證保護伺服器。使用者名稱預設為 `opencode`，或設定 `OPENCODE_SERVER_USERNAME` 來覆蓋它。這適用於 `opencode serve` 和 `opencode web`。
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### 它是如何運作的
+
+當您執行 `opencode` 時，它會啟動 TUI 和伺服器。 TUI 是
+與伺服器對話的客戶端。伺服器公開 OpenAPI 3.1 規範
+端點。該端點還用於生成 [軟體開發套件](/docs/sdk)。
+
+:::tip
+使用 opencode 伺服器以程式化方式與 opencode 進行互動。
+:::
+
+此架構讓 opencode 支援多個客戶端，並允許您以程式化方式與 opencode 進行互動。
+
+您可以執行 `opencode serve` 來啟動獨立伺服器。如果您有
+opencode TUI 執行，`opencode serve` 將啟動一個新伺服器。
+
+---
+
+#### 連接到現有伺服器
+
+當您啟動 TUI 時，它會隨機分配連接埠和主機名稱。您可以改為傳入 `--hostname` 和 `--port` [旗標](/docs/cli)。然後使用它連接到其伺服器。
+
+[`/tui`](#tui) 端點可用於透過伺服器驅動 TUI。例如，您可以預填充或執行提示。此設定由 opencode [IDE](/docs/ide) 外掛使用。
+
+---
+
+## 規格
+
+伺服器發布了 OpenAPI 3.1 規範，可以在以下位置查看：
+
+```
+http://<hostname>:<port>/doc
+```
+
+例如，`http://localhost:4096/doc`。使用規範生成客戶端或檢查請求和回應類型。或者在 Swagger 瀏覽器中查看它。
+
+---
+
+## API
+
+opencode 伺服器公開以下 API。
+
+---
+
+### 全域
+
+| 方法  | 路徑             | 描述                     | 回應                                 |
+| ----- | ---------------- | ------------------------ | ------------------------------------ |
+| `GET` | `/global/health` | 獲取伺服器健康狀態和版本 | `{ healthy: true, version: string }` |
+| `GET` | `/global/event`  | 獲取全域事件（SSE 串流） | 事件串流                             |
+
+---
+
+### 專案
+
+| 方法  | 路徑               | 描述         | 回應                                          |
+| ----- | ------------------ | ------------ | --------------------------------------------- |
+| `GET` | `/project`         | 列出所有專案 | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET` | `/project/current` | 獲取當前專案 | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### 路徑和 VCS
+
+| 方法  | 路徑    | 描述                    | 回應                                        |
+| ----- | ------- | ----------------------- | ------------------------------------------- |
+| `GET` | `/path` | 獲取當前路徑            | <a href={typesUrl}><code>Path</code></a>    |
+| `GET` | `/vcs`  | 獲取當前專案的 VCS 資訊 | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### 實例
+
+| 方法   | 路徑                | 描述         | 回應      |
+| ------ | ------------------- | ------------ | --------- |
+| `POST` | `/instance/dispose` | 處置當前實例 | `boolean` |
+
+---
+
+### 配置
+
+| 方法    | 路徑                | 描述                 | 回應                                                                                     |
+| ------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | 獲取設定資訊         | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | 更新設定             | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | 列出供應商和預設模型 | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### 供應商
+
+| 方法   | 路徑                             | 描述                    | 回應                                                                                |
+| ------ | -------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | 列出所有供應商          | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | 獲取供應商身分驗證方法  | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | 使用 OAuth 授權供應商   | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | 處理供應商的 OAuth 回調 | `boolean`                                                                           |
+
+---
+
+### 工作階段
+
+| 方法     | 路徑                                     | 描述                           | 備註                                                                            |
+| -------- | ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | 列出所有工作階段               | 返回 <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | 建立新工作階段                 | 正文：`{ parentID?, title? }`，返回 <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | 獲取所有工作階段的狀態         | 返回 `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | 獲取工作階段詳細資訊           | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | 刪除工作階段及其所有數據       | 返回 `boolean`                                                                  |
+| `PATCH`  | `/session/:id`                           | 更新工作階段屬性               | 正文：`{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | 獲取工作階段的子工作階段       | 返回 <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | 獲取工作階段的待辦事項清單     | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | 分析應用程式並建立 `AGENTS.md` | 主體：`{ messageID, providerID, modelID }`，返回`boolean`                       |
+| `POST`   | `/session/:id/fork`                      | 在訊息中分岔現有工作階段       | 正文：`{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | 中止正在執行的工作階段         | 返回 `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | 分享工作階段                   | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | 取消分享工作階段               | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | 獲取本次工作階段的差異         | 查詢：`messageID?`，返回 <a href={typesUrl}><code>FileDiff[]</code></a>         |
+| `POST`   | `/session/:id/summarize`                 | 工作階段摘要                   | 主體：`{ providerID, modelID }`，返回`boolean`                                  |
+| `POST`   | `/session/:id/revert`                    | 還原訊息                       | 主體：`{ messageID, partID? }`，返回`boolean`                                   |
+| `POST`   | `/session/:id/unrevert`                  | 恢復所有已還原的訊息           | 返回 `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | 回覆權限請求                   | 主體：`{ response, remember? }`，返回`boolean`                                  |
+
+---
+
+### 訊息
+
+| 方法   | 路徑                              | 描述                       | 備註                                                                                                                                                              |
+| ------ | --------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | 列出工作階段中的訊息       | 查詢：`limit?`，返回`{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                         |
+| `POST` | `/session/:id/message`            | 發送訊息並等待回覆         | 主體：`{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`，返回`{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | 獲取訊息詳情               | 返回`{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `POST` | `/session/:id/prompt_async`       | 非同步發送訊息（無需等待） | body：與`/session/:id/message`相同，返回`204 No Content`                                                                                                          |
+| `POST` | `/session/:id/command`            | 執行斜線指令               | 主體：`{ messageID?, agent?, model?, command, arguments }`，返回`{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | 執行 shell 指令            | 主體：`{ agent, model?, command }`，返回`{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### 指令
+
+| 方法  | 路徑       | 描述         | 回應                                          |
+| ----- | ---------- | ------------ | --------------------------------------------- |
+| `GET` | `/command` | 列出所有指令 | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### 檔案
+
+| 方法  | 路徑                     | 描述                 | 回應                                                                                |
+| ----- | ------------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>`    | 搜尋檔案中的文字     | 具有 `path`, `lines`, `line_number`, `absolute_offset`, `submatches` 的匹配物件陣列 |
+| `GET` | `/find/file?query=<q>`   | 按名稱尋找檔案和目錄 | `string[]`（路徑）                                                                  |
+| `GET` | `/find/symbol?query=<q>` | 尋找工作區符號       | <a href={typesUrl}><code>Symbol[]</code></a>                                        |
+| `GET` | `/file?path=<path>`      | 列出檔案和目錄       | <a href={typesUrl}><code>FileNode[]</code></a>                                      |
+| `GET` | `/file/content?path=<p>` | 讀取檔案             | <a href={typesUrl}><code>FileContent</code></a>                                     |
+| `GET` | `/file/status`           | 獲取追蹤檔案的狀態   | <a href={typesUrl}><code>File[]</code></a>                                          |
+
+#### `/find/file` 查詢參數
+
+- `query`（必需）- 搜尋字串（模糊匹配）
+- `type`（可選）- 將結果限制為 `"file"` 或 `"directory"`
+- `directory` (可選) — 覆寫搜尋的專案根目錄
+- `limit`（可選）— 最大結果 (1–200)
+- `dirs`（可選）- 舊旗標（`"false"` 僅返回檔案）
+
+---
+
+### 工具（實驗）
+
+| 方法  | 路徑                                        | 描述                         | 回應                                         |
+| ----- | ------------------------------------------- | ---------------------------- | -------------------------------------------- |
+| `GET` | `/experimental/tool/ids`                    | 列出所有工具 ID              | <a href={typesUrl}><code>ToolID</code></a>   |
+| `GET` | `/experimental/tool?provider=<p>&model=<m>` | 列出具有模型 JSON 架構的工具 | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP、格式化程式和 MCP
+
+| 方法   | 路徑         | 描述                | 回應                                                     |
+| ------ | ------------ | ------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | 獲取 LSP 伺服器狀態 | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | 獲取格式化程式狀態  | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | 獲取 MCP 伺服器狀態 | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | 動態添加 MCP 伺服器 | body: `{ name, config }`, 返回 MCP 狀態物件              |
+
+---
+
+### 代理
+
+| 方法  | 路徑     | 描述               | 回應                                        |
+| ----- | -------- | ------------------ | ------------------------------------------- |
+| `GET` | `/agent` | 列出所有可用的代理 | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### 記錄
+
+| 方法   | 路徑   | 描述                                                      | 回應      |
+| ------ | ------ | --------------------------------------------------------- | --------- |
+| `POST` | `/log` | 寫入日誌項目。正文：`{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| 方法   | 路徑                    | 描述                                        | 回應         |
+| ------ | ----------------------- | ------------------------------------------- | ------------ |
+| `POST` | `/tui/append-prompt`    | 將文字附加到提示                            | `boolean`    |
+| `POST` | `/tui/open-help`        | 打開說明對話方塊                            | `boolean`    |
+| `POST` | `/tui/open-sessions`    | 打開工作階段選擇器                          | `boolean`    |
+| `POST` | `/tui/open-themes`      | 打開主題選擇器                              | `boolean`    |
+| `POST` | `/tui/open-models`      | 打開模型選擇器                              | `boolean`    |
+| `POST` | `/tui/submit-prompt`    | 提交當前提示                                | `boolean`    |
+| `POST` | `/tui/clear-prompt`     | 清除提示                                    | `boolean`    |
+| `POST` | `/tui/execute-command`  | 執行指令 (`{ command }`)                    | `boolean`    |
+| `POST` | `/tui/show-toast`       | 顯示 Toast (`{ title?, message, variant }`) | `boolean`    |
+| `GET`  | `/tui/control/next`     | 等待下一個控制請求                          | 控制請求物件 |
+| `POST` | `/tui/control/response` | 回應控制請求 (`{ body }`)                   | `boolean`    |
+
+---
+
+### 授權
+
+| 方法  | 路徑        | 描述                                       | 回應      |
+| ----- | ----------- | ------------------------------------------ | --------- |
+| `PUT` | `/auth/:id` | 設定身分驗證憑證。正文必須與供應商架構匹配 | `boolean` |
+
+---
+
+### 事件
+
+| 方法  | 路徑     | 描述                                                                        | 回應                 |
+| ----- | -------- | --------------------------------------------------------------------------- | -------------------- |
+| `GET` | `/event` | 伺服器發送的事件串流。第一個活動是 `server.connected`，然後是事件匯流排事件 | 伺服器發送的事件串流 |
+
+---
+
+### 文件
+
+| 方法  | 路徑   | 描述             | 回應                          |
+| ----- | ------ | ---------------- | ----------------------------- |
+| `GET` | `/doc` | OpenAPI 3.1 規範 | 具有 OpenAPI 規範的 HTML 頁面 |

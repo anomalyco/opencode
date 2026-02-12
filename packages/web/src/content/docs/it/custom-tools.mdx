@@ -1,0 +1,170 @@
+---
+title: Strumenti personalizzati
+description: Crea strumenti che l'LLM puo chiamare in opencode.
+---
+
+Gli strumenti personalizzati sono funzioni che crei e che l'LLM puo chiamare durante le conversazioni. Funzionano insieme agli [strumenti integrati](/docs/tools) di opencode come `read`, `write` e `bash`.
+
+---
+
+## Creazione di uno strumento
+
+Gli strumenti sono definiti come file **TypeScript** o **JavaScript**. Tuttavia, la definizione dello strumento puo invocare script scritti in **qualsiasi linguaggio**: TypeScript o JavaScript vengono usati solo per la definizione in se.
+
+---
+
+### Posizione
+
+Possono essere definiti:
+
+- In locale, mettendoli nella directory `.opencode/tools/` del progetto.
+- Oppure in globale, mettendoli in `~/.config/opencode/tools/`.
+
+---
+
+### Struttura
+
+Il modo piu semplice per creare strumenti e usare l'helper `tool()` che fornisce type-safety e validazione.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+Il **nome del file** diventa il **nome dello strumento**. L'esempio sopra crea lo strumento `database`.
+
+---
+
+#### Strumenti multipli per file
+
+Puoi anche esportare piu strumenti da un singolo file. Ogni export diventa **uno strumento separato** con nome **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Questo crea due strumenti: `math_add` e `math_multiply`.
+
+---
+
+### Argomenti
+
+Puoi usare `tool.schema`, che e semplicemente [Zod](https://zod.dev), per definire i tipi degli argomenti.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Puoi anche importare [Zod](https://zod.dev) direttamente e restituire un oggetto semplice:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Contesto
+
+Gli strumenti ricevono un contesto sulla sessione corrente:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+Usa `context.directory` per la working directory della sessione.
+Usa `context.worktree` per la root del worktree git.
+
+---
+
+## Esempi
+
+### Scrivere uno strumento in Python
+
+Puoi scrivere gli strumenti in qualunque linguaggio. Ecco un esempio che somma due numeri usando Python.
+
+Per prima cosa, crea lo strumento come script Python:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Poi crea la definizione dello strumento che lo invoca:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Qui usiamo l'utility [`Bun.$`](https://bun.com/docs/runtime/shell) per eseguire lo script Python.
