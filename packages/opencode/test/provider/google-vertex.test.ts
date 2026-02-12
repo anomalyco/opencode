@@ -17,7 +17,10 @@ mock.module("../../src/bun/index", () => ({
 const mockPlugin = () => ({})
 mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
 mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
-mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
+mock.module("@gitlab/opencode-gitlab-auth", () => ({
+  default: mockPlugin,
+  gitlabAuthPlugin: mockPlugin,
+}))
 
 // Mock Google Auth Library (required for official SDK initialization)
 mock.module("google-auth-library", () => ({
@@ -154,7 +157,8 @@ describe("Google Vertex Provider Merge", () => {
               "google-vertex": {
                 models: {
                   "openapi-model": {
-                    api: { npm: "@ai-sdk/openai-compatible", id: "gemini-1.5-pro-alias" }
+                    id: "gemini-1.5-pro-alias",
+                    provider: { npm: "@ai-sdk/openai-compatible", api: "https://api.google.com" }
                   }
                 }
               }
