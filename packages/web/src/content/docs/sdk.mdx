@@ -128,7 +128,7 @@ const result = await client.session.prompt({
   path: { id: sessionId },
   body: {
     parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
-    outputFormat: {
+    format: {
       type: "json_schema",
       schema: {
         type: "object",
