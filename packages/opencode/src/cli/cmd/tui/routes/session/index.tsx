@@ -113,7 +113,7 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
   const children = createMemo(() => {
@@ -1021,8 +1021,10 @@ export function Session() {
                               paddingLeft={2}
                               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
+                              <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                                {revert()!.reverted.length} message reverted
+                              </text>
+                              <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                                 <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
                                 restore
                               </text>
@@ -1030,7 +1032,7 @@ export function Session() {
                                 <box marginTop={1}>
                                   <For each={revert()!.diffFiles}>
                                     {(file) => (
-                                      <text fg={theme.text}>
+                                      <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
                                           <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
@@ -1154,7 +1156,7 @@ function UserMessage(props: {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
@@ -1187,7 +1189,9 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()?.text}</text>
+            <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+              {text()?.text}
+            </text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1325,7 +1329,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, subtleSyntax } = useTheme()
+  const { theme, subtleSyntax, selectionBg, selectionFg } = useTheme()
   const ctx = use()
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
@@ -1351,6 +1355,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
           fg={theme.textMuted}
+          selectionBg={selectionBg()}
+          selectionFg={selectionFg()}
         />
       </box>
     </Show>
@@ -1359,7 +1365,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1381,6 +1387,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.text}
+              selectionBg={selectionBg()}
+              selectionFg={selectionFg()}
             />
           </Match>
         </Switch>
@@ -1899,7 +1907,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
 function Edit(props: ToolProps<typeof EditTool>) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
 
   const view = createMemo(() => {
     const diffStyle = ctx.sync.data.config.tui?.diff_style
@@ -1932,6 +1940,8 @@ function Edit(props: ToolProps<typeof EditTool>) {
               width="100%"
               wrapMode={ctx.diffWrapMode()}
               fg={theme.text}
+              selectionBg={selectionBg()}
+              selectionFg={selectionFg()}
               addedBg={theme.diffAddedBg}
               removedBg={theme.diffRemovedBg}
               contextBg={theme.diffContextBg}
@@ -1968,7 +1978,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
 
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
 
   const files = createMemo(() => props.metadata.files ?? [])
 
@@ -1990,6 +2000,8 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
           width="100%"
           wrapMode={ctx.diffWrapMode()}
           fg={theme.text}
+          selectionBg={selectionBg()}
+          selectionFg={selectionFg()}
           addedBg={theme.diffAddedBg}
           removedBg={theme.diffRemovedBg}
           contextBg={theme.diffContextBg}
@@ -2062,7 +2074,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 }
 
 function Question(props: ToolProps<typeof QuestionTool>) {
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
   function format(answer?: string[]) {
@@ -2078,8 +2090,12 @@ function Question(props: ToolProps<typeof QuestionTool>) {
             <For each={props.input.questions ?? []}>
               {(q, i) => (
                 <box flexDirection="column">
-                  <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
+                  <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                    {q.question}
+                  </text>
+                  <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                    {format(props.metadata.answers?.[i()])}
+                  </text>
                 </box>
               )}
             </For>

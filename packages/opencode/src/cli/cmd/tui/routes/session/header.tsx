@@ -10,19 +10,19 @@ import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
 
 const Title = (props: { session: Accessor<Session> }) => {
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   return (
-    <text fg={theme.text}>
+    <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
       <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
     </text>
   )
 }
 
 const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   return (
     <Show when={props.context()}>
-      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+      <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()} wrapMode="none" flexShrink={0}>
         {props.context()} ({props.cost()})
       </text>
     </Show>

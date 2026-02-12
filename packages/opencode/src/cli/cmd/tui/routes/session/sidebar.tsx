@@ -14,7 +14,7 @@ import { TodoItem } from "../../component/todo-item"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
@@ -83,20 +83,28 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
-              <text fg={theme.text}>
+              <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                 <b>{session().title}</b>
               </text>
               <Show when={session().share?.url}>
-                <text fg={theme.textMuted}>{session().share!.url}</text>
+                <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                  {session().share!.url}
+                </text>
               </Show>
             </box>
             <box>
-              <text fg={theme.text}>
+              <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                 <b>Context</b>
               </text>
-              <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
-              <text fg={theme.textMuted}>{cost()} spent</text>
+              <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                {context()?.tokens ?? 0} tokens
+              </text>
+              <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                {context()?.percentage ?? 0}% used
+              </text>
+              <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                {cost()} spent
+              </text>
             </box>
             <Show when={mcpEntries().length > 0}>
               <box>
@@ -108,7 +116,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <Show when={mcpEntries().length > 2}>
                     <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
                   </Show>
-                  <text fg={theme.text}>
+                  <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                     <b>MCP</b>
                     <Show when={!expanded.mcp}>
                       <span style={{ fg: theme.textMuted }}>
@@ -139,7 +147,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                         >
                           •
                         </text>
-                        <text fg={theme.text} wrapMode="word">
+                        <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()} wrapMode="word">
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>
@@ -168,13 +176,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={sync.data.lsp.length > 2}>
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
                 </Show>
-                <text fg={theme.text}>
+                <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                   <b>LSP</b>
                 </text>
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
-                  <text fg={theme.textMuted}>
+                  <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                     {sync.data.config.lsp === false
                       ? "LSPs have been disabled in settings"
                       : "LSPs will activate as files are read"}
@@ -194,7 +202,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       >
                         •
                       </text>
-                      <text fg={theme.textMuted}>
+                      <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                         {item.id} {item.root}
                       </text>
                     </box>
@@ -231,7 +239,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <Show when={diff().length > 2}>
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
-                  <text fg={theme.text}>
+                  <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                     <b>Modified Files</b>
                   </text>
                 </box>
@@ -240,7 +248,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     {(item) => {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="none">
+                          <text
+                            fg={theme.textMuted}
+                            selectionBg={selectionBg()}
+                            selectionFg={selectionFg()}
+                            wrapMode="none"
+                          >
                             {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
@@ -295,11 +308,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </box>
             </box>
           </Show>
-          <text>
+          <text selectionBg={selectionBg()} selectionFg={selectionFg()}>
             <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
-          <text fg={theme.textMuted}>
+          <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>
               <b>Code</b>

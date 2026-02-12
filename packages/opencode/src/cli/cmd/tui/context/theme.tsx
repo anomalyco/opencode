@@ -358,6 +358,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const syntax = createMemo(() => generateSyntax(values()))
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
+    const selectionBg = createMemo(() =>
+      tint(values().backgroundPanel, values().primary, store.mode === "light" ? 0.2 : 0.3),
+    )
+    const selectionFg = createMemo(() => values().text)
+
     return {
       theme: new Proxy(values(), {
         get(_target, prop) {
@@ -373,6 +378,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       },
       syntax,
       subtleSyntax,
+      selectionBg,
+      selectionFg,
       mode() {
         return store.mode
       },
