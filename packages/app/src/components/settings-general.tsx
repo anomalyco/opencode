@@ -1,8 +1,10 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
@@ -39,6 +41,8 @@ export const SettingsGeneral: Component = () => {
   const [store, setStore] = createStore({
     checking: false,
   })
+
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -148,6 +152,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.language.description")}
             >
               <Select
+                data-action="settings-language"
                 options={languageOptions()}
                 current={languageOptions().find((o) => o.value === language.locale())}
                 value={(o) => o.value}
@@ -164,6 +169,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.appearance.description")}
             >
               <Select
+                data-action="settings-color-scheme"
                 options={colorSchemeOptions()}
                 current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
                 value={(o) => o.value}
@@ -190,6 +196,7 @@ export const SettingsGeneral: Component = () => {
               }
             >
               <Select
+                data-action="settings-theme"
                 options={themeOptions()}
                 current={themeOptions().find((o) => o.id === theme.themeId())}
                 value={(o) => o.id}
@@ -214,6 +221,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.font.description")}
             >
               <Select
+                data-action="settings-font"
                 options={fontOptionsList}
                 current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
                 value={(o) => o.value}
@@ -243,30 +251,36 @@ export const SettingsGeneral: Component = () => {
               title={language.t("settings.general.notifications.agent.title")}
               description={language.t("settings.general.notifications.agent.description")}
             >
-              <Switch
-                checked={settings.notifications.agent()}
-                onChange={(checked) => settings.notifications.setAgent(checked)}
-              />
+              <div data-action="settings-notifications-agent">
+                <Switch
+                  checked={settings.notifications.agent()}
+                  onChange={(checked) => settings.notifications.setAgent(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.general.notifications.permissions.title")}
               description={language.t("settings.general.notifications.permissions.description")}
             >
-              <Switch
-                checked={settings.notifications.permissions()}
-                onChange={(checked) => settings.notifications.setPermissions(checked)}
-              />
+              <div data-action="settings-notifications-permissions">
+                <Switch
+                  checked={settings.notifications.permissions()}
+                  onChange={(checked) => settings.notifications.setPermissions(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.general.notifications.errors.title")}
               description={language.t("settings.general.notifications.errors.description")}
             >
-              <Switch
-                checked={settings.notifications.errors()}
-                onChange={(checked) => settings.notifications.setErrors(checked)}
-              />
+              <div data-action="settings-notifications-errors">
+                <Switch
+                  checked={settings.notifications.errors()}
+                  onChange={(checked) => settings.notifications.setErrors(checked)}
+                />
+              </div>
             </SettingsRow>
           </div>
         </div>
@@ -281,6 +295,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.agent.description")}
             >
               <Select
+                data-action="settings-sounds-agent"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.agent())}
                 value={(o) => o.id}
@@ -305,6 +320,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.permissions.description")}
             >
               <Select
+                data-action="settings-sounds-permissions"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
                 value={(o) => o.id}
@@ -329,6 +345,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.errors.description")}
             >
               <Select
+                data-action="settings-sounds-errors"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.errors())}
                 value={(o) => o.id}
@@ -350,6 +367,34 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
+        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+          {(_) => {
+            const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
+            const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
+
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsRow
+                    title={language.t("settings.desktop.wsl.title")}
+                    description={language.t("settings.desktop.wsl.description")}
+                  >
+                    <div data-action="settings-wsl">
+                      <Switch
+                        checked={enabled() ?? false}
+                        disabled={enabledResource.state === "pending"}
+                        onChange={(checked) => platform.setWslEnabled?.(checked)?.finally(() => actions.refetch())}
+                      />
+                    </div>
+                  </SettingsRow>
+                </div>
+              </div>
+            )
+          }}
+        </Show>
+
         {/* Updates Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
@@ -359,21 +404,25 @@ export const SettingsGeneral: Component = () => {
               title={language.t("settings.updates.row.startup.title")}
               description={language.t("settings.updates.row.startup.description")}
             >
-              <Switch
-                checked={settings.updates.startup()}
-                disabled={!platform.checkUpdate}
-                onChange={(checked) => settings.updates.setStartup(checked)}
-              />
+              <div data-action="settings-updates-startup">
+                <Switch
+                  checked={settings.updates.startup()}
+                  disabled={!platform.checkUpdate}
+                  onChange={(checked) => settings.updates.setStartup(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.general.row.releaseNotes.title")}
               description={language.t("settings.general.row.releaseNotes.description")}
             >
-              <Switch
-                checked={settings.general.releaseNotes()}
-                onChange={(checked) => settings.general.setReleaseNotes(checked)}
-              />
+              <div data-action="settings-release-notes">
+                <Switch
+                  checked={settings.general.releaseNotes()}
+                  onChange={(checked) => settings.general.setReleaseNotes(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
@@ -393,13 +442,49 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        <Show when={linux()}>
+          {(_) => {
+            const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
+            const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
+
+            const onChange = (checked: boolean) =>
+              platform.setDisplayBackend?.(checked ? "wayland" : "auto").finally(() => actions.refetch())
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsRow
+                    title={
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("settings.general.row.wayland.title")}</span>
+                        <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
+                          <span class="text-text-weak">
+                            <Icon name="help" size="small" />
+                          </span>
+                        </Tooltip>
+                      </div>
+                    }
+                    description={language.t("settings.general.row.wayland.description")}
+                  >
+                    <div data-action="settings-wayland">
+                      <Switch checked={value() === "wayland"} onChange={onChange} />
+                    </div>
+                  </SettingsRow>
+                </div>
+              </div>
+            )
+          }}
+        </Show>
       </div>
     </div>
   )
 }
 
 interface SettingsRowProps {
-  title: string
+  title: string | JSX.Element
   description: string | JSX.Element
   children: JSX.Element
 }

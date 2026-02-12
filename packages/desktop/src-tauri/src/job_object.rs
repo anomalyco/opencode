@@ -15,9 +15,9 @@ use std::io::{Error, Result};
 use std::sync::Mutex;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-    SetInformationJobObject,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 
@@ -111,7 +111,7 @@ impl JobObjectState {
                 error: Mutex::new(None),
             },
             Err(e) => {
-                eprintln!("Failed to create job object: {e}");
+                tracing::error!("Failed to create job object: {e}");
                 Self {
                     job: Mutex::new(None),
                     error: Mutex::new(Some(format!("Failed to create job object: {e}"))),
@@ -123,11 +123,11 @@ impl JobObjectState {
     pub fn assign_pid(&self, pid: u32) {
         if let Some(job) = self.job.lock().unwrap().as_ref() {
             if let Err(e) = job.assign_pid(pid) {
-                eprintln!("Failed to assign process {pid} to job object: {e}");
+                tracing::error!(pid, "Failed to assign process to job object: {e}");
                 *self.error.lock().unwrap() =
                     Some(format!("Failed to assign process to job object: {e}"));
             } else {
-                println!("Assigned process {pid} to job object for automatic cleanup");
+                tracing::info!(pid, "Assigned process to job object for automatic cleanup");
             }
         }
     }

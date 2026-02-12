@@ -1,4 +1,5 @@
 import { createOpencodeClient, createOpencodeServer } from "@opencode-ai/sdk"
+import { pathToFileURL } from "bun"
 
 const server = await createOpencodeServer()
 const client = createOpencodeClient({ baseUrl: server.url })
@@ -17,7 +18,7 @@ for await (const file of input) {
           {
             type: "file",
             mime: "text/plain",
-            url: `file://${file}`,
+            url: pathToFileURL(file).href,
           },
           {
             type: "text",
@@ -41,7 +42,7 @@ await Promise.all(
           {
             type: "file",
             mime: "text/plain",
-            url: `file://${file}`,
+            url: pathToFileURL(file).href,
           },
           {
             type: "text",

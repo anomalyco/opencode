@@ -1,3 +1,5 @@
+import { uuid } from "@/utils/uuid"
+
 type Nav = {
   id: string
   dir?: string
@@ -15,8 +17,6 @@ const dev = import.meta.env.DEV
 const key = (dir: string | undefined, to: string) => `${dir ?? ""}:${to}`
 
 const now = () => performance.now()
-
-const uid = () => crypto.randomUUID?.() ?? Math.random().toString(16).slice(2)
 
 const navs = new Map<string, Nav>()
 const pending = new Map<string, string>()
@@ -94,7 +94,7 @@ function ensure(id: string, data: Omit<Nav, "marks" | "logged" | "timer">) {
 export function navStart(input: { dir?: string; from?: string; to: string; trigger?: string }) {
   if (!dev) return
 
-  const id = uid()
+  const id = uuid()
   const start = now()
   const nav = ensure(id, { ...input, id, start })
   nav.marks["navigate:start"] = start
@@ -109,7 +109,7 @@ export function navParams(input: { dir?: string; from?: string; to: string }) {
   const k = key(input.dir, input.to)
   const pendingId = pending.get(k)
   if (pendingId) pending.delete(k)
-  const id = pendingId ?? uid()
+  const id = pendingId ?? uuid()
 
   const start = now()
   const nav = ensure(id, { ...input, id, start, trigger: pendingId ? "key" : "route" })
