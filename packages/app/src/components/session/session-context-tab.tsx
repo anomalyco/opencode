@@ -1,7 +1,6 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@opencode-ai/util/encode"
@@ -14,12 +13,82 @@ import { Markdown } from "@opencode-ai/ui/markdown"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "./session-context-metrics"
+import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
+import { createSessionContextFormatter } from "./session-context-format"
 
 interface SessionContextTabProps {
   messages: () => Message[]
   visibleUserMessages: () => UserMessage[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   info: () => ReturnType<ReturnType<typeof useSync>["session"]["get"]>
+}
+
+const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
+  system: "var(--syntax-info)",
+  user: "var(--syntax-success)",
+  assistant: "var(--syntax-property)",
+  tool: "var(--syntax-warning)",
+  other: "var(--syntax-comment)",
+}
+
+function Stat(props: { label: string; value: JSX.Element }) {
+  return (
+    <div class="flex flex-col gap-1">
+      <div class="text-12-regular text-text-weak">{props.label}</div>
+      <div class="text-12-medium text-text-strong">{props.value}</div>
+    </div>
+  )
+}
+
+function RawMessageContent(props: { message: Message; getParts: (id: string) => Part[]; onRendered: () => void }) {
+  const file = createMemo(() => {
+    const parts = props.getParts(props.message.id)
+    const contents = JSON.stringify({ message: props.message, parts }, null, 2)
+    return {
+      name: `${props.message.role}-${props.message.id}.json`,
+      contents,
+      cacheKey: checksum(contents),
+    }
+  })
+
+  return (
+    <Code
+      file={file()}
+      overflow="wrap"
+      class="select-text"
+      onRendered={() => requestAnimationFrame(props.onRendered)}
+    />
+  )
+}
+
+function RawMessage(props: {
+  message: Message
+  getParts: (id: string) => Part[]
+  onRendered: () => void
+  time: (value: number | undefined) => string
+}) {
+  return (
+    <Accordion.Item value={props.message.id}>
+      <StickyAccordionHeader>
+        <Accordion.Trigger>
+          <div class="flex items-center justify-between gap-2 w-full">
+            <div class="min-w-0 truncate">
+              {props.message.role} <span class="text-text-base">• {props.message.id}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="shrink-0 text-12-regular text-text-weak">{props.time(props.message.time.created)}</div>
+              <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
+            </div>
+          </div>
+        </Accordion.Trigger>
+      </StickyAccordionHeader>
+      <Accordion.Content class="bg-background-base">
+        <div class="p-3">
+          <RawMessageContent message={props.message} getParts={props.getParts} onRendered={props.onRendered} />
+        </div>
+      </Accordion.Content>
+    </Accordion.Item>
+  )
 }
 
 export function SessionContextTab(props: SessionContextTabProps) {
@@ -37,6 +106,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
   const metrics = createMemo(() => getSessionContextMetrics(props.messages(), sync.data.provider.all))
   const ctx = createMemo(() => metrics().context)
+  const formatter = createMemo(() => createSessionContextFormatter(language.locale()))
 
   const cost = createMemo(() => {
     return usd().format(metrics().totalCost)
@@ -62,23 +132,6 @@ export function SessionContextTab(props: SessionContextTabProps) {
     return trimmed
   })
 
-  const number = (value: number | null | undefined) => {
-    if (value === undefined) return "—"
-    if (value === null) return "—"
-    return value.toLocaleString(language.locale())
-  }
-
-  const percent = (value: number | null | undefined) => {
-    if (value === undefined) return "—"
-    if (value === null) return "—"
-    return value.toLocaleString(language.locale()) + "%"
-  }
-
-  const time = (value: number | undefined) => {
-    if (!value) return "—"
-    return DateTime.fromMillis(value).setLocale(language.locale()).toLocaleString(DateTime.DATETIME_MED)
-  }
-
   const providerLabel = createMemo(() => {
     const c = ctx()
     if (!c) return "—"
@@ -96,197 +149,51 @@ export function SessionContextTab(props: SessionContextTabProps) {
       () => [ctx()?.message.id, ctx()?.input, props.messages().length, systemPrompt()],
       () => {
         const c = ctx()
-        if (!c) return []
-        const input = c.input
-        if (!input) return []
-
-        const out = {
-          system: systemPrompt()?.length ?? 0,
-          user: 0,
-          assistant: 0,
-          tool: 0,
-        }
-
-        for (const msg of props.messages()) {
-          const parts = (sync.data.part[msg.id] ?? []) as Part[]
-
-          if (msg.role === "user") {
-            for (const part of parts) {
-              if (part.type === "text") out.user += part.text.length
-              if (part.type === "file") out.user += part.source?.text.value.length ?? 0
-              if (part.type === "agent") out.user += part.source?.value.length ?? 0
-            }
-            continue
-          }
-
-          if (msg.role === "assistant") {
-            for (const part of parts) {
-              if (part.type === "text") out.assistant += part.text.length
-              if (part.type === "reasoning") out.assistant += part.text.length
-              if (part.type === "tool") {
-                out.tool += Object.keys(part.state.input).length * 16
-                if (part.state.status === "pending") out.tool += part.state.raw.length
-                if (part.state.status === "completed") out.tool += part.state.output.length
-                if (part.state.status === "error") out.tool += part.state.error.length
-              }
-            }
-          }
-        }
-
-        const estimateTokens = (chars: number) => Math.ceil(chars / 4)
-        const system = estimateTokens(out.system)
-        const user = estimateTokens(out.user)
-        const assistant = estimateTokens(out.assistant)
-        const tool = estimateTokens(out.tool)
-        const estimated = system + user + assistant + tool
-
-        const pct = (tokens: number) => (tokens / input) * 100
-        const pctLabel = (tokens: number) => (Math.round(pct(tokens) * 10) / 10).toString() + "%"
-
-        const build = (tokens: { system: number; user: number; assistant: number; tool: number; other: number }) => {
-          return [
-            {
-              key: "system",
-              label: language.t("context.breakdown.system"),
-              tokens: tokens.system,
-              width: pct(tokens.system),
-              percent: pctLabel(tokens.system),
-              color: "var(--syntax-info)",
-            },
-            {
-              key: "user",
-              label: language.t("context.breakdown.user"),
-              tokens: tokens.user,
-              width: pct(tokens.user),
-              percent: pctLabel(tokens.user),
-              color: "var(--syntax-success)",
-            },
-            {
-              key: "assistant",
-              label: language.t("context.breakdown.assistant"),
-              tokens: tokens.assistant,
-              width: pct(tokens.assistant),
-              percent: pctLabel(tokens.assistant),
-              color: "var(--syntax-property)",
-            },
-            {
-              key: "tool",
-              label: language.t("context.breakdown.tool"),
-              tokens: tokens.tool,
-              width: pct(tokens.tool),
-              percent: pctLabel(tokens.tool),
-              color: "var(--syntax-warning)",
-            },
-            {
-              key: "other",
-              label: language.t("context.breakdown.other"),
-              tokens: tokens.other,
-              width: pct(tokens.other),
-              percent: pctLabel(tokens.other),
-              color: "var(--syntax-comment)",
-            },
-          ].filter((x) => x.tokens > 0)
-        }
-
-        if (estimated <= input) {
-          return build({ system, user, assistant, tool, other: input - estimated })
-        }
-
-        const scale = input / estimated
-        const scaled = {
-          system: Math.floor(system * scale),
-          user: Math.floor(user * scale),
-          assistant: Math.floor(assistant * scale),
-          tool: Math.floor(tool * scale),
-        }
-        const scaledTotal = scaled.system + scaled.user + scaled.assistant + scaled.tool
-        return build({ ...scaled, other: Math.max(0, input - scaledTotal) })
+        if (!c?.input) return []
+        return estimateSessionContextBreakdown({
+          messages: props.messages(),
+          parts: sync.data.part as Record<string, Part[] | undefined>,
+          input: c.input,
+          systemPrompt: systemPrompt(),
+        })
       },
     ),
   )
 
-  function Stat(statProps: { label: string; value: JSX.Element }) {
-    return (
-      <div class="flex flex-col gap-1">
-        <div class="text-12-regular text-text-weak">{statProps.label}</div>
-        <div class="text-12-medium text-text-strong">{statProps.value}</div>
-      </div>
-    )
+  const breakdownLabel = (key: SessionContextBreakdownKey) => {
+    if (key === "system") return language.t("context.breakdown.system")
+    if (key === "user") return language.t("context.breakdown.user")
+    if (key === "assistant") return language.t("context.breakdown.assistant")
+    if (key === "tool") return language.t("context.breakdown.tool")
+    return language.t("context.breakdown.other")
   }
 
-  const stats = createMemo(() => {
-    const c = ctx()
-    const count = counts()
-    return [
-      { label: language.t("context.stats.session"), value: props.info()?.title ?? params.id ?? "—" },
-      { label: language.t("context.stats.messages"), value: count.all.toLocaleString(language.locale()) },
-      { label: language.t("context.stats.provider"), value: providerLabel() },
-      { label: language.t("context.stats.model"), value: modelLabel() },
-      { label: language.t("context.stats.limit"), value: number(c?.limit) },
-      { label: language.t("context.stats.totalTokens"), value: number(c?.total) },
-      { label: language.t("context.stats.usage"), value: percent(c?.usage) },
-      { label: language.t("context.stats.inputTokens"), value: number(c?.input) },
-      { label: language.t("context.stats.outputTokens"), value: number(c?.output) },
-      { label: language.t("context.stats.reasoningTokens"), value: number(c?.reasoning) },
-      {
-        label: language.t("context.stats.cacheTokens"),
-        value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}`,
-      },
-      { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString(language.locale()) },
-      {
-        label: language.t("context.stats.assistantMessages"),
-        value: count.assistant.toLocaleString(language.locale()),
-      },
-      { label: language.t("context.stats.totalCost"), value: cost() },
-      { label: language.t("context.stats.sessionCreated"), value: time(props.info()?.time.created) },
-      { label: language.t("context.stats.lastActivity"), value: time(c?.message.time.created) },
-    ] satisfies { label: string; value: JSX.Element }[]
-  })
-
-  function RawMessageContent(msgProps: { message: Message }) {
-    const file = createMemo(() => {
-      const parts = (sync.data.part[msgProps.message.id] ?? []) as Part[]
-      const contents = JSON.stringify({ message: msgProps.message, parts }, null, 2)
-      return {
-        name: `${msgProps.message.role}-${msgProps.message.id}.json`,
-        contents,
-        cacheKey: checksum(contents),
-      }
-    })
-
-    return (
-      <Code file={file()} overflow="wrap" class="select-text" onRendered={() => requestAnimationFrame(restoreScroll)} />
-    )
-  }
-
-  function RawMessage(msgProps: { message: Message }) {
-    return (
-      <Accordion.Item value={msgProps.message.id}>
-        <StickyAccordionHeader>
-          <Accordion.Trigger>
-            <div class="flex items-center justify-between gap-2 w-full">
-              <div class="min-w-0 truncate">
-                {msgProps.message.role} <span class="text-text-base">• {msgProps.message.id}</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="shrink-0 text-12-regular text-text-weak">{time(msgProps.message.time.created)}</div>
-                <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
-              </div>
-            </div>
-          </Accordion.Trigger>
-        </StickyAccordionHeader>
-        <Accordion.Content class="bg-background-base">
-          <div class="p-3">
-            <RawMessageContent message={msgProps.message} />
-          </div>
-        </Accordion.Content>
-      </Accordion.Item>
-    )
-  }
+  const stats = [
+    { label: "context.stats.session", value: () => props.info()?.title ?? params.id ?? "—" },
+    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.locale()) },
+    { label: "context.stats.provider", value: providerLabel },
+    { label: "context.stats.model", value: modelLabel },
+    { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
+    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
+    { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
+    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
+    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.output) },
+    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.reasoning) },
+    {
+      label: "context.stats.cacheTokens",
+      value: () => `${formatter().number(ctx()?.cacheRead)} / ${formatter().number(ctx()?.cacheWrite)}`,
+    },
+    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.locale()) },
+    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.locale()) },
+    { label: "context.stats.totalCost", value: cost },
+    { label: "context.stats.sessionCreated", value: () => formatter().time(props.info()?.time.created) },
+    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+  ] satisfies { label: string; value: () => JSX.Element }[]
 
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
+  const getParts = (id: string) => (sync.data.part[id] ?? []) as Part[]
 
   const restoreScroll = () => {
     const el = scroll
@@ -343,7 +250,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
     >
       <div class="px-6 pt-4 flex flex-col gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
-          <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
+          <For each={stats}>
+            {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
+          </For>
         </div>
 
         <Show when={breakdown().length > 0}>
@@ -356,7 +265,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
                     class="h-full"
                     style={{
                       width: `${segment.width}%`,
-                      "background-color": segment.color,
+                      "background-color": BREAKDOWN_COLOR[segment.key],
                     }}
                   />
                 )}
@@ -366,9 +275,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
               <For each={breakdown()}>
                 {(segment) => (
                   <div class="flex items-center gap-1 text-11-regular text-text-weak">
-                    <div class="size-2 rounded-sm" style={{ "background-color": segment.color }} />
-                    <div>{segment.label}</div>
-                    <div class="text-text-weaker">{segment.percent}</div>
+                    <div class="size-2 rounded-sm" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
+                    <div>{breakdownLabel(segment.key)}</div>
+                    <div class="text-text-weaker">{segment.percent.toLocaleString(language.locale())}%</div>
                   </div>
                 )}
               </For>
@@ -391,7 +300,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
         <div class="flex flex-col gap-2">
           <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
           <Accordion multiple>
-            <For each={props.messages()}>{(message) => <RawMessage message={message} />}</For>
+            <For each={props.messages()}>
+              {(message) => (
+                <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
+              )}
+            </For>
           </Accordion>
         </div>
       </div>

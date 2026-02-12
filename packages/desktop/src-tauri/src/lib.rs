@@ -24,16 +24,17 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
+use tauri_specta::Event;
 use tokio::{
     sync::{oneshot, watch},
     time::{sleep, timeout},
 };
 
-use crate::cli::sync_cli;
+use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
 use crate::constants::*;
 use crate::server::get_saved_server_url;
 use crate::windows::{LoadingWindow, MainWindow};
@@ -122,8 +123,8 @@ async fn await_initialization(
     let mut rx = init_state.current.clone();
 
     let events = async {
-        let e = (*rx.borrow()).clone();
-        let _ = events.send(e).unwrap();
+        let e = *rx.borrow();
+        let _ = events.send(e);
 
         while rx.changed().await.is_ok() {
             let step = *rx.borrow_and_update();
@@ -517,7 +518,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             wsl_path,
             resolve_app_path
         ])
-        .events(tauri_specta::collect_events![LoadingWindowComplete])
+        .events(tauri_specta::collect_events![
+            LoadingWindowComplete,
+            SqliteMigrationProgress
+        ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
 
@@ -556,17 +560,46 @@ async fn initialize(app: AppHandle) {
 
     tracing::info!("Main and loading windows created");
 
+    // SQLite migration handling:
+    // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it
+    // First, we spawn a task that listens for SqliteMigrationProgress events that can
+    // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
+    // Then in the loading task, we wait for sqlite migration to complete before
+    // starting our health check against the server, otherwise long migrations could result in a timeout.
     let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
+    let sqlite_done = (sqlite_enabled && !sqlite_file_exists()).then(|| {
+        tracing::info!(
+            path = %opencode_db_path().expect("failed to get db path").display(),
+            "Sqlite file not found, waiting for it to be generated"
+        );
+
+        let (done_tx, done_rx) = oneshot::channel::<()>();
+        let done_tx = Arc::new(Mutex::new(Some(done_tx)));
+
+        let init_tx = init_tx.clone();
+        let id = SqliteMigrationProgress::listen(&app, move |e| {
+            let _ = init_tx.send(InitStep::SqliteWaiting);
+
+            if matches!(e.payload, SqliteMigrationProgress::Done)
+                && let Some(done_tx) = done_tx.lock().unwrap().take()
+            {
+                let _ = done_tx.send(());
+            }
+        });
+
+        let app = app.clone();
+        tokio::spawn(done_rx.map(async move |_| {
+            app.unlisten(id);
+        }))
+    });
 
     let loading_task = tokio::spawn({
-        let init_tx = init_tx.clone();
         let app = app.clone();
 
         async move {
-            let mut sqlite_exists = sqlite_file_exists();
-
             tracing::info!("Setting up server connection");
             let server_connection = setup_server_connection(app.clone()).await;
+            tracing::info!("Server connection setup");
 
             // we delay spawning this future so that the timeout is created lazily
             let cli_health_check = match server_connection {
@@ -622,23 +655,12 @@ async fn initialize(app: AppHandle) {
                 }
             };
 
+            tracing::info!("server connection started");
+
             if let Some(cli_health_check) = cli_health_check {
-                if sqlite_enabled {
-                    tracing::debug!(sqlite_exists, "Checking sqlite file existence");
-                    if !sqlite_exists {
-                        tracing::info!(
-                            path = %opencode_db_path().expect("failed to get db path").display(),
-                            "Sqlite file not found, waiting for it to be generated"
-                        );
-                        let _ = init_tx.send(InitStep::SqliteWaiting);
-
-                        while !sqlite_exists {
-                            sleep(Duration::from_secs(1)).await;
-                            sqlite_exists = sqlite_file_exists();
-                        }
-                    }
+                if let Some(sqlite_done_rx) = sqlite_done {
+                    let _ = sqlite_done_rx.await;
                 }
-
                 tokio::spawn(cli_health_check);
             }
 
@@ -654,11 +676,11 @@ async fn initialize(app: AppHandle) {
             .is_err()
     {
         tracing::debug!("Loading task timed out, showing loading window");
-        let app = app.clone();
         let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
         sleep(Duration::from_secs(1)).await;
         Some(loading_window)
     } else {
+        tracing::debug!("Showing main window without loading window");
         MainWindow::create(&app).expect("Failed to create main window");
 
         None
@@ -667,7 +689,6 @@ async fn initialize(app: AppHandle) {
     let _ = loading_task.await;
 
     tracing::info!("Loading done, completing initialisation");
-
     let _ = init_tx.send(InitStep::Done);
 
     if loading_window.is_some() {

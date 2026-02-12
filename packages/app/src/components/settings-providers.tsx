@@ -14,7 +14,17 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
-type ProviderMeta = { source?: ProviderSource }
+type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
+
+const PROVIDER_NOTES = [
+  { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
+  { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
+  { match: (id: string) => id.startsWith("github-copilot"), key: "dialog.provider.copilot.note" },
+  { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
+  { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
+  { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
+  { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
+] as const
 
 export const SettingsProviders: Component = () => {
   const dialog = useDialog()
@@ -44,22 +54,28 @@ export const SettingsProviders: Component = () => {
     return items
   })
 
-  const source = (item: unknown) => (item as ProviderMeta).source
+  const source = (item: ProviderItem): ProviderSource | undefined => {
+    if (!("source" in item)) return
+    const value = item.source
+    if (value === "env" || value === "api" || value === "config" || value === "custom") return value
+    return
+  }
 
-  const type = (item: unknown) => {
+  const type = (item: ProviderItem) => {
     const current = source(item)
     if (current === "env") return language.t("settings.providers.tag.environment")
     if (current === "api") return language.t("provider.connect.method.apiKey")
     if (current === "config") {
-      const id = (item as { id?: string }).id
-      if (id && isConfigCustom(id)) return language.t("settings.providers.tag.custom")
+      if (isConfigCustom(item.id)) return language.t("settings.providers.tag.custom")
       return language.t("settings.providers.tag.config")
     }
     if (current === "custom") return language.t("settings.providers.tag.custom")
     return language.t("settings.providers.tag.other")
   }
 
-  const canDisconnect = (item: unknown) => source(item) !== "env"
+  const canDisconnect = (item: ProviderItem) => source(item) !== "env"
+
+  const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
     const provider = globalSync.data.config.provider?.[providerID]
@@ -175,40 +191,8 @@ export const SettingsProviders: Component = () => {
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                       </Show>
                     </div>
-                    <Show when={item.id === "opencode"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.opencode.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id === "anthropic"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.anthropic.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id.startsWith("github-copilot")}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.copilot.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id === "openai"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.openai.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id === "google"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.google.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id === "openrouter"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.openrouter.note")}
-                      </span>
-                    </Show>
-                    <Show when={item.id === "vercel"}>
-                      <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.vercel.note")}
-                      </span>
+                    <Show when={note(item.id)}>
+                      {(key) => <span class="text-12-regular text-text-weak pl-8">{language.t(key())}</span>}
                     </Show>
                   </div>
                   <Button
