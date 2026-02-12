@@ -74,9 +74,26 @@ export namespace Agent {
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
+      ralph: {
+        name: "ralph",
+        description:
+          "Autonomous loop agent that iterates on a task until complete. Best for large refactors, migrations, and multi-step tasks with clear done criteria.",
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            loopcomplete: "allow",
+            question: "allow",
+          }),
+          user,
+        ),
+        mode: "primary",
+        native: true,
+        color: "#FF6B35",
+      },
       build: {
         name: "build",
-        description: "The default agent. Executes tools based on configured permissions.",
+        description: "Standard agent. Executes tools based on configured permissions.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -258,7 +275,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "ralph"), "desc"]),
     )
   }
 
