@@ -311,7 +311,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
-      if (isEditableTarget(event.target)) return
 
       const sig = signatureFromEvent(event)
       const isPalette = palette().has(sig)
