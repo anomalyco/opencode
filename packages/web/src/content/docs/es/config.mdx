@@ -1,5 +1,5 @@
 ---
-title: configuración
+title: Configuración
 description: Usando la configuración OpenCode JSON.
 ---
 
@@ -336,7 +336,7 @@ Puedes configurar agentes especializados para tareas específicas a través de l
 }
 ```
 
-También puede definir agentes utilizando archivos de rebajas en `~/.config/opencode/agents/` o `.opencode/agents/`. [Más información aquí](/docs/agents).
+También puede definir agentes utilizando archivos de Markdown en `~/.config/opencode/agents/` o `.opencode/agents/`. [Más información aquí](/docs/agents).
 
 ---
 
@@ -357,7 +357,7 @@ Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`)
 
 ---
 
-### Intercambio
+### Compartir
 
 Puede configurar la función [compartir](/docs/share) a través de la opción `share`.
 
@@ -400,11 +400,11 @@ Puede configurar comandos personalizados para tareas repetitivas a través de la
 }
 ```
 
-También puede definir comandos utilizando archivos de rebajas en `~/.config/opencode/commands/` o `.opencode/commands/`. [Más información aquí](/docs/commands).
+También puede definir comandos utilizando archivos de Markdown en `~/.config/opencode/commands/` o `.opencode/commands/`. [Más información aquí](/docs/commands).
 
 ---
 
-### combinaciones de teclas
+### Atajos de teclado
 
 Puede personalizar sus combinaciones de teclas a través de la opción `keybinds`.
 
@@ -500,7 +500,7 @@ Puede controlar el comportamiento de compactación del contexto a través de la 
 
 ---
 
-### Vigilante
+### Observador
 
 Puede configurar patrones de ignorancia del observador de archivos a través de la opción `watcher`.
 
@@ -517,7 +517,7 @@ Los patrones siguen la sintaxis global. Utilice esto para excluir directorios ru
 
 ---
 
-### MCP servidores
+### Servidores MCP
 
 Puede configurar los servidores MCP que desee utilizar a través de la opción `mcp`.
 
@@ -626,13 +626,13 @@ Las opciones experimentales no son estables. Pueden cambiar o eliminarse sin pre
 
 ---
 
-##Variables
+## Variables
 
 Puede utilizar la sustitución de variables en sus archivos de configuración para hacer referencia a variables de entorno y contenidos de archivos.
 
 ---
 
-### Variables ambientales
+### Variables de entorno
 
 Utilice `{env:VARIABLE_NAME}` para sustituir variables de entorno:
 

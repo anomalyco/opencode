@@ -9,7 +9,7 @@ Po defaultu su svi alati **ukljuceni** i ne traze dozvolu za pokretanje. Ponasan
 
 ---
 
-## Configure
+## Konfiguracija
 
 Koristite polje `permission` za kontrolu ponasanja alata. Za svaki alat mozete postaviti allow, deny ili ask.
 
@@ -39,9 +39,9 @@ Mozete koristiti i wildcard obrasce da kontrolisete vise alata odjednom. Na prim
 
 ---
 
-## Built-in
+## Ugrađeni
 
-Ovo su svi ugradeni alati dostupni u OpenCode-u.
+Ovo su svi ugradeni alati dostupni u OpenCode.
 
 ---
 
@@ -168,7 +168,7 @@ Ovaj alat ispisuje sadrzaj direktorija. Prihvata glob obrasce za filtriranje rez
 
 ---
 
-### lsp (experimental)
+### lsp (eksperimentalno)
 
 Komunicira sa konfigurisanim LSP serverima za funkcije inteligencije koda kao definicije, reference, hover info i hijerarhija poziva.
 
@@ -293,7 +293,7 @@ Pretrazuje web za informacije.
 :::note
 Ovaj alat je dostupan samo uz OpenCode provajdera ili kada je varijabla `OPENCODE_ENABLE_EXA` postavljena na truthy vrijednost (npr. `true` ili `1`).
 
-Da ukljucite pri pokretanju OpenCode-a:
+Da ukljucite pri pokretanju OpenCode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -344,7 +344,7 @@ Svako pitanje ukljucuje naslov, tekst pitanja i listu opcija. Korisnici mogu iza
 
 ---
 
-## Custom tools
+## Prilagođeni alati
 
 Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze pozivati. Definisu se u config datoteci i mogu izvrsavati proizvoljan kod.
 
@@ -352,7 +352,7 @@ Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze poziv
 
 ---
 
-## MCP servers
+## MCP serveri
 
 MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i servisa. Ovo ukljucuje pristup bazama, API integracije i third-party servise.
 
@@ -360,13 +360,13 @@ MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i s
 
 ---
 
-## Internals
+## Interno
 
 Interno, alati kao `grep`, `glob` i `list` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
 
 ---
 
-### Ignore patterns
+### Obrasci ignorisanja
 
 Da ukljucite fajlove koji bi inace bili ignorisani, kreirajte `.ignore` datoteku u korijenu projekta. Ova datoteka moze eksplicitno dozvoliti odredene putanje.
 

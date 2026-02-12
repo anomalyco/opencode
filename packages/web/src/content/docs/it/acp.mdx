@@ -9,11 +9,11 @@ OpenCode supporta [Agent Client Protocol](https://agentclientprotocol.com) (ACP)
 Per una lista di editor e tool che supportano ACP, vedi l'[ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
-ACP e un protocollo aperto che standardizza la comunicazione tra editor di codice e agenti di coding AI.
+ACP e è un protocollo aperto che standardizza la comunicazione tra editor di codice e agenti di coding AI.
 
 ---
 
-## Configure
+## Configurazione
 
 Per usare OpenCode via ACP, configura l'editor in modo che esegua il comando `opencode acp`.
 
@@ -140,17 +140,16 @@ Questa config imposta CodeCompanion per usare OpenCode come agente ACP per la ch
 
 Se devi passare variabili d'ambiente (come `OPENCODE_API_KEY`), vedi [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) nella documentazione di CodeCompanion.nvim.
 
-## Support
+## Supporto
 
 OpenCode funziona via ACP come nel terminale. Tutte le funzionalita sono supportate:
-
 :::note
 Alcuni comandi slash integrati come `/undo` e `/redo` non sono attualmente supportati.
 :::
 
-- Built-in tools (file operations, terminal commands, etc.)
-- Custom tools and slash commands
-- MCP servers configured in your OpenCode config
-- Project-specific rules from `AGENTS.md`
-- Custom formatters and linters
-- Agents and permissions system
+- Strumenti integrati (operazioni sui file, comandi da terminale, ecc.)
+- Strumenti personalizzati e comandi slash
+- Server MCP configurati nella tua configurazione OpenCode
+- Regole specifiche del progetto da `AGENTS.md`
+- Formatter e linter personalizzati
+- Sistema di agenti e permessi

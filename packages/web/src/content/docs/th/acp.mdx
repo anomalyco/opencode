@@ -1,31 +1,31 @@
 ---
-title: ACPสามารถช่วย
-description: ใช้ OpenCode ในโปรแกรมแก้ไขที่ต้องการ ACP
+title: การรองรับ ACP
+description: ใช้ OpenCode ในโปรแกรมแก้ไขที่รองรับ ACP
 ---
 
-OpenCode ที่แสดง [Agent Client Protocol](https://agentclientprotocol.com) หรือ (ACP) ซึ่งสามารถช่วยได้โดยตรงในการแก้ไขและ IDE ที่หน่วยความจำ
+OpenCode รองรับ [Agent Client Protocol](https://agentclientprotocol.com) (ACP) ซึ่งช่วยให้สามารถทำงานร่วมกับ editor และ IDE ต่างๆ ได้โดยตรง
 
 :::tip
-สำหรับรายชื่อและเครื่องมือที่รองรับ ACPรายงานที่[ACP รายงาน](https://zed.dev/blog/acp-progress-report#available-now)
+สำหรับรายชื่อเครื่องมือที่รองรับ ACP สามารถดูได้ที่ [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)
 :::
 
-ACP เป็นแบบเปิดมาตรฐานการสื่อสารระหว่างโปรแกรมแก้ไขโค้ดและตัวแทน AI
+ACP เป็นมาตรฐานเปิดสำหรับการสื่อสารระหว่างโปรแกรมแก้ไขโค้ดและ AI agent
 
 ---
 
-## เม็กซิโก
+## การกำหนดค่า
 
-บางครั้งใช้ OpenCode ผ่าน ACP ไม่อนุญาตให้โปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
+ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
 
-สั่งเริ่ม OpenCode เนื่องจากต้องย่อยที่จำเป็นต้องมี ACP ซึ่งจะต้องแก้ไขโปรแกรมของคุณผ่าน JSON-RPC ผ่าน stdio
+คำสั่งนี้จะเริ่ม OpenCode เป็น process ย่อยที่รองรับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ทาง stdio
 
-นี่คือตัวอย่างโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
+นี่คือตัวอย่างสำหรับโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
 
 ---
 
-### เซด
+### Zed
 
-อดทนต่อไป [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+สำหรับ [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -38,9 +38,9 @@ ACP เป็นแบบเปิดมาตรฐานการสื่อ�
 }
 ```
 
-สิ่งนั้นเปิดใช้สำหรับ `agent: new thread` ใน **Command Palette**
+สิ่งนี้จะเปิดใช้ `agent: new thread` ใน **Command Palette**
 
-คุณต้องผูกมัดอย่างหนักเพื่อแก้ไข `keymap.json` ของคุณ:
+คุณต้องตั้งค่า keybinding ใน `keymap.json` ของคุณ:
 
 ```json title="keymap.json"
 [
@@ -67,9 +67,9 @@ ACP เป็นแบบเปิดมาตรฐานการสื่อ�
 
 ---
 
-### เจ็ตเบรนส์ IDE
+### JetBrains IDEs
 
-ไปที่ [JetBrains IDE](https://www.jetbrains.com/) acp.json ของคุณตาม [เอกสาร](https://www.jetbrains.com/help/ai-assistant/acp.html):
+เพิ่มลงใน acp.json ของ [JetBrains IDE](https://www.jetbrains.com/) ของคุณตาม [เอกสาร](https://www.jetbrains.com/help/ai-assistant/acp.html):
 
 ```json title="acp.json"
 {
@@ -101,7 +101,7 @@ ACP เป็นแบบเปิดมาตรฐานการสื่อ�
 }
 ```
 
-จะต้องส่งผ่านวันพรุ่งนี้:
+หากคุณต้องการส่งผ่าน environment variables (เช่น `OPENCODE_API_KEY`) คุณต้องระบุใน `env`:
 
 ```lua {6-8}
 {
@@ -136,16 +136,16 @@ require("codecompanion").setup({
 })
 ```
 
-คุณสามารถใช้ CodeCompanion เพื่อใช้ OpenCode ACP สำหรับแชท
+คุณสามารถใช้ CodeCompanion เพื่อใช้ opencode เป็น ACP agent สำหรับแชท
 
-บางครั้งการส่งผ่านบางครั้ง (เช่น `OPENCODE_API_KEY`) ต้อง [ต้องอธิบายเหตุผล:https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารประกอบ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
+หากคุณต้องส่ง environment variables (เช่น `OPENCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
 
-## เพื่อ
+## การรองรับ
 
-OpenCode เป็นเวลานาน ACP และในการตรวจสอบคุณสมบัติทั้งหมด:
+opencode ทำงานผ่าน ACP เหมือนกับใน terminal และรองรับฟีเจอร์ทั้งหมด:
 
 :::note
-คำสั่งสแลมในคำสั่งบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
+คำสั่ง slash ในตัวบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
 :::
 
 - เครื่องมือใน (ไฟล์ไฟล์คำสั่งอื่นๆ)

@@ -1,25 +1,25 @@
 ---
-title: ACP support
+title: ACP-understøttelse
 description: Brug OpenCode i enhver ACP-kompatibel editor.
 ---
 
 OpenCode understøtter [Agent Client Protocol](https://agentclientprotocol.com) eller (ACP), så du kan bruge det direkte i kompatible editorer og IDE'er.
 
 :::tip
-For en liste over redaktører og værktøjer, der understøtter ACP, tjek [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+For en liste over editorer og værktøjer, der understøtter ACP, tjek [ACP fremskridtsrapport](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
 ACP er en åben protokol, der standardiserer kommunikation mellem kodeeditorer og AI-kodningsagenter.
 
 ---
 
-## Konfigurer
+## Konfiguration
 
 For at bruge OpenCode via ACP, konfigurer din editor til at køre kommandoen `opencode acp`.
 
 Kommandoen starter OpenCode som en ACP-kompatibel underproces, der kommunikerer med din editor over JSON-RPC via stdio.
 
-Nedenfor er eksempler på populære redaktører, der understøtter ACP.
+Nedenfor er eksempler på populære editorer, der understøtter ACP.
 
 ---
 
@@ -69,7 +69,7 @@ Du kan også binde en tastaturgenvej ved at redigere din `keymap.json`:
 
 ### JetBrains IDE'er
 
-Tilføj til din [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold til [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html):
+Tilføj til din [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold til [dokumentationen](https://www.jetbrains.com/help/ai-assistant/acp.html):
 
 ```json title="acp.json"
 {
@@ -138,18 +138,18 @@ require("codecompanion").setup({
 
 Denne konfiguration sætter CodeCompanion til at bruge OpenCode som ACP-agent til chat.
 
-Hvis du har brug for at sende miljøvariabler (som `OPENCODE_API_KEY`), henvises til [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
+Hvis du har brug for at sende miljøvariabler (som `OPENCODE_API_KEY`), henvises til [Konfiguration af adaptere: Miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
 
-## Support
+## Understøttelse
 
 OpenCode fungerer på samme måde via ACP som i terminalen. Alle funktioner understøtter:
 
 :::note
-Nogle indbyggede skråstreg-kommandoer som `/undo` og `/redo` er i øjeblikket ikke understøttet.
+Nogle indbyggede slash-kommandoer som `/undo` og `/redo` er i øjeblikket ikke understøttet.
 :::
 
 - Indbyggede værktøjer (filoperationer, terminalkommandoer osv.)
-- Brugerdefinerede værktøjer og skråstreg-kommandoer
+- Brugerdefinerede værktøjer og slash-kommandoer
 - MCP-servere konfigureret i din OpenCode-konfiguration
 - Projektspecifikke regler fra `AGENTS.md`
 - Brugerdefinerede formatere og linters

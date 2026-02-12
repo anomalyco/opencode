@@ -1,5 +1,5 @@
 ---
-title: Konfig
+title: Konfiguration
 description: Verwenden Sie die Konfiguration OpenCode JSON.
 ---
 
@@ -23,7 +23,7 @@ OpenCode unterstützt die Formate **JSON** und **JSONC** (JSON mit Kommentaren).
 
 ---
 
-## Locations
+## Speicherorte
 
 Sie können Ihre Konfiguration an verschiedenen Orten platzieren und sie haben eine
 andere Rangfolge.
@@ -52,7 +52,7 @@ Konfigurationsquellen werden in dieser Reihenfolge geladen (spätere Quellen üb
 Dies bedeutet, dass Projektkonfigurationen globale Standardeinstellungen überschreiben können und globale Konfigurationen Remote-Organisationsstandards überschreiben können.
 
 :::note
-Die Verzeichnisse `.opencode` und `~/.config/opencode` verwenden **Pluralnamen** für Unterverzeichnisse: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` und `themes/`. Aus Gründen der Abwärtskompatibilität werden auch einzelne Namen (e.g., `agent/`) unterstützt.
+Die Verzeichnisse `.opencode` und `~/.config/opencode` verwenden **Pluralnamen** für Unterverzeichnisse: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` und `themes/`. Aus Gründen der Abwärtskompatibilität werden auch einzelne Namen (z. B. `agent/`) unterstützt.
 :::
 
 ---
@@ -175,7 +175,7 @@ Verfügbare Optionen:
 - `scroll_speed` – Benutzerdefinierter Scrollgeschwindigkeitsmultiplikator (Standard: `3`, Minimum: `1`). Wird ignoriert, wenn `scroll_acceleration.enabled` gleich `true` ist.
 - `diff_style` – Steuern Sie das Diff-Rendering. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer eine einzelne Spalte an.
 
-[Learn more about using the TUI here](/docs/tui).
+[Erfahren Sie hier mehr über die Verwendung der TUI](/docs/tui).
 
 ---
 
@@ -204,11 +204,11 @@ Verfügbare Optionen:
 - `mdnsDomain` – Benutzerdefinierter Domänenname für den mDNS-Dienst. Standardmäßig ist `opencode.local`. Nützlich für die Ausführung mehrerer Instanzen im selben Netzwerk.
 - `cors` – Zusätzliche Ursprünge, um CORS zu ermöglichen, wenn der HTTP-Server von einem browserbasierten Client aus verwendet wird. Die Werte müssen vollständige Ursprünge haben (Schema + Host + optionaler Port), z. B. `https://app.example.com`.
 
-[Learn more about the server here](/docs/server).
+[Erfahren Sie hier mehr über den Server](/docs/server).
 
 ---
 
-### Tools
+### Werkzeuge
 
 Sie können die Tools, die ein LLM verwenden kann, über die Option `tools` verwalten.
 
@@ -222,11 +222,11 @@ Sie können die Tools, die ein LLM verwenden kann, über die Option `tools` verw
 }
 ```
 
-[Learn more about tools here](/docs/tools).
+[Erfahren Sie hier mehr über Tools](/docs/tools).
 
 ---
 
-### Models
+### Modelle
 
 Sie können die Anbieter und Modelle, die Sie in Ihrer OpenCode-Konfiguration verwenden möchten, über die Optionen `provider`, `model` und `small_model` konfigurieren.
 
@@ -260,7 +260,7 @@ Zu den Anbieteroptionen können `timeout` und `setCacheKey` gehören:
 - `timeout` – Anforderungszeitlimit in Millisekunden (Standard: 300000). Zum Deaktivieren auf `false` setzen.
 - `setCacheKey` – Stellen Sie sicher, dass immer ein Cache-Schlüssel für den angegebenen Anbieter festgelegt ist.
 
-Sie können auch [local models](/docs/models#local) konfigurieren. [Learn more](/docs/models).
+Sie können auch [lokale Modelle](/docs/models#local) konfigurieren. [Mehr erfahren](/docs/models).
 
 ---
 
@@ -268,7 +268,7 @@ Sie können auch [local models](/docs/models#local) konfigurieren. [Learn more](
 
 Einige Anbieter unterstützen zusätzliche Konfigurationsoptionen über die allgemeinen Einstellungen `timeout` und `apiKey` hinaus.
 
-##### Amazonas-Grundgestein
+##### Amazon Bedrock
 
 Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 
@@ -292,14 +292,14 @@ Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 - `endpoint` – Benutzerdefinierter Endpunkt URL für VPC-Endpunkte. Dies ist ein Alias ​​​​für die generische Option `baseURL` unter Verwendung der AWS-spezifischen Terminologie. Wenn beide angegeben sind, hat `endpoint` Vorrang.
 
 :::note
-Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor der profilbasierten Authentifizierung. Weitere Informationen finden Sie unter [authentication precedence](/docs/providers#authentication-precedence).
+Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor der profilbasierten Authentifizierung. Weitere Informationen finden Sie unter [Authentifizierungs-Rangfolge](/docs/providers#authentication-precedence).
 :::
 
-[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+[Erfahren Sie mehr über die Amazon Bedrock-Konfiguration](/docs/providers#amazon-bedrock).
 
 ---
 
-### Themes
+### Themen
 
 Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchten, über die Option `theme` konfigurieren.
 
@@ -310,11 +310,11 @@ Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchte
 }
 ```
 
-[Learn more here](/docs/themes).
+[Mehr erfahren](/docs/themes).
 
 ---
 
-### Agents
+### Agenten
 
 Über die Option `agent` können Sie spezielle Agenten für bestimmte Aufgaben konfigurieren.
 
@@ -336,7 +336,7 @@ Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchte
 }
 ```
 
-Sie können Agenten auch mithilfe von Markdown-Dateien in `~/.config/opencode/agents/` oder `.opencode/agents/` definieren. [Learn more here](/docs/agents).
+Sie können Agenten auch mithilfe von Markdown-Dateien in `~/.config/opencode/agents/` oder `.opencode/agents/` definieren. [Mehr erfahren](/docs/agents).
 
 ---
 
@@ -357,7 +357,7 @@ Diese Einstellung gilt für alle Schnittstellen: TUI, CLI (`opencode run`), Desk
 
 ---
 
-### Sharing
+### Teilen
 
 Sie können die Funktion [share](/docs/share) über die Option `share` konfigurieren.
 
@@ -400,11 +400,11 @@ Sie können benutzerdefinierte Befehle für sich wiederholende Aufgaben über di
 }
 ```
 
-Sie können Befehle auch mithilfe von Markdown-Dateien in `~/.config/opencode/commands/` oder `.opencode/commands/` definieren. [Learn more here](/docs/commands).
+Sie können Befehle auch mithilfe von Markdown-Dateien in `~/.config/opencode/commands/` oder `.opencode/commands/` definieren. [Mehr erfahren](/docs/commands).
 
 ---
 
-### Keybinds
+### Tastenkombinationen
 
 Sie können Ihre Tastenkombinationen über die Option `keybinds` anpassen.
 
@@ -415,11 +415,11 @@ Sie können Ihre Tastenkombinationen über die Option `keybinds` anpassen.
 }
 ```
 
-[Learn more here](/docs/keybinds).
+[Mehr erfahren](/docs/keybinds).
 
 ---
 
-### Autoupdate
+### Automatisches Update
 
 OpenCode lädt beim Start automatisch alle neuen Updates herunter. Sie können dies mit der Option `autoupdate` deaktivieren.
 
@@ -435,7 +435,7 @@ Beachten Sie, dass dies nur funktioniert, wenn es nicht mit einem Paketmanager w
 
 ---
 
-### Formatters
+### Formatierer
 
 Sie können Codeformatierer über die Option `formatter` konfigurieren.
 
@@ -457,13 +457,13 @@ Sie können Codeformatierer über die Option `formatter` konfigurieren.
 }
 ```
 
-[Learn more about formatters here](/docs/formatters).
+[Erfahren Sie hier mehr über Formatierer](/docs/formatters).
 
 ---
 
-### Permissions
+### Berechtigungen
 
-Opencode erlaubt standardmäßig alle Vorgänge, ohne dass eine ausdrückliche Genehmigung erforderlich ist. Sie können dies mit der Option `permission` ändern.
+OpenCode erlaubt standardmäßig alle Vorgänge, ohne dass eine ausdrückliche Genehmigung erforderlich ist. Sie können dies mit der Option `permission` ändern.
 
 Um beispielsweise sicherzustellen, dass die Tools `edit` und `bash` eine Benutzergenehmigung erfordern:
 
@@ -477,11 +477,11 @@ Um beispielsweise sicherzustellen, dass die Tools `edit` und `bash` eine Benutze
 }
 ```
 
-[Learn more about permissions here](/docs/permissions).
+[Erfahren Sie hier mehr über Berechtigungen](/docs/permissions).
 
 ---
 
-### Compaction
+### Komprimierung
 
 Sie können das Verhalten der Kontextkomprimierung über die Option `compaction` steuern.
 
@@ -500,7 +500,7 @@ Sie können das Verhalten der Kontextkomprimierung über die Option `compaction`
 
 ---
 
-### Watcher
+### Dateiüberwachung
 
 Sie können Datei-Watcher-Ignoriermuster über die Option `watcher` konfigurieren.
 
@@ -517,7 +517,7 @@ Muster folgen der Glob-Syntax. Verwenden Sie diese Option, um verrauschte Verzei
 
 ---
 
-### MCP Server
+### MCP
 
 Sie können den MCP-Server, den Sie verwenden möchten, über die Option `mcp` konfigurieren.
 
@@ -528,7 +528,7 @@ Sie können den MCP-Server, den Sie verwenden möchten, über die Option `mcp` k
 }
 ```
 
-[Learn more here](/docs/mcp-servers).
+[Mehr erfahren](/docs/mcp-servers).
 
 ---
 
@@ -545,11 +545,11 @@ Platzieren Sie Ihre Plugin-Dateien in `.opencode/plugins/` oder `~/.config/openc
 }
 ```
 
-[Learn more here](/docs/plugins).
+[Mehr erfahren](/docs/plugins).
 
 ---
 
-### Instructions
+### Anweisungen
 
 Sie können die Anweisungen für das von Ihnen verwendete Modell über die Option `instructions` konfigurieren.
 
@@ -560,12 +560,11 @@ Sie können die Anweisungen für das von Ihnen verwendete Modell über die Optio
 }
 ```
 
-Dies erfordert eine Reihe von Pfaden und Glob-Mustern zu Anweisungsdateien. [Erfahren Sie mehr
-über Regeln hier](/docs/rules).
+Dies erfordert eine Reihe von Pfaden und Glob-Mustern zu Anweisungsdateien. [Erfahren Sie hier mehr über Regeln](/docs/rules).
 
 ---
 
-### Behinderte Anbieter
+### Deaktivierte Anbieter
 
 Sie können Anbieter, die automatisch geladen werden, über die Option `disabled_providers` deaktivieren. Dies ist nützlich, wenn Sie verhindern möchten, dass bestimmte Anbieter geladen werden, selbst wenn deren Anmeldeinformationen verfügbar sind.
 
@@ -609,7 +608,7 @@ Wenn ein Anbieter sowohl in `enabled_providers` als auch in `disabled_providers`
 
 ---
 
-### Experimental
+### Experimentell
 
 Der Schlüssel `experimental` enthält Optionen, die sich in der aktiven Entwicklung befinden.
 
@@ -626,13 +625,13 @@ Experimentelle Optionen sind nicht stabil. Sie können ohne vorherige Ankündigu
 
 ---
 
-## Variables
+## Variablen
 
 Sie können die Variablenersetzung in Ihren Konfigurationsdateien verwenden, um auf Umgebungsvariablen und Dateiinhalte zu verweisen.
 
 ---
 
-### Umgebungsvars
+### Umgebungsvariablen
 
 Verwenden Sie `{env:VARIABLE_NAME}`, um Umgebungsvariablen zu ersetzen:
 
@@ -655,7 +654,7 @@ Wenn die Umgebungsvariable nicht gesetzt ist, wird sie durch eine leere Zeichenf
 
 ---
 
-### Files
+### Dateien
 
 Verwenden Sie `{file:path/to/file}`, um den Inhalt einer Datei zu ersetzen:
 

@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: użyj OpenCode w problemach z GitLabem i zastosujch scalania.
+description: użyj opencode w problemach z GitLabem i zastosujch scalania.
 ---
 
-OpenCode integruje się z przepływem pracy GitLab poprzez potok GitLab CI/CD lub z GitLab Duo.
+opencode integruje się z przepływem pracy GitLab poprzez potok GitLab CI/CD lub z GitLab Duo.
 
-W obu przypadkach OpenCode będzie modułem GitLab.
+W obu przypadkach opencode będzie modułem GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode działa w zwykłym potoku GitLab. Możesz wbudować go w potok jako [komponent CI](https://docs.gitlab.com/ee/ci/components/)
+opencode działa w zwykłym potoku GitLab. Możesz wbudować go w potok jako [komponent CI](https://docs.gitlab.com/ee/ci/components/)
 
-Tutaj obowiązkowego przez społeczność komponentu CI/CD dla OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Tutaj obowiązkowego przez społeczność komponentu CI/CD dla opencode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Cechy
 
-- **Użyj konfiguracji dla każdego zadania**: Skonfiguruj OpenCode z niestandardowym katalogiem konfiguracyjnym, na przykładzie `./config/#custom-directory`, aby włączyć lub funkcjonalności na każde wywołanie OpenCode.
-- **Konfiguracja minimalna**: Komponent CI konfiguruje OpenCode w tle, wystarczy skonfigurować OpenCode i początkowy monit.
+- **Użyj konfiguracji dla każdego zadania**: Skonfiguruj opencode z niestandardowym katalogiem konfiguracyjnym, na przykładzie `./config/#custom-directory`, aby włączyć lub funkcjonalności na każde wywołanie opencode.
+- **Konfiguracja minimalna**: Komponent CI konfiguruje opencode w tle, wystarczy skonfigurować opencode i początkowy monit.
 - **Elastyczny**: Komponent CI obsługuje kilka danych, które są stosowane w celu dostosowania jego zachowania
 
 ---
 
 ### Organizować coś
 
-1. Przechowuj dane uwierzytelniające OpenCode w formacie JSON jako zmienne parametry CI typu pliku w specyfikacji **Ustawienia** > **CI/CD** > **Zmienne**. Zachowaj, aby być oznaczony jako „Zamaskowane i ukryte”.
+1. Przechowuj dane uwierzytelniające opencode w formacie JSON jako zmienne parametry CI typu pliku w specyfikacji **Ustawienia** > **CI/CD** > **Zmienne**. Zachowaj, aby być oznaczony jako „Zamaskowane i ukryte”.
 2. Dodaj elementy do swojego pliku `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -46,23 +46,23 @@ Więcej danych dotyczących użycia [sprawdź opis](https://gitlab.com/explore/c
 
 ## Duet GitLab
 
-OpenCode integruje się z przepływem pracy GitLab.
-Wspomnij o `@opencode` w komentarzu, a OpenCode wykonaj zadania w ramach swojego potoku GitLab CI.
+opencode integruje się z przepływem pracy GitLab.
+Wspomnij o `@opencode` w komentarzu, a opencode wykonaj zadania w ramach swojego potoku GitLab CI.
 
 ---
 
 ### Cechy
 
-- **Problem związany z segregacją**: Poproś OpenCode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
-- **Napraw i zaimplementuj**: Poproś OpenCode o naprawienie problemu lub zaimplementowanie funkcji.
+- **Problem związany z segregacją**: Poproś opencode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
+- **Napraw i zaimplementuj**: Poproś opencode o naprawienie problemu lub zaimplementowanie funkcji.
   Utworzył nowy oddział i zgłosi ataku ze sobą.
-- **Bezpieczny**: OpenCode działa na modułach GitLab.
+- **Bezpieczny**: opencode działa na modułach GitLab.
 
 ---
 
 ### Organizować coś
 
-OpenCode działa w potoku CI/CD GitLab. Oto, czego potrzebujesz, aby przejść do:
+opencode działa w potoku CI/CD GitLab. Oto, czego potrzebujesz, aby przejść do:
 
 :::tip
 Aktualne instrukcje dotyczące [**dokumentacji GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/).
@@ -158,7 +158,7 @@ Szczegółowe instrukcje w [dokumentacji agentów GitLab CLI](https://docs.gitla
 
 ### Przykłady
 
-Oto kilka możliwości wykorzystania OpenCode w GitLabie.
+Oto kilka możliwości wykorzystania opencode w GitLabie.
 
 :::tip
 Można zastosować inną metodę ograniczającą niż `@opencode`.
@@ -172,7 +172,7 @@ Można zastosować inną metodę ograniczającą niż `@opencode`.
   @opencode explain this issue
   ```
 
-  OpenCode przeczytaj problem i odpowiedź z wyjaśnieniem.
+  opencode przeczytaj problem i odpowiedź z wyjaśnieniem.
 
 - **Napraw problem**
 
@@ -182,7 +182,7 @@ Można zastosować inną metodę ograniczającą niż `@opencode`.
   @opencode fix this
   ```
 
-  OpenCode utworzy nową podstawę, zaimplementuje zmiany i spowoduje, że skalowanie będzie możliwe.
+  opencode utworzy nową podstawę, zaimplementuje zmiany i spowoduje, że skalowanie będzie możliwe.
 
 - **Przejrzyj prośby o połączenie**
 
@@ -192,4 +192,4 @@ Można zastosować inną metodę ograniczającą niż `@opencode`.
   @opencode review this merge request
   ```
 
-  OpenCode sprawdzenie rozwiązania i przepuszczenie.
+  opencode sprawdzenie rozwiązania i przepuszczenie.

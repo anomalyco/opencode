@@ -3,9 +3,9 @@ title: LSP serveri
 description: OpenCode se integriše sa vašim LSP serverima.
 ---
 
-## OpenCode se integriše sa vašim jezičkim serverskim protokolom (LSP) kako bi pomogao LLM-u u interakciji s vašom bazom koda. Koristi dijagnostiku za pružanje povratnih informacija LLM-u.
+OpenCode se integriše sa vašim Language Server Protocol (LSP) serverima kako bi pomogao LLM-u u interakciji s kodnom bazom. Koristi dijagnostiku za slanje povratnih informacija modelu.
 
-## Ugrađeno
+## Ugrađeni
 
 OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | LSP server | Ekstenzije | Zahtjevi
@@ -20,7 +20,7 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | elixir-ls | .ex, .exs | `elixir` komanda dostupna |
 | eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | `eslint` ovisnost u projektu |
 | fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` instaliran |
-| sjaj | .bleam | `gleam` komanda dostupna |
+| gleam | .bleam | `gleam` komanda dostupna |
 | gopls | .go | `go` komanda dostupna |
 | hls | .hs, .lhs | `haskell-language-server-wrapper` komanda dostupna |
 | jdtls | .java | `Java SDK (version 21+)` instaliran |
@@ -33,12 +33,12 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | prisma | .prisma | `prisma` komanda dostupna |
 | pyright | .py, .pyi | `pyright` ovisnost instalirana |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | `ruby` i `gem` komande dostupne |
-| hrđa | .rs | `rust-analyzer` komanda dostupna |
+| rust | .rs | `rust-analyzer` komanda dostupna |
 | sourcekit-lsp | .swift, .objc, .objcpp | `swift` instaliran (`xcode` na macOS-u) |
-| vitka | .svelte | Automatske instalacije za Svelte projekte |
+| svelte | .svelte | Automatske instalacije za Svelte projekte |
 | terraform | .tf, .tfvars | Automatske instalacije iz GitHub izdanja |
 | tinymist | .typ, .typc | Automatske instalacije iz GitHub izdanja |
-| strojopis | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` zavisnost u projektu |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` zavisnost u projektu |
 | vue | .vue | Automatske instalacije za Vue projekte |
 | yaml-ls | .yaml, .yml | Automatski instalira Red Hat yaml-language-server |
 | zls | .zig, .zon | `zig` komanda dostupna |
@@ -58,7 +58,7 @@ Kada opencode otvori fajl, on:
 
 ---
 
-## Konfiguriši
+## Konfiguracija
 
 Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfiguraciji.
 
@@ -70,7 +70,7 @@ Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfigurac
 ```
 
 Svaki LSP server podržava sljedeće:
-| Nekretnine | Vrsta | Opis
+| Svojstvo | Vrsta | Opis
 |---------------- | -------- | ------------------------------------------------- |
 | `disabled` | boolean | Postavite ovo na `true` da onemogućite LSP server |
 | `command` | string[] | Naredba za pokretanje LSP servera |
@@ -175,6 +175,6 @@ Možete dodati prilagođene LSP servere navodeći ekstenzije naredbe i datoteke:
 
 PHP Intelephense nudi vrhunske funkcije putem licencnog ključa. Možete dati licencni ključ postavljanjem (samo) ključa u tekstualnu datoteku na:
 
-- Na macOS/Linuxu: `$HOME/intelephense/licence.txt`
-- Na Windowsima: `%USERPROFILE%/intelephense/licence.txt`
+- Na macOS/Linuxu: `$HOME/intelephense/license.txt`
+- Na Windowsima: `%USERPROFILE%/intelephense/license.txt`
   Datoteka treba da sadrži samo licencni ključ bez dodatnog sadržaja.

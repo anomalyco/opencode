@@ -1,9 +1,9 @@
 ---
-title: Rules
+title: Zasady
 description: Ustaw niestandardowe instrukcje dla opencode.
 ---
 
-Możesz dostarczyć niestandardowe instrukcje do kodu opencode, tworząc plik `AGENTS.md`. Jest to podobne do zasad Cursora. Zawiera instrukcje, które zostaną uwzględnione w kontekście LLM, aby dostosować jego zachowanie do konkretnego projektu.
+Możesz dostarczyć niestandardowe instrukcje do opencode, tworząc plik `AGENTS.md`. Jest to podobne do zasad Cursora. Zawiera instrukcje, które zostaną uwzględnione w kontekście LLM, aby dostosować jego zachowanie do konkretnego projektu.
 
 ---
 
@@ -52,23 +52,23 @@ Dodajemy tutaj instrukcje dotyczące konkretnego projektu, które zostaną udost
 
 ---
 
-## Types
+## Typy
 
 opencode obsługuje także odczytywanie pliku `AGENTS.md` z wielu lokalizacji. A to służy różnym celom.
 
-### Project
+### Projekt
 
 Umieść `AGENTS.md` w katalogu głównym projektu, aby uzyskać reguły specyficzne dla projektu. Mają one zastosowanie tylko wtedy, gdy pracujesz w tym katalogu lub jego podkatalogach.
 
-### Global
+### Globalne
 
 Możesz także mieć reguły globalne w pliku `~/.config/opencode/AGENTS.md`. Jest to stosowane we wszystkich sesjach opencode.
 
 Ponieważ nie jest to wymagane dla Git ani udostępniane Twojemu zespołowi, zalecamy użycie tego do określenia wszelkich osobistych zasad, których powinien przestrzegać LLM.
 
-### Claude Code Compatibility
+### Kompatybilność z Claude Code
 
-W przypadku użytkowników migrujących z Claude Code OpenCode obsługuje konwencje plików Claude Code jako rozwiązania awaryjne:
+W przypadku użytkowników migrujących z Claude Code opencode obsługuje konwencje plików Claude Code jako rozwiązania awaryjne:
 
 - **Zasady projektu**: `CLAUDE.md` w katalogu projektu (używane, jeśli nie istnieje `AGENTS.md`)
 - **Zasady globalne**: `~/.claude/CLAUDE.md` (używane, jeśli nie istnieje `~/.config/opencode/AGENTS.md`)
@@ -84,7 +84,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## Precedence
+## Priorytet
 
 Po uruchomieniu opencode szuka plików reguł w następującej kolejności:
 
@@ -139,7 +139,7 @@ Zalecanym podejściem jest użycie pola `instructions` w `opencode.json`:
 }
 ```
 
-### Manual Instructions in AGENTS.md
+### Ręczne instrukcje w AGENTS.md
 
 Możesz nauczyć opencode czytać pliki zewnętrzne, podając wyraźne instrukcje w swoim `AGENTS.md`. Oto praktyczny przykład:
 

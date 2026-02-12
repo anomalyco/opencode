@@ -10,22 +10,22 @@ Opcja `mode` jest obecnie przestarzała. [Dowiedz się więcej](/docs/agents).
 
 Tryb udostępniania możliwości stosowania, narzędzie i podpowiedzi do różnych zastosowań.
 
-Posiadanie dwa tryby: **budowanie** i **planowanie**. Można dostosować
+Posiadanie dwa tryby: **Build** i **Plan**. Można dostosować
 te lub skonfiguruj własne za pomocą konfiguracji opencode.
 
 Można przełączać się między trybami podczas sesji lub konfigurować je w pliku konfiguracyjnym.
 
 ---
 
-## Wbudowany
+## Wbudowane
 
 opencode ma dwa puste tryby.
 
 ---
 
-### Zbudować
+### Build
 
-Kompilacja jest trybem **domyślnym** z dostępnymi narzędziami. Jest to standardowy tryb pracy programistycznej, który jest dostępny z pełnym dostępem do operacji na plikach i oryginalnych systemach systemowych.
+Build jest trybem **domyślnym** z dostępnymi narzędziami. Jest to standardowy tryb pracy programistycznej, który jest dostępny z pełnym dostępem do operacji na plikach i oryginalnych systemach systemowych.
 
 ---
 
@@ -36,7 +36,7 @@ Tryb ograniczony do analizy. W urządzeniu planowym narzędzia są przydatne:
 - `write` - Nie można stworzyć nowych plików
 - `edit` — Nie można zastosować naruszenia plików, z naruszeniem praw autorskich w `.opencode/plans/*.md` w celu uszczegółowienia samego planu
 - `patch` - Nie można zastosować poprawek
-- `bash` - Nie można wykonać poleceń powłoki
+- `bash` - Nie można wykonać poleceń shell
 
 Ten tryb jest alternatywny, gdy chcesz, aby sztuczna inteligencja analizowała kod, sugerowała zmianę lub tworzyła projekty bez źródła zewnętrznego, które stanowi bazę kodu.
 
@@ -54,7 +54,7 @@ Zobacz także: [Formaterzy](/docs/formatters), aby uzyskać informacje na temat 
 
 Możliwość dostosowania alternatywnego trybu lub konfiguracji poprzez własną konfigurację. Tryb można skonfigurować na dwa systemy:
 
-### Konfiguracja JSON-a
+### Konfiguracja JSON
 
 Skonfiguruj tryb w pliku konfiguracyjnym `opencode.json`:
 
@@ -83,7 +83,7 @@ Skonfiguruj tryb w pliku konfiguracyjnym `opencode.json`:
 }
 ```
 
-### Konfiguracja przecen
+### Konfiguracja Markdown
 
 Można także definiować tryby za pomocą plików przecen. Trzymaj je w:
 
@@ -110,7 +110,7 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-Nazwa pliku przecen staje się kluczem trybunału (np. `review.md` tworzy tryb `review`).
+Nazwa pliku przecen staje się kluczem trybu (np. `review.md` tworzy tryb `review`).
 
 Przyjrzyjmy się szczegółowo tym opcjom konfiguracji.
 
@@ -118,7 +118,7 @@ Przyjrzyjmy się szczegółowo tym opcjom konfiguracji.
 
 ### Model
 
-Zastosowanie konstrukcji `model`, aby zastosować domyślny model dla tego trybunału. Przydatne przy wykorzystaniu różnych modeli dostępnych w różnych zadaniach. Na przykład zastosowanie modelu, skuteczniejsze wykonanie modelu.
+Zastosowanie konstrukcji `model`, aby zastosować domyślny model dla tego trybu. Przydatne przy wykorzystaniu różnych modeli dostępnych w różnych zadaniach. Na przykład zastosowanie modelu, skuteczniejsze wykonanie modelu.
 
 ```json title="opencode.json"
 {
@@ -177,9 +177,9 @@ Jeśli nie ma wpływu na temperaturę, opencode stosuje się narzędzia badawcze
 
 ---
 
-### Podpowiedź
+### Prompt (Monit)
 
-niestandardowy plik podpowiedzi systemowych dla tej procedury za pomocą konfiguracji `prompt`. Plik informacyjny powinien zawierać instrukcje dotyczące przeznaczenia trybunału.
+niestandardowy plik podpowiedzi systemowych dla tej procedury za pomocą konfiguracji `prompt`. Plik informacyjny powinien zawierać instrukcje dotyczące przeznaczenia trybu.
 
 ```json title="opencode.json"
 {
@@ -221,13 +221,13 @@ Jeśli nie ma żadnych narzędzi, wszystkie narzędzia są wyłączone.
 
 ---
 
-#### Dostępne narzędzie
+#### Dostępne narzędzia
 
-Oto wszystkie narzędzia, które można sterować za pomocą konfiguracji trybunałów.
+Oto wszystkie narzędzia, które można sterować za pomocą konfiguracji trybów.
 
 | Narzędzie   | Opis                                  |
 | ----------- | ------------------------------------- |
-| `bash`      | Wykonaj polecenia powłoki             |
+| `bash`      | Wykonaj polecenia shell               |
 | `edit`      | Modyfikuj istniejące pliki            |
 | `write`     | Utwórz nowe pliki                     |
 | `read`      | Przeczytaj zawartość pliku            |
@@ -322,10 +322,10 @@ Priorities:
 
 Oto kilka typowych zastosowań dla różnych trybów.
 
-- **Tryb stosowania**: Pełne prace programistyczne z dostępnymi narzędziami
-- **Tryb planowania**: Analiza i planowanie bez zmian
-- **Wypróbuj**: Przegląd kodu z możliwością odczytu i narzędzi do dokumentacji
-- **Spróbuj debugowania**: Koncentruje się na urządzeniu z dostępnymi narzędziami bash i odczytu
-- **Tryb Dokumenty**: Zapisywanie dokumentacji przy użyciu operacji na plikach, ale bez oryginalnych systemów systemowych
+- **Build mode**: Pełne prace programistyczne z dostępnymi narzędziami
+- **Plan mode**: Analiza i planowanie bez zmian
+- **Review mode**: Przegląd kodu z możliwością odczytu i narzędzi do dokumentacji
+- **Debug mode**: Koncentruje się na urządzeniu z dostępnymi narzędziami bash i odczytu
+- **Docs mode**: Zapisywanie dokumentacji przy użyciu operacji na plikach, ale bez oryginalnych systemów systemowych
 
 Może się również zdarzyć, że różne modele są dobre w różnych wersjach użycia.

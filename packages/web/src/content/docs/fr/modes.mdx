@@ -4,26 +4,25 @@ description: Différents modes pour différents cas d'utilisation.
 ---
 
 :::caution
-Les modes sont désormais configurés via l'option `agent` dans la configuration opencode. Le
+Les modes sont désormais configurés via l'option `agent` dans la configuration opencode.
 L’option `mode` est désormais obsolète. [En savoir plus](/docs/agents).
 :::
 
-Les modes dans opencode vous permettent de personnaliser le comportement, les outils et les invites pour différents cas d'utilisation.
+Les modes dans opencode vous permettent de personnaliser le comportement, les outils et les prompts pour différents cas d'utilisation.
 
-Il est livré avec deux modes intégrés : **build** et **plan**. Vous pouvez personnaliser
-ceux-ci ou configurez les vôtres via la configuration opencode.
+Il est livré avec deux modes intégrés : **build** et **plan**. Vous pouvez personnaliser ceux-ci ou configurez les vôtres via la configuration opencode.
 
 Vous pouvez basculer entre les modes au cours d'une session ou les configurer dans votre fichier de configuration.
 
 ---
 
-## Intégré
+## Modes intégrés
 
 opencode est livré avec deux modes intégrés.
 
 ---
 
-### Construire
+### Build
 
 Build est le mode **par défaut** avec tous les outils activés. Il s'agit du mode standard pour le travail de développement dans lequel vous avez besoin d'un accès complet aux opérations sur les fichiers et aux commandes système.
 
@@ -31,7 +30,7 @@ Build est le mode **par défaut** avec tous les outils activés. Il s'agit du mo
 
 ### Plan
 
-Un mode restreint conçu pour la planification et l’analyse. En mode plan, les outils suivants sont désactivés par défaut :
+Un mode restreint conçu pour la planification et l’analyse. En mode plan, les outils suivants sont désactivés par défaut :
 
 - `write` - Impossible de créer de nouveaux fichiers
 - `edit` - Impossible de modifier les fichiers existants, à l'exception des fichiers situés à `.opencode/plans/*.md` pour détailler le plan lui-même
@@ -42,21 +41,21 @@ Ce mode est utile lorsque vous souhaitez que l'IA analyse le code, suggère des 
 
 ---
 
-## Commutation
+## Changement de mode
 
 Vous pouvez basculer entre les modes au cours d'une session à l'aide de la touche _Tab_. Ou votre raccourci clavier `switch_mode` configuré.
 
-Voir également : [Formatters](/docs/formatters) pour plus d'informations sur la configuration du formatage du code.
+Voir également : [Formatters](/docs/formatters) pour plus d'informations sur la configuration du formatage du code.
 
 ---
 
-## Configurer
+## Configuration
 
-Vous pouvez personnaliser les modes intégrés ou créer les vôtres via la configuration. Les modes peuvent être configurés de deux manières :
+Vous pouvez personnaliser les modes intégrés ou créer les vôtres via la configuration. Les modes peuvent être configurés de deux manières :
 
-### JSONConfiguration
+### Configuration JSON
 
-Configurez les modes dans votre fichier de configuration `opencode.json` :
+Configurez les modes dans votre fichier de configuration `opencode.json` :
 
 ```json title="opencode.json"
 {
@@ -83,12 +82,12 @@ Configurez les modes dans votre fichier de configuration `opencode.json` :
 }
 ```
 
-### Configuration de démarque
+### Configuration Markdown
 
-Vous pouvez également définir des modes à l'aide de fichiers markdown. Placez-les dans :
+Vous pouvez également définir des modes à l'aide de fichiers markdown. Placez-les dans :
 
-- Mondial : `~/.config/opencode/modes/`
-- Projet : `.opencode/modes/`
+- Global : `~/.config/opencode/modes/`
+- Projet : `.opencode/modes/`
 
 ```markdown title="~/.config/opencode/modes/review.md"
 ---
@@ -149,11 +148,11 @@ Contrôlez le caractère aléatoire et la créativité des réponses de l'IA ave
 }
 ```
 
-Les valeurs de température varient généralement de 0,0 à 1,0 :
+Les valeurs de température varient généralement de 0,0 à 1,0 :
 
-- **0,0-0,2** : réponses très ciblées et déterministes, idéales pour l'analyse et la planification du code
-- **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
-- **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
+- **0,0-0,2** : réponses très ciblées et déterministes, idéales pour l'analyse et la planification du code
+- **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
+- **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
 
 ```json title="opencode.json"
 {
@@ -177,9 +176,9 @@ Si aucune température n'est spécifiée, opencode utilise les valeurs par défa
 
 ---
 
-### Rapide
+### Invite
 
-Spécifiez un fichier d'invite système personnalisé pour ce mode avec la configuration `prompt`. Le fichier d'invite doit contenir des instructions spécifiques à l'objectif du mode.
+Spécifiez un fichier de prompt système personnalisé pour ce mode avec la configuration `prompt`. Le fichier de prompt doit contenir des instructions spécifiques à l'objectif du mode.
 
 ```json title="opencode.json"
 {
@@ -191,8 +190,7 @@ Spécifiez un fichier d'invite système personnalisé pour ce mode avec la confi
 }
 ```
 
-Ce chemin est relatif à l'emplacement du fichier de configuration. Donc ça marche pour
-à la fois la configuration globale opencode et la configuration spécifique au projet.
+Ce chemin est relatif à l'emplacement du fichier de configuration. Donc ça marche pour à la fois la configuration globale opencode et la configuration spécifique au projet.
 
 ---
 
@@ -225,7 +223,7 @@ Si aucun outil n'est spécifié, tous les outils sont activés par défaut.
 
 Voici tous les outils pouvant être contrôlés via le mode config.
 
-| Outil       | Descriptif                            |
+| Outil       | Description                           |
 | ----------- | ------------------------------------- |
 | `bash`      | Exécuter des commandes shell          |
 | `edit`      | Modifier des fichiers existants       |
@@ -243,7 +241,7 @@ Voici tous les outils pouvant être contrôlés via le mode config.
 
 ## Modes personnalisés
 
-Vous pouvez créer vos propres modes personnalisés en les ajoutant à la configuration. Voici des exemples utilisant les deux approches :
+Vous pouvez créer vos propres modes personnalisés en les ajoutant à la configuration. Voici des exemples utilisant les deux approches :
 
 ### Utilisation de la configuration JSON
 
@@ -266,9 +264,9 @@ Vous pouvez créer vos propres modes personnalisés en les ajoutant à la config
 }
 ```
 
-### Utiliser des fichiers de démarque
+### Utiliser des fichiers Markdown
 
-Créez des fichiers de mode dans `.opencode/modes/` pour les modes spécifiques au projet ou `~/.config/opencode/modes/` pour les modes globaux :
+Créez des fichiers de mode dans `.opencode/modes/` pour les modes spécifiques au projet ou `~/.config/opencode/modes/` pour les modes globaux :
 
 ```markdown title=".opencode/modes/debug.md"
 ---
@@ -322,10 +320,10 @@ Priorities:
 
 Voici quelques cas d’utilisation courants pour différents modes.
 
-- **Mode build** : travail de développement complet avec tous les outils activés
-- **Mode Plan** : Analyse et planification sans apporter de modifications
-- **Mode révision** : révision du code avec accès en lecture seule et outils de documentation
-- **Mode débogage** : axé sur l'investigation avec les outils bash et read activés
-- **Mode Docs** : écriture de documentation avec des opérations sur les fichiers mais pas de commandes système
+- **Mode Build** : travail de développement complet avec tous les outils activés
+- **Mode Plan** : Analyse et planification sans apporter de modifications
+- **Mode Review** : révision du code avec accès en lecture seule et outils de documentation
+- **Mode Debug** : axé sur l'investigation avec les outils bash et read activés
+- **Mode Docs** : écriture de documentation avec des opérations sur les fichiers mais pas de commandes système
 
 Vous constaterez peut-être également que différents modèles conviennent à différents cas d’utilisation.

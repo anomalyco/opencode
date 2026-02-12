@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Avvia l'interfaccia testuale di OpenCode (terminal user interface).
+Avvia l'interfaccia testuale di OpenCode (interfaccia utente da terminale).
 
 ```bash
 opencode [project]
@@ -60,7 +60,7 @@ opencode agent [command]
 
 ### attach
 
-Collega un terminale a un backend server di OpenCode gia' in esecuzione avviato tramite i comandi `serve` o `web`.
+Collega un terminale a un backend server di OpenCode già in esecuzione avviato tramite i comandi `serve` o `web`.
 
 ```bash
 opencode attach [url]
@@ -72,7 +72,7 @@ Questo consente di usare la TUI con un backend OpenCode remoto. Per esempio:
 # Start the backend server for web/mobile access
 opencode web --port 4096 --hostname 0.0.0.0
 
-# In another terminal, attach the TUI to the running backend
+# In un altro terminale, collega la TUI al backend in esecuzione
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -173,7 +173,7 @@ Installa l'agente GitHub nel tuo repository.
 opencode github install
 ```
 
-Questo configura il workflow GitHub Actions necessario e ti guida nel processo di configurazione. [Scopri di piu'](/docs/github).
+Questo configura il workflow GitHub Actions necessario e ti guida nel processo di configurazione. [Scopri di più](/docs/github).
 
 ---
 
@@ -240,7 +240,7 @@ Autentica con un server MCP con OAuth abilitato.
 opencode mcp auth [name]
 ```
 
-Se non fornisci un nome server, ti verra' chiesto di selezionare tra i server OAuth-capable disponibili.
+Se non fornisci un nome server, ti verrà chiesto di selezionare tra i server OAuth-capable disponibili.
 
 Puoi anche elencare i server OAuth-capable e il loro stato di autenticazione.
 
@@ -286,7 +286,7 @@ opencode models [provider]
 
 Questo comando mostra tutti i modelli disponibili tra i provider configurati nel formato `provider/model`.
 
-E' utile per capire l'esatto nome del modello da usare nella [config](/docs/config/).
+È utile per capire l'esatto nome del modello da usare nella [config](/docs/config/).
 
 Puoi anche passare opzionalmente un ID provider per filtrare i modelli a quel provider.
 
@@ -296,12 +296,12 @@ opencode models anthropic
 
 #### Flag
 
-| Flag        | Descrizione                                         |
-| ----------- | --------------------------------------------------- |
-| `--refresh` | Aggiorna la cache modelli da models.dev             |
-| `--verbose` | Output piu' verboso (include metadati come i costi) |
+| Flag        | Descrizione                                        |
+| ----------- | -------------------------------------------------- |
+| `--refresh` | Aggiorna la cache modelli da models.dev            |
+| `--verbose` | Output più verboso (include metadati come i costi) |
 
-Usa `--refresh` per aggiornare l'elenco modelli in cache. E' utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in OpenCode.
+Usa `--refresh` per aggiornare l'elenco modelli in cache. È utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in OpenCode.
 
 ```bash
 opencode models --refresh
@@ -311,25 +311,25 @@ opencode models --refresh
 
 ### run
 
-Esegui opencode in modalita' non interattiva passando un prompt direttamente.
+Esegui opencode in modalità non interattiva passando un prompt direttamente.
 
 ```bash
 opencode run [message..]
 ```
 
-E' utile per scripting, automazione o quando vuoi una risposta rapida senza avviare la TUI completa. Per esempio.
+È utile per scripting, automazione o quando vuoi una risposta rapida senza avviare la TUI completa. Per esempio:
 
 ```bash "opencode run"
 opencode run Explain the use of context in Go
 ```
 
-Puoi anche collegarti a una istanza `opencode serve` gia' in esecuzione per evitare i cold boot dei server MCP ad ogni esecuzione:
+Puoi anche collegarti a una istanza `opencode serve` già in esecuzione per evitare i cold boot dei server MCP ad ogni esecuzione:
 
 ```bash
-# Start a headless server in one terminal
+# Avvia un server headless in un terminale
 opencode serve
 
-# In another terminal, run commands that attach to it
+# In un altro terminale, esegui comandi che si collegano ad esso
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
@@ -360,7 +360,7 @@ Avvia un server OpenCode headless per accesso via API. Vedi le [server docs](/do
 opencode serve
 ```
 
-Avvia un server HTTP che espone accesso API alle funzionalita' di opencode senza la TUI. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
+Avvia un server HTTP che espone accesso API alle funzionalità di opencode senza la TUI. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
 
 #### Flag
 
@@ -395,7 +395,7 @@ opencode session list
 
 | Flag          | Breve | Descrizione                          |
 | ------------- | ----- | ------------------------------------ |
-| `--max-count` | `-n`  | Limita alle N sessioni piu' recenti  |
+| `--max-count` | `-n`  | Limita alle N sessioni più recenti   |
 | `--format`    |       | Formato output: table o json (table) |
 
 ---
@@ -427,7 +427,7 @@ Esporta i dati di sessione come JSON.
 opencode export [sessionID]
 ```
 
-Se non fornisci un ID sessione, ti verra' chiesto di selezionare tra le sessioni disponibili.
+Se non fornisci un ID sessione, ti verrà chiesto di selezionare tra le sessioni disponibili.
 
 ---
 
@@ -551,7 +551,7 @@ La CLI di opencode accetta i seguenti flag globali.
 
 ## Variabili d'ambiente
 
-OpenCode puo' essere configurato tramite variabili d'ambiente.
+OpenCode può essere configurato tramite variabili d'ambiente.
 
 | Variabile                             | Tipo    | Descrizione                                                 |
 | ------------------------------------- | ------- | ----------------------------------------------------------- |
@@ -584,20 +584,20 @@ OpenCode puo' essere configurato tramite variabili d'ambiente.
 
 ### Sperimentale
 
-Queste variabili d'ambiente abilitano funzionalita' sperimentali che potrebbero cambiare o essere rimosse.
+Queste variabili d'ambiente abilitano funzionalità sperimentali che potrebbero cambiare o essere rimosse.
 
-| Variabile                                       | Tipo    | Descrizione                                 |
-| ----------------------------------------------- | ------- | ------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Abilita tutte le funzionalita' sperimentali |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Abilita icon discovery                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disabilita copy on select nella TUI         |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Timeout di default per comandi bash in ms   |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Massimo token di output per risposte LLM    |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Abilita file watcher per l'intera dir       |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Abilita formatter oxfmt                     |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Abilita strumento LSP sperimentale          |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disabilita file watcher                     |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalita' Exa sperimentali      |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita type checking LSP sperimentale      |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Abilita markdown sperimentale               |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                           |
+| Variabile                                       | Tipo    | Descrizione                                |
+| ----------------------------------------------- | ------- | ------------------------------------------ |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Abilita tutte le funzionalità sperimentali |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Abilita icon discovery                     |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disabilita copy on select nella TUI        |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Timeout di default per comandi bash in ms  |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Massimo token di output per risposte LLM   |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Abilita file watcher per l'intera dir      |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Abilita formatter oxfmt                    |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Abilita strumento LSP sperimentale         |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disabilita file watcher                    |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalità Exa sperimentali      |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita type checking LSP sperimentale     |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Abilita markdown sperimentale              |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                          |

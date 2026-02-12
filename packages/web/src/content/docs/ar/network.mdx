@@ -12,13 +12,13 @@ description: إعداد الوكلاء والشهادات المخصصة.
 يتبع OpenCode متغيرات بيئة الوكيل القياسية.
 
 ```bash
-# HTTPS proxy (recommended)
+# وكيل HTTPS (موصى به)
 export HTTPS_PROXY=https://proxy.example.com:8080
 
-# HTTP proxy (if HTTPS not available)
+# وكيل HTTP (إذا لم يتوفر HTTPS)
 export HTTP_PROXY=http://proxy.example.com:8080
 
-# Bypass proxy for local server (required)
+# تجاوز الوكيل للخادم المحلي (مطلوب)
 export NO_PROXY=localhost,127.0.0.1
 ```
 
@@ -26,7 +26,7 @@ export NO_PROXY=localhost,127.0.0.1
 تتواصل واجهة TUI مع خادم HTTP محلي. يجب تجاوز الوكيل لهذا الاتصال لمنع حلقات التوجيه.
 :::
 
-يمكنك إعداد منفذ الخادم واسم المضيف باستخدام [أعلام سطر الأوامر](/docs/cli#run).
+يمكنك إعداد منفذ الخادم واسم المضيف باستخدام [أعلام CLI](/docs/cli#run).
 
 ---
 
@@ -54,4 +54,4 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
 ```
 
-يعمل ذلك لكل من اتصالات الوكيل والوصول المباشر إلى واجهات برمجة التطبيقات.
+يعمل ذلك لكل من اتصالات الوكيل والوصول المباشر إلى APIs.

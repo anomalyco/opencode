@@ -27,7 +27,7 @@ Los agentes primarios son los asistentes principales con los que interactúas di
 Puede utilizar la tecla **Tab** para cambiar entre agentes principales durante una sesión.
 :::
 
-OpenCode viene con dos agentes principales integrados, **Construir** y **Planificar**. Bien
+OpenCode viene con dos agentes principales integrados, **Build** y **Plan**. Bien
 mira estos a continuación.
 
 ---
@@ -36,17 +36,17 @@ mira estos a continuación.
 
 Los subagentes son asistentes especializados que los agentes principales pueden invocar para tareas específicas. También puedes invocarlos manualmente **@ mencionándolos** en tus mensajes.
 
-OpenCode viene con dos subagentes integrados, **General** y **Explorar**. Veremos esto a continuación.
+OpenCode viene con dos subagentes integrados, **General** y **Explore**. Veremos esto a continuación.
 
 ---
 
-## Incorporado
+## Integrados
 
 OpenCode viene con dos agentes primarios integrados y dos subagentes integrados.
 
 ---
 
-### Usar compilación
+### Build
 
 _Modo_: `primary`
 
@@ -54,7 +54,7 @@ Build es el agente principal **predeterminado** con todas las herramientas habil
 
 ---
 
-### Plan de uso
+### Plan
 
 _Modo_: `primary`
 
@@ -68,7 +68,7 @@ Este agente es útil cuando desea que LLM analice código, sugiera cambios o cre
 
 ---
 
-### Uso general
+### General
 
 _Modo_: `subagent`
 
@@ -76,7 +76,7 @@ Un agente de uso general para investigar preguntas complejas y ejecutar tareas d
 
 ---
 
-### Usar explorar
+### Explore
 
 _Modo_: `subagent`
 
@@ -84,7 +84,7 @@ Un agente rápido y de solo lectura para explorar bases de código. No se pueden
 
 ---
 
-### Utilice compactación
+### Compactación
 
 _Modo_: `primary`
 
@@ -92,7 +92,7 @@ Agente de sistema oculto que compacta un contexto largo en un resumen más peque
 
 ---
 
-### Usar título
+### Título
 
 _Modo_: `primary`
 
@@ -100,7 +100,7 @@ Agente del sistema oculto que genera títulos de sesión cortos. Se ejecuta auto
 
 ---
 
-### Usar resumen
+### Resumen
 
 _Modo_: `primary`
 
@@ -121,14 +121,14 @@ Agente del sistema oculto que crea resúmenes de sesiones. Se ejecuta automátic
      ```
 
 3. **Navegación entre sesiones**: cuando los subagentes crean sus propias sesiones secundarias, puede navegar entre la sesión principal y todas las sesiones secundarias usando:
-   - **\<Líder>+Derecha** (o su combinación de teclas `session_child_cycle` configurada) para avanzar a través de padre → hijo1 → hijo2 → ... → padre
-   - **\<Líder>+Izquierda** (o su combinación de teclas `session_child_cycle_reverse` configurada) para retroceder entre padre ← hijo1 ← hijo2 ← ... ← padre
+   - **\<Leader>+Right** (or su combinación de teclas `session_child_cycle` configurada) para avanzar a través de padre → hijo1 → hijo2 → ... → padre
+   - **\<Leader>+Left** (or su combinación de teclas `session_child_cycle_reverse` configurada) para retroceder entre padre ← hijo1 ← hijo2 ← ... ← padre
 
    Esto le permite cambiar sin problemas entre la conversación principal y el trabajo de subagente especializado.
 
 ---
 
-## Configurar
+## Configuración
 
 Puede personalizar los agentes integrados o crear los suyos propios mediante la configuración. Los agentes se pueden configurar de dos maneras:
 
@@ -177,9 +177,9 @@ Configure agentes en su archivo de configuración `opencode.json`:
 
 ---
 
-### Rebaja
+### Markdown
 
-También puede definir agentes utilizando archivos de rebajas. Colócalos en:
+También puede definir agentes utilizando archivos de Markdown. Colócalos en:
 
 - Global: `~/.config/opencode/agents/`
 - Por proyecto: `.opencode/agents/`
@@ -206,7 +206,7 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-El nombre del archivo de rebajas se convierte en el nombre del agente. Por ejemplo, `review.md` crea un agente `review`.
+El nombre del archivo de Markdown se convierte en el nombre del agente. Por ejemplo, `review.md` crea un agente `review`.
 
 ---
 
@@ -307,7 +307,7 @@ El campo heredado `maxSteps` está en desuso. Utilice `steps` en su lugar.
 
 ---
 
-### Desactivar
+### Deshabilitar
 
 Establezca en `true` para deshabilitar el agente.
 
@@ -323,7 +323,7 @@ Establezca en `true` para deshabilitar el agente.
 
 ---
 
-### Inmediato
+### Indicación
 
 Especifique un archivo de aviso del sistema personalizado para este agente con la configuración `prompt`. El archivo de aviso debe contener instrucciones específicas para el propósito del agente.
 
@@ -563,7 +563,7 @@ Sólo aplica para agentes `mode: subagent`.
 
 ---
 
-### Permisos de tareas
+### Permisos de tarea
 
 Controle qué subagentes puede invocar un agente a través de la herramienta Tarea con `permission.task`. Utiliza patrones globales para una combinación flexible.
 
@@ -617,7 +617,7 @@ Utilice un color hexadecimal válido (por ejemplo, `#FF5733`) o un color de tema
 
 ---
 
-### P superior
+### Top P
 
 Controle la diversidad de respuestas con la opción `top_p`. Alternativa a la temperatura para controlar la aleatoriedad.
 
@@ -684,11 +684,11 @@ Este comando interactivo:
 
 A continuación se muestran algunos casos de uso comunes para diferentes agentes.
 
-- **Agente de compilación**: trabajo de desarrollo completo con todas las herramientas habilitadas
-- **Plan agente**: Análisis y planificación sin realizar cambios
-- **Agente de revisión**: revisión de código con acceso de solo lectura más herramientas de documentación
-- **Agente de depuración**: centrado en la investigación con bash y herramientas de lectura habilitadas
-- **Agente de documentos**: escritura de documentación con operaciones de archivos pero sin comandos del sistema.
+- **Agente Build**: trabajo de desarrollo completo con todas las herramientas habilitadas
+- **Agente Plan**: Análisis y planificación sin realizar cambios
+- **Agente Review**: revisión de código con acceso de solo lectura más herramientas de documentación
+- **Agente Debug**: centrado en la investigación con bash y herramientas de lectura habilitadas
+- **Agente Docs**: escritura de documentación con operaciones de archivos pero sin comandos del sistema.
 
 ---
 

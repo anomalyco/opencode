@@ -3,13 +3,13 @@ title: MCP sunucuları
 description: Yerel ve uzak MCP araçlarını ekleyin.
 ---
 
-_Model Bağlam Protokolü_ veya MCP kullanarak OpenCode'a harici araçlar ekleyebilirsiniz. OpenCode hem yerel hem de uzak sunucuları destekler.
+_Model Bağlam Protokolü_ veya MCP kullanarak opencode'a harici araçlar ekleyebilirsiniz. opencode hem yerel hem de uzak sunucuları destekler.
 
 MCP araçları eklendikten sonra yerleşik araçların yanı sıra LLM tarafından otomatik olarak kullanılabilir.
 
 ---
 
-#### Caveats
+#### Uyarılar
 
 Bir MCP sunucusu kullandığınızda bağlama eklenir. Çok fazla aletiniz varsa, bu hızla artabilir. Bu nedenle hangi MCP sunucularını kullandığınıza dikkat etmenizi öneririz.
 
@@ -21,9 +21,9 @@ GitHub MCP sunucusu gibi belirli MCP sunucuları çok sayıda belirteç ekleme e
 
 ---
 
-## Olanak vermek
+## Etkinleştirme
 
-MCP sunucularını [OpenCode Config](https://opencode.ai/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
+MCP sunucularını [opencode Config](https://opencode.ai/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -44,7 +44,7 @@ Ayrıca `enabled` öğesini `false` olarak ayarlayarak bir sunucuyu devre dış�
 
 ---
 
-### Overriding remote defaults
+### Uzak varsayılanları geçersiz kılma
 
 Kuruluşlar, `.well-known/opencode` uç noktaları aracılığıyla varsayılan MCP sunucularını sağlayabilir. Bu sunucular varsayılan olarak devre dışı bırakılarak kullanıcıların ihtiyaç duydukları sunucuları seçmelerine olanak tanınabilir.
 
@@ -112,7 +112,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-#### Options
+#### Seçenekler
 
 Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiştir.
 
@@ -150,7 +150,7 @@ Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiş
 
 ---
 
-#### Options
+#### Seçenekler
 
 | Seçenek   | Tür     | Gerekli | Açıklama                                                                                       |
 | --------- | ------- | ------- | ---------------------------------------------------------------------------------------------- |
@@ -165,7 +165,7 @@ Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiş
 
 ## OAuth
 
-OpenCode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olarak yönetir. Bir sunucu kimlik doğrulaması gerektirdiğinde OpenCode şunları yapar:
+opencode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olarak yönetir. Bir sunucu kimlik doğrulaması gerektirdiğinde opencode şunları yapar:
 
 1. 401 yanıtını tespit edin ve OAuth akışını başlatın
 2. Sunucu tarafından destekleniyorsa **Dinamik İstemci Kaydı (RFC 7591)** kullanın
@@ -173,7 +173,7 @@ OpenCode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olar
 
 ---
 
-### Automatic
+### Otomatik
 
 OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gerek yoktur. Uzak sunucuyu yapılandırmanız yeterli:
 
@@ -189,7 +189,7 @@ OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gere
 }
 ```
 
-Sunucu kimlik doğrulama gerektiriyorsa OpenCode, onu ilk kez kullanmaya çalıştığınızda kimlik doğrulamanızı isteyecektir. Değilse, `opencode mcp auth <server-name>` ile [manually trigger the flow](#authenticating) yapabilirsiniz.
+Sunucu kimlik doğrulama gerektiriyorsa opencode, onu ilk kez kullanmaya çalıştığınızda kimlik doğrulamanızı isteyecektir. Değilse, `opencode mcp auth <server-name>` ile [manually trigger the flow](#authenticating) yapabilirsiniz.
 
 ---
 
@@ -216,7 +216,7 @@ MCP sunucu sağlayıcısından istemci kimlik bilgileriniz varsa, bunları yapı
 
 ---
 
-### Authenticating
+### Kimlik doğrulama
 
 Kimlik doğrulamayı manuel olarak tetikleyebilir veya kimlik bilgilerini yönetebilirsiniz.
 
@@ -238,7 +238,7 @@ Remove stored credentials:
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` komutu tarayıcınızı yetkilendirme için açacaktır. Yetkilendirmenizin ardından OpenCode, belirteçleri `~/.local/share/opencode/mcp-auth.json`'de güvenli bir şekilde saklar.
+`mcp auth` komutu tarayıcınızı yetkilendirme için açacaktır. Yetkilendirmenizin ardından opencode, belirteçleri `~/.local/share/opencode/mcp-auth.json`'de güvenli bir şekilde saklar.
 
 ---
 
@@ -264,7 +264,7 @@ Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğ
 
 ---
 
-#### OAuth Options
+#### OAuth Seçenekleri
 
 | Seçenek        | Tür             | Açıklama                                                                         |
 | -------------- | --------------- | -------------------------------------------------------------------------------- |
@@ -273,7 +273,7 @@ Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğ
 | `clientSecret` | Dize            | Yetkilendirme sunucusu gerektiriyorsa OAuth istemci sırrı.                       |
 | `scope`        | String          | OAuth scopes to request during authorization.                                    |
 
-#### Debugging
+#### Hata Ayıklama
 
 Uzak bir MCP sunucusunun kimlik doğrulaması başarısız olursa aşağıdakileri kullanarak sorunları teşhis edebilirsiniz:
 
@@ -289,9 +289,9 @@ opencode mcp debug my-oauth-server
 
 ---
 
-## Üstesinden gelmek
+## Yönetim
 
-MCP'leriniz yerleşik araçların yanı sıra OpenCode'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi OpenCode yapılandırması aracılığıyla yönetebilirsiniz.
+MCP'leriniz yerleşik araçların yanı sıra opencode'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi opencode yapılandırması aracılığıyla yönetebilirsiniz.
 
 ---
 
@@ -343,7 +343,7 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 
 ---
 
-### Temsilci başına
+### Agent başına
 
 Çok sayıda MCP sunucunuz varsa, bunları yalnızca aracı başına etkinleştirmek ve genel olarak devre dışı bırakmak isteyebilirsiniz. Bunu yapmak için:
 
@@ -375,7 +375,7 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 
 ---
 
-#### Glob patterns
+#### Glob desenleri
 
 Glob modeli, basit normal ifade globbing modellerini kullanır:
 
@@ -423,7 +423,7 @@ Yapılandırmayı ekledikten sonra Sentry ile kimlik doğrulaması yapın:
 opencode mcp auth sentry
 ```
 
-Bu, OAuth akışını tamamlamak ve OpenCode'u Sentry hesabınıza bağlamak için bir tarayıcı penceresi açacaktır.
+Bu, OAuth akışını tamamlamak ve opencode'u Sentry hesabınıza bağlamak için bir tarayıcı penceresi açacaktır.
 
 Kimlik doğrulaması yapıldıktan sonra sorunları, projeleri ve hata verilerini sorgulamak için istemlerinizde Sentry araçlarını kullanabilirsiniz.
 
@@ -433,7 +433,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### Bağlam7
+### Context7
 
 Dokumanlar arasında arama yapmak için [Context7 MCP server](https://github.com/upstash/context7) ekleyin.
 

@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components"
 رغم أن OpenCode يمكن تشغيله مباشرة على Windows، نوصي باستخدام [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) للحصول على أفضل تجربة. يوفر WSL بيئة Linux تعمل بسلاسة مع ميزات OpenCode.
 
 :::tip[لماذا WSL؟]
-يوفر WSL أداء أفضل لنظام الملفات، ودعمًا كاملًا للطرفية، وتوافقًا مع أدوات التطوير التي يعتمد عليها OpenCode.
+يوفر WSL أداء أفضل لنظام الملفات، ودعمًا كاملًا لـ terminal، وتوافقًا مع أدوات التطوير التي يعتمد عليها OpenCode.
 :::
 
 ---
@@ -23,7 +23,7 @@ import { Steps } from "@astrojs/starlight/components"
 
 2. **ثبّت OpenCode داخل WSL**
 
-   بعد إعداد WSL، افتح طرفية WSL وثبّت OpenCode باستخدام إحدى [طرق التثبيت](/docs/).
+   بعد إعداد WSL، افتح terminal داخل WSL وثبّت OpenCode باستخدام إحدى [طرق التثبيت](/docs/).
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
@@ -73,7 +73,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 لأفضل تجربة ويب على Windows:
 
-1. **شغّل `opencode web` من طرفية WSL** بدلًا من PowerShell:
+1. **شغّل `opencode web` من terminal داخل WSL** بدلًا من PowerShell:
 
    ```bash
    opencode web --hostname 0.0.0.0
@@ -81,7 +81,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 2. **افتحه من متصفح Windows** عبر `http://localhost:<port>` (يعرض OpenCode الرابط)
 
-تشغيل `opencode web` من WSL يضمن وصولًا صحيحًا لنظام الملفات وتكاملًا أفضل مع الطرفية، مع بقائه متاحًا من متصفح Windows.
+تشغيل `opencode web` من WSL يضمن وصولًا صحيحًا لنظام الملفات وتكاملًا أفضل مع terminal، مع بقائه متاحًا من متصفح Windows.
 
 ---
 

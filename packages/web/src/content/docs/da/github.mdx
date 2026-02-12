@@ -1,6 +1,6 @@
 ---
 title: GitHub
-description: Brug OpenCode i GitHub-problemer og pull-anmodninger.
+description: Brug OpenCode i GitHub-problemer og Pull Requests.
 ---
 
 OpenCode integreres med din GitHub arbejdsgang. Nævn `/opencode` eller `/oc` i din kommentar, og OpenCode vil udføre opgaver i din GitHub Actions-løber.
@@ -10,7 +10,7 @@ OpenCode integreres med din GitHub arbejdsgang. Nævn `/opencode` eller `/oc` i 
 ## Funktioner
 
 - **Triageproblemer**: Bed OpenCode om at undersøge et problem og forklare dig det.
-- **Ret og implementer**: Bed OpenCode om at løse et problem eller implementere en funktion. Og det vil fungere i en ny afdeling og indsende en PR med alle ændringerne.
+- **Ret og implementer**: Bed OpenCode om at løse et problem eller implementere en funktion. Og det vil fungere i en ny branch og indsende en PR med alle ændringerne.
 - **Sikker**: OpenCode løber inde i din GitHubs løbere.
 
 ---
@@ -37,7 +37,7 @@ Eller du kan indstille det manuelt.
 
 2. **Tilføj arbejdsgangen**
 
-   Tilføj følgende workflow-fil til `.github/workflows/opencode.yml` i din repo. Sørg for at indstille de relevante `model` og nødvendige API nøgler i `env`.
+   Tilføj følgende workflow-fil til `.github/workflows/opencode.yml` i din repo. Sørg for at indstille de relevante `model` og nødvendige API-nøgler i `env`.
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -73,9 +73,9 @@ Eller du kan indstille det manuelt.
              # github_token: xxxx
    ```
 
-3. **Opbevar API nøglerne i hemmeligheder**
+3. **Opbevar API-nøglerne i hemmeligheder**
 
-   I din organisation eller dit projekt **indstillinger** skal du udvide **Hemmeligheder og variabler** til venstre og vælge **Handlinger**. Og tilføj de nødvendige API nøgler.
+   I din organisation eller dit projekt **indstillinger** skal du udvide **Hemmeligheder og variabler** til venstre og vælge **Handlinger**. Og tilføj de nødvendige API-nøgler.
 
 ---
 
@@ -85,7 +85,7 @@ Eller du kan indstille det manuelt.
 - `agent`: Agenten, der skal bruges. Skal være en primær agent. Falder tilbage til `default_agent` fra config eller `"build"`, hvis den ikke findes.
 - `share`: Om OpenCode-sessionen skal dele. Standard er **true** for offentlige arkiver.
 - `prompt`: Valgfri brugerdefineret prompt for at tilsidesætte standardadfærden. Brug dette til at tilpasse, hvordan OpenCode behandler anmodninger.
-- `token`: Valgfrit GitHub adgangstoken til at udføre operationer såsom oprettelse af kommentarer, begå ændringer og åbning af pull-anmodninger. Som standard bruger OpenCode installationsadgangstokenet fra OpenCode GitHub-appen, så commits, kommentarer og pull-anmodninger ser ud til at komme fra appen.
+- `token`: Valgfrit GitHub adgangstoken til at udføre operationer såsom oprettelse af kommentarer, begå ændringer og åbning af Pull Requests. Som standard bruger OpenCode installationsadgangstokenet fra OpenCode GitHub-appen, så commits, kommentarer og Pull Requests ser ud til at komme fra appen.
 
   Alternativt kan du bruge GitHub Action runners [built-in `GITHUB_TOKEN`](OpenCode) uden at installere OpenCode GitHub appen. Bare sørg for at give de nødvendige tilladelser i dit workflow:
 
@@ -107,14 +107,14 @@ OpenCode kan udløses af følgende GitHub hændelser:
 
 | Begivenhedstype               | Udløst af                               | Detaljer                                                                                                                |
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Kommentarer og problemer eller PR       | Nævn `/opencode` eller `/oc` i din kommentar. OpenCode læser kontekst og kan oprette filialer, åbne PR'er eller svare.  |
+| `issue_comment`               | Kommentarer og problemer eller PR       | Nævn `/opencode` eller `/oc` i din kommentar. OpenCode læser kontekst og kan oprette brancher, åbne PR'er eller svare.  |
 | `pull_request_review_comment` | Kommenter specifikke kodelinjer i en PR | Nævn `/opencode` eller `/oc`, mens du gennemgår koden. OpenCode modtager filsti, linjenumre og diff-kontekst.           |
 | `issues`                      | Udgave åbnet eller redigeret            | Udløs automatisk OpenCode, når problemer oprettes eller ændres. Kræver `prompt` input.                                  |
-| `pull_request`                | PR åbnet eller opdateret                | Udløs automatisk OpenCode, når PR'er åbnes, synkroniseres eller genåbnes. Nyttigt til automatiserede anmeldelser.       |
+| `pull_request`                | PR åbnet eller opdateret                | Udløs automatisk OpenCode, når PR'er åbnes, synkroniseres eller genåbnes. Nyttigt til automatiserede kodegennemgange.   |
 | `schedule`                    | Cron-baseret tidsplan                   | Kør OpenCode efter en tidsplan. Kræver `prompt` input. Output går til logfiler og PR'er (intet problem ved kommentere). |
 | `workflow_dispatch`           | Manuel trigger fra GitHub UI            | Udløs OpenCode efter behov via fanen Handlinger. Kræver `prompt` input. Output går til logfiler og PR'er.               |
 
-### Skema Eksempel
+### Tidsplan eksempel
 
 Kør OpenCode efter en tidsplan for at udføre automatiske opgaver:
 
@@ -150,11 +150,11 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-For planlagte begivenheder er `prompt` input **påkrævet**, da der ikke er nogen kommentarer at udtrække instruktioner fra. Planlagte arbejdsgange kører uden en brugerkontekst til kontrol af tilladelser, så arbejdsgangen skal give `contents: write` og `pull-requests: write`, hvis du forventer, at OpenCode skal oprette filialer eller PR'er.
+For planlagte begivenheder er `prompt` input **påkrævet**, da der ikke er nogen kommentarer at udtrække instruktioner fra. Planlagte arbejdsgange kører uden en brugerkontekst til kontrol af tilladelser, så arbejdsgangen skal give `contents: write` og `pull-requests: write`, hvis du forventer, at OpenCode skal oprette brancher eller PR'er.
 
 ---
 
-### Pull Request Eksempel
+### Pull Request eksempel
 
 Gennemgå automatisk PR'er, når de åbnes eller opdateres:
 
@@ -191,11 +191,11 @@ jobs:
             - Suggest improvements
 ```
 
-For `pull_request` hændelser, hvis der ikke er angivet nogen `prompt`, vil OpenCode som standard gennemgå pull-anmodningen.
+For `pull_request` hændelser, hvis der ikke er angivet nogen `prompt`, vil OpenCode som standard gennemgå Pull Requesten.
 
 ---
 
-### Issues Triage Eksempel
+### Issues Triage eksempel
 
 Triage automatisk nye problemer. Dette eksempel filtrerer til konti ældre end 30 dage for at reducere spam:
 
@@ -291,7 +291,7 @@ Her er nogle eksempler på, hvordan du kan bruge OpenCode i GitHub.
   /opencode fix this
   ```
 
-  Og OpenCode vil oprette en ny filial, implementere ændringer og åbne en PR med ændringer.
+  Og OpenCode vil oprette en ny branch, implementere ændringer og åbne en PR med ændringer.
 
 - **Gennemgå PR'er og foretag ændringer**
 

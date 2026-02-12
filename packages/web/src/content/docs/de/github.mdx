@@ -7,11 +7,11 @@ OpenCode lässt sich in Ihren GitHub-Workflow integrieren. Erwähnen Sie `/openc
 
 ---
 
-## Features
+## Funktionen
 
-- **Triage-Probleme**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
-- **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren. Und es funktioniert in einem neuen Zweig und sendet ein PR mit allen Änderungen.
-- **Sicher**: OpenCode läuft in den Runnern Ihres GitHub.
+- **Issue Triage**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
+- **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren. Und es funktioniert in einem neuen Branch und sendet ein PR mit allen Änderungen.
+- **Sicher**: OpenCode läuft in den Runners Ihres GitHub.
 
 ---
 
@@ -23,7 +23,7 @@ Führen Sie den folgenden Befehl in einem Projekt aus, das sich in einem GitHub-
 opencode github install
 ```
 
-Dies führt Sie durch die Installation der GitHub-App, das Erstellen des Workflows und das Einrichten von Geheimnissen.
+Dies führt Sie durch die Installation der GitHub-App, das Erstellen des Workflows und das Einrichten von Secrets.
 
 ---
 
@@ -37,7 +37,7 @@ Oder Sie können es manuell einrichten.
 
 2. **Den Workflow hinzufügen**
 
-   Fügen Sie die folgende Workflowdatei zu `.github/workflows/opencode.yml` in Ihrem Repository hinzu. Stellen Sie sicher, dass Sie in `env` die entsprechenden Schlüssel `model` und API festlegen.
+   Fügen Sie die folgende Workflowdatei zu `.github/workflows/opencode.yml` in Ihrem Repository hinzu. Stellen Sie sicher, dass Sie in `env` die passenden Werte für `model` und `api_key` setzen.
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -73,19 +73,19 @@ Oder Sie können es manuell einrichten.
              # github_token: xxxx
    ```
 
-3. **Speichern Sie die API-Schlüssel in Geheimnissen**
+3. **Speichern Sie die API-Schlüssel in Secrets**
 
-   Erweitern Sie in den **Einstellungen** Ihrer Organisation oder Ihres Projekts links **Geheimnisse und Variablen** und wählen Sie **Aktionen** aus. Und fügen Sie die erforderlichen API-Schlüssel hinzu.
+   Erweitern Sie in den **Einstellungen** Ihrer Organisation oder Ihres Projekts links **Secrets und Variablen** und wählen Sie **Aktionen** aus. Und fügen Sie die erforderlichen API-Schlüssel hinzu.
 
 ---
 
-## Configuration
+## Konfiguration
 
 - `model`: Das mit OpenCode zu verwendende Modell. Nimmt das Format `provider/model` an. Dies ist **erforderlich**.
 - `agent`: Der zu verwendende Agent. Muss ein Hauptagent sein. Fällt aus der Konfiguration auf `default_agent` oder `"build"` zurück, wenn es nicht gefunden wird.
 - `share`: Ob die OpenCode-Sitzung geteilt werden soll. Der Standardwert ist **true** für öffentliche Repositorys.
 - `prompt`: Optionale benutzerdefinierte Eingabeaufforderung zum Überschreiben des Standardverhaltens. Verwenden Sie dies, um anzupassen, wie OpenCode Anfragen verarbeitet.
-- `token`: Optionales GitHub-Zugriffstoken zum Ausführen von Vorgängen wie dem Erstellen von Kommentaren, dem Festschreiben von Änderungen und dem Öffnen von Pull-Anfragen. Standardmäßig verwendet OpenCode das Installationszugriffstoken der OpenCode GitHub-App, sodass Commits, Kommentare und Pull-Anfragen so aussehen, als würden sie von der App kommen.
+- `token`: Optionales GitHub-Zugriffstoken zum Ausführen von Vorgängen wie dem Erstellen von Kommentaren, dem Festschreiben von Änderungen und dem Öffnen von Pull Requests. Standardmäßig verwendet OpenCode das Installation Access Token der OpenCode GitHub-App, sodass Commits, Kommentare und Pull Requests so aussehen, als würden sie von der App kommen.
 
   Alternativ können Sie [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) des GitHub Action Runners verwenden, ohne die OpenCode GitHub App zu installieren. Stellen Sie einfach sicher, dass Sie in Ihrem Workflow die erforderlichen Berechtigungen erteilen:
 
@@ -101,18 +101,18 @@ Oder Sie können es manuell einrichten.
 
 ---
 
-## Unterstützte Veranstaltungen
+## Unterstützte Events
 
-OpenCode kann durch die folgenden GitHub-Ereignisse ausgelöst werden:
+OpenCode kann durch die folgenden GitHub-Events ausgelöst werden:
 
 | Ereignistyp                   | Ausgelöst durch                                   | Einzelheiten                                                                                                                                        |
 | ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Kommentieren Sie ein Problem oder PR              | Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar. OpenCode liest den Kontext und kann Verzweigungen erstellen, PRs öffnen oder antworten.     |
-| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/opencode` oder `/oc` beim Überprüfen des Codes. OpenCode empfängt Dateipfad, Zeilennummern und Diff-Kontext.                         |
+| `issue_comment`               | Kommentieren Sie ein Problem oder PR              | Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar. OpenCode liest den Kontext und kann Branches erstellen, PRs öffnen oder antworten.          |
+| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/opencode` oder `/oc` beim Überprüfen des Codes. OpenCode empfängt Dateipfad, Zeilennummern und Diff Context.                         |
 | `issues`                      | Problem geöffnet oder bearbeitet                  | Lösen Sie OpenCode automatisch aus, wenn Probleme erstellt oder geändert werden. Erfordert `prompt`-Eingabe.                                        |
 | `pull_request`                | PR geöffnet oder aktualisiert                     | Lösen Sie OpenCode automatisch aus, wenn PRs geöffnet, synchronisiert oder erneut geöffnet werden. Nützlich für automatisierte Bewertungen.         |
 | `schedule`                    | Cron-basierter Zeitplan                           | Führen Sie OpenCode nach einem Zeitplan aus. Erfordert `prompt`-Eingabe. Die Ausgabe geht an Protokolle und PRs (kein Kommentar zu diesem Problem). |
-| `workflow_dispatch`           | Manueller Trigger von GitHub UI                   | Lösen Sie OpenCode bei Bedarf über die Registerkarte „Aktionen“ aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.         |
+| `workflow_dispatch`           | Manueller Trigger von GitHub UI                   | Lösen Sie OpenCode bei Bedarf über die Actions Tab aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.                      |
 
 ### Beispiel für einen Zeitplan
 
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-Für geplante Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen Kommentar gibt, aus dem Anweisungen extrahiert werden können. Geplante Workflows werden ohne Benutzerkontext zur Berechtigungsprüfung ausgeführt. Daher muss der Workflow `contents: write` und `pull-requests: write` gewähren, wenn Sie erwarten, dass OpenCode Zweige oder PRs erstellt.
+Für geplante Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen Kommentar gibt, aus dem Anweisungen extrahiert werden können. Geplante Workflows werden ohne Benutzerkontext zur Berechtigungsprüfung ausgeführt. Daher muss der Workflow `contents: write` und `pull-requests: write` gewähren, wenn Sie erwarten, dass OpenCode Branches oder PRs erstellt.
 
 ---
 
@@ -195,7 +195,7 @@ Wenn für `pull_request`-Ereignisse kein `prompt` bereitgestellt wird, überprü
 
 ---
 
-### Beispiel für eine Triage von Problemen
+### Beispiel für eine Issue-Triage
 
 Neue Probleme automatisch selektieren. In diesem Beispiel wird nach Konten gefiltert, die älter als 30 Tage sind, um Spam zu reduzieren:
 
@@ -250,7 +250,7 @@ Für `issues`-Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen
 
 ---
 
-## Benutzerdefinierte Eingabeaufforderungen
+## Benutzerdefinierte Prompts
 
 Überschreiben Sie die Standardaufforderung, um das Verhalten von OpenCode für Ihren Workflow anzupassen.
 
@@ -269,7 +269,7 @@ Dies ist nützlich, um bestimmte Prüfkriterien, Kodierungsstandards oder Schwer
 
 ---
 
-## Examples
+## Beispiele
 
 Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
 
@@ -291,7 +291,7 @@ Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
   /opencode fix this
   ```
 
-  Und OpenCode erstellt einen neuen Zweig, implementiert die Änderungen und öffnet ein PR mit den Änderungen.
+  Und OpenCode erstellt einen neuen Branch, implementiert die Änderungen und öffnet ein PR mit den Änderungen.
 
 - **PRs überprüfen und Änderungen vornehmen**
 
@@ -305,7 +305,7 @@ Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
 
 - **Überprüfen Sie bestimmte Codezeilen**
 
-  Hinterlassen Sie einen Kommentar direkt zu den Codezeilen auf der Registerkarte „Dateien“ von PR. OpenCode erkennt automatisch die Datei, Zeilennummern und den Diff-Kontext, um präzise Antworten bereitzustellen.
+  Hinterlassen Sie einen Kommentar direkt zu den Codezeilen auf der Files Tab von PR. OpenCode erkennt automatisch die Datei, Zeilennummern und den Diff Context, um präzise Antworten bereitzustellen.
 
   ```
   [Comment on specific lines in Files tab]
@@ -315,7 +315,7 @@ Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
   Beim Kommentieren bestimmter Zeilen erhält OpenCode:
   - Die genaue Datei, die überprüft wird
   - Die spezifischen Codezeilen
-  - Der umgebende Diff-Kontext
+  - Der umgebende Diff Context
   - Informationen zur Zeilennummer
 
   Dies ermöglicht gezieltere Anfragen, ohne dass Dateipfade oder Zeilennummern manuell angegeben werden müssen.

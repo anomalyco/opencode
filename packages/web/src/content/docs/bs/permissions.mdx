@@ -67,7 +67,7 @@ Za većinu dozvola, možete koristiti objekt za primjenu različitih radnji na o
 }
 ```
 
-Pravila se procjenjuju na osnovu podudaranja uzorka, pri čemu **pobjeđuje **poslednje odgovarajuće pravilo\*_. Uobičajeni obrazac je da se prvo pravilo `"_"` stavi sveobuhvatno, a poslije njega konkretnija pravila.
+Pravila se procjenjuju na osnovu podudaranja uzorka, pri čemu **pobjeđuje **poslednje odgovarajuće pravilo\*\_. Uobičajeni obrazac je da se prvo pravilo `"*"` stavi sveobuhvatno, a poslije njega konkretnija pravila.
 
 ### Zamjenski znakovi
 
@@ -77,7 +77,7 @@ Uzorci dozvola koriste jednostavno podudaranje zamjenskih znakova:
 - `?` odgovara tačno jednom znaku
 - Svi ostali likovi se bukvalno podudaraju
 
-### Proširenje kućnog imenika
+### Proširenje kućnog direktorija
 
 Možete koristiti `~` ili `$HOME` na početku obrasca da referencirate svoj početni direktorij. Ovo je posebno korisno za [`external_directory`](#external-directories) pravila.
 
@@ -85,7 +85,7 @@ Možete koristiti `~` ili `$HOME` na početku obrasca da referencirate svoj poč
 - `$HOME/projects/*` -> `/Users/username/projects/*`
 - `~` -> `/Users/username`
 
-### Vanjski imenici
+### Vanjski direktoriji
 
 Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje izvan radnog direktorija gdje je OpenCode pokrenut. Ovo se odnosi na bilo koji alat koji uzima putanju kao ulaz (na primjer `read`, `edit`, `list`, `glob`, `grep` i mnoge `bash` komande).
 Proširenje kuće (poput `~/...`) utiče samo na način na koji je obrazac napisan. Ne čini vanjsku stazu dijelom trenutnog radnog prostora, tako da staze izvan radnog direktorija i dalje moraju biti dozvoljene preko `external_directory`.
@@ -118,11 +118,11 @@ Svaki direktorij koji je ovdje dozvoljen nasljeđuje iste zadane postavke kao tr
 }
 ```
 
-## Neka lista bude fokusirana na pouzdane staze, a dodatni sloj dozvoljava ili odbija pravila prema potrebi za druge alate (na primjer `bash`).
+Držite ovu listu fokusiranom na pouzdane putanje, a dodatna allow/deny pravila dodajte po potrebi za druge alate (npr. `bash`).
 
 ## Dostupne dozvole
 
-Dozvole OpenCode-a su označene imenom alata, plus nekoliko sigurnosnih mjera:
+Dozvole OpenCode su označene imenom alata, plus nekoliko sigurnosnih mjera:
 
 - `read` — čitanje datoteke (odgovara putanji datoteke)
 - `edit` — sve izmjene fajlova (pokriva `edit`, `write`, `patch`, `multiedit`)
@@ -141,7 +141,7 @@ Dozvole OpenCode-a su označene imenom alata, plus nekoliko sigurnosnih mjera:
 
 ---
 
-## Defaults
+## Zadane postavke
 
 Ako ništa ne navedete, OpenCode počinje od dozvoljenih zadanih vrijednosti:
 
@@ -164,7 +164,7 @@ Ako ništa ne navedete, OpenCode počinje od dozvoljenih zadanih vrijednosti:
 
 ---
 
-## Šta radi “Ask”.
+## Šta radi “Ask”
 
 Kada OpenCode zatraži odobrenje, korisničko sučelje nudi tri ishoda:
 

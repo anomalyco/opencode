@@ -7,7 +7,7 @@ OpenCode se integriše sa vašim GitHub tokovom rada. Spomenite `/opencode` ili 
 
 ---
 
-## Karakteristike
+## Funkcije
 
 - **Problemi trijaže**: Zamolite OpenCode da ispita problem i objasni vam ga.
 - **Popravi i implementiraj**: Zamolite OpenCode da popravi problem ili implementira funkciju. I radit će u novoj poslovnici i dostavljati PR sa svim promjenama.
@@ -32,7 +32,7 @@ Ovo će vas provesti kroz instalaciju GitHub aplikacije, kreiranje toka posla i 
 Ili ga možete postaviti ručno.
 
 1. **Instalirajte GitHub aplikaciju**
-   Idite na [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Uvjerite se da je instaliran na ciljnom spremištu.
+   Idite na [**github.com/apps/opencodegent**](https://github.com/apps/opencodegent). Uvjerite se da je instaliran na ciljnom spremištu.
 2. **Dodajte radni tok**
    Dodajte sljedeći fajl toka posla u `.github/workflows/opencode.yml` u svoj repo. Obavezno postavite odgovarajuće `model` i potrebne API ključeve u `env`.
 
@@ -68,8 +68,6 @@ Ili ga možete postaviti ručno.
              model: anthropic/claude-sonnet-4-20250514
              # share: true
              # github_token: xxxx
-
-
 ```
 
 3. **Sačuvaj API ključeve u tajne**
@@ -79,7 +77,7 @@ Ili ga možete postaviti ručno.
 
 ## Konfiguracija
 
-- `model`: Model za korištenje s OpenCodeom. Uzima format `provider/model`. Ovo je **obavezno**.
+- `model`: Model za korištenje s OpenCode. Uzima format `provider/model`. Ovo je **obavezno**.
 - `agent`: Agent za korištenje. Mora biti primarni agent. Vraća se na `default_agent` iz konfiguracije ili `"build"` ako nije pronađen.
 - `share`: Da li dijeliti OpenCode sesiju. Podrazumevano je **true** za javna spremišta.
 - `prompt`: Opcioni prilagođeni upit za nadjačavanje zadanog ponašanja. Koristite ovo da prilagodite kako OpenCode obrađuje zahtjeve.
@@ -246,9 +244,9 @@ Za `issues` događaje, `prompt` unos je **potreban** jer nema komentara za izvla
 
 ---
 
-## Prilagođene upite
+## Prilagođeni upiti
 
-Zaobiđite zadani prompt da biste prilagodili ponašanje OpenCodea za vaš tok posla.
+Zaobiđite zadani prompt da biste prilagodili ponašanje OpenCode za vaš tok posla.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -267,15 +265,13 @@ Ovo je korisno za provođenje specifičnih kriterija pregleda, standarda kodiran
 
 ## Primjeri
 
-Evo nekoliko primjera kako možete koristiti OpenCode u GitHubu.
+Evo nekoliko primjera kako možete koristiti OpenCode u GitHub.
 
 - **Objasnite problem**
   Dodajte ovaj komentar u GitHub izdanje.
 
 ```
   /opencode explain this issue
-
-
 ```
 
 OpenCode će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s jasnim objašnjenjem.
@@ -285,8 +281,6 @@ OpenCode će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s
 
 ```
   /opencode fix this
-
-
 ```
 
 I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa promjenama.
@@ -296,8 +290,6 @@ I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa pro
 
 ```
   Delete the attachment from S3 when the note is removed /oc
-
-
 ```
 
 OpenCode će implementirati traženu promjenu i posvetiti je istom PR-u.
@@ -308,8 +300,6 @@ OpenCode će implementirati traženu promjenu i posvetiti je istom PR-u.
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
-
-
 ```
 
 Kada komentarišete određene linije, OpenCode prima:

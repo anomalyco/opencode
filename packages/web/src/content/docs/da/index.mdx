@@ -1,5 +1,5 @@
 ---
-title: Intro
+title: Introduktion
 description: Kom godt i gang med OpenCode.
 ---
 
@@ -9,7 +9,7 @@ export const console = config.console
 
 [**OpenCode**](/) er en open source AI-kodningsagent. Den er tilgængelig som en terminalbaseret grænseflade, desktop-app eller IDE-udvidelse.
 
-![OpenCode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+![OpenCode TUI med opencode-temaet](../../../assets/lander/screenshot.png)
 
 Lad os komme i gang.
 
@@ -25,11 +25,11 @@ For at bruge OpenCode i din terminal skal du bruge:
    - [Ghostty](https://ghostty.org), Linux og macOS
    - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux og macOS
 
-2. API nøgler til de LLM udbydere, du vil bruge.
+2. API-nøgler til de LLM udbydere, du vil bruge.
 
 ---
 
-## Installationsprogram
+## Installation
 
 Den nemmeste måde at installere OpenCode på er gennem installationsscriptet.
 
@@ -79,7 +79,7 @@ Du kan også installere det med følgende kommandoer:
   brew install anomalyco/tap/opencode
   ```
 
-  > Vi anbefaler at bruge OpenCode-hanen for at få de mest opdaterede udgivelser. Den officielle `brew install opencode`-formel vedligeholdes af Homebrew-teamet og opdateret sjældnere.
+  > Vi anbefaler at bruge OpenCode-tap for at få de mest opdaterede udgivelser. Den officielle `brew install opencode`-formel vedligeholdes af Homebrew-teamet og opdateret sjældnere.
 
 - **Brug af Paru på Arch Linux**
 
@@ -93,7 +93,7 @@ Du kan også installere det med følgende kommandoer:
 For at få den bedste oplevelse på Windows anbefaler vi at bruge [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Det giver bedre ydeevne og fuld kompatibilitet med OpenCodes funktioner.
 :::
 
-- **Brug af chokolade**
+- **Brug af Chocolatey**
 
   ```bash
   choco install opencode
@@ -129,9 +129,9 @@ Du kan også få fat i binæren fra [Releases](https://github.com/anomalyco/open
 
 ---
 
-## Konfigurer
+## Konfiguration
 
-Med OpenCode kan du bruge enhver LLM udbyder ved at konfigurere deres API nøgler.
+Med OpenCode kan du bruge enhver LLM udbyder ved at konfigurere deres API-nøgler.
 
 Hvis du er ny til at bruge LLM-udbydere, anbefaler vi at bruge [OpenCode Zen](/docs/zen).
 Det er en udvalgt liste over modeller, der er blevet testet og verificeret af OpenCode
@@ -145,7 +145,7 @@ holde.
 
 2. Log ind, tilføj dine faktureringsoplysninger, og kopier din API-nøgle.
 
-3. Indsæt din API nøgle.
+3. Indsæt din API-nøgle.
 
    ```txt
    ┌ API key
@@ -158,7 +158,7 @@ Alternativt kan du vælge en af ​​de andre udbydere. [Læs mere](/docs/provi
 
 ---
 
-## Initialiser
+## Initialisering
 
 Nu hvor du har konfigureret en udbyder, kan du navigere til et projekt, der
 du vil arbejde på.
@@ -180,7 +180,7 @@ Derefter initialiseres OpenCode for projektet ved at køre følgende kommando.
 ```
 
 Dette får OpenCode til at analysere dit projekt og oprette en `AGENTS.md` fil i
-projektets stang.
+projektets rod.
 
 :::tip
 Du bør overgive dit projekter `AGENTS.md` fil til Git.
@@ -228,7 +228,7 @@ Du kan bede OpenCode om at tilføje nye funktioner til dit projekt. Selvom vi f�
 
    Skift til det ved hjælp af **Tab**-tasten. Du vil se en indikator for dette i nederste højre hjørne.
 
-   ```bash frame="none" title="Switch to Plan mode"
+   ```bash frame="none" title="Skift til Plan-tilstand"
    <TAB>
    ```
 
@@ -243,9 +243,9 @@ Du kan bede OpenCode om at tilføje nye funktioner til dit projekt. Selvom vi f�
    Du vil give OpenCode nok detaljer til at forstå, hvad du ønsker. Det hjælper
    at tale med det, som om du taler med en juniorudvikler på dit team.
 
-Drikkepenge
+:::tip
 Giv OpenCode masser af kontekst og eksempler for at hjælpe den med at forstå, hvad du
-mangel.
+ønsker.
 :::
 
 2. **Gentag om planen**
@@ -257,7 +257,7 @@ mangel.
    [Image #1] Take a look at this image and use it as a reference.
    ```
 
-Drikkepenge
+:::tip
 Træk og slip billeder i terminalen for at tilføje dem til prompten.
 :::
 
@@ -333,7 +333,7 @@ Eller du **kan gentage** ændringerne ved hjælp af kommandoen `/redo`.
 
 ---
 
-## Del
+## Deling
 
 De samtaler, du har med OpenCode, kan [deles med din
 team](/docs/share).
@@ -352,8 +352,8 @@ Her er en [eksempelsamtale](https://opencode.ai/s/4XP1fce5) med OpenCode.
 
 ---
 
-## Tilpas
+## Tilpasning
 
 Og det er det! Du er nu en professionel i at bruge OpenCode.
 
-For at gøre det til dit eget, anbefaler vi [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands) eller at lege med [OpenCode config](/docs/config).
+For at gøre det til dit eget, anbefaler vi [at vælge et tema](/docs/themes), [tilpasse genvejstaster](/docs/keybinds), [konfigurere kodeformater](/docs/formatters), [oprette brugerdefinerede kommandoer](/docs/commands) eller at lege med [OpenCode-konfiguration](/docs/config).

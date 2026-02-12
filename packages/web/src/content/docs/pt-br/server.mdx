@@ -13,7 +13,7 @@ O comando `opencode serve` executa um servidor HTTP sem cabeça que expõe um en
 ### Uso
 
 ```bash
-opencode serve [--port <número>] [--hostname <string>] [--cors <origem>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opções
@@ -39,7 +39,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 Defina `OPENCODE_SERVER_PASSWORD` para proteger o servidor com autenticação básica HTTP. O nome de usuário padrão é `opencode`, ou defina `OPENCODE_SERVER_USERNAME` para substituí-lo. Isso se aplica tanto ao `opencode serve` quanto ao `opencode web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=sua-senha opencode serve
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
 ```
 
 ---
@@ -62,7 +62,7 @@ Você pode executar `opencode serve` para iniciar um servidor autônomo. Se voc�
 
 Quando você inicia o TUI, ele atribui aleatoriamente uma porta e um nome de host. Você pode passar os [flags](/docs/cli) `--hostname` e `--port`. Em seguida, use isso para se conectar ao seu servidor.
 
-O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do OpenCode [IDE](/docs/ide).
+O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do opencode [IDE](/docs/ide).
 
 ---
 

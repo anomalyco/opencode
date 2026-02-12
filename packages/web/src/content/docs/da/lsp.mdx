@@ -1,50 +1,50 @@
 ---
-title: LSP Servere
+title: LSP-servere
 description: OpenCode integreres med dine LSP-servere.
 ---
 
-OpenCode integreres med din sprogserverprotokol (LSP) for at hjælpe LLM med at interagere med din kodebase. Den bruger diagnostik til at give feedback til LLM.
+OpenCode integreres med Language Server Protocol (LSP) for at hjælpe LLM med at interagere med din kodebase. Den bruger diagnostik til at give feedback til LLM.
 
 ---
 
-## Indbygget
+## Indbyggede
 
 OpenCode leveres med flere indbyggede LSP-servere til populære sprog:
 
-| LSP Server          | Udvidelser                                                | Krav                                                            |
-| ------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| astro               | .astro                                                    | Autoinstallationer til Astro-projekter                          |
-| bash                | .sh,.bash,.zsh,.ksh                                       | Autoinstallerer bash-language-server                            |
-| clangd              | .c,.cpp,.cc,.cxx,.c++,.h,.hpp,.hh,.hxx,.h++               | Autoinstallationer for C/C++ projekter                          |
-| csharp              | .cs                                                       | `.NET SDK` installere                                           |
-| clojure-lsp         | .clj,.cljs,.cljc,.edn                                     | `clojure-lsp` kommando tilgængelig                              |
-| dart                | .dart                                                     | `dart` kommando tilgængelig                                     |
-| deno                | .ts,.tsx,.js,.jsx,.mjs                                    | `deno` kommando tilgængelig (auto-detects deno.json/deno.jsonc) |
-| eliksir-ls          | .ex,.exs                                                  | `elixir` kommando tilgængelig                                   |
-| eslint              | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts,.vue                | `eslint` afhængighed i projekt                                  |
-| fskarp              | .fs,.fsi,.fsx,.fsscript                                   | `.NET SDK` installere                                           |
-| glimt               | .glimt                                                    | `gleam` kommando tilgængelig                                    |
-| gopls               | .go                                                       | `go` kommando tilgængelig                                       |
-| hls                 | .hs,.lhs                                                  | `haskell-language-server-wrapper` kommando tilgængelig          |
-| jdtls               | .java                                                     | `Java SDK (version 21+)` installere                             |
-| kotlin-ls           | .kt,.kts                                                  | Autoinstallationer til Kotlin-projekter                         |
-| lua-ls              | .lua                                                      | Autoinstallationer til Lua-projekter                            |
-| nixd                | .nix                                                      | `nixd` kommando tilgængelig                                     |
-| ocaml-lsp           | .ml,.mli                                                  | `ocamllsp` kommando tilgængelig                                 |
-| oxlint              | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts,.vue,.astro,.svelte | `oxlint` afhængighed i projekt                                  |
-| php intelephense    | .php                                                      | Automatiske installationer til PHP-projekter                    |
-| prisma              | .prisma                                                   | `prisma` kommando tilgængelig                                   |
-| ophavsret           | .py,.pyi                                                  | `pyright` afhængig installeret                                  |
-| rubin-lsp (rubocop) | .rb,.rake,.gemspec,.ru                                    | `ruby` og `gem` kommandoer tilgængelige                         |
-| rust                | .rs                                                       | `rust-analyzer` kommando tilgængelig                            |
-| sourcekit-lsp       | .swift,.objc,.objcpp                                      | `swift` installere (`xcode` på macOS)                           |
-| svelte              | .svelte                                                   | Autoinstallationer til Svelte-projekter                         |
-| terraform           | .tf,.tfvars                                               | Automatiske installationer fra GitHub-udgivelser                |
-| lillemand           | .typ,.typc                                                | Automatiske installationer fra GitHub-udgivelser                |
-| maskinskrift        | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts                     | `typescript` afhængighed i projekt                              |
-| vue                 | .vue                                                      | Autoinstallationer til Vue-projekter                            |
-| yaml-ls             | .yaml,.yml                                                | Autoinstallerer Red Hat yaml-language-server                    |
-| zls                 | .zig,.zon                                                 | `zig` kommando tilgængelig                                      |
+| LSP Server         | Udvidelser                                                | Krav                                                            |
+| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------- |
+| astro              | .astro                                                    | Autoinstallationer til Astro-projekter                          |
+| bash               | .sh,.bash,.zsh,.ksh                                       | Autoinstallerer bash-language-server                            |
+| clangd             | .c,.cpp,.cc,.cxx,.c++,.h,.hpp,.hh,.hxx,.h++               | Autoinstallationer for C/C++ projekter                          |
+| csharp             | .cs                                                       | `.NET SDK` installere                                           |
+| clojure-lsp        | .clj,.cljs,.cljc,.edn                                     | `clojure-lsp` kommando tilgængelig                              |
+| dart               | .dart                                                     | `dart` kommando tilgængelig                                     |
+| deno               | .ts,.tsx,.js,.jsx,.mjs                                    | `deno` kommando tilgængelig (auto-detects deno.json/deno.jsonc) |
+| eliksir-ls         | .ex,.exs                                                  | `elixir` kommando tilgængelig                                   |
+| eslint             | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts,.vue                | `eslint` afhængighed i projekt                                  |
+| fsharp             | .fs,.fsi,.fsx,.fsscript                                   | `.NET SDK` installere                                           |
+| gleam              | .gleam                                                    | `gleam` kommando tilgængelig                                    |
+| gopls              | .go                                                       | `go` kommando tilgængelig                                       |
+| hls                | .hs,.lhs                                                  | `haskell-language-server-wrapper` kommando tilgængelig          |
+| jdtls              | .java                                                     | `Java SDK (version 21+)` installere                             |
+| kotlin-ls          | .kt,.kts                                                  | Autoinstallationer til Kotlin-projekter                         |
+| lua-ls             | .lua                                                      | Autoinstallationer til Lua-projekter                            |
+| nixd               | .nix                                                      | `nixd` kommando tilgængelig                                     |
+| ocaml-lsp          | .ml,.mli                                                  | `ocamllsp` kommando tilgængelig                                 |
+| oxlint             | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts,.vue,.astro,.svelte | `oxlint` afhængighed i projekt                                  |
+| php intelephense   | .php                                                      | Automatiske installationer til PHP-projekter                    |
+| prisma             | .prisma                                                   | `prisma` kommando tilgængelig                                   |
+| pyright            | .py,.pyi                                                  | `pyright` afhængig installeret                                  |
+| ruby-lsp (rubocop) | .rb,.rake,.gemspec,.ru                                    | `ruby` og `gem` kommandoer tilgængelige                         |
+| rust               | .rs                                                       | `rust-analyzer` kommando tilgængelig                            |
+| sourcekit-lsp      | .swift,.objc,.objcpp                                      | `swift` installere (`xcode` på macOS)                           |
+| svelte             | .svelte                                                   | Autoinstallationer til Svelte-projekter                         |
+| terraform          | .tf,.tfvars                                               | Automatiske installationer fra GitHub-udgivelser                |
+| tinymist           | .typ,.typc                                                | Automatiske installationer fra GitHub-udgivelser                |
+| typescript         | .ts,.tsx,.js,.jsx,.mjs,.cjs,.mts,.cts                     | `typescript` afhængighed i projekt                              |
+| vue                | .vue                                                      | Autoinstallationer til Vue-projekter                            |
+| yaml-ls            | .yaml,.yml                                                | Autoinstallerer Red Hat yaml-language-server                    |
+| zls                | .zig,.zon                                                 | `zig` kommando tilgængelig                                      |
 
 LSP-servere aktiveres automatisk, når en af ​​ovnstående filtypenavne opdages, og kravene er opfyldt.
 
@@ -63,7 +63,7 @@ Når opencode åbner en fil, vil den:
 
 ---
 
-## Konfigurer
+## Konfiguration
 
 Du kan tilpasse LSP-servere gennem sektionen `lsp` i din opencode-konfiguration.
 
@@ -76,7 +76,7 @@ Du kan tilpasse LSP-servere gennem sektionen `lsp` i din opencode-konfiguration.
 
 Hver LSP- server understøtter følgende:
 
-| Ejendom          | Skriv    | Beskrivelse                                               |
+| Egenskab         | Type     | Beskrivelse                                               |
 | ---------------- | -------- | --------------------------------------------------------- |
 | `disabled`       | boolean  | Indstil dette til `true` for at deaktivere LSP-serveren   |
 | `command`        | string[] | Kommandoen til at starte LSP-serveren                     |
@@ -182,7 +182,7 @@ Du kan tilføje brugerdefinerede LSP-servere ved at angive kommandoen og filtype
 
 PHP Intelephense tilbyder premium funktioner gennem en licensnøgle. Du kan angive en licensnøgle ved at placere (kun) nøglen i en tekstfil på:
 
-- På macOS/Linux: `$HOME/intelephense/licence.txt`
-- På Windows: `%USERPROFILE%/intelephense/licence.txt`
+- På macOS/Linux: `$HOME/intelephense/license.txt`
+- På Windows: `%USERPROFILE%/intelephense/license.txt`
 
 Filen bør kun indeholde licensnøglen uden yderligere indhold.

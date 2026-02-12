@@ -1,21 +1,21 @@
 ---
-title: Modelci
-description: LLM sağlayıcısını ve modelinin adı.
+title: Modeller
+description: LLM sağlayıcılarını ve model seçimlerini yapılandırın.
 ---
 
-OpenCode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
-
----
-
-## Providers
-
-Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar OpenCode'u başlattığınızda kullanılabilir olacaktır.
-
-[providers](/docs/providers) hakkında daha fazla bilgi edinin.
+opencode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
 
 ---
 
-## Bir model seçin
+## Sağlayıcılar
+
+Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar opencode'u başlattığınızda kullanılabilir olacaktır.
+
+[Sağlayıcılar](/docs/providers) hakkında daha fazla bilgi edinin.
+
+---
+
+## Model seçimi
 
 Sağlayıcınızı yapılandırdıktan sonra aşağıdaki komutu yazarak istediğiniz modeli seçebilirsiniz:
 
@@ -25,7 +25,7 @@ Sağlayıcınızı yapılandırdıktan sonra aşağıdaki komutu yazarak istedi�
 
 ---
 
-## Recommended models
+## Önerilen modeller
 
 Piyasada pek çok model var ve her hafta yeni modeller çıkıyor.
 
@@ -35,7 +35,7 @@ Piyasada pek çok model var ve her hafta yeni modeller çıkıyor.
 
 Ancak, hem kod oluşturmada hem de araç çağırmada iyi olan yalnızca birkaçı var.
 
-Burada, OpenCode ile belirli bir sıraya göre iyi çalışan birkaç model yer almaktadır. (Bu kapsamlı bir liste değildir ve mutlaka güncel olması da gerekmez):
+Burada, opencode ile belirli bir sıraya göre iyi çalışan birkaç model yer almaktadır. (Bu kapsamlı bir liste değildir ve mutlaka güncel olması da gerekmez):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -46,10 +46,10 @@ Burada, OpenCode ile belirli bir sıraya göre iyi çalışan birkaç model yer 
 
 ---
 
-## Varsayılanı ayarla
+## Varsayılan ayarlama
 
 Bunlardan birini varsayılan model olarak ayarlamak için `model` anahtarınızı telefonunuzudan ayarlayabilirsiniz.
-OpenCode yapılandırması
+opencode yapılandırması
 
 ```json title="opencode.json" {3}
 {
@@ -64,7 +64,7 @@ Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_
 
 ---
 
-## Modelleri yapılandırın
+## Model yapılandırma
 
 Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılandırabilirsiniz.
 
@@ -100,10 +100,10 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
 }
 ```
 
-Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `openai` sağlayıcısı aracılığıyla erişildiğinde `gpt-5` ve `anthropic` sağlayıcısı aracılığıyla erişildiğinde `claude-sonnet-4-20250514`.
+Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `gpt-5` sağlayıcısı aracılığıyla erişildiğinde `openai` ve `claude-sonnet-4-20250514` sağlayıcısı aracılığıyla erişildiğinde `anthropic`.
 Yerleşik sağlayıcı ve model adları [Models.dev](https://models.dev) adresinde bulunabilir.
 
-Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Learn more](/docs/agents/#additional).
+Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Daha fazla bilgi](/docs/agents/#additional).
 
 Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsiniz. Varyantlar, yinelenen girişler oluşturmadan aynı model için farklı ayarları yapılandırmanıza olanak tanır:
 
@@ -137,11 +137,11 @@ Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsin
 
 ## Varyantlar
 
-Birçok model, farklı konfigürasyonlara sahip birden fazla kapasiteye sahip. OpenCode, popüler sağlayıcılar için sunulan değişkenlerle birlikte gelir.
+Birçok model, farklı konfigürasyonlara sahip birden fazla kapasiteye sahip. opencode, popüler sağlayıcılar için sunulan değişkenlerle birlikte gelir.
 
 ### Yerleşik çeşitler
 
-OpenCode birçok sağlayıcı için varsayılan değişkenlerle birlikte gelir:
+opencode birçok sağlayıcı için varsayılan değişkenlerle birlikte gelir:
 
 **Antropik**:
 
@@ -197,17 +197,17 @@ Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
 
 ### Döngü çeşitleri
 
-Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Learn more](/docs/keybinds).
+Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Daha fazla bilgi](/docs/keybinds).
 
 ---
 
-## Loading models
+## Modelleri yükleme
 
-OpenCode başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
+opencode başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
 
 1. `--model` veya `-m` komut satırı bayrağı. Biçim, yapılandırma dosyasındakiyle aynıdır: `provider_id/model_id`.
 
-2. OpenCode yapılandırmasındaki model listesi.
+2. opencode yapılandırmasındaki model listesi.
 
    ```json title="opencode.json"
    {

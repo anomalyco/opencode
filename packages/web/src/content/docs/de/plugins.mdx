@@ -9,7 +9,7 @@ Beispiele finden Sie im von der Community erstellten [plugins](/docs/ecosystem#p
 
 ---
 
-## Verwenden Sie ein Plugin
+## Plugins verwenden
 
 Es gibt zwei Möglichkeiten, Plugins zu laden.
 
@@ -43,7 +43,7 @@ Durchsuchen Sie die verfügbaren Plugins im [ecosystem](/docs/ecosystem#plugins)
 
 ---
 
-### Wie Plugins installiert werden
+### Plugin-Installation
 
 **NPM-Plugins** werden beim Start automatisch mit Bun installiert. Pakete und ihre Abhängigkeiten werden in `~/.cache/opencode/node_modules/` zwischengespeichert.
 
@@ -51,7 +51,7 @@ Durchsuchen Sie die verfügbaren Plugins im [ecosystem](/docs/ecosystem#plugins)
 
 ---
 
-### Auftrag laden
+### Ladereihenfolge
 
 Plugins werden aus allen Quellen geladen und alle Hooks werden nacheinander ausgeführt. Die Ladereihenfolge lautet:
 
@@ -64,14 +64,13 @@ Doppelte npm-Pakete mit demselben Namen und derselben Version werden einmal gela
 
 ---
 
-## Erstellen Sie ein Plugin
+## Plugins erstellen
 
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
-Funktionen. Jede Funktion empfängt ein Kontextobjekt und gibt ein Hooks-Objekt zurück.
+Ein Plugin ist ein **JavaScript/TypeScript-Modul**, das eine oder mehrere Plugin-Funktionen exportiert. Jede Funktion empfängt ein Kontextobjekt und gibt ein Hooks-Objekt zurück.
 
 ---
 
-### Dependencies
+### Abhängigkeiten
 
 Lokale Plugins und benutzerdefinierte Tools können externe npm-Pakete verwenden. Fügen Sie Ihrem Konfigurationsverzeichnis ein `package.json` mit den benötigten Abhängigkeiten hinzu.
 
@@ -118,12 +117,12 @@ Die Plugin-Funktion erhält:
 - `project`: Die aktuellen Projektinformationen.
 - `directory`: Das aktuelle Arbeitsverzeichnis.
 - `worktree`: Der Git-Worktree-Pfad.
-- `client`: Ein Opencode-SDK-Client für die Interaktion mit AI.
+- `client`: Ein OpenCode-SDK-Client für die Interaktion mit AI.
 - `$`: Buns [shell API](https://bun.com/docs/runtime/shell) zum Ausführen von Befehlen.
 
 ---
 
-### TypeScript support
+### TypeScript-Unterstützung
 
 Für TypeScript-Plugins können Sie Typen aus dem Plugin-Paket importieren:
 
@@ -139,7 +138,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### Events
+### Ereignisse
 
 Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ gezeigt. Hier finden Sie eine Liste der verschiedenen verfügbaren Veranstaltungen.
 
@@ -156,7 +155,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 - `installation.updated`
 
-#### LSP Ereignisse
+#### LSP-Ereignisse
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -188,11 +187,11 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 - `session.status`
 - `session.updated`
 
-#### Todo-Events
+#### Todo-Ereignisse
 
 - `todo.updated`
 
-#### Shell-Events
+#### Shell-Ereignisse
 
 - `shell.env`
 
@@ -201,7 +200,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI Ereignisse
+#### TUI-Ereignisse
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -209,13 +208,13 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 ---
 
-## Examples
+## Beispiele
 
-Hier sind einige Beispiele für Plugins, mit denen Sie Opencode erweitern können.
+Hier sind einige Beispiele für Plugins, mit denen Sie OpenCode erweitern können.
 
 ---
 
-### Senden Sie Benachrichtigungen
+### Benachrichtigungen senden
 
 Senden Sie Benachrichtigungen, wenn bestimmte Ereignisse eintreten:
 
@@ -240,9 +239,9 @@ Wenn Sie die OpenCode-Desktop-App verwenden, kann diese automatisch Systembenach
 
 ---
 
-### .env protection
+### .env-Schutz
 
-Verhindern Sie, dass Opencode `.env`-Dateien liest:
+Verhindern Sie, dass OpenCode `.env`-Dateien liest:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -275,9 +274,9 @@ export const InjectEnvPlugin = async () => {
 
 ---
 
-### Benutzerdefinierte Werkzeuge
+### Benutzerdefinierte Tools
 
-Plugins können Opencode auch benutzerdefinierte Tools hinzufügen:
+Plugins können OpenCode auch benutzerdefinierte Tools hinzufügen:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -300,17 +299,17 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das Opencode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
+Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das OpenCode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
 
 - `description`: Was das Tool macht
 - `args`: Zod-Schema für die Argumente des Tools
 - `execute`: Funktion, die ausgeführt wird, wenn das Tool aufgerufen wird
 
-Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für Opencode zur Verfügung.
+Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für OpenCode zur Verfügung.
 
 ---
 
-### Logging
+### Protokollierung
 
 Verwenden Sie `client.app.log()` anstelle von `console.log` für die strukturierte Protokollierung:
 
@@ -331,7 +330,7 @@ Ebenen: `debug`, `info`, `warn`, `error`. Weitere Informationen finden Sie unter
 
 ---
 
-### Verdichtungshaken
+### Compaction-Hooks
 
 Passen Sie den Kontext an, der beim Komprimieren einer Sitzung einbezogen wird:
 
