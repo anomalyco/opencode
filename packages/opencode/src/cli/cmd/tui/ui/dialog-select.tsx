@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -15,6 +15,7 @@ export interface DialogSelectProps<T> {
   title: string
   placeholder?: string
   options: DialogSelectOption<T>[]
+  flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
@@ -50,7 +51,6 @@ export type DialogSelectRef<T> = {
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false)
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
@@ -103,7 +103,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     setStore("input", "keyboard")
   })
 
-  const grouped = createMemo(() => {
+  const flatten = createMemo(() => props.flat && store.filter.length > 0)
+
+  const grouped = createMemo<[string, DialogSelectOption<T>[]][]>(() => {
+    if (flatten()) return [["", filtered()]]
     const result = pipe(
       filtered(),
       groupBy((x) => x.category ?? ""),
@@ -119,10 +122,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     )
   })
 
+  const rows = createMemo(() => {
+    const headers = grouped().reduce((acc, [category], i) => {
+      if (!category) return acc
+      return acc + (i > 0 ? 2 : 1)
+    }, 0)
+    return flat().length + headers
+  })
+
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() =>
-    Math.min(flat().length + grouped().length * 2 - 1, Math.floor(dimensions().height / 2) - 6),
-  )
+  const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
 
   const selected = createMemo(() => flat()[store.selected])
 
@@ -266,16 +275,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
           </text>
-          <box
-            paddingLeft={1}
-            paddingRight={1}
-            backgroundColor={hover() ? theme.primary : undefined}
-            onMouseOver={() => setHover(true)}
-            onMouseOut={() => setHover(false)}
-            onMouseUp={() => dialog.clear()}
-          >
-            <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc</text>
-          </box>
+          <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+            esc
+          </text>
         </box>
         <box paddingTop={1}>
           <input
@@ -358,7 +360,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       >
                         <Option
                           title={option.title}
-                          footer={option.footer}
+                          footer={flatten() ? (option.category ?? option.footer) : option.footer}
                           description={option.description !== category ? option.description : undefined}
                           active={active()}
                           current={current()}

@@ -1,0 +1,201 @@
+---
+title: Modeli
+description: Konfiguriranje LLM provajdera i modela.
+---
+
+OpenCode koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) za podršku **75+ LLM providera**, uključujući lokalne modele.
+
+## Provajderi
+
+Većina popularnih provajdera su unaprijed učitani prema zadanim postavkama. Ako ste dodali vjerodajnice za provajdera putem naredbe `/connect`, oni će biti dostupni kada pokrenete OpenCode.
+Saznajte više o [providers](/docs/providers).
+
+---
+
+## Odabir modela
+
+Nakon što konfigurirate svog provajdera, možete odabrati model koji želite upisivanjem:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## Preporučeni modeli
+
+Postoji mnogo modela vani, a novi modeli izlaze svake sedmice.
+:::tip
+Razmislite o korištenju jednog od modela koje preporučujemo.
+:::
+
+Međutim, postoji samo nekoliko njih koji su dobri i u generiranju koda i u pozivanju alata.
+Evo nekoliko modela koji dobro rade sa OpenCode, bez posebnog redosleda. (Ovo nije potpuna lista niti je nužno ažurirana):
+
+- GPT 5.2
+- Codex GPT 5.1
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## Postavljanje zadanog
+
+Da postavite jedan od ovih kao zadani model, možete postaviti ključ `model` u svom
+OpenCode config.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Ovdje je puni ID `provider_id/model_id`. Na primjer, ako koristite [OpenCode Zen](/docs/zen), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
+Ako ste konfigurirali [prilagođenog provajdera](/docs/providers#custom), `provider_id` je ključ iz `provider` dijela vaše konfiguracije, a `model_id` je ključ iz `provider.models`.
+
+---
+
+## Konfiguracija modela
+
+Možete globalno konfigurirati opcije modela kroz config.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Ovdje konfiguriramo globalne postavke za dva ugrađena modela: `gpt-5` kada se pristupa preko `openai` provajdera i `claude-sonnet-4-20250514` kada se pristupa preko `anthropic` provajdera.
+Ugrađeni dobavljač i nazivi modela mogu se naći na [Models.dev](https://models.dev).
+Također možete konfigurirati ove opcije za sve agente koje koristite. Konfiguracija agenta poništava sve globalne opcije ovdje. [Saznajte više](/docs/agents/#additional).
+Također možete definirati prilagođene varijante koje proširuju ugrađene. Varijante vam omogućavaju da konfigurirate različite postavke za isti model bez stvaranja duplih unosa:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Varijante
+
+Mnogi modeli podržavaju više varijanti sa različitim konfiguracijama. OpenCode se isporučuje sa ugrađenim podrazumevanim varijantama za popularne provajdere.
+
+### Ugrađene varijante
+
+OpenCode se isporučuje sa zadanim varijantama za mnoge provajdere:
+**Anthropic**:
+
+- `high` - Visok budžet za razmišljanje (zadano)
+- `max` - Maksimalni budžet za razmišljanje
+  **OpenAI**:
+  Zavisi od modela, ali otprilike:
+- `none` - Bez obrazloženja
+- `minimal` - Minimalni napor za rasuđivanje
+- `low` - Nizak napor u rasuđivanju
+- `medium` - Srednji napor u zaključivanju
+- `high` - Veliki napor u rasuđivanju
+- `xhigh` - Ekstra visok napor u rasuđivanju
+  **Google**:
+- `low` - Manji trud/budžet tokena
+- `high` - Veći budžet za trud/token
+  :::tip
+  Ova lista nije sveobuhvatna. Mnogi drugi provajderi također imaju ugrađene zadane postavke.
+  :::
+
+### Prilagođene varijante
+
+Možete nadjačati postojeće varijante ili dodati svoje:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### Kruženje kroz varijante
+
+Koristite keybind `variant_cycle` za brzo prebacivanje između varijanti. [Saznajte više](/docs/keybinds).
+
+## Učitavanje modela
+
+Kada se OpenCode pokrene, on provjerava modele u sljedećem prioritetnom redoslijedu:
+
+1. Oznaka komandne linije `--model` ili `-m`. Format je isti kao u konfiguracijskoj datoteci: `provider_id/model_id`.
+2. Lista modela u OpenCode konfiguraciji.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514"
+}
+```
+
+Format ovdje je `provider/model`. 3. Posljednji korišteni model. 4. Prvi model koji koristi interni prioritet.

@@ -1,0 +1,170 @@
+---
+title: Özel Araçlar
+description: LLM'un opencode'da çağırabileceği araçları birleştirebilir.
+---
+
+Özel araçlar, LLM'un konuşmalar sırasında arayabileceği, oluşturduğunuz işlevlerdir. opencode'un [built-in tools](/docs/tools) ile birlikte `read`, `write` ve `bash` gibi çalışırlar.
+
+---
+
+## Araç oluşturma
+
+Araçlar **TypeScript** veya **JavaScript** dosyaları olarak tanımlanır. Ancak araç tanımı **herhangi bir dilde** yazılmış komut dosyalarını çağırabilir; TypeScript veya JavaScript yalnızca araç tanımının kendisi için kullanılır.
+
+---
+
+### Konum
+
+Bunlar tanımlanabilir:
+
+- Yerel olarak bunları projenizin `.opencode/tools/` dizinine yerleştirerek.
+- Veya küresel olarak bunları `~/.config/opencode/tools/` içine yerleştirerek.
+
+---
+
+### Yapı
+
+Araç oluşturmanın en kolay yolu, tür güvenliği ve doğrulama sağlayan `tool()` yardımcısını kullanmaktır.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**dosya adı**, **araç adı** olur. Yukarıdakiler bir `database` aracı oluşturur.
+
+---
+
+#### Dosya başına birden fazla araç
+
+Ayrıca tek bir dosyadan birden fazla aracı dışa aktarabilirsiniz. Her dışa aktarma, **`<filename>_<exportname>`** adıyla **ayrı bir araç** haline gelir:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Bu iki araç oluşturur: `math_add` ve `math_multiply`.
+
+---
+
+### Argümanlar
+
+Bağımsız değişken türlerini tanımlamak için yalnızca [Zod](https://zod.dev) olan `tool.schema` öğesini kullanabilirsiniz.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Ayrıca [Zod](https://zod.dev) öğesini doğrudan içe aktarabilir ve düz bir nesne döndürebilirsiniz:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Bağlam
+
+Araçlar geçerli oturumla ilgili bağlamı alır:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+Oturum çalışma dizisi için `context.directory` kullanın.
+Git çalışma ağacı kökü için `context.worktree` kullanın.
+
+---
+
+## Örnekler
+
+### Python ile araç yazma
+
+Araçlarınızı dilediğiniz dilde yazabilirsiniz. İşte Python kullanarak iki sayıyı toplayan bir örnek.
+
+Öncelikle aracı bir Python betiği olarak oluşturun:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Ardından onu çağıran araç tanımını oluşturun:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Burada Python betiğini çalıştırmak için [`Bun.$`](https://bun.com/docs/runtime/shell) yardımcı programını kullanıyoruz.

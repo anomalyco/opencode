@@ -19,12 +19,10 @@ export const dict = {
   "command.category.agent": "에이전트",
   "command.category.permissions": "권한",
   "command.category.workspace": "작업 공간",
-
   "command.category.settings": "설정",
   "theme.scheme.system": "시스템",
   "theme.scheme.light": "라이트",
   "theme.scheme.dark": "다크",
-
   "command.sidebar.toggle": "사이드바 토글",
   "command.project.open": "프로젝트 열기",
   "command.provider.connect": "공급자 연결",
@@ -35,17 +33,13 @@ export const dict = {
   "command.session.previous.unseen": "이전 읽지 않은 세션",
   "command.session.next.unseen": "다음 읽지 않은 세션",
   "command.session.archive": "세션 보관",
-
   "command.palette": "명령 팔레트",
-
   "command.theme.cycle": "테마 순환",
   "command.theme.set": "테마 사용: {{theme}}",
   "command.theme.scheme.cycle": "색상 테마 순환",
   "command.theme.scheme.set": "색상 테마 사용: {{scheme}}",
-
   "command.language.cycle": "언어 순환",
   "command.language.set": "언어 사용: {{language}}",
-
   "command.session.new": "새 세션",
   "command.file.open": "파일 열기",
   "command.tab.close": "탭 닫기",
@@ -76,6 +70,7 @@ export const dict = {
   "command.permissions.autoaccept.enable": "편집 자동 수락",
   "command.permissions.autoaccept.disable": "편집 자동 수락 중지",
   "command.workspace.toggle": "작업 공간 전환",
+  "command.workspace.toggle.description": "사이드바에서 다중 작업 공간 활성화 또는 비활성화",
   "command.session.undo": "실행 취소",
   "command.session.undo.description": "마지막 메시지 실행 취소",
   "command.session.redo": "다시 실행",
@@ -88,32 +83,30 @@ export const dict = {
   "command.session.share.description": "이 세션을 공유하고 URL을 클립보드에 복사",
   "command.session.unshare": "세션 공유 중지",
   "command.session.unshare.description": "이 세션 공유 중지",
-
   "palette.search.placeholder": "파일, 명령어 및 세션 검색",
   "palette.empty": "결과 없음",
   "palette.group.commands": "명령어",
   "palette.group.files": "파일",
-
   "dialog.provider.search.placeholder": "공급자 검색",
   "dialog.provider.empty": "공급자 없음",
   "dialog.provider.group.popular": "인기",
   "dialog.provider.group.other": "기타",
   "dialog.provider.tag.recommended": "추천",
+  "dialog.provider.opencode.note": "Claude, GPT, Gemini 등을 포함한 엄선된 모델",
   "dialog.provider.anthropic.note": "Claude Pro/Max 또는 API 키로 연결",
-  "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
   "dialog.provider.copilot.note": "Copilot 또는 API 키로 연결",
-
+  "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
+  "dialog.provider.google.note": "빠르고 구조화된 응답을 위한 Gemini 모델",
+  "dialog.provider.openrouter.note": "모든 지원 모델을 단일 공급자에서 액세스",
+  "dialog.provider.vercel.note": "스마트 라우팅을 통한 AI 모델 통합 액세스",
   "dialog.model.select.title": "모델 선택",
   "dialog.model.search.placeholder": "모델 검색",
   "dialog.model.empty": "모델 결과 없음",
   "dialog.model.manage": "모델 관리",
   "dialog.model.manage.description": "모델 선택기에 표시할 모델 사용자 지정",
-
   "dialog.model.unpaid.freeModels.title": "OpenCode에서 제공하는 무료 모델",
   "dialog.model.unpaid.addMore.title": "인기 공급자의 모델 추가",
-
   "dialog.provider.viewAll": "더 많은 공급자 보기",
-
   "provider.connect.title": "{{provider}} 연결",
   "provider.connect.title.anthropicProMax": "Claude Pro/Max로 로그인",
   "provider.connect.selectMethod": "{{provider}} 로그인 방법 선택",
@@ -129,10 +122,10 @@ export const dict = {
   "provider.connect.opencodeZen.line1":
     "OpenCode Zen은 코딩 에이전트를 위해 최적화된 신뢰할 수 있는 엄선된 모델에 대한 액세스를 제공합니다.",
   "provider.connect.opencodeZen.line2": "단일 API 키로 Claude, GPT, Gemini, GLM 등 다양한 모델에 액세스할 수 있습니다.",
-  "provider.connect.opencodeZen.visit.prefix": "",
+  "provider.connect.opencodeZen.visit.prefix": "다음 ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": "를 방문하여 API 키를 받으세요.",
-  "provider.connect.oauth.code.visit.prefix": "",
+  "provider.connect.opencodeZen.visit.suffix": "을 방문하여 API 키를 받으세요.",
+  "provider.connect.oauth.code.visit.prefix": "다음 ",
   "provider.connect.oauth.code.visit.link": "이 링크",
   "provider.connect.oauth.code.visit.suffix":
     "를 방문하여 인증 코드를 받아 계정을 연결하고 OpenCode에서 {{provider}} 모델을 사용하세요.",
@@ -140,19 +133,53 @@ export const dict = {
   "provider.connect.oauth.code.placeholder": "인증 코드",
   "provider.connect.oauth.code.required": "인증 코드가 필요합니다",
   "provider.connect.oauth.code.invalid": "유효하지 않은 인증 코드",
-  "provider.connect.oauth.auto.visit.prefix": "",
+  "provider.connect.oauth.auto.visit.prefix": "다음 ",
   "provider.connect.oauth.auto.visit.link": "이 링크",
   "provider.connect.oauth.auto.visit.suffix":
     "를 방문하고 아래 코드를 입력하여 계정을 연결하고 OpenCode에서 {{provider}} 모델을 사용하세요.",
   "provider.connect.oauth.auto.confirmationCode": "확인 코드",
   "provider.connect.toast.connected.title": "{{provider}} 연결됨",
   "provider.connect.toast.connected.description": "이제 {{provider}} 모델을 사용할 수 있습니다.",
-
+  "provider.custom.title": "사용자 지정 공급자",
+  "provider.custom.description.prefix": "OpenAI 호환 공급자를 구성합니다. ",
+  "provider.custom.description.link": "공급자 구성 문서",
+  "provider.custom.description.suffix": "를 참조하세요.",
+  "provider.custom.field.providerID.label": "공급자 ID",
+  "provider.custom.field.providerID.placeholder": "myprovider",
+  "provider.custom.field.providerID.description": "소문자, 숫자, 하이픈 또는 밑줄",
+  "provider.custom.field.name.label": "표시 이름",
+  "provider.custom.field.name.placeholder": "내 AI 공급자",
+  "provider.custom.field.baseURL.label": "기본 URL",
+  "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
+  "provider.custom.field.apiKey.label": "API 키",
+  "provider.custom.field.apiKey.placeholder": "API 키",
+  "provider.custom.field.apiKey.description": "선택 사항입니다. 헤더를 통해 인증을 관리하는 경우 비워 두세요.",
+  "provider.custom.models.label": "모델",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "model-id",
+  "provider.custom.models.name.label": "이름",
+  "provider.custom.models.name.placeholder": "표시 이름",
+  "provider.custom.models.remove": "모델 제거",
+  "provider.custom.models.add": "모델 추가",
+  "provider.custom.headers.label": "헤더 (선택 사항)",
+  "provider.custom.headers.key.label": "헤더",
+  "provider.custom.headers.key.placeholder": "헤더 이름",
+  "provider.custom.headers.value.label": "값",
+  "provider.custom.headers.value.placeholder": "값",
+  "provider.custom.headers.remove": "헤더 제거",
+  "provider.custom.headers.add": "헤더 추가",
+  "provider.custom.error.providerID.required": "공급자 ID가 필요합니다",
+  "provider.custom.error.providerID.format": "소문자, 숫자, 하이픈 또는 밑줄을 사용하세요",
+  "provider.custom.error.providerID.exists": "해당 공급자 ID가 이미 존재합니다",
+  "provider.custom.error.name.required": "표시 이름이 필요합니다",
+  "provider.custom.error.baseURL.required": "기본 URL이 필요합니다",
+  "provider.custom.error.baseURL.format": "http:// 또는 https://로 시작해야 합니다",
+  "provider.custom.error.required": "필수",
+  "provider.custom.error.duplicate": "중복",
   "provider.disconnect.toast.disconnected.title": "{{provider}} 연결 해제됨",
   "provider.disconnect.toast.disconnected.description": "{{provider}} 모델을 더 이상 사용할 수 없습니다.",
   "model.tag.free": "무료",
   "model.tag.latest": "최신",
-
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
@@ -169,6 +196,7 @@ export const dict = {
   "model.tooltip.context": "컨텍스트 제한 {{limit}}",
   "common.search.placeholder": "검색",
   "common.goBack": "뒤로 가기",
+  "common.goForward": "앞으로 가기",
   "common.loading": "로딩 중",
   "common.loading.ellipsis": "...",
   "common.cancel": "취소",
@@ -179,14 +207,12 @@ export const dict = {
   "common.saving": "저장 중...",
   "common.default": "기본값",
   "common.attachment": "첨부 파일",
-
   "prompt.placeholder.shell": "셸 명령어 입력...",
   "prompt.placeholder.normal": '무엇이든 물어보세요... "{{example}}"',
   "prompt.placeholder.summarizeComments": "댓글 요약…",
   "prompt.placeholder.summarizeComment": "댓글 요약…",
   "prompt.mode.shell": "셸",
   "prompt.mode.shell.exit": "종료하려면 esc",
-
   "prompt.example.1": "코드베이스의 TODO 수정",
   "prompt.example.2": "이 프로젝트의 기술 스택이 무엇인가요?",
   "prompt.example.3": "고장 난 테스트 수정",
@@ -212,7 +238,6 @@ export const dict = {
   "prompt.example.23": "이 목록에 페이지네이션 추가",
   "prompt.example.24": "...를 위한 CLI 명령어 생성",
   "prompt.example.25": "여기서 환경 변수는 어떻게 작동하나요?",
-
   "prompt.popover.emptyResults": "일치하는 결과 없음",
   "prompt.popover.emptyCommands": "일치하는 명령어 없음",
   "prompt.dropzone.label": "이미지나 PDF를 여기에 드롭하세요",
@@ -228,7 +253,6 @@ export const dict = {
   "prompt.attachment.remove": "첨부 파일 제거",
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",
-
   "prompt.toast.pasteUnsupported.title": "지원되지 않는 붙여넣기",
   "prompt.toast.pasteUnsupported.description": "이미지나 PDF만 붙여넣을 수 있습니다.",
   "prompt.toast.modelAgentRequired.title": "에이전트 및 모델 선택",
@@ -239,24 +263,18 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "명령 전송 실패",
   "prompt.toast.promptSendFailed.title": "프롬프트 전송 실패",
   "prompt.toast.promptSendFailed.description": "세션을 가져올 수 없습니다",
-
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}개 중 {{enabled}}개 활성화됨",
   "dialog.mcp.empty": "구성된 MCP 없음",
-
   "dialog.lsp.empty": "파일 유형에서 자동 감지된 LSP",
   "dialog.plugins.empty": "opencode.json에 구성된 플러그인",
-
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
   "mcp.status.needs_auth": "인증 필요",
   "mcp.status.disabled": "비활성화됨",
-
   "dialog.fork.empty": "분기할 메시지 없음",
-
   "dialog.directory.search.placeholder": "폴더 검색",
   "dialog.directory.empty": "폴더 없음",
-
   "dialog.server.title": "서버",
   "dialog.server.description": "이 앱이 연결할 OpenCode 서버를 전환합니다.",
   "dialog.server.search.placeholder": "서버 검색",
@@ -274,14 +292,12 @@ export const dict = {
   "dialog.server.default.set": "현재 서버를 기본값으로 설정",
   "dialog.server.default.clear": "지우기",
   "dialog.server.action.remove": "서버 제거",
-
   "dialog.server.menu.edit": "편집",
   "dialog.server.menu.default": "기본값으로 설정",
   "dialog.server.menu.defaultRemove": "기본값 제거",
   "dialog.server.menu.delete": "삭제",
   "dialog.server.current": "현재 서버",
   "dialog.server.status.default": "기본값",
-
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.name": "이름",
   "dialog.project.edit.icon": "아이콘",
@@ -290,7 +306,6 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "권장: 128x128px",
   "dialog.project.edit.color": "색상",
   "dialog.project.edit.color.select": "{{color}} 색상 선택",
-
   "dialog.project.edit.worktree.startup": "작업 공간 시작 스크립트",
   "dialog.project.edit.worktree.startup.description": "새 작업 공간(작업 트리)을 만든 뒤 실행됩니다.",
   "dialog.project.edit.worktree.startup.placeholder": "예: bun install",
@@ -301,10 +316,8 @@ export const dict = {
   "context.breakdown.assistant": "어시스턴트",
   "context.breakdown.tool": "도구 호출",
   "context.breakdown.other": "기타",
-
   "context.systemPrompt.title": "시스템 프롬프트",
   "context.rawMessages.title": "원시 메시지",
-
   "context.stats.session": "세션",
   "context.stats.messages": "메시지",
   "context.stats.provider": "공급자",
@@ -321,34 +334,42 @@ export const dict = {
   "context.stats.totalCost": "총 비용",
   "context.stats.sessionCreated": "세션 생성됨",
   "context.stats.lastActivity": "최근 활동",
-
   "context.usage.tokens": "토큰",
   "context.usage.usage": "사용량",
   "context.usage.cost": "비용",
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
   "context.usage.view": "컨텍스트 사용량 보기",
-
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
+  "language.th": "ไทย",
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
-
   "toast.theme.title": "테마 전환됨",
   "toast.scheme.title": "색상 테마",
-
-  "toast.permissions.autoaccept.on.title": "편집 자동 수락 중",
-  "toast.permissions.autoaccept.on.description": "편집 및 쓰기 권한이 자동으로 승인됩니다",
-  "toast.permissions.autoaccept.off.title": "편집 자동 수락 중지됨",
-  "toast.permissions.autoaccept.off.description": "편집 및 쓰기 권한 승인이 필요합니다",
-
   "toast.workspace.enabled.title": "작업 공간 활성화됨",
   "toast.workspace.enabled.description": "이제 사이드바에 여러 작업 트리가 표시됩니다",
   "toast.workspace.disabled.title": "작업 공간 비활성화됨",
   "toast.workspace.disabled.description": "사이드바에 메인 작업 트리만 표시됩니다",
-
+  "toast.permissions.autoaccept.on.title": "편집 자동 수락 중",
+  "toast.permissions.autoaccept.on.description": "편집 및 쓰기 권한이 자동으로 승인됩니다",
+  "toast.permissions.autoaccept.off.title": "편집 자동 수락 중지됨",
+  "toast.permissions.autoaccept.off.description": "편집 및 쓰기 권한 승인이 필요합니다",
   "toast.model.none.title": "선택된 모델 없음",
   "toast.model.none.description": "이 세션을 요약하려면 공급자를 연결하세요",
-
   "toast.file.loadFailed.title": "파일 로드 실패",
-
   "toast.file.listFailed.title": "파일 목록을 불러오지 못했습니다",
   "toast.context.noLineSelection.title": "줄 선택 없음",
   "toast.context.noLineSelection.description": "먼저 파일 탭에서 줄 범위를 선택하세요.",
@@ -357,19 +378,15 @@ export const dict = {
   "toast.session.share.success.description": "공유 URL이 클립보드에 복사되었습니다!",
   "toast.session.share.failed.title": "세션 공유 실패",
   "toast.session.share.failed.description": "세션을 공유하는 동안 오류가 발생했습니다",
-
   "toast.session.unshare.success.title": "세션 공유 해제됨",
   "toast.session.unshare.success.description": "세션 공유가 성공적으로 해제되었습니다!",
   "toast.session.unshare.failed.title": "세션 공유 해제 실패",
   "toast.session.unshare.failed.description": "세션 공유를 해제하는 동안 오류가 발생했습니다",
-
   "toast.session.listFailed.title": "{{project}}에 대한 세션을 로드하지 못했습니다",
-
   "toast.update.title": "업데이트 가능",
   "toast.update.description": "OpenCode의 새 버전({{version}})을 설치할 수 있습니다.",
   "toast.update.action.installRestart": "설치 및 다시 시작",
   "toast.update.action.notYet": "나중에",
-
   "error.page.title": "문제가 발생했습니다",
   "error.page.description": "애플리케이션을 로드하는 동안 오류가 발생했습니다.",
   "error.page.details.label": "오류 세부 정보",
@@ -380,12 +397,10 @@ export const dict = {
   "error.page.report.prefix": "이 오류를 OpenCode 팀에 제보해 주세요: ",
   "error.page.report.discord": "Discord",
   "error.page.version": "버전: {{version}}",
-
   "error.dev.rootNotFound":
     "루트 요소를 찾을 수 없습니다. index.html에 추가하는 것을 잊으셨나요? 또는 id 속성의 철자가 틀렸을 수 있습니다.",
-
   "error.globalSync.connectFailed": "서버에 연결할 수 없습니다. `{{url}}`에서 서버가 실행 중인가요?",
-
+  "directory.error.invalidUrl": "URL에 유효하지 않은 디렉터리가 있습니다.",
   "error.chain.unknown": "알 수 없는 오류",
   "error.chain.causedBy": "원인:",
   "error.chain.apiError": "API 오류",
@@ -405,21 +420,17 @@ export const dict = {
   "error.chain.configFrontmatterError": "{{path}}의 frontmatter 파싱 실패:\n{{message}}",
   "error.chain.configInvalid": "{{path}}의 구성 파일이 유효하지 않습니다",
   "error.chain.configInvalidWithMessage": "{{path}}의 구성 파일이 유효하지 않습니다: {{message}}",
-
   "notification.permission.title": "권한 필요",
   "notification.permission.description": "{{projectName}}의 {{sessionTitle}}에서 권한이 필요합니다",
   "notification.question.title": "질문",
   "notification.question.description": "{{projectName}}의 {{sessionTitle}}에서 질문이 있습니다",
   "notification.action.goToSession": "세션으로 이동",
-
   "notification.session.responseReady.title": "응답 준비됨",
   "notification.session.error.title": "세션 오류",
   "notification.session.error.fallbackDescription": "오류가 발생했습니다",
-
   "home.recentProjects": "최근 프로젝트",
   "home.empty.title": "최근 프로젝트 없음",
   "home.empty.description": "로컬 프로젝트를 열어 시작하세요",
-
   "session.tab.session": "세션",
   "session.tab.review": "검토",
   "session.tab.context": "컨텍스트",
@@ -437,18 +448,19 @@ export const dict = {
   "session.messages.loadingEarlier": "이전 메시지 로드 중...",
   "session.messages.loadEarlier": "이전 메시지 로드",
   "session.messages.loading": "메시지 로드 중...",
-
   "session.messages.jumpToLatest": "최신으로 이동",
   "session.context.addToContext": "컨텍스트에 {{selection}} 추가",
-
   "session.new.worktree.main": "메인 브랜치",
   "session.new.worktree.mainWithBranch": "메인 브랜치 ({{branch}})",
   "session.new.worktree.create": "새 작업 트리 생성",
   "session.new.lastModified": "최근 수정",
-
   "session.header.search.placeholder": "{{project}} 검색",
   "session.header.searchFiles": "파일 검색",
-
+  "session.header.openIn": "다음에서 열기",
+  "session.header.open.action": "{{app}} 열기",
+  "session.header.open.ariaLabel": "{{app}}에서 열기",
+  "session.header.open.menu": "열기 옵션",
+  "session.header.open.copyPath": "경로 복사",
   "status.popover.trigger": "상태",
   "status.popover.ariaLabel": "서버 구성",
   "status.popover.tab.servers": "서버",
@@ -456,7 +468,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "플러그인",
   "status.popover.action.manageServers": "서버 관리",
-
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
   "session.share.popover.description.unshared":
@@ -469,16 +480,13 @@ export const dict = {
   "session.share.action.view": "보기",
   "session.share.copy.copied": "복사됨",
   "session.share.copy.copyLink": "링크 복사",
-
   "lsp.tooltip.none": "LSP 서버 없음",
   "lsp.label.connected": "{{count}} LSP",
-
   "prompt.loading": "프롬프트 로드 중...",
   "terminal.loading": "터미널 로드 중...",
   "terminal.title": "터미널",
   "terminal.title.numbered": "터미널 {{number}}",
   "terminal.close": "터미널 닫기",
-
   "terminal.connectionLost.title": "연결 끊김",
   "terminal.connectionLost.description":
     "터미널 연결이 중단되었습니다. 서버가 재시작하면 이런 일이 발생할 수 있습니다.",
@@ -494,7 +502,6 @@ export const dict = {
   "common.close": "닫기",
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
-
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "메뉴 토글",
   "sidebar.nav.projectsAndSessions": "프로젝트 및 세션",
@@ -507,18 +514,19 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Claude, GPT, Gemini 등을 포함한 모델을 사용하려면 공급자를 연결하세요.",
   "sidebar.project.recentSessions": "최근 세션",
   "sidebar.project.viewAllSessions": "모든 세션 보기",
-
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "데스크톱",
   "settings.section.server": "서버",
   "settings.tab.general": "일반",
   "settings.tab.shortcuts": "단축키",
-
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL 통합",
+  "settings.desktop.wsl.description": "Windows의 WSL 내부에서 OpenCode 서버를 실행합니다.",
   "settings.general.section.appearance": "모양",
   "settings.general.section.notifications": "시스템 알림",
   "settings.general.section.updates": "업데이트",
   "settings.general.section.sounds": "효과음",
-
+  "settings.general.section.display": "디스플레이",
   "settings.general.row.language.title": "언어",
   "settings.general.row.language.description": "OpenCode 표시 언어 변경",
   "settings.general.row.appearance.title": "모양",
@@ -527,10 +535,12 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
-
+  "settings.general.row.wayland.title": "네이티브 Wayland 사용",
+  "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
+  "settings.general.row.wayland.tooltip":
+    "혼합 주사율 모니터가 있는 Linux에서는 네이티브 Wayland가 더 안정적일 수 있습니다.",
   "settings.general.row.releaseNotes.title": "릴리스 노트",
   "settings.general.row.releaseNotes.description": "업데이트 후 '새 소식' 팝업 표시",
-
   "settings.updates.row.startup.title": "시작 시 업데이트 확인",
   "settings.updates.row.startup.description": "OpenCode를 실행할 때 업데이트를 자동으로 확인합니다",
   "settings.updates.row.check.title": "업데이트 확인",
@@ -539,7 +549,6 @@ export const dict = {
   "settings.updates.action.checking": "확인 중...",
   "settings.updates.toast.latest.title": "최신 상태입니다",
   "settings.updates.toast.latest.description": "현재 최신 버전의 OpenCode를 사용 중입니다.",
-
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -603,14 +612,12 @@ export const dict = {
   "settings.general.notifications.permissions.description": "권한이 필요할 때 시스템 알림 표시",
   "settings.general.notifications.errors.title": "오류",
   "settings.general.notifications.errors.description": "오류가 발생했을 때 시스템 알림 표시",
-
   "settings.general.sounds.agent.title": "에이전트",
   "settings.general.sounds.agent.description": "에이전트가 완료되거나 주의가 필요할 때 소리 재생",
   "settings.general.sounds.permissions.title": "권한",
   "settings.general.sounds.permissions.description": "권한이 필요할 때 소리 재생",
   "settings.general.sounds.errors.title": "오류",
   "settings.general.sounds.errors.description": "오류가 발생했을 때 소리 재생",
-
   "settings.shortcuts.title": "키보드 단축키",
   "settings.shortcuts.reset.button": "기본값으로 초기화",
   "settings.shortcuts.reset.toast.title": "단축키 초기화됨",
@@ -621,14 +628,12 @@ export const dict = {
   "settings.shortcuts.pressKeys": "키 누르기",
   "settings.shortcuts.search.placeholder": "단축키 검색",
   "settings.shortcuts.search.empty": "단축키를 찾을 수 없습니다",
-
   "settings.shortcuts.group.general": "일반",
   "settings.shortcuts.group.session": "세션",
   "settings.shortcuts.group.navigation": "탐색",
   "settings.shortcuts.group.modelAndAgent": "모델 및 에이전트",
   "settings.shortcuts.group.terminal": "터미널",
   "settings.shortcuts.group.prompt": "프롬프트",
-
   "settings.providers.title": "공급자",
   "settings.providers.description": "공급자 설정은 여기서 구성할 수 있습니다.",
   "settings.providers.section.connected": "연결된 공급자",
@@ -646,16 +651,13 @@ export const dict = {
   "settings.commands.description": "명령어 설정은 여기서 구성할 수 있습니다.",
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "MCP 설정은 여기서 구성할 수 있습니다.",
-
   "settings.permissions.title": "권한",
   "settings.permissions.description": "서버가 기본적으로 사용할 수 있는 도구를 제어합니다.",
   "settings.permissions.section.tools": "도구",
   "settings.permissions.toast.updateFailed.title": "권한 업데이트 실패",
-
   "settings.permissions.action.allow": "허용",
   "settings.permissions.action.ask": "묻기",
   "settings.permissions.action.deny": "거부",
-
   "settings.permissions.tool.read.title": "읽기",
   "settings.permissions.tool.read.description": "파일 읽기 (파일 경로와 일치)",
   "settings.permissions.tool.edit.title": "편집",
@@ -688,12 +690,10 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "프로젝트 디렉터리 외부의 파일에 액세스",
   "settings.permissions.tool.doom_loop.title": "무한 반복",
   "settings.permissions.tool.doom_loop.description": "동일한 입력으로 반복되는 도구 호출 감지",
-
   "session.delete.failed.title": "세션 삭제 실패",
   "session.delete.title": "세션 삭제",
   "session.delete.confirm": '"{{name}}" 세션을 삭제하시겠습니까?',
   "session.delete.button": "세션 삭제",
-
   "workspace.new": "새 작업 공간",
   "workspace.type.local": "로컬",
   "workspace.type.sandbox": "샌드박스",
