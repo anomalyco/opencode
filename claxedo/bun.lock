@@ -15,14 +15,14 @@
         "@opentelemetry/sdk-node": "^0.57.0",
         "@opentelemetry/sdk-trace-node": "^1.28.0",
         "@opentelemetry/semantic-conventions": "^1.28.0",
-        "@sandbox-agent/cli-darwin-arm64": "^0.1.11",
+        "@sandbox-agent/cli-darwin-arm64": "^0.2.0",
         "@sentry/node": "^8.0.0",
         "@types/ws": "^8.18.1",
         "convex": "^1.17.4",
         "dotenv": "^17.2.3",
         "hono": "^4.11.5",
         "prom-client": "^15.1.0",
-        "sandbox-agent": "^0.1.11",
+        "sandbox-agent": "^0.2.0",
         "ws": "^8.19.0",
       },
       "devDependencies": {
@@ -33,6 +33,8 @@
     },
   },
   "packages": {
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.14.1", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-b6r3PS3Nly+Wyw9U+0nOr47bV8tfS476EgyEMhoKvJCZLbgqoDFN7DJwkxL88RR0aiOqOYV1ZnESHqb+RmdH8w=="],
+
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 
     "@aws-crypto/crc32c": ["@aws-crypto/crc32c@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-+iWb8qaHLYKrNvGRbiYRHSdKRWhto5XlZUEBwDjYNf+ly5SVYG6zEoYIdxvf5R3zyeP16w4PLBn3rH1xc74Rag=="],
@@ -329,19 +331,19 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.0", "", {}, "sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw=="],
 
-    "@sandbox-agent/cli": ["@sandbox-agent/cli@0.1.11", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.1.11" }, "optionalDependencies": { "@sandbox-agent/cli-darwin-arm64": "0.1.11", "@sandbox-agent/cli-darwin-x64": "0.1.11", "@sandbox-agent/cli-linux-arm64": "0.1.11", "@sandbox-agent/cli-linux-x64": "0.1.11", "@sandbox-agent/cli-win32-x64": "0.1.11" }, "bin": { "sandbox-agent": "bin/sandbox-agent" } }, "sha512-4nVH0dKC70zQjYSYhUagnn9bAy2mOXQovr77YlD4qATcjJHr6bbx/hgvtGYuaIGr/3SoZsPJMf8X6On81EnIxw=="],
+    "@sandbox-agent/cli": ["@sandbox-agent/cli@0.2.0", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.2.0" }, "optionalDependencies": { "@sandbox-agent/cli-darwin-arm64": "0.2.0", "@sandbox-agent/cli-darwin-x64": "0.2.0", "@sandbox-agent/cli-linux-arm64": "0.2.0", "@sandbox-agent/cli-linux-x64": "0.2.0", "@sandbox-agent/cli-win32-x64": "0.2.0" }, "bin": { "sandbox-agent": "bin/sandbox-agent" } }, "sha512-kTZyybllHki1cCiSUt20udzlrN4Z94rnRMDSquebOaR3AkkJQQVe7oXvapeDezujIN+C4H7TUpCFVf+40DgeIg=="],
 
-    "@sandbox-agent/cli-darwin-arm64": ["@sandbox-agent/cli-darwin-arm64@0.1.11", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Xh59hSo/0xiPm1nscSTUXcc/naGlF3E7xIBG0XjFM5jEOI+tdpJn6hGx02s7Py9uZOmqyN2yCaytEgJc4p2klw=="],
+    "@sandbox-agent/cli-darwin-arm64": ["@sandbox-agent/cli-darwin-arm64@0.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-DQ8nmqnHYwZvtVh1q4Tuy1qlzWiYYwg/7W8Jc2nwGobIrxVl3atMC0uZ22yx2OlxP5VRu6UkPJUuhB3LMy59NA=="],
 
-    "@sandbox-agent/cli-darwin-x64": ["@sandbox-agent/cli-darwin-x64@0.1.11", "", { "os": "darwin", "cpu": "x64" }, "sha512-h14t6qh+I2Tt68XzF5a44CGJ0/EyuK2GV46d+JyBPxGPhJanmgY0gnOvpI+AwWxg8ZeoOmOXXEYPMW5WogEhIw=="],
+    "@sandbox-agent/cli-darwin-x64": ["@sandbox-agent/cli-darwin-x64@0.2.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-elHLfqNY4So1WXXWIKYThLiD/V4RZcvK9w0DQ4LGFQc87KDvHsaucN1V3tY2O7IW+A5URvvLENkm/UBkzpiFzg=="],
 
-    "@sandbox-agent/cli-linux-arm64": ["@sandbox-agent/cli-linux-arm64@0.1.11", "", { "os": "linux", "cpu": "arm64" }, "sha512-fq8gy34RVshxcU9FfHx0ZmfWwiDAIPCKyP6/k0GIhM/RlN2YMExar6VrFgeHMmboarHOAQQSN1XsfxVH6Ixlkg=="],
+    "@sandbox-agent/cli-linux-arm64": ["@sandbox-agent/cli-linux-arm64@0.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-JrYAS1tODC0i4xkWyv6qQWZ7Ejrx8scQrTemYwzRjTFC7ms77/6eVJp9BCN0Oml5IXK8mFHrzGmEqdtyPcI53w=="],
 
-    "@sandbox-agent/cli-linux-x64": ["@sandbox-agent/cli-linux-x64@0.1.11", "", { "os": "linux", "cpu": "x64" }, "sha512-sPpVIcXG2Gbb/IQWnzVFFwGRqaxPZ9o6qpa+AXha7fZ38Ey6ypbC4eWSU27r2114POmqaciupxVlDKR/yGsuZg=="],
+    "@sandbox-agent/cli-linux-x64": ["@sandbox-agent/cli-linux-x64@0.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-yzJ4gK1gWB7geNdybZS/SVuwn4UvhBDzodD6F9hhwH8HvGlWOkwiBGrkC+EfKVKToewHztaKO2wMKoI737VkIQ=="],
 
-    "@sandbox-agent/cli-shared": ["@sandbox-agent/cli-shared@0.1.11", "", {}, "sha512-Rr0r0uK49rhlTJOcuXvMwlkG/DFtolpIkwx3Ob4hwmknFHkCX3fcfRJmRcW0XmmwFwIJCLJeYYYMw2Ltr8k4HQ=="],
+    "@sandbox-agent/cli-shared": ["@sandbox-agent/cli-shared@0.2.0", "", {}, "sha512-gME/yVdeNlkNQRYfJOnkELziXnw++CzzrqCMWoAXf1c5cJYYEZIAMQ4y/WRIQgc/1BV8EjnHWxLJxgyqOF1zRw=="],
 
-    "@sandbox-agent/cli-win32-x64": ["@sandbox-agent/cli-win32-x64@0.1.11", "", { "os": "win32", "cpu": "x64" }, "sha512-vvpwdHs3EoqD1kmCWuYWnvol0zGBiqwx64HSMgkGsE5Lc0DAULuXBaiR4ZElSeSCSWpIr2EhcO8AfHSyn91jDg=="],
+    "@sandbox-agent/cli-win32-x64": ["@sandbox-agent/cli-win32-x64@0.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Zdl/RtSX31LcGgu8/36VyKx/kEFoutjEUG79vnaywEvaCAk0LyECBEHHKGHnIZpBiHkaNfK3rapY6rKPAquhJQ=="],
 
     "@sentry/core": ["@sentry/core@8.55.0", "", {}, "sha512-6g7jpbefjHYs821Z+EBJ8r4Z7LT5h80YSWRJaylGS4nW5W5Z2KXzpdnyFarv37O7QjauzVC2E+PABmpkw5/JGA=="],
 
@@ -472,6 +474,8 @@
     "acorn": ["acorn@8.15.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg=="],
 
     "acorn-import-attributes": ["acorn-import-attributes@1.9.5", "", { "peerDependencies": { "acorn": "^8" } }, "sha512-n02Vykv5uA3eHGM/Z2dQrcD56kL8TyDb2p1+0P83PClMnC/nc+anbQRhIOWnSq4Ke/KvDPrY3C9hDtC/A3eHnQ=="],
+
+    "acp-http-client": ["acp-http-client@0.1.0", "", { "dependencies": { "@agentclientprotocol/sdk": "^0.14.1" } }, "sha512-EI0HH0lcr+Cypten2Otzfuo+406EVGUWR6pWfo3TVVHqbSPBUIAtVjF8HCQycJWpkKlt1mgVXmC8kRaidEQbeA=="],
 
     "ansi-regex": ["ansi-regex@5.0.1", "", {}, "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ=="],
 
@@ -683,7 +687,7 @@
 
     "safe-buffer": ["safe-buffer@5.2.1", "", {}, "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="],
 
-    "sandbox-agent": ["sandbox-agent@0.1.11", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.1.11" }, "optionalDependencies": { "@sandbox-agent/cli": "0.1.11" } }, "sha512-xyQtCe2KXWbEM4QnLnDspWuh4vapJp129GiWB7aCOhsLFShiK5mobQYK8VevKUuidUjNLaQO9O9bDn318ha/yA=="],
+    "sandbox-agent": ["sandbox-agent@0.2.0", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.2.0", "acp-http-client": "0.1.0" }, "optionalDependencies": { "@sandbox-agent/cli": "0.2.0" } }, "sha512-3mwFbnu+R/SMIRHIQWNFb/G/CC1+b3CjpN7d9qEor8V2AOPQ44hvb75+CuT0H2ZZPwuUsxqIF6lPGx2xrskINw=="],
 
     "semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
@@ -744,6 +748,8 @@
     "yargs": ["yargs@17.7.2", "", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, "sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w=="],
 
     "yargs-parser": ["yargs-parser@21.1.1", "", {}, "sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw=="],
+
+    "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
 
     "@aws-crypto/sha1-browser/@smithy/util-utf8": ["@smithy/util-utf8@2.3.0", "", { "dependencies": { "@smithy/util-buffer-from": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A=="],
 

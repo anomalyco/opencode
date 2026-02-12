@@ -1,5 +1,5 @@
 /**
- * Sandbox Agent Integration Tests (v0.1.11)
+ * Sandbox Agent Integration Tests (v0.2.x)
  *
  * Validates that the sandbox-agent npm package upgrade works correctly
  * across the full gateway integration surface:
@@ -9,7 +9,7 @@
  *   4. Proxy middleware — path rewriting, auth token, error handling
  *   5. Event bridge — SSE parsing, directory caching, reconnection
  */
-import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test"
+import { describe, it, expect, mock, beforeEach, afterEach, afterAll } from "bun:test"
 
 // ---------------------------------------------------------------------------
 // 1. Package API compatibility
@@ -18,7 +18,7 @@ import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test"
 // is process-global in bun, so we shell out to a clean process.
 // ---------------------------------------------------------------------------
 
-describe("sandbox-agent package API (v0.1.11)", () => {
+describe("sandbox-agent package API (v0.2.x)", () => {
   // Run a bun -e script that imports the REAL sandbox-agent and checks exports.
   // Returns a JSON object with boolean flags for each check.
   async function checkRealModule(script: string): Promise<Record<string, any>> {
@@ -102,23 +102,24 @@ describe("sandbox-agent package API (v0.1.11)", () => {
     expect(result.hasHeader).toBe(true)
   })
 
-  it("SandboxAgent prototype has all expected methods", async () => {
+  it("SandboxAgent prototype has required core methods", async () => {
     const result = await checkRealModule(`
       const { SandboxAgent } = await import("sandbox-agent");
       const proto = SandboxAgent.prototype;
-      const methods = [
-        "listAgents", "getHealth", "installAgent", "getAgentModes", "getAgentModels",
-        "createSession", "listSessions", "postMessage", "postMessageStream",
-        "getEvents", "getEventsSse", "streamEvents", "streamTurn",
-        "replyQuestion", "rejectQuestion", "replyPermission", "terminateSession",
+      const required = [
+        "listAgents", "getHealth", "installAgent",
+        "createSession", "listSessions", "getEvents",
         "listFsEntries", "readFsFile", "writeFsFile", "deleteFsEntry",
         "mkdirFs", "moveFs", "statFs", "uploadFsBatch", "dispose",
       ];
-      const missing = methods.filter(m => typeof proto[m] !== "function");
-      console.log(JSON.stringify({ missing, total: methods.length }));
+      const modernSession = ["getSession", "resumeSession", "destroySession", "sendSessionMethod"];
+      const missing = required.filter((name) => typeof proto[name] !== "function");
+      const modernPresent = modernSession.filter((name) => typeof proto[name] === "function").length;
+      console.log(JSON.stringify({ missing, requiredTotal: required.length, modernPresent }));
     `)
     expect(result.missing).toEqual([])
-    expect(result.total).toBe(26)
+    expect(result.requiredTotal).toBe(15)
+    expect(result.modernPresent).toBeGreaterThan(0)
   })
 
   it("SandboxAgent.connect rejects with unreachable URL", async () => {
@@ -154,8 +155,11 @@ const mockSandboxAgentModule = {
   },
 }
 
-// Mock sandbox-agent module before importing routes
-mock.module("sandbox-agent", () => mockSandboxAgentModule)
+// Route tests import sandbox-agent through an explicit module path so this
+// mock does not leak into other test files using the real package.
+const mockSandboxAgentPath = "sandbox-agent-mock"
+process.env.SANDBOX_AGENT_MODULE_PATH = mockSandboxAgentPath
+mock.module(mockSandboxAgentPath, () => mockSandboxAgentModule)
 
 // Mock event bridge so spawn doesn't try to connect SSE
 const bridgeMocks = {
@@ -1031,4 +1035,10 @@ describe("Full lifecycle: spawn → status → stop → respawn", () => {
     ).json()
     expect(status.agent).toBe("amp")
   })
+})
+
+afterAll(() => {
+  // Top-level module mocks in this file should not leak into other test files.
+  delete process.env.SANDBOX_AGENT_MODULE_PATH
+  mock.restore()
 })

@@ -70,7 +70,11 @@ export async function spawnSandboxAgent(
   const port = Number(process.env.SANDBOX_AGENT_PORT || DEFAULT_PORT)
   const token = process.env.SANDBOX_AGENT_TOKEN || undefined
 
-  const { SandboxAgent } = await import("sandbox-agent")
+  const source =
+    process.env.SANDBOX_AGENT_MODULE_PATH && process.env.SANDBOX_AGENT_MODULE_PATH.length > 0
+      ? process.env.SANDBOX_AGENT_MODULE_PATH
+      : "sandbox-agent"
+  const { SandboxAgent } = await import(source)
 
   const client = await SandboxAgent.start({
     spawn: {
