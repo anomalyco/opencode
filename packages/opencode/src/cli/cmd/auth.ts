@@ -16,7 +16,6 @@ type PluginAuth = NonNullable<Hooks["auth"]>
 
 /**
  * Handle plugin-based authentication flow.
- * Returns true if auth was handled, false if it should fall through to default handling.
  */
 async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
   let index = 0
@@ -35,7 +34,6 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   }
   const method = plugin.auth.methods[index]
 
-  // Handle prompts for all auth types
   await Bun.sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
@@ -83,7 +81,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.add(saveProvider, {
             type: "oauth",
             refresh,
             access,
@@ -92,7 +90,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.add(saveProvider, {
             type: "api",
             key: result.key,
           })
@@ -115,7 +113,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.add(saveProvider, {
             type: "oauth",
             refresh,
             access,
@@ -124,7 +122,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.add(saveProvider, {
             type: "api",
             key: result.key,
           })
@@ -145,7 +143,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
+        await Auth.add(saveProvider, {
           type: "api",
           key: result.key,
         })
@@ -163,29 +161,48 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthUseCommand)
+      .demandCommand(),
   async handler() {},
 })
 
 export const AuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
-  describe: "list providers",
+  describe: "list providers and accounts",
   async handler() {
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+    const results = await Auth.all()
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
+    // Group by provider
+    for (const [providerID, providerData] of Object.entries(results)) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      
+      // Show provider name
+      prompts.log.info(`${UI.Style.TEXT_BOLD}${name}`)
+      
+      // Show all accounts for this provider
+      if (providerData.accounts) {
+        for (const [accountId, info] of Object.entries(providerData.accounts)) {
+          const isActive = accountId === providerData.activeAccount
+          const isDisabled = "disabled" in info && info.disabled
+          const marker = isActive ? " ✓" : (isDisabled ? " (disabled)" : "")
+          const label = accountId === "default" ? "default" : accountId
+          prompts.log.info(`  ${label}${marker} ${UI.Style.TEXT_DIM}(${info.type})`)
+        }
+      }
     }
 
-    prompts.outro(`${results.length} credentials`)
+    prompts.outro(`${Object.keys(results).length} providers`)
 
     // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
@@ -228,7 +245,12 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
+        
+        // Check if provider already has accounts - offer options
+        const existingProviders = await Auth.all()
+        
         if (args.url) {
+          // Well-known auth
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
@@ -242,7 +264,7 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.add(args.url, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
@@ -251,6 +273,7 @@ export const AuthLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
+        
         await ModelsDev.refresh().catch(() => {})
 
         const config = await Config.get()
@@ -307,6 +330,63 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
+        // Check if this provider already has accounts
+        const hasExistingAccounts = existingProviders[provider] && 
+          Object.keys(existingProviders[provider].accounts || {}).length > 0
+
+        if (hasExistingAccounts) {
+          // Ask what to do: add another, switch, or manage
+          const action = await prompts.select({
+            message: "This provider already has accounts. What would you like to do?",
+            options: [
+              { label: "Add another account", value: "add" },
+              { label: "Switch active account", value: "switch" },
+              { label: "Manage accounts (enable/disable)", value: "manage" },
+            ],
+          })
+          if (prompts.isCancel(action)) throw new UI.CancelledError()
+          
+          if (action === "switch") {
+            const accounts = await Auth.list(provider)
+            const currentActive = await Auth.getActiveAccount(provider)
+            const selected = await prompts.select({
+              message: "Select active account",
+              options: accounts.map(acc => ({
+                label: acc === "default" ? "default" : acc,
+                value: acc,
+              })),
+            })
+            if (prompts.isCancel(selected)) throw new UI.CancelledError()
+            await Auth.use(provider, selected)
+            prompts.log.success(`Switched to ${selected}`)
+            prompts.outro("Done")
+            return
+          }
+          
+          if (action === "manage") {
+            const accounts = await Auth.list(provider)
+            const selected = await prompts.select({
+              message: "Select account to toggle",
+              options: [
+                ...accounts.map(acc => ({
+                  label: acc === "default" ? "default" : acc,
+                  value: acc,
+                })),
+              ],
+            })
+            if (prompts.isCancel(selected)) throw new UI.CancelledError()
+            
+            const currentAccounts = await Auth.getAccounts(provider)
+            const isDisabled = currentAccounts[selected]?.disabled ?? false
+            
+            await Auth.setEnabled(provider, selected, isDisabled)
+            prompts.log.success(isDisabled ? "Account enabled" : "Account disabled")
+            prompts.outro("Done")
+            return
+          }
+          // If "add", continue to authentication
+        }
+
         const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
@@ -316,13 +396,12 @@ export const AuthLoginCommand = cmd({
         if (provider === "other") {
           provider = await prompts.text({
             message: "Enter provider id",
-            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+            validate: (x) => (x && x.match(/^[0-9a-z-]+$/)) ? undefined : "a-z, 0-9 and hyphens only",
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
           const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
@@ -363,11 +442,23 @@ export const AuthLoginCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
+        
+        // Ask for email (optional, for identification)
+        const email = await prompts.text({
+          message: "Account name/email (optional, for identification)",
+          placeholder: "e.g., work, personal, user@gmail.com",
+        })
+        
+        const info: Auth.Info = {
           type: "api",
           key,
-        })
-
+        }
+        
+        if (email && !prompts.isCancel(email)) {
+          (info as any).email = email.trim()
+        }
+        
+        await Auth.add(provider, info)
         prompts.outro("Done")
       },
     })
@@ -379,22 +470,121 @@ export const AuthLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    const credentials = await Auth.all()
+    const providers = Object.keys(credentials)
+    
     prompts.intro("Remove credential")
-    if (credentials.length === 0) {
+    if (providers.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
+    
     const database = await ModelsDev.get()
+    
+    // Show provider selection with account count
     const providerID = await prompts.select({
       message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+      options: providers.map(key => {
+        const accountCount = Object.keys(credentials[key].accounts || {}).length
+        return {
+          label: (database[key]?.name || key) + UI.Style.TEXT_DIM + ` (${accountCount} account${accountCount !== 1 ? "s" : ""})`,
+          value: key,
+        }
+      }),
     })
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
+    
+    // Show account selection
+    const accounts = await Auth.list(providerID)
+    if (accounts.length > 1) {
+      const accountToRemove = await prompts.select({
+        message: "Select account to remove",
+        options: [
+          { label: "All accounts", value: "all" },
+          ...accounts.map(acc => ({
+            label: acc === "default" ? "default" : acc,
+            value: acc,
+          })),
+        ],
+      })
+      if (prompts.isCancel(accountToRemove)) throw new UI.CancelledError()
+      
+      await Auth.remove(providerID, accountToRemove)
+    } else {
+      await Auth.remove(providerID)
+    }
+    
     prompts.outro("Logout successful")
+  },
+})
+
+export const AuthUseCommand = cmd({
+  command: "use",
+  describe: "switch between accounts for a provider",
+  builder: (yargs) =>
+    yargs
+      .positional("provider", {
+        describe: "provider id",
+        type: "string",
+      })
+      .positional("account", {
+        describe: "account name or email",
+        type: "string",
+      }),
+  async handler(args) {
+    if (!args.provider || !args.account) {
+      // Interactive mode
+      const credentials = await Auth.all()
+      const providers = Object.keys(credentials)
+      
+      if (providers.length === 0) {
+        prompts.log.error("No providers found")
+        return
+      }
+      
+      const database = await ModelsDev.get()
+      
+      const providerID = await prompts.select({
+        message: "Select provider",
+        options: providers.map(key => ({
+          label: database[key]?.name || key,
+          value: key,
+        })),
+      })
+      if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+      
+      const accounts = await Auth.list(providerID)
+      if (accounts.length === 0) {
+        prompts.log.error("No accounts found for this provider")
+        return
+      }
+      
+      const account = await prompts.select({
+        message: "Select account",
+        options: accounts.map(acc => ({
+          label: acc === "default" ? "default" : acc,
+          value: acc,
+        })),
+      })
+      if (prompts.isCancel(account)) throw new UI.CancelledError()
+      
+      try {
+        await Auth.use(providerID, account)
+        prompts.log.success(`Switched to ${account}`)
+      } catch (error) {
+        prompts.log.error(String(error))
+      }
+      prompts.outro("Done")
+      return
+    }
+    
+    // Direct mode
+    try {
+      await Auth.use(args.provider, args.account)
+      prompts.log.success(`Switched to ${args.account} for ${args.provider}`)
+    } catch (error) {
+      prompts.log.error(String(error))
+    }
+    prompts.outro("Done")
   },
 })

@@ -13,6 +13,7 @@ export namespace Auth {
       expires: z.number(),
       accountId: z.string().optional(),
       enterpriseUrl: z.string().optional(),
+      email: z.string().optional(), // For multi-account identification
     })
     .meta({ ref: "OAuth" })
 
@@ -20,6 +21,7 @@ export namespace Auth {
     .object({
       type: z.literal("api"),
       key: z.string(),
+      email: z.string().optional(), // For multi-account identification
     })
     .meta({ ref: "ApiAuth" })
 
@@ -34,37 +36,246 @@ export namespace Auth {
   export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
+  // Multi-account storage format
+  export type AccountStore = {
+    [provider: string]: {
+      accounts: {
+        [accountId: string]: Info & { disabled?: boolean }
+      }
+      // Current active account for this provider
+      activeAccount?: string
+    }
+  }
+
   const filepath = path.join(Global.Path.data, "auth.json")
 
-  export async function get(providerID: string) {
-    const auth = await all()
-    return auth[providerID]
+  /**
+   * Get credential for a provider.
+   * Uses activeAccount if set, otherwise returns first available.
+   */
+  export async function get(providerID: string): Promise<Info | undefined> {
+    const store = await load()
+    const provider = store[providerID]
+    
+    if (!provider || !provider.accounts) return undefined
+    
+    // Use active account if set
+    if (provider.activeAccount && provider.accounts[provider.activeAccount]) {
+      return provider.accounts[provider.activeAccount]
+    }
+    
+    // Otherwise, find first non-disabled account
+    for (const [id, info] of Object.entries(provider.accounts)) {
+      if (!info.disabled) return info
+    }
+    
+    return undefined
   }
 
-  export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
-    return Object.entries(data).reduce(
-      (acc, [key, value]) => {
-        const parsed = Info.safeParse(value)
-        if (!parsed.success) return acc
-        acc[key] = parsed.data
-        return acc
-      },
-      {} as Record<string, Info>,
-    )
+  /**
+   * Get all accounts for a provider.
+   */
+  export async function getAccounts(providerID: string): Promise<Record<string, Info>> {
+    const store = await load()
+    const provider = store[providerID]
+    return provider?.accounts ?? {}
   }
 
-  export async function set(key: string, info: Info) {
-    const file = Bun.file(filepath)
-    const data = await all()
-    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 })
+  /**
+   * List all providers and their accounts.
+   */
+  export async function all(): Promise<AccountStore> {
+    return await load()
   }
 
-  export async function remove(key: string) {
+  /**
+   * Add a new credential to a provider.
+   * Automatically creates a new account entry.
+   * Returns the account ID (email or generated).
+   */
+  export async function add(providerID: string, info: Info): Promise<string> {
+    const store = await load()
+    
+    if (!store[providerID]) {
+      store[providerID] = { accounts: {} }
+    }
+    
+    // Generate account ID from email if available, otherwise use timestamp
+    let accountId = "default"
+    if ("email" in info && info.email) {
+      accountId = info.email
+    } else if ("refresh" in info && info.refresh) {
+      // For OAuth, use a hash of refresh token
+      accountId = `oauth-${Date.now()}`
+    } else {
+      accountId = `key-${Date.now()}`
+    }
+    
+    store[providerID].accounts[accountId] = info
+    
+    // If this is the first account, set as active
+    if (!store[providerID].activeAccount) {
+      store[providerID].activeAccount = accountId
+    }
+    
+    await save(store)
+    return accountId
+  }
+
+  /**
+   * Set credential (alias for add for compatibility)
+   */
+  export async function set(providerID: string, info: Info, account?: string) {
+    // For backwards compatibility: if account is provided, use it
+    if (account) {
+      const store = await load()
+      if (!store[providerID]) {
+        store[providerID] = { accounts: {} }
+      }
+      store[providerID].accounts[account] = info
+      if (!store[providerID].activeAccount) {
+        store[providerID].activeAccount = account
+      }
+      await save(store)
+    } else {
+      // Otherwise add as new account
+      await add(providerID, info)
+    }
+  }
+
+  /**
+   * Remove an account from a provider.
+   * If account is "all" or not specified, removes all.
+   */
+  export async function remove(providerID: string, account?: string) {
+    const store = await load()
+    const provider = store[providerID]
+    
+    if (!provider) return
+    
+    if (!account) {
+      // Remove all accounts for this provider
+      delete store[providerID]
+    } else if (account === "all") {
+      delete store[providerID]
+    } else {
+      delete provider.accounts[account]
+      
+      // If we removed the active account, switch to another
+      if (provider.activeAccount === account) {
+        const remaining = Object.keys(provider.accounts)
+        provider.activeAccount = remaining[0] ?? undefined
+      }
+    }
+    
+    await save(store)
+  }
+
+  /**
+   * List all accounts for a provider.
+   */
+  export async function list(providerID: string): Promise<string[]> {
+    const store = await load()
+    const provider = store[providerID]
+    return provider ? Object.keys(provider.accounts) : []
+  }
+
+  /**
+   * Get active account for a provider.
+   */
+  export async function getActiveAccount(providerID: string): Promise<string | undefined> {
+    const store = await load()
+    return store[providerID]?.activeAccount
+  }
+
+  /**
+   * Set active account for a provider.
+   */
+  export async function use(providerID: string, account: string) {
+    const store = await load()
+    const provider = store[providerID]
+    
+    if (!provider || !provider.accounts[account]) {
+      throw new Error(`Account ${account} not found for provider ${providerID}`)
+    }
+    
+    provider.activeAccount = account
+    await save(store)
+  }
+
+  /**
+   * Enable/disable an account (for rotation).
+   */
+  export async function setEnabled(providerID: string, account: string, enabled: boolean) {
+    const store = await load()
+    const provider = store[providerID]
+    
+    if (!provider || !provider.accounts[account]) return
+    
+    provider.accounts[account].disabled = !enabled
+    
+    // If we disabled the active account, switch to another
+    if (!enabled && provider.activeAccount === account) {
+      const remaining = Object.keys(provider.accounts).filter(a => !provider.accounts[a].disabled)
+      provider.activeAccount = remaining[0] ?? undefined
+    }
+    
+    await save(store)
+  }
+
+  /**
+   * Get next available account (for auto-rotation on rate-limit).
+   */
+  export async function getNextAccount(providerID: string): Promise<{ account: string, info: Info } | undefined> {
+    const store = await load()
+    const provider = store[providerID]
+    
+    if (!provider || !provider.accounts) return undefined
+    
+    const accounts = Object.entries(provider.accounts).filter(([_, info]) => !info.disabled)
+    
+    if (accounts.length === 0) return undefined
+    
+    // Simple round-robin: switch to next account
+    const currentActive = provider.activeAccount
+    const currentIndex = accounts.findIndex(([id]) => id === currentActive)
+    const nextIndex = (currentIndex + 1) % accounts.length
+    
+    const [account, info] = accounts[nextIndex]
+    provider.activeAccount = account
+    await save(store)
+    
+    return { account, info }
+  }
+
+  /**
+   * Legacy compatibility: convert old format to new.
+   */
+  async function migrateIfNeeded(store: AccountStore): Promise<AccountStore> {
+    // Check if it's in legacy format (direct Info objects instead of { accounts: {} })
+    for (const [providerID, value] of Object.entries(store)) {
+      if (value && typeof value === "object" && !("accounts" in value)) {
+        // Legacy format - migrate
+        const info = value as unknown as Info
+        store[providerID] = {
+          accounts: { default: info },
+          activeAccount: "default"
+        }
+      }
+    }
+    return store
+  }
+
+  // Load auth data from file
+  async function load(): Promise<AccountStore> {
     const file = Bun.file(filepath)
-    const data = await all()
-    delete data[key]
-    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
+    const data = await file.json().catch(() => ({}))
+    return await migrateIfNeeded(data)
+  }
+
+  // Save auth data to file
+  async function save(store: AccountStore) {
+    const file = Bun.file(filepath)
+    await Bun.write(file, JSON.stringify(store, null, 2), { mode: 0o600 })
   }
 }
