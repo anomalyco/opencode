@@ -1,6 +1,6 @@
 ---
-title: Config
-description: Usa la config JSON di OpenCode.
+title: Configurazione
+description: Usa la configurazione JSON di OpenCode.
 ---
 
 Puoi configurare OpenCode usando un file di configurazione JSON.
@@ -56,7 +56,7 @@ Le directory `.opencode` e `~/.config/opencode` usano **nomi al plurale** per le
 
 ---
 
-### Remota
+### Configurazione remota
 
 Le organizzazioni possono fornire una configurazione predefinita tramite l'endpoint `.well-known/opencode`. Viene recuperata automaticamente quando ti autentichi con un provider che lo supporta.
 
@@ -92,7 +92,7 @@ Puoi abilitare server specifici nella tua configurazione locale:
 
 ---
 
-### Globale
+### Configurazione globale
 
 Metti la configurazione globale di OpenCode in `~/.config/opencode/opencode.json`. Usa la configurazione globale per preferenze valide per l'utente (ad es. temi, provider o keybind).
 
@@ -100,7 +100,7 @@ La configurazione globale sovrascrive i default remoti dell'organizzazione.
 
 ---
 
-### Per progetto
+### Configurazione di progetto
 
 Aggiungi `opencode.json` nella root del progetto. La configurazione di progetto ha la precedenza piu alta tra i file standard: sovrascrive sia la configurazione globale sia quella remota.
 
@@ -235,9 +235,9 @@ Puoi configurare provider e modelli da usare in OpenCode tramite le opzioni `pro
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+L'opzione `small_model` configura un modello separato per task leggeri come la generazione dei titoli. Per impostazione predefinita, OpenCode prova a usare un modello più economico se disponibile dal tuo provider, altrimenti fa fallback sul tuo modello principale.
 
-Provider options can include `timeout` and `setCacheKey`:
+Le opzioni del provider possono includere `timeout` e `setCacheKey`:
 
 ```json title="opencode.json"
 {
@@ -556,8 +556,7 @@ Puoi configurare le istruzioni per il modello che stai usando tramite l'opzione 
 }
 ```
 
-Accetta un array di percorsi e pattern glob verso file di istruzioni. [Scopri di piu
-sulle regole](/docs/rules).
+Accetta un array di percorsi e pattern glob verso file di istruzioni. [Scopri di piu sulle regole](/docs/rules).
 
 ---
 

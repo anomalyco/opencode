@@ -27,7 +27,7 @@ Give me a quick summary of the codebase.
 
 ---
 
-## File references
+## Referencje plików
 
 Możesz odwoływać się do plików w swoich wiadomościach, używając `@`. Spowoduje to rozmyte wyszukiwanie plików w bieżącym katalogu roboczym.
 
@@ -43,9 +43,9 @@ Zawartość pliku jest automatycznie dodawana do rozmowy.
 
 ---
 
-## Bash commands
+## Polecenia Bash
 
-Rozpocznij wiadomość od `!`, aby uruchomić polecenie powłoki.
+Rozpocznij wiadomość od `!`, aby uruchomić polecenie shell.
 
 ```bash frame="none"
 !ls -la
@@ -65,7 +65,7 @@ Korzystając z TUI opencode, możesz wpisać `/`, po którym następuje nazwa po
 
 Większość poleceń ma również skrót klawiszowy wykorzystujący `ctrl+x` jako klucz wiodący, gdzie `ctrl+x` jest domyślnym klawiszem wiodącym. [Dowiedz się więcej](/docs/keybinds).
 
-Oto wszystkie dostępne polecenia ukośnika:
+Oto wszystkie dostępne slash commands:
 
 ---
 
@@ -93,7 +93,7 @@ Kompaktuj bieżącą sesję. _Alias_: `/summarize`
 
 ### details
 
-Toggle tool execution details.
+Przełącz szczegóły wykonywania narzędzi.
 
 ```bash frame="none"
 /details
@@ -117,7 +117,7 @@ Otwórz zewnętrzny edytor do tworzenia wiadomości. Używa edytora ustawionego 
 
 ### exit
 
-Exit opencode. _Aliases_: `/quit`, `/q`
+Zamknij opencode. _Aliasy_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -192,7 +192,7 @@ Rozpocznij nową sesję. _Alias_: `/clear`
 Ponów cofniętą wcześniej wiadomość. Dostępne tylko po użyciu `/undo`.
 
 :::tip
-Any file changes will also be restored.
+Wszystkie zmiany plików również zostaną przywrócone.
 :::
 
 Wewnętrznie używa Git do zarządzania zmianami plików. Więc Twój projekt ** musi
@@ -261,7 +261,7 @@ To polecenie kontroluje jedynie, czy bloki myślowe są **wyświetlane** - nie w
 Cofnij ostatnią wiadomość w rozmowie. Usuwa najnowszą wiadomość użytkownika, wszystkie kolejne odpowiedzi i wszelkie zmiany w plikach.
 
 :::tip
-Any file changes made will also be reverted.
+Wszystkie zmiany plików również zostaną cofnięte.
 :::
 
 Wewnętrznie używa Git do zarządzania zmianami plików. Więc Twój projekt ** musi
@@ -285,7 +285,7 @@ Anuluj udostępnianie bieżącej sesji. [Dowiedz się więcej](/docs/share#un-sh
 
 ---
 
-## Editor setup
+## Konfiguracja edytora
 
 Zarówno polecenia `/editor`, jak i `/export` korzystają z edytora określonego w zmiennej środowiskowej `EDITOR`.
 
@@ -301,7 +301,7 @@ Zarówno polecenia `/editor`, jak i `/export` korzystają z edytora określonego
     export EDITOR="code --wait"
     ```
 
-    Aby było to trwałe, dodaj to do swojego profilu powłoki;
+    Aby było to trwałe, dodaj to do swojego profilu shell;
     `~/.bashrc`, `~/.zshrc`, etc.
 
   </TabItem>
@@ -334,7 +334,7 @@ Zarówno polecenia `/editor`, jak i `/export` korzystają z edytora określonego
   </TabItem>
 </Tabs>
 
-Popular editor options include:
+Popularne opcje edytora:
 
 - `code` - Visual Studio Code
 - `cursor` - Cursor
@@ -349,7 +349,7 @@ Popular editor options include:
 Niektóre edytory, takie jak VS Code, należy uruchamiać z flagą `--wait`.
 :::
 
-Niektórzy redaktorzy potrzebują argumentów wiersza poleceń, aby działać w trybie blokowania. Flaga `--wait` blokuje proces edytora aż do jego zamknięcia.
+Niektórzy edytory potrzebują argumentów wiersza poleceń, aby działać w trybie blokowania. Flaga `--wait` blokuje proces edytora aż do jego zamknięcia.
 
 ---
 
@@ -369,20 +369,20 @@ Możesz dostosować zachowanie TUI za pomocą pliku konfiguracyjnego opencode.
 }
 ```
 
-### Options
+### Opcje
 
 - `scroll_acceleration` — Włącz przyspieszenie przewijania w stylu macOS, aby zapewnić płynne, naturalne przewijanie. Po włączeniu prędkość przewijania wzrasta wraz z szybkimi gestami przewijania i pozostaje precyzyjna w przypadku wolniejszych ruchów. **To ustawienie ma pierwszeństwo przed `scroll_speed` i zastępuje je, gdy jest włączone.**
 - `scroll_speed` - Kontroluje szybkość przewijania TUI podczas korzystania z poleceń przewijania (minimum: `1`). Wartość domyślna to `3`. **Uwaga: jest to ignorowane, jeśli `scroll_acceleration.enabled` jest ustawione na `true`.**
 
 ---
 
-## Customization
+## Personalizacja
 
 Za pomocą palety poleceń (`ctrl+x h` lub `/help`) można dostosować różne aspekty widoku TUI. Te ustawienia są zachowywane po ponownym uruchomieniu.
 
 ---
 
-#### Username display
+#### Wyświetlanie nazwy użytkownika
 
 Włącz lub wyłącz wyświetlanie Twojej nazwy użytkownika w wiadomościach na czacie. Dostęp do tego poprzez:
 

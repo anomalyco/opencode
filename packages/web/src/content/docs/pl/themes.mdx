@@ -9,12 +9,12 @@ Domyślnie opencode używa naszego własnego motywu `opencode`.
 
 ---
 
-## Terminal requirements
+## Wymagania terminala
 
 Aby motywy wyświetlały się poprawnie z pełną paletą kolorów, Twój terminal musi obsługiwać **truecolor** (kolor 24-bitowy). Większość nowoczesnych terminali domyślnie obsługuje tę opcję, ale może być konieczne jej włączenie:
 
 - **Sprawdź wsparcie**: Uruchom `echo $COLORTERM` - powinno wypisać `truecolor` lub `24bit`
-- **Włącz truecolor**: Ustaw zmienną środowiskową `COLORTERM=truecolor` w swoim profilu powłoki
+- **Włącz truecolor**: Ustaw zmienną środowiskową `COLORTERM=truecolor` w swoim profilu shell
 - **Zgodność terminala**: Upewnij się, że emulator terminala obsługuje 24-bitowy kolor (większość nowoczesnych terminali, takich jak iTerm2, Alacritty, Kitty, Windows Terminal i najnowsze wersje terminala GNOME tak)
 
 Bez obsługi Truecolor motywy mogą pojawiać się ze zmniejszoną dokładnością kolorów lub wracać do najbliższego przybliżenia 256 kolorów.
@@ -43,7 +43,7 @@ Co więcej, stale dodajemy nowe motywy.
 
 ---
 
-## System theme
+## Motyw systemowy
 
 Motyw `system` został zaprojektowany tak, aby automatycznie dostosowywał się do schematu kolorów terminala. W przeciwieństwie do tradycyjnych motywów, które używają stałych kolorów, motyw _system_:
 
@@ -59,7 +59,7 @@ Motyw systemu przeznaczony jest dla użytkowników, którzy:
 
 ---
 
-## Using a theme
+## Używanie motywu
 
 Możesz wybrać motyw, wywołując opcję wyboru motywu za pomocą polecenia `/theme`. Możesz też określić to w [config](/docs/config).
 
@@ -72,26 +72,26 @@ Możesz wybrać motyw, wywołując opcję wyboru motywu za pomocą polecenia `/t
 
 ---
 
-## Custom themes
+## Motywy niestandardowe
 
 opencode obsługuje elastyczny system motywów oparty na JSON, który pozwala użytkownikom łatwo tworzyć i dostosowywać motywy.
 
 ---
 
-### Hierarchy
+### Hierarchia
 
 Motywy są ładowane z wielu katalogów w następującej kolejności, przy czym późniejsze katalogi zastępują wcześniejsze:
 
 1. **Wbudowane motywy** – są osadzone w formacie binarnym
-2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **Katalog konfiguracji użytkownika** - Zdefiniowany w `~/.config/opencode/themes/*.json` lub `$XDG_CONFIG_HOME/opencode/themes/*.json`
 3. **Katalog główny projektu** - Zdefiniowany w `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+4. **Bieżący katalog roboczy** - Zdefiniowany w `./.opencode/themes/*.json`
 
 Jeśli wiele katalogów zawiera motyw o tej samej nazwie, zostanie użyty motyw z katalogu o wyższym priorytecie.
 
 ---
 
-### Creating a theme
+### Tworzenie motywu
 
 Aby utworzyć niestandardowy motyw, utwórz plik JSON w jednym z katalogów motywów.
 
@@ -111,25 +111,25 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### JSON format
+### Format JSON
 
 Motywy korzystają z elastycznego formatu JSON z obsługą:
 
-- **Hex colors**: `"#ffffff"`
-- **ANSI colors**: `3` (0-255)
-- **Color references**: `"primary"` or custom definitions
-- **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
-- **Brak koloru**: `"none"` - Używa domyślnego koloru terminala lub przezroczystości
+- **Kolorów Hex**: `"#ffffff"`
+- **Kolorów ANSI**: `3` (0-255)
+- **Referencji kolorów**: `"primary"` lub definicje niestandardowe
+- **Wariantów Ciemny/Jasny**: `{"dark": "#000", "light": "#fff"}`
+- **Braku koloru**: `"none"` - Używa domyślnego koloru terminala lub przezroczystości
 
 ---
 
-### Color definitions
+### Definicje kolorów
 
 Sekcja `defs` jest opcjonalna i pozwala zdefiniować kolory wielokrotnego użytku, do których można się odwoływać w motywie.
 
 ---
 
-### Terminal defaults
+### Domyślne ustawienia terminala
 
 Wartość specjalna `"none"` może zostać użyta dla dowolnego koloru, aby przejąć domyślny kolor terminala. Jest to szczególnie przydatne do tworzenia motywów, które płynnie komponują się ze schematem kolorów terminala:
 
@@ -140,7 +140,7 @@ Wartość specjalna `"none"` może zostać użyta dla dowolnego koloru, aby prze
 
 ### Przykład
 
-Here's an example of a custom theme:
+Oto przykład niestandardowego motywu:
 
 ```json title="my-theme.json"
 {

@@ -14,7 +14,7 @@ opencode
 Mas também aceita comandos conforme documentado nesta página. Isso permite que você interaja com o opencode programaticamente.
 
 ```bash
-opencode run "Explique como closures funcionam em JavaScript"
+opencode run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,10 +24,10 @@ opencode run "Explique como closures funcionam em JavaScript"
 Inicie a interface de usuário do terminal do opencode.
 
 ```bash
-opencode [projeto]
+opencode [project]
 ```
 
-#### Flags
+#### Opções
 
 | Flag         | Curto | Descrição                                                                  |
 | ------------ | ----- | -------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ A CLI do opencode também possui os seguintes comandos.
 Gerencie agentes para o opencode.
 
 ```bash
-opencode agent [comando]
+opencode agent [command]
 ```
 
 ---
@@ -69,14 +69,14 @@ opencode attach [url]
 Isso permite usar o TUI com um backend opencode remoto. Por exemplo:
 
 ```bash
-# Inicie o servidor backend para acesso web/móvel
+# Inicie o servidor backend para acesso web/mobile
 opencode web --port 4096 --hostname 0.0.0.0
 
 # Em outro terminal, anexe o TUI ao backend em execução
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Curto | Descrição                                |
 | ----------- | ----- | ---------------------------------------- |
@@ -112,7 +112,7 @@ opencode agent list
 Comando para gerenciar credenciais e login para provedores.
 
 ```bash
-opencode auth [comando]
+opencode auth [command]
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Gerencie o agente do GitHub para automação de repositórios.
 
 ```bash
-opencode github [comando]
+opencode github [command]
 ```
 
 ---
@@ -185,7 +185,7 @@ Execute o agente do GitHub. Isso é tipicamente usado em GitHub Actions.
 opencode github run
 ```
 
-##### Flags
+##### Opções
 
 | Flag      | Descrição                                        |
 | --------- | ------------------------------------------------ |
@@ -196,10 +196,10 @@ opencode github run
 
 ### mcp
 
-Gerencie servidores do Protocolo de Contexto de Modelo.
+Gerencie servidores do Model Context Protocol.
 
 ```bash
-opencode mcp [comando]
+opencode mcp [command]
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Autentique-se com um servidor MCP habilitado para OAuth.
 
 ```bash
-opencode mcp auth [nome]
+opencode mcp auth [name]
 ```
 
 Se você não fornecer um nome de servidor, será solicitado que você selecione entre os servidores disponíveis habilitados para OAuth.
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Remova credenciais OAuth para um servidor MCP.
 
 ```bash
-opencode mcp logout [nome]
+opencode mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [nome]
 Depure problemas de conexão OAuth para um servidor MCP.
 
 ```bash
-opencode mcp debug <nome>
+opencode mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <nome>
 Liste todos os modelos disponíveis dos provedores configurados.
 
 ```bash
-opencode models [provedor]
+opencode models [provider]
 ```
 
 Este comando exibe todos os modelos disponíveis entre seus provedores configurados no formato `provider/model`.
@@ -294,7 +294,7 @@ Você pode opcionalmente passar um ID de provedor para filtrar modelos por esse 
 opencode models anthropic
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Descrição                                                             |
 | ----------- | --------------------------------------------------------------------- |
@@ -314,13 +314,13 @@ opencode models --refresh
 Execute o opencode em modo não interativo passando um prompt diretamente.
 
 ```bash
-opencode run [mensagem..]
+opencode run [message..]
 ```
 
 Isso é útil para scripts, automação ou quando você deseja uma resposta rápida sem iniciar o TUI completo. Por exemplo.
 
 ```bash "opencode run"
-opencode run Explique o uso de contexto em Go
+opencode run Explique o uso de context em Go
 ```
 
 Você também pode se anexar a uma instância em execução do `opencode serve` para evitar tempos de inicialização a frio do servidor MCP em cada execução:
@@ -333,7 +333,7 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 ```
 
-#### Flags
+#### Opções
 
 | Flag         | Curto | Descrição                                                                     |
 | ------------ | ----- | ----------------------------------------------------------------------------- |
@@ -362,7 +362,7 @@ opencode serve
 
 Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode sem a interface TUI. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                                             |
 | ------------ | ----------------------------------------------------- |
@@ -378,7 +378,7 @@ Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode se
 Gerencie sessões do opencode.
 
 ```bash
-opencode session [comando]
+opencode session [command]
 ```
 
 ---
@@ -391,7 +391,7 @@ Liste todas as sessões do opencode.
 opencode session list
 ```
 
-##### Flags
+##### Opções
 
 | Flag          | Curto | Descrição                                 |
 | ------------- | ----- | ----------------------------------------- |
@@ -408,7 +408,7 @@ Mostre o uso de tokens e estatísticas de custo para suas sessões do opencode.
 opencode stats
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Descrição                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------- |
@@ -436,7 +436,7 @@ Se você não fornecer um ID de sessão, será solicitado que você selecione en
 Importe dados da sessão de um arquivo JSON ou URL de compartilhamento do opencode.
 
 ```bash
-opencode import <arquivo>
+opencode import <file>
 ```
 
 Você pode importar de um arquivo local ou de uma URL de compartilhamento do opencode.
@@ -458,7 +458,7 @@ opencode web
 
 Isso inicia um servidor HTTP e abre um navegador para acessar o opencode através de uma interface web. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                                             |
 | ------------ | ----------------------------------------------------- |
@@ -471,7 +471,7 @@ Isso inicia um servidor HTTP e abre um navegador para acessar o opencode atravé
 
 ### acp
 
-Inicie um servidor ACP (Protocolo de Cliente de Agente).
+Inicie um servidor ACP (Agent Client Protocol).
 
 ```bash
 opencode acp
@@ -479,7 +479,7 @@ opencode acp
 
 Este comando inicia um servidor ACP que se comunica via stdin/stdout usando nd-JSON.
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                 |
 | ------------ | ------------------------- |
@@ -497,7 +497,7 @@ Desinstale o opencode e remova todos os arquivos relacionados.
 opencode uninstall
 ```
 
-#### Flags
+#### Opções
 
 | Flag            | Curto | Descrição                                |
 | --------------- | ----- | ---------------------------------------- |
@@ -513,7 +513,7 @@ opencode uninstall
 Atualiza o opencode para a versão mais recente ou uma versão específica.
 
 ```bash
-opencode upgrade [alvo]
+opencode upgrade [target]
 ```
 
 Para atualizar para a versão mais recente.
@@ -528,7 +528,7 @@ Para atualizar para uma versão específica.
 opencode upgrade v0.1.48
 ```
 
-#### Flags
+#### Opções
 
 | Flag       | Curto | Descrição                                                        |
 | ---------- | ----- | ---------------------------------------------------------------- |
@@ -536,7 +536,7 @@ opencode upgrade v0.1.48
 
 ---
 
-## Flags Globais
+## Opções Globais
 
 A CLI do opencode aceita as seguintes flags globais.
 

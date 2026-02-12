@@ -1,28 +1,28 @@
 ---
-title: 定制工具
-description: 創建法學碩士可以在opencode中調用的工具。
+title: 自定义工具
+description: 创建 LLM 可以在 opencode 中调用的工具。
 ---
 
-自定义工具是您创建的函数，LLM 可以在对话期间调用。它们与 opencode 的[内置工具](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
+自定义工具是您创建的函数，LLM 可以在对话期间调用。它们与 opencode 的 [Built-in Tools](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
 
 ---
 
-## 創建工具
+## 创建工具
 
 工具定义为 **TypeScript** 或 **JavaScript** 文件。但是，工具定义调用可以使用 **任何语言** 编写的脚本 - TypeScript 或 JavaScript 仅用于工具定义本身。
 
 ---
 
-### 地點
+### 位置
 
-它們可以定義為：
+它们可以定义为：
 
 - 通过将它们放在项目的 `.opencode/tools/` 目录中来本地进行。
 - 或者在全局范围内，将它们放在 `~/.config/opencode/tools/` 中。
 
 ---
 
-### 結構
+### 结构
 
 创建工具最简单的方法是使用 `tool()` 帮助程序，它提供类型安全和验证。
 
@@ -41,13 +41,13 @@ export default tool({
 })
 ```
 
-**文件名**成为**工具名称**。以上创建了一个 `database` 工具。
+**文件名** 成为 **工具名称**。以上创建了一个 `database` 工具。
 
 ---
 
-#### 每個文件多個工具
+#### 每个文件多个工具
 
-您還可以從單個文件導出多個工具。每個導出都會成為**一個單獨的工具**，名稱為**`<filename>_<exportname>`**：
+您还可以从单个文件导出多个工具。每个导出都会成为 **一个单独的工具**，名称为 **`<filename>_<exportname>`**：
 
 ```ts title=".opencode/tools/math.ts"
 import { tool } from "@opencode-ai/plugin"
@@ -79,9 +79,9 @@ export const multiply = tool({
 
 ---
 
-### 論據
+### 参数
 
-您可以使用`tool.schema`（即[佐德](https://zod.dev)）来定义参数类型。
+您可以使用 `tool.schema`（即 [Zod](https://zod.dev)）来定义参数类型。
 
 ```ts "tool.schema"
 args: {
@@ -89,7 +89,7 @@ args: {
 }
 ```
 
-您还可以直接导入[佐德](https://zod.dev)并返回一个普通对象：
+您还可以直接导入 [Zod](https://zod.dev) 并返回一个普通对象：
 
 ```ts {6}
 import { z } from "zod"
@@ -108,9 +108,9 @@ export default {
 
 ---
 
-### 情境
+### 上下文
 
-工具接收有關當前會話的上下文：
+工具接收有关当前会话的上下文：
 
 ```ts title=".opencode/tools/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
@@ -133,7 +133,7 @@ export default tool({
 
 ## 示例
 
-### 用Python编写一个工具
+### 使用 Python 编写工具
 
 您可以使用任何您想要的语言编写工具。下面是一个使用 Python 将两个数字相加的示例。
 
@@ -147,7 +147,7 @@ b = int(sys.argv[2])
 print(a + b)
 ```
 
-然後創建調用它的工具定義：
+然后创建调用它的工具定义：
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"

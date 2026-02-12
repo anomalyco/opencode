@@ -1,11 +1,11 @@
 ---
 title: TUI
-description: Using the opencode terminal user interface.
+description: OpenCode 터미널 사용자 인터페이스 사용.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode는 LLM과 함께 프로젝트를 위해 대화형 터미널 인터페이스 또는 TUI를 제공합니다.
+opencode는 LLM과 함께 프로젝트를 위해 대화형 terminal 인터페이스 또는 TUI를 제공합니다.
 
 opencode는 현재 디렉토리에 TUI를 시작합니다.
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash 명령
 
-`!`를 사용하여 쉘 명령을 실행합니다.
+`!`를 사용하여 shell 명령을 실행합니다.
 
 ```bash frame="none"
 !ls -la
@@ -69,7 +69,7 @@ opencode TUI를 사용할 때, `/`를 입력하여 명령 이름을 따라 작�
 
 ---
 
-### 연결
+### /connect
 
 opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에서 선택하고 API 키를 추가 할 수 있습니다.
 
@@ -79,7 +79,7 @@ opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에�
 
 ---
 
-### 콤팩트
+### /compact
 
 현재 세션을 압축합니다. 앨리스 : `/summarize`
 
@@ -91,7 +91,7 @@ opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에�
 
 ---
 
-### 세부사항
+### /details
 
 토글 툴 실행 세부 사항.
 
@@ -103,7 +103,7 @@ opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에�
 
 ---
 
-### 편집기
+### /editor
 
 메시지를 작성하기 위한 외부 편집기를 엽니다. `EDITOR` 환경에서 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
 
@@ -115,7 +115,7 @@ opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에�
 
 ---
 
-### 출구
+### /exit
 
 opencode를 종료합니다. Aliases : `/quit`, `/q`
 
@@ -127,7 +127,7 @@ opencode를 종료합니다. Aliases : `/quit`, `/q`
 
 ---
 
-### 수출
+### /export
 
 Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립니다. `EDITOR` 환경에서 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
 
@@ -139,7 +139,7 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 
 ---
 
-### 도움
+### /help
 
 도움말 대화 상자를 표시합니다.
 
@@ -151,7 +151,7 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 
 ---
 
-###### 인
+###### /init
 
 `AGENTS.md` 파일을 만들거나 업데이트하십시오. [더 알아보기](/docs/rules).
 
@@ -163,7 +163,7 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 
 ---
 
-## 모델
+## /models
 
 사용 가능한 모델 목록.
 
@@ -175,7 +175,7 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 
 ---
 
-## 새로운
+## /new
 
 새로운 세션을 시작합니다. 앨리스 : `/clear`
 
@@ -187,7 +187,7 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 
 ---
 
-##### 재도
+##### /redo
 
 이전 undone 메시지 Redo. `/undo`를 사용하는 후에만 유효한.
 
@@ -206,7 +206,7 @@ Git 저장소**입니다.
 
 ---
 
-## 세션
+## /sessions
 
 세션 간 목록 및 전환. Aliases : `/resume`, `/continue`
 
@@ -230,7 +230,7 @@ Git 저장소**입니다.
 
 ---
 
-## 테마
+## /theme
 
 사용할 수 있는 테마 목록.
 
@@ -242,7 +242,7 @@ Git 저장소**입니다.
 
 ---
 
-### 생각
+### /thinking
 
 대화의 사고/거주 블록의 가시성을 토합니다. 사용할 때, 확장 된 생각을 지원하는 모델의 이유 프로세스를 볼 수 있습니다.
 
@@ -256,7 +256,7 @@ Git 저장소**입니다.
 
 ---
 
-##### 취소
+##### /undo
 
 대화에서 마지막 메시지. 가장 최근의 사용자 메시지, 모든 후속 응답 및 모든 파일 변경 제거.
 
@@ -275,7 +275,7 @@ Git 저장소**입니다.
 
 ---
 
-#### 공유
+#### /unshare
 
 Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
 
@@ -285,7 +285,7 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
 
 ---
 
-## 에디터 설정
+## 편집기 설정
 
 `/editor`와 `/export` 명령 모두는 `EDITOR` 환경변수에서 지정된 편집기를 사용합니다.
 
@@ -301,7 +301,7 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
     export EDITOR="code --wait"
     ```
 
-영원한 만들기 위하여, 당신의 포탄 단면도에 이것을 추가하십시오;
+영원한 만들기 위하여, 당신의 shell 프로파일에 이것을 추가하십시오;
 `~/.bashrc`, `~/.zshrc`, 등.
 
   </TabItem>
@@ -382,7 +382,7 @@ opencode config 파일을 통해 TUI 동작을 사용자 정의할 수 있습니
 
 ---
 
-#### 사용자 이름 전시
+#### 사용자 이름 표시
 
 사용자 이름이 채팅 메시지에 나타나는지 여부를 수정합니다. 이것을 통해 접근:
 

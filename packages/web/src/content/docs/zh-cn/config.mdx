@@ -23,47 +23,46 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-## 地點
+## 位置
 
-您可以將配置放置在幾個不同的位置，它們有一個
-不同的優先順序。
+您可以将配置放置在几个不同的位置，它们有一个不同的优先顺序。
 
 :::note
-配置文件**合併在一起**，而不是替換。
+配置文件**合并在一起**，而不是替换。
 :::
 
-配置文件被合併在一起，而不是被替換。以下配置位置的設置被合併。僅當密鑰衝突時，後面的配置才會覆蓋前面的配置。保留所有配置中的非衝突設置。
+配置文件被合并在一起，而不是被替换。以下配置位置的设置被合并。仅当密钥冲突时，后面的配置才会覆盖前面的配置。保留所有配置中的非冲突设置。
 
-例如，如果您的全局配置设置`theme: "opencode"`和`autoupdate: true`，并且您的项目配置设置`model: "anthropic/claude-sonnet-4-5"`，则最终配置将包括所有三个设置。
+例如，如果您的全局配置设置 `theme: "opencode"` 和 `autoupdate: true`，并且您的项目配置设置 `model: "anthropic/claude-sonnet-4-5"`，则最终配置将包括所有三个设置。
 
 ---
 
-### 優先順序
+### 优先级
 
-配置源按以下順序加載（後面的源覆蓋前面的源）：
+配置源按以下顺序加载（后面的源覆盖前面的源）：
 
-1. **远程配置**（来自`.well-known/opencode`）-组织默认值
-2. **全局配置** (`~/.config/opencode/opencode.json`) - 用户首选项
-3. **自定义配置** (`OPENCODE_CONFIG` env var) - 自定义覆盖
-4. **项目配置**（项目中的`opencode.json`）- 项目特定的设置
+1. **Remote config** (来自 `.well-known/opencode`) - 组织默认值
+2. **Global config** (`~/.config/opencode/opencode.json`) - 用户首选项
+3. **Custom config** (`OPENCODE_CONFIG` env var) - 自定义覆盖
+4. **Project config** (项目中的 `opencode.json`) - 项目特定的设置
 5. **`.opencode` 目录** - 代理、命令、插件
-6. **内联配置** (`OPENCODE_CONFIG_CONTENT` env var) - 运行时覆盖
+6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - 运行时覆盖
 
-這意味著項目配置可以覆蓋全局默認值，全局配置可以覆蓋遠程組織默認值。
+这意味着项目配置可以覆盖全局默认值，全局配置可以覆盖远程组织默认值。
 
 :::note
-`.opencode` 和`~/.config/opencode` 目录对子目录使用**复数名称**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和`themes/`。为了坚固兼容，还支持单数名称（例如`agent/`）。
+`.opencode` 和 `~/.config/opencode` 目录对子目录使用 **复数名称**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和 `themes/`。为了向后兼容，还支持单数名称（例如 `agent/`）。
 :::
 
 ---
 
-### 偏僻的
+### 远程
 
-组织可以通过 `.well-known/opencode` 端点提供默认配置。当您向支持的成功进行身份验证时，会自动获取该信息。
+组织可以通过 `.well-known/opencode` 端点提供默认配置。当您向支持的提供商进行身份验证时，会自动获取该信息。
 
-首先加載遠程配置，作為基礎層。所有其他配置源（全局、項目）都可以覆蓋這些默認值。
+首先加载远程配置，作为基础层。所有其他配置源（全局、项目）都可以覆盖这些默认值。
 
-例如，如果您的组织提供默认取消的 MCP 服务器：
+例如，如果您的组织提供默认禁用的 MCP 服务器：
 
 ```json title="Remote config from .well-known/opencode"
 {
@@ -77,7 +76,7 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 }
 ```
 
-您可以在本地配置中啟用特定服務器：
+您可以在本地配置中启用特定服务器：
 
 ```json title="opencode.json"
 {
@@ -93,29 +92,29 @@ opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ---
 
-### 全球的
+### 全局
 
-将全局 opencode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来实现用户范围的首选项，例如主题、提供程序或按键绑定。
+将全局 opencode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来实现用户范围的首选项，例如主题、提供商或按键绑定。
 
-全局配置覆蓋遠程組織默認值。
+全局配置覆盖远程组织默认值。
 
 ---
 
-### 每個項目
+### 项目级
 
-在项目根目录中添加`opencode.json`。项目配置在标准配置文件中具有最高优先级 - 它覆盖全局配置和远程配置。
+在项目根目录中添加 `opencode.json`。项目配置在标准配置文件中具有最高优先级 - 它覆盖全局配置和远程配置。
 
 :::tip
-將項目特定配置放在項目的根目錄中。
+将项目特定配置放在项目的根目录中。
 :::
 
-当opencode启动时，它会在当前目录中查找配置文件或打开到最近的Git目录。
+当 opencode 启动时，它会在当前目录中查找配置文件或向上遍历到最近的 Git 目录。
 
-这也可以安全地签入 Git 并使用与全局模式相同的模式。
+这也可以安全地签入 Git 并使用与全局模式相同的架构。
 
 ---
 
-### 自定義路徑
+### 自定义路径
 
 使用 `OPENCODE_CONFIG` 环境变量指定自定义配置文件路径。
 
@@ -124,35 +123,32 @@ export OPENCODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
-自定義配置按優先順序在全局配置和項目配置之間加載。
+自定义配置按优先顺序在全局配置和项目配置之间加载。
 
 ---
 
-### 自定義目錄
+### 自定义目录
 
-使用`OPENCODE_CONFIG_DIR`指定自定义配置目录
-環境變量。將在該目錄中搜索代理、命令、
-模式和插件类似于标准`.opencode`目录一样，并且应该
-遵循相同的結構。
+使用 `OPENCODE_CONFIG_DIR` 环境变量指定自定义配置目录。将在该目录中搜索代理、命令、模式和插件，就像标准 `.opencode` 目录一样，并且应该遵循相同的结构。
 
 ```bash
 export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-自定义目录在全局配置和`.opencode`目录加载后，因此**可以覆盖**它们的设置。
+自定义目录在全局配置和 `.opencode` 目录加载后，因此 **可以覆盖** 它们的设置。
 
 ---
 
 ## 模式
 
-配置文件具有在 [**`opencode.ai/config.json`**](https://opencode.ai/config.json) 中配置的架构。
+配置文件具有在 [**`opencode.ai/config.json`**](https://opencode.ai/config.json) 中定义的架构。
 
-您的編輯器應該能夠根據架構進行驗證和自動完成。
+您的编辑器应该能够根据架构进行验证和自动完成。
 
 ---
 
-### 途易
+### TUI
 
 您可以通过 `tui` 选项配置特定于 TUI 的设置。
 
@@ -169,19 +165,19 @@ opencode run "Hello world"
 }
 ```
 
-可用選項：
+可用选项：
 
-- `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速。 **优先于`scroll_speed`。 **
-- `scroll_speed` - 自定义滚动速度倍增（默认值：`3`，简单：`1`）。如果`scroll_acceleration.enabled`是`true`，则忽略。
-- `diff_style` - 控制差异渲染。 `"auto"` 适应宽度，`"stacked"` 始终显示单列。
+- `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速。 **优先于 `scroll_speed`。**
+- `scroll_speed` - 自定义滚动速度倍增（默认值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 是 `true`，则忽略。
+- `diff_style` - 控制差异渲染。 `"auto"` 适应终端宽度，`"stacked"` 始终显示单列。
 
 [在此处了解有关使用 TUI 的更多信息](/docs/tui)。
 
 ---
 
-### 伺服器
+### 服务器
 
-您可以通过`server` 选项为`opencode serve` 和`opencode web` 命令配置服务器设置。
+您可以通过 `opencode serve` 选项为 `opencode web` 和 `server` 命令配置服务器设置。
 
 ```json title="opencode.json"
 {
@@ -196,13 +192,13 @@ opencode run "Hello world"
 }
 ```
 
-可用選項：
+可用选项：
 
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+- `port` - 监听端口。
+- `hostname` - 监听的主机名。当 `mdns` 启用且未设置主机名时，默认为 `0.0.0.0`。
 - `mdns` - 启用 mDNS 服务发现。这允许网络上的其他设备发现您的 opencode 服务器。
-- `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。对于在同一个网络上运行多个实例很有用。
-- `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的其他来源。值必须是完整来源（方案+主机+任选端口），例如 `https://app.example.com`。
+- `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。对于在同一个网络上运行多个实例很有帮助。
+- `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的其他来源。值必须是完整来源（协议+主机+可选端口），例如 `https://app.example.com`。
 
 [在此处了解有关服务器的更多信息](/docs/server)。
 
@@ -210,7 +206,7 @@ opencode run "Hello world"
 
 ### 工具
 
-您可以通过 `tools` 选项管理LLM可以使用的工具。
+您可以通过 `tools` 选项管理 LLM 可以使用的工具。
 
 ```json title="opencode.json"
 {
@@ -226,9 +222,9 @@ opencode run "Hello world"
 
 ---
 
-### 型號
+### 模型
 
-您可以通过 `provider`、`model` 和 `small_model` 选项来配置要在 opencode 配置中使用的提供的程序和模型。
+您可以通过 `provider`、`model` 和 `small_model` 选项来配置要在 opencode 配置中使用的提供商和模型。
 
 ```json title="opencode.json"
 {
@@ -239,9 +235,9 @@ opencode run "Hello world"
 }
 ```
 
-`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的成功可以提供更便宜的模型，opencode 会尝试使用更便宜的模型，否则它会退回到您的主模型。
+`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的提供商可以提供更便宜的模型，opencode 会尝试使用更便宜的模型，否则它会退回到您的主模型。
 
-提供商选项可以包括`timeout`和`setCacheKey`：
+提供商选项可以包括 `timeout` 和 `setCacheKey`：
 
 ```json title="opencode.json"
 {
@@ -258,17 +254,17 @@ opencode run "Hello world"
 ```
 
 - `timeout` - 请求超时以毫秒为单位（默认值：300000）。设置为 `false` 以禁用。
-- `setCacheKey` -确保始终为指定的提供者设置存储硬盘。
+- `setCacheKey` - 确保始终为指定的提供商设置缓存键。
 
-您还可以配置[本地模型](/docs/models#local)。[了解更多](/docs/models)。
+您还可以配置 [本地模型](/docs/models#local)。[了解更多](/docs/models)。
 
 ---
 
-#### 特定於提供商的選項
+#### 特定于提供商的选项
 
-有些提供程序支持除通用 `timeout` 和 `apiKey` 之外的其他配置选项。
+有些提供商支持除通用 `timeout` 和 `apiKey` 之外的其他配置选项。
 
-##### 亞馬遜基岩
+##### Amazon Bedrock
 
 Amazon Bedrock 支持 AWS 特定配置：
 
@@ -292,16 +288,16 @@ Amazon Bedrock 支持 AWS 特定配置：
 - `endpoint` - VPC 终端节点的自定义节点 URL。这是使用 AWS 特定术语的通用 `baseURL` 选项的别名。如果两者都指定，`endpoint` 优先。
 
 :::note
-承载令牌（`AWS_BEARER_TOKEN_BEDROCK` 或`/connect`）优先于基于配置文件的身份验证。详情请参见【认证优先级](/docs/providers#authentication-precedence)。
+Bearer Tokens (`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`) 优先于基于配置文件的身份验证。详情请参见 [身份验证优先级](/docs/providers#authentication-precedence)。
 :::
 
 [了解有关 Amazon Bedrock 配置的更多信息](/docs/providers#amazon-bedrock)。
 
 ---
 
-### 主題
+### 主题
 
-您可以通过 opencode 配置中配置中的 `theme` 选项要使用的主题。
+您可以通过 opencode 配置中的 `theme` 选项配置要使用的主题。
 
 ```json title="opencode.json"
 {
@@ -314,7 +310,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 
 ---
 
-### 代理商
+### 代理
 
 您可以通过 `agent` 选项为特定任务配置专用代理。
 
@@ -340,9 +336,9 @@ Amazon Bedrock 支持 AWS 特定配置：
 
 ---
 
-### 默認代理
+### 默认代理
 
-您可以使用 `default_agent` 选项默认设置代理。当没有明确指定时，这将确定使用哪个代理。
+您可以使用 `default_agent` 选项设置默认代理。当没有明确指定时，这将确定使用哪个代理。
 
 ```json title="opencode.json"
 {
@@ -351,7 +347,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 }
 ```
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+默认代理必须是 Primary 代理（不是 Subagent）。这可以是内置代理（如 `"build"` 或 `"plan"`），也可以是您定义的 [Custom Agent](/docs/agents)。如果指定的代理不存在或者是子代理，opencode 将回退到 `"build"` 并发出警告。
 
 此设置适用于所有界面：TUI、CLI (`opencode run`)、桌面应用程序和 GitHub Action。
 
@@ -359,7 +355,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 分享
 
-您可以通过`share`选项配置[分享](/docs/share)功能。
+您可以通过 `share` 选项配置 [分享](/docs/share) 功能。
 
 ```json title="opencode.json"
 {
@@ -368,9 +364,9 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-這需要：
+这需要：
 
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+- `"manual"` - 允许通过命令手动共享（默认）
 - `"auto"` - 自动分享新对话
 - `"disabled"` - 完全禁用共享
 
@@ -380,7 +376,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 命令
 
-您可以通过`command`选项为重复任务配置自定义命令。
+您可以通过 `command` 选项为重复任务配置自定义命令。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -404,7 +400,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ---
 
-### 按鍵綁定
+### 快捷键
 
 您可以通过 `keybinds` 选项自定义您的按键绑定。
 
@@ -419,9 +415,9 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ---
 
-### 自動更新
+### 自动更新
 
-opencode 将在启动时自动下载任何新的更新。您可以使用 `autoupdate` 选项取消此功能。
+opencode 将在启动时自动下载任何新的更新。您可以使用 `autoupdate` 选项禁用此功能。
 
 ```json title="opencode.json"
 {
@@ -430,14 +426,14 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 }
 ```
 
-如果您不想更新但希望在新版本可用时收到通知，则需将`autoupdate`设置为`"notify"`。
+如果您不想更新但希望在新版本可用时收到通知，则需将 `autoupdate` 设置为 `"notify"`。
 请注意，这仅在未使用 Homebrew 等包管理器安装时才有效。
 
 ---
 
 ### 格式化程序
 
-您可以通过`formatter`选项配置代码初始化程序。
+您可以通过 `formatter` 选项配置代码格式化程序。
 
 ```json title="opencode.json"
 {
@@ -457,11 +453,11 @@ opencode 将在启动时自动下载任何新的更新。您可以使用 `autoup
 }
 ```
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+[在这里了解有关格式化程序的更多信息](/docs/formatters)。
 
 ---
 
-### 權限
+### 权限
 
 默认情况下，opencode **允许所有操作**，无需明确批准。您可以使用 `permission` 选项更改此设置。
 
@@ -481,7 +477,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ---
 
-### 壓實
+### 压缩
 
 您可以通过 `compaction` 选项控制上下文压缩行为。
 
@@ -495,14 +491,14 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
-- `prune` - 删除旧工具以输出保存令牌（默认值：`true`）。
+- `auto` - 当上下文已满时自动压缩会话（默认值：`true`）。
+- `prune` - 删除旧工具输出以保存 Tokens（默认值：`true`）。
 
 ---
 
-### 守望者
+### 观察器
 
-您可以通过`watcher`选项配置文件观察器忽略模式。
+您可以通过 `watcher` 选项配置文件观察器忽略模式。
 
 ```json title="opencode.json"
 {
@@ -513,11 +509,11 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-模式遵循 glob 语法。使用它可以从文件监视中排除杂的目录。
+模式遵循 glob 语法。使用它可以从文件监视中排除嘈杂的目录。
 
 ---
 
-### MCP服务器
+### MCP 服务器
 
 您可以通过 `mcp` 选项配置要使用的 MCP 服务器。
 
@@ -534,9 +530,9 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 插件
 
-[插件](/docs/plugins) 使用自定义工具、挂钩和集成扩展 opencode。
+[Plugins](/docs/plugins) 使用自定义工具、挂钩和集成扩展 opencode。
 
-将插件文件放置在`.opencode/plugins/` 或`~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
+将插件文件放置在 `.opencode/plugins/` 或 `~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
 
 ```json title="opencode.json"
 {
@@ -549,9 +545,9 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ---
 
-### 指示
+### 指令
 
-您可以通过 `instructions` 选项配置您正在使用的型号的说明。
+您可以通过 `instructions` 选项配置您正在使用的模型的说明。
 
 ```json title="opencode.json"
 {
@@ -560,14 +556,13 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-這需要指令文件的路徑和全局模式數組。 [了解更多
-关于规则在这里](/docs/rules)。
+这需要指令文件的路径和 glob 模式数组。 [在此处了解有关规则的更多信息](/docs/rules)。
 
 ---
 
-### 殘疾服務提供者
+### 禁用提供商
 
-您可以通过 `disabled_providers` 选项取消自动加载的提供程序。当您想要阻止加载某些提供程序（即使其可用）时，这非常有用。
+您可以通过 `disabled_providers` 选项禁用自动加载的提供商。当您想要阻止加载某些提供商（即使其凭据可用）时，这非常有用。
 
 ```json title="opencode.json"
 {
@@ -577,20 +572,20 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 ```
 
 :::note
-`disabled_providers` 优先于`enabled_providers`。
+`disabled_providers` 优先于 `enabled_providers`。
 :::
 
-`disabled_providers` 选项接受提供者 ID 内存。当提供者被取消时：
+`disabled_providers` 选项接受提供商 ID 数组。当提供商被禁用时：
 
-- 即使設置了環境變量也不會加載。
-- 即使通过`/connect`命令配置API钥匙，也不会加载它。
-- 提供商的型號不會出現在型號選擇列表中。
+- 即使设置了环境变量也不会加载。
+- 即使通过 `/connect` 命令配置 API 密钥，也不会加载它。
+- 提供商的模型不会出现在模型选择列表中。
 
 ---
 
-### 啟用的提供商
+### 启用提供商
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+您可以通过 `enabled_providers` 选项指定允许的提供商列表。设置后，仅启用指定的提供商，所有其他提供商将被忽略。
 
 ```json title="opencode.json"
 {
@@ -599,17 +594,17 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-当您想要限制 opencode 仅使用特定的提供程序而不是一一禁止它们时，这非常有用。
+当您想要限制 opencode 仅使用特定的提供商而不是逐一禁用它们时，这非常有用。
 
 :::note
-`disabled_providers` 优先于`enabled_providers`。
+`disabled_providers` 优先于 `enabled_providers`。
 :::
 
-如果有人提供程序同时出现在`enabled_providers`和`disabled_providers`中，则`disabled_providers`优先考虑一致性。
+如果提供商同时出现在 `enabled_providers` 和 `disabled_providers` 中，则 `disabled_providers` 优先以保持一致性。
 
 ---
 
-### 實驗性的
+### 实验性功能
 
 `experimental` 键包含正在积极开发的选项。
 
@@ -621,20 +616,20 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 ```
 
 :::caution
-實驗選項不穩定。它們可能會更改或被刪除，恕不另行通知。
+实验选项不稳定。它们可能会更改或被删除，恕不另行通知。
 :::
 
 ---
 
-## 變量
+## 变量
 
-您可以在配置文件中使用變量替換來引用環境變量和文件內容。
+您可以在配置文件中使用变量替换来引用环境变量和文件内容。
 
 ---
 
-### 環境變量
+### 环境变量
 
-使用`{env:VARIABLE_NAME}`替换环境变量：
+使用 `{env:VARIABLE_NAME}` 替换环境变量：
 
 ```json title="opencode.json"
 {
@@ -651,7 +646,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-如果未設置環境變量，它將被替換為空字符串。
+如果未设置环境变量，它将被替换为空字符串。
 
 ---
 
@@ -673,13 +668,13 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-文件路徑可以是：
+文件路径可以是：
 
-- 相對於配置文件目錄
-- 或者以 `/` 或 `~` 開頭的絕對路徑
+- 相对于配置文件目录
+- 或者以 `/` 或 `~` 开头的绝对路径
 
-這些對於：
+这些对于：
 
-- 将API等敏感数据保存在单独的文件中。
-- 包含大型指令文件，而不會弄亂您的配置。
-- 跨多個配置文件共享通用配置片段。
+- 将 API 密钥等敏感数据保存在单独的文件中。
+- 包含大型指令文件，而不会弄乱您的配置。
+- 跨多个配置文件共享通用配置片段。

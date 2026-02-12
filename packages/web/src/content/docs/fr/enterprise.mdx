@@ -6,20 +6,20 @@ description: Utiliser OpenCode en toute sécurité dans votre organisation.
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-OpenCode Enterprise est destiné aux organisations qui souhaitent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Il peut le faire en utilisant une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.
+OpenCode Enterprise est destiné aux organisations qui souhaitent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Cela est possible grâce à une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.
 
 :::note
 OpenCode ne stocke aucune de vos données de code ou de contexte.
 :::
 
-Pour démarrer avec OpenCode Enterprise :
+Pour démarrer avec OpenCode Enterprise :
 
 1. Faites un essai en interne avec votre équipe.
 2. **<a href={email}>Contactez-nous</a>** pour discuter des options de tarification et de mise en œuvre.
 
 ---
 
-## Procès
+## Essai
 
 OpenCode est open source et ne stocke aucune de vos données de code ou de contexte, vos développeurs peuvent donc simplement [commencer ](/docs/) et effectuer un essai.
 
@@ -29,8 +29,7 @@ OpenCode est open source et ne stocke aucune de vos données de code ou de conte
 
 **OpenCode ne stocke pas votre code ni vos données contextuelles.** Tous les traitements s'effectuent localement ou via des appels API directs à votre fournisseur d'IA.
 
-Cela signifie que tant que vous faites appel à un fournisseur de confiance ou à un
-Passerelle AI, vous pouvez utiliser OpenCode en toute sécurité.
+Cela signifie que tant que vous faites appel à un fournisseur de confiance ou à une passerelle IA, vous pouvez utiliser OpenCode en toute sécurité.
 
 La seule mise en garde ici concerne la fonctionnalité facultative `/share`.
 
@@ -69,9 +68,7 @@ Nous utilisons un modèle par siège pour OpenCode Enterprise. Si vous disposez 
 
 ## Déploiement
 
-Une fois que vous avez terminé votre essai et que vous êtes prêt à utiliser OpenCode à
-votre organisation, vous pouvez **<a href={email}>nous contacter</a>** pour en discuter
-options de tarification et de mise en œuvre.
+Une fois que vous avez terminé votre essai et que vous êtes prêt à utiliser OpenCode à votre organisation, vous pouvez **<a href={email}>nous contacter</a>** pour discuter des options de tarification et de mise en œuvre.
 
 ---
 
@@ -101,8 +98,7 @@ Vous pouvez également désactiver tous les autres fournisseurs d'IA, en vous as
 
 ### Auto-hébergement
 
-Bien que nous vous recommandons de désactiver les pages de partage pour garantir que vos données ne quittent jamais
-votre organisation, nous pouvons également vous aider à les auto-héberger sur votre infrastructure.
+Bien que nous vous recommandons de désactiver les pages de partage pour garantir que vos données ne quittent jamais votre organisation, nous pouvons également vous aider à les auto-héberger sur votre infrastructure.
 
 Ceci est actuellement sur notre feuille de route. Si vous êtes intéressé, **<a href={email}>faites-le-nous savoir</a>**.
 
@@ -111,14 +107,14 @@ Ceci est actuellement sur notre feuille de route. Si vous êtes intéressé, **<
 ## FAQ
 
 <details>
-<summary>Qu’est-ce que OpenCode Entreprise ?</summary>
+<summary>Qu’est-ce que OpenCode Entreprise ?</summary>
 
 OpenCode Enterprise est destiné aux organisations qui souhaitent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Il peut le faire en utilisant une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.
 
 </details>
 
 <details>
-<summary>Comment démarrer avec OpenCode Enterprise ?</summary>
+<summary>Comment démarrer avec OpenCode Enterprise ?</summary>
 
 Commencez simplement par un essai interne avec votre équipe. OpenCode par défaut ne stocke pas votre code ni vos données contextuelles, ce qui facilite le démarrage.
 
@@ -134,31 +130,30 @@ Nous proposons des tarifs d'entreprise par siège. Si vous disposez de votre pro
 </details>
 
 <details>
-<summary>Mes données sont-elles sécurisées avec OpenCode Enterprise ?</summary>
+<summary>Mes données sont-elles sécurisées avec OpenCode Enterprise ?</summary>
 
 Oui. OpenCode ne stocke pas votre code ni vos données contextuelles. Tout le traitement s'effectue localement ou via des appels API directs à votre fournisseur d'IA. Grâce à la configuration centrale et à l'intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.
 
 </details>
 
 <details>
-<summary>Pouvons-nous utiliser notre propre registre privé NPM ?</summary>
+<summary>Pouvons-nous utiliser notre propre registre privé NPM ?</summary>
 
 OpenCode prend en charge les registres npm privés via la prise en charge native des fichiers `.npmrc` de Bun. Si votre organisation utilise un registre privé, tel que JFrog Artifactory, Nexus ou similaire, assurez-vous que les développeurs sont authentifiés avant d'exécuter OpenCode.
 
-Pour configurer l'authentification avec votre registre privé :
+Pour configurer l'authentification avec votre registre privé :
 
 ```bash
 npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
-Cela crée `~/.npmrc` avec les détails d'authentification. OpenCode sera automatiquement
-ramasse ça.
+Cela crée `~/.npmrc` avec les détails d'authentification. OpenCode le détectera automatiquement.
 
 :::caution
 Vous devez être connecté au registre privé avant d'exécuter OpenCode.
 :::
 
-Alternativement, vous pouvez configurer manuellement un fichier `.npmrc` :
+Alternativement, vous pouvez configurer manuellement un fichier `.npmrc` :
 
 ```bash title="~/.npmrc"
 registry=https://your-company.jfrog.io/api/npm/npm-virtual/

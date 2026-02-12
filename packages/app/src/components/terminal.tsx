@@ -56,6 +56,91 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   },
 }
 
+const debugTerminal = (...values: unknown[]) => {
+  if (!import.meta.env.DEV) return
+  console.debug("[terminal]", ...values)
+}
+
+const useTerminalUiBindings = (input: {
+  container: HTMLDivElement
+  term: Term
+  cleanups: VoidFunction[]
+  handlePointerDown: () => void
+  handleLinkClick: (event: MouseEvent) => void
+}) => {
+  const handleCopy = (event: ClipboardEvent) => {
+    const selection = input.term.getSelection()
+    if (!selection) return
+
+    const clipboard = event.clipboardData
+    if (!clipboard) return
+
+    event.preventDefault()
+    clipboard.setData("text/plain", selection)
+  }
+
+  const handlePaste = (event: ClipboardEvent) => {
+    const clipboard = event.clipboardData
+    const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+    if (!text) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    input.term.paste(text)
+  }
+
+  const handleTextareaFocus = () => {
+    input.term.options.cursorBlink = true
+  }
+  const handleTextareaBlur = () => {
+    input.term.options.cursorBlink = false
+  }
+
+  input.container.addEventListener("copy", handleCopy, true)
+  input.cleanups.push(() => input.container.removeEventListener("copy", handleCopy, true))
+
+  input.container.addEventListener("paste", handlePaste, true)
+  input.cleanups.push(() => input.container.removeEventListener("paste", handlePaste, true))
+
+  input.container.addEventListener("pointerdown", input.handlePointerDown)
+  input.cleanups.push(() => input.container.removeEventListener("pointerdown", input.handlePointerDown))
+
+  input.container.addEventListener("click", input.handleLinkClick, { capture: true })
+  input.cleanups.push(() => input.container.removeEventListener("click", input.handleLinkClick, { capture: true }))
+
+  input.term.textarea?.addEventListener("focus", handleTextareaFocus)
+  input.term.textarea?.addEventListener("blur", handleTextareaBlur)
+  input.cleanups.push(() => input.term.textarea?.removeEventListener("focus", handleTextareaFocus))
+  input.cleanups.push(() => input.term.textarea?.removeEventListener("blur", handleTextareaBlur))
+}
+
+const persistTerminal = (input: {
+  term: Term | undefined
+  addon: SerializeAddon | undefined
+  cursor: number
+  pty: LocalPTY
+  onCleanup?: (pty: LocalPTY) => void
+}) => {
+  if (!input.addon || !input.onCleanup || !input.term) return
+  const buffer = (() => {
+    try {
+      return input.addon.serialize()
+    } catch {
+      debugTerminal("failed to serialize terminal buffer")
+      return ""
+    }
+  })()
+
+  input.onCleanup({
+    ...input.pty,
+    buffer,
+    cursor: input.cursor,
+    rows: input.term.rows,
+    cols: input.term.cols,
+    scrollY: input.term.getViewportY(),
+  })
+}
+
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
   const sdk = useSDK()
@@ -70,11 +155,11 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
-  let handleTextareaFocus: () => void
-  let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
-  let tail = local.pty.tail ?? ""
+  const start =
+    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  let cursor = start ?? 0
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -82,14 +167,25 @@ export const Terminal = (props: TerminalProps) => {
     for (const fn of fns) {
       try {
         fn()
-      } catch {
-        // ignore
+      } catch (err) {
+        debugTerminal("cleanup failed", err)
       }
     }
   }
 
+  const pushSize = (cols: number, rows: number) => {
+    return sdk.client.pty
+      .update({
+        ptyID: local.pty.id,
+        size: { cols, rows },
+      })
+      .catch((err) => {
+        debugTerminal("failed to sync terminal size", err)
+      })
+  }
+
   const getTerminalColors = (): TerminalColors => {
-    const mode = theme.mode()
+    const mode = theme.mode() === "dark" ? "dark" : "light"
     const fallback = DEFAULT_TERMINAL_COLORS[mode]
     const currentTheme = theme.themes()[theme.themeId()]
     if (!currentTheme) return fallback
@@ -128,11 +224,12 @@ export const Terminal = (props: TerminalProps) => {
     const t = term
     if (!t) return
     t.focus()
+    t.textarea?.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
-    if (activeElement instanceof HTMLElement && activeElement !== container) {
+    if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
       activeElement.blur()
     }
     focusTerminal()
@@ -164,13 +261,16 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      url.searchParams.set("directory", sdk.directory)
+      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
       }
       const socket = new WebSocket(url)
+      socket.binaryType = "arraybuffer"
       cleanups.push(() => {
         if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
       })
@@ -180,12 +280,26 @@ export const Terminal = (props: TerminalProps) => {
       }
       ws = socket
 
+      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+      const restoreSize =
+        restore &&
+        typeof local.pty.cols === "number" &&
+        Number.isSafeInteger(local.pty.cols) &&
+        local.pty.cols > 0 &&
+        typeof local.pty.rows === "number" &&
+        Number.isSafeInteger(local.pty.rows) &&
+        local.pty.rows > 0
+          ? { cols: local.pty.cols, rows: local.pty.rows }
+          : undefined
+
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
+        cols: restoreSize?.cols,
+        rows: restoreSize?.rows,
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
-        allowTransparency: true,
+        allowTransparency: false,
         convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
@@ -199,44 +313,11 @@ export const Terminal = (props: TerminalProps) => {
       ghostty = g
       term = t
 
-      const copy = () => {
-        const selection = t.getSelection()
-        if (!selection) return false
-
-        const body = document.body
-        if (body) {
-          const textarea = document.createElement("textarea")
-          textarea.value = selection
-          textarea.setAttribute("readonly", "")
-          textarea.style.position = "fixed"
-          textarea.style.opacity = "0"
-          body.appendChild(textarea)
-          textarea.select()
-          const copied = document.execCommand("copy")
-          body.removeChild(textarea)
-          if (copied) return true
-        }
-
-        const clipboard = navigator.clipboard
-        if (clipboard?.writeText) {
-          clipboard.writeText(selection).catch(() => {})
-          return true
-        }
-
-        return false
-      }
-
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-          copy()
-          return true
-        }
-
-        if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
-          if (!t.hasSelection()) return true
-          copy()
+          document.execCommand("copy")
           return true
         }
 
@@ -256,76 +337,40 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
-
-      container.addEventListener("pointerdown", handlePointerDown)
-      cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
-
-      container.addEventListener("click", handleLinkClick, { capture: true })
-      cleanups.push(() => container.removeEventListener("click", handleLinkClick, { capture: true }))
-
-      handleTextareaFocus = () => {
-        t.options.cursorBlink = true
-      }
-      handleTextareaBlur = () => {
-        t.options.cursorBlink = false
-      }
-
-      t.textarea?.addEventListener("focus", handleTextareaFocus)
-      t.textarea?.addEventListener("blur", handleTextareaBlur)
-      cleanups.push(() => t.textarea?.removeEventListener("focus", handleTextareaFocus))
-      cleanups.push(() => t.textarea?.removeEventListener("blur", handleTextareaBlur))
+      useTerminalUiBindings({ container, term: t, cleanups, handlePointerDown, handleLinkClick })
 
       focusTerminal()
 
-      fit.fit()
+      const startResize = () => {
+        fit.observeResize()
+        handleResize = () => fit.fit()
+        window.addEventListener("resize", handleResize)
+        cleanups.push(() => window.removeEventListener("resize", handleResize))
+      }
 
-      if (local.pty.buffer) {
-        t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
+      if (restore && restoreSize) {
+        t.write(restore, () => {
+          fit.fit()
+          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          startResize()
         })
-      }
-
-      fit.observeResize()
-      handleResize = () => fit.fit()
-      window.addEventListener("resize", handleResize)
-      cleanups.push(() => window.removeEventListener("resize", handleResize))
-      const limit = 16_384
-      const min = 32
-      const windowMs = 750
-      const seed = tail.length > limit ? tail.slice(-limit) : tail
-      let sync = seed.length >= min
-      let syncUntil = 0
-      const stopSync = () => {
-        sync = false
-        syncUntil = 0
-      }
-
-      const overlap = (data: string) => {
-        if (!seed) return 0
-        const max = Math.min(seed.length, data.length)
-        if (max < min) return 0
-        for (let i = max; i >= min; i--) {
-          if (seed.slice(-i) === data.slice(0, i)) return i
+      } else {
+        fit.fit()
+        if (restore) {
+          t.write(restore, () => {
+            if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          })
         }
-        return 0
+        startResize()
       }
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
-          await sdk.client.pty
-            .update({
-              ptyID: local.pty.id,
-              size: {
-                cols: size.cols,
-                rows: size.rows,
-              },
-            })
-            .catch(() => {})
+          await pushSize(size.cols, size.rows)
         }
       })
       cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
-        if (data) stopSync()
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
@@ -343,45 +388,36 @@ export const Terminal = (props: TerminalProps) => {
 
       const handleOpen = () => {
         local.onConnect?.()
-        if (sync) syncUntil = Date.now() + windowMs
-        sdk.client.pty
-          .update({
-            ptyID: local.pty.id,
-            size: {
-              cols: t.cols,
-              rows: t.rows,
-            },
-          })
-          .catch(() => {})
+        void pushSize(t.cols, t.rows)
       }
       socket.addEventListener("open", handleOpen)
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
+      const decoder = new TextDecoder()
+
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
+        if (event.data instanceof ArrayBuffer) {
+          // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+          const bytes = new Uint8Array(event.data)
+          if (bytes[0] !== 0) return
+          const json = decoder.decode(bytes.subarray(1))
+          try {
+            const meta = JSON.parse(json) as { cursor?: unknown }
+            const next = meta?.cursor
+            if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
+              cursor = next
+            }
+          } catch (err) {
+            debugTerminal("invalid websocket control frame", err)
+          }
+          return
+        }
+
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
-
-        const next = (() => {
-          if (!sync) return data
-          if (syncUntil && Date.now() > syncUntil) {
-            stopSync()
-            return data
-          }
-          const n = overlap(data)
-          if (!n) {
-            stopSync()
-            return data
-          }
-          const trimmed = data.slice(n)
-          if (trimmed) stopSync()
-          return trimmed
-        })()
-
-        if (!next) return
-
-        t.write(next)
-        tail = next.length >= limit ? next.slice(-limit) : (tail + next).slice(-limit)
+        t.write(data)
+        cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -423,25 +459,7 @@ export const Terminal = (props: TerminalProps) => {
 
   onCleanup(() => {
     disposed = true
-    const t = term
-    if (serializeAddon && props.onCleanup && t) {
-      const buffer = (() => {
-        try {
-          return serializeAddon.serialize()
-        } catch {
-          return ""
-        }
-      })()
-      props.onCleanup({
-        ...local.pty,
-        buffer,
-        tail,
-        rows: t.rows,
-        cols: t.cols,
-        scrollY: t.getViewportY(),
-      })
-    }
-
+    persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
     cleanup()
   })
 

@@ -1,6 +1,6 @@
 ---
-title: 主題
-description: 選擇內建主題或定義您自己的主題。
+title: 主题
+description: 选择內建主题或定義您自己的主题。
 ---
 
 使用 opencode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
@@ -9,23 +9,23 @@ By default, opencode uses our own `opencode` theme.
 
 ---
 
-## 終端要求
+## 终端要求
 
-為了使主題能夠正確顯示完整的調色盤，您的終端必須支援**真彩色**（24 位顏色）。大多數現代終端預設支援此功能，但您可能需要啟用它：
+为了使主题能夠正确显示完整的调色板，您的终端必須支持**真彩色**（24 位顏色）。大多數现代终端默认支持此功能，但您可能需要启用它：
 
 - **检查支持**：执行 `echo $COLORTERM` - 它应该输出 `truecolor` 或 `24bit`
 - **启用真彩色**：在shell配置文件中设置环境变量`COLORTERM=truecolor`
-- **您的终端相容性**：确保终端模拟器支持24位颜色（大多数现代终端，​​​​如iTerm2、Alacritty、Kitty、Windows终端和最新版本的GNOME终端都支持）
+- **您的终端兼容性**：确保终端模拟器支持24位颜色（大多数现代终端，​​​​如iTerm2、Alacritty、Kitty、Windows终端和最新版本的GNOME终端都支持）
 
-如果沒有真彩色支援，主題的顏色精度可能會降低或回落到最接近的 256 色近似值。
+如果沒有真彩色支持，主题的顏色精度可能会降低或回落到最接近的 256 色近似值。
 
 ---
 
-## 內建主題
+## 内置主题
 
 opencode 带有几个内建主题。
 
-| 名稱                   | 描述                                                                         |
+| 名称                   | 描述                                                                         |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `system`               | 适应您所处的背景颜色                                                         |
 | `tokyonight`           | Based on the [Tokyonight](https://github.com/folke/tokyonight.nvim) theme    |
@@ -39,27 +39,27 @@ opencode 带有几个内建主题。
 | `matrix`               | 骇客风格黑底绿主题                                                           |
 | `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
 
-此外，我們還在不斷新增新主題。
+此外，我们还在不斷添加新主题。
 
 ---
 
-## 系統主題
+## 系统主题
 
 `system` 主题旨在自动适应您的最终方案。与使用固定颜色的传统主题不同，_system_ 主题：
 
-- **生成灰度**：根據終端的背景顏色建立自定義灰度，確保最佳對比度。
+- **生成灰度**：根據终端的背景顏色建立自定義灰度，確保最佳对比度。
 - **使用 ANSI 颜色**：使用标准 ANSI 颜色 (0-15) 进行语法突出显示和 UI 元素，尊重 Windows 的调色盘。
 - **保留默认设置**：使用 `none` 作为文字和背景颜色以保持本机的外观。
 
-系統主題適合以下使用者：
+系統主题適合以下用户：
 
 - 希望 opencode 与终端的外观相匹配
-- 使用自定義終端配色方案
-- 希望所有終端應用程式具有一致的外觀
+- 使用自定義终端配色方案
+- 希望所有终端应用程序具有一致的外觀
 
 ---
 
-## 使用主題
+## 使用主题
 
 您可以通过使用 `/theme` 命令调出主题选择来选择主题。或者您可以在 [config](/docs/config) 中指定它。
 
@@ -72,37 +72,37 @@ opencode 带有几个内建主题。
 
 ---
 
-## 自定義主題
+## 自定义主题
 
 opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建和自定义主题。
 
 ---
 
-### 等級制度
+### 优先级
 
-主題按以下順序從多個目錄載入，其中後面的目錄覆蓋前面的目錄：
+主题按以下顺序從多个目录載入，其中后面的目录覆盖前面的目录：
 
-1. **內建主題** - 這些主題嵌入在二進製檔案中
+1. **內建主题** - 这些主题嵌入在二進製文件中
 2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
 3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
 4. **Current working directory** - Defined in `./.opencode/themes/*.json`
 
-如果多個目錄包含同名主題，則將使用優先順序較高的目錄中的主題。
+如果多个目录包含同名主题，则将使用优先顺序較高的目录中的主题。
 
 ---
 
-### 建立主題
+### 创建主题
 
 要创建自定义主题，请在主题目录中创建 JSON 档案。
 
-對於使用者範圍的主題：
+对于用户范围的主题：
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
 ```
 
-以及針對特定專案的主題。
+以及針对特定专案的主题。
 
 ```bash no-frame
 mkdir -p .opencode/themes
@@ -123,13 +123,13 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### 顏色定義
+### 颜色定义
 
 `defs` 部分是可选的，它允许您定义可在主题中引用的可重用颜色。
 
 ---
 
-### 終端預設值
+### 终端默认值
 
 特殊值 `"none"` 可用于任何颜色以继承默认的默认颜色。这对于建立与终端方案无缝的融合主题特别有用：
 
@@ -140,7 +140,7 @@ vim .opencode/themes/my-theme.json
 
 ### 例子
 
-以下是自定義主題的示例：
+以下是自定義主题的示例：
 
 ```json title="my-theme.json"
 {

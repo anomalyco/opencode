@@ -1,21 +1,21 @@
 ---
-title: Modelci
-description: LLM sağlayıcısını ve modelinin adı.
+title: Modeller
+description: LLM sağlayıcılarını ve model seçimlerini yapılandırın.
 ---
 
 opencode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
 
 ---
 
-## Providers
+## Sağlayıcılar
 
 Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar opencode'u başlattığınızda kullanılabilir olacaktır.
 
-[providers](/docs/providers) hakkında daha fazla bilgi edinin.
+[Sağlayıcılar](/docs/providers) hakkında daha fazla bilgi edinin.
 
 ---
 
-## Bir model seçin
+## Model seçimi
 
 Sağlayıcınızı yapılandırdıktan sonra aşağıdaki komutu yazarak istediğiniz modeli seçebilirsiniz:
 
@@ -25,7 +25,7 @@ Sağlayıcınızı yapılandırdıktan sonra aşağıdaki komutu yazarak istedi�
 
 ---
 
-## Recommended models
+## Önerilen modeller
 
 Piyasada pek çok model var ve her hafta yeni modeller çıkıyor.
 
@@ -46,7 +46,7 @@ Burada, opencode ile belirli bir sıraya göre iyi çalışan birkaç model yer 
 
 ---
 
-## Varsayılanı ayarla
+## Varsayılan ayarlama
 
 Bunlardan birini varsayılan model olarak ayarlamak için `model` anahtarınızı telefonunuzudan ayarlayabilirsiniz.
 opencode yapılandırması
@@ -64,7 +64,7 @@ Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_
 
 ---
 
-## Modelleri yapılandırın
+## Model yapılandırma
 
 Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılandırabilirsiniz.
 
@@ -100,10 +100,10 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
 }
 ```
 
-Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `openai` sağlayıcısı aracılığıyla erişildiğinde `gpt-5` ve `anthropic` sağlayıcısı aracılığıyla erişildiğinde `claude-sonnet-4-20250514`.
+Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `gpt-5` sağlayıcısı aracılığıyla erişildiğinde `openai` ve `claude-sonnet-4-20250514` sağlayıcısı aracılığıyla erişildiğinde `anthropic`.
 Yerleşik sağlayıcı ve model adları [Models.dev](https://models.dev) adresinde bulunabilir.
 
-Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Learn more](/docs/agents/#additional).
+Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Daha fazla bilgi](/docs/agents/#additional).
 
 Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsiniz. Varyantlar, yinelenen girişler oluşturmadan aynı model için farklı ayarları yapılandırmanıza olanak tanır:
 
@@ -197,11 +197,11 @@ Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
 
 ### Döngü çeşitleri
 
-Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Learn more](/docs/keybinds).
+Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Daha fazla bilgi](/docs/keybinds).
 
 ---
 
-## Loading models
+## Modelleri yükleme
 
 opencode başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
 

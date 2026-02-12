@@ -1,11 +1,11 @@
 ---
 title: TUI
-description: Использование пользовательского интерфейса терминала opencode.
+description: Использование TUI opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode предоставляет интерактивный интерфейс терминала или TUI для работы над вашими проектами с помощью LLM.
+opencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
 
 Запуск opencode запускает TUI для текущего каталога.
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash-команды
 
-Начните сообщение с `!`, чтобы запустить команду оболочки.
+Начните сообщение с `!`, чтобы запустить shell-команду.
 
 ```bash frame="none"
 !ls -la
@@ -69,7 +69,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### соединять
+### connect
 
 Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
@@ -79,7 +79,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### компактный
+### compact
 
 Сжать текущий сеанс. _Псевдоним_: `/summarize`
 
@@ -91,7 +91,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### подробности
+### details
 
 Переключить детали выполнения инструмента.
 
@@ -103,7 +103,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### редактор
+### editor
 
 Открыть внешний редактор для составления сообщений. Использует редактор, установленный в переменной среды `EDITOR`. [Подробнее ](#editor-setup).
 
@@ -115,7 +115,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### Выход
+### exit
 
 Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
 
@@ -127,7 +127,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### экспорт
+### export
 
 Экспортируйте текущий разговор в Markdown и откройте его в редакторе по умолчанию. Использует редактор, установленный в переменной среды `EDITOR`. [Подробнее ](#editor-setup).
 
@@ -139,7 +139,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### помощь
+### help
 
 Показать диалоговое окно помощи.
 
@@ -151,7 +151,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### инициализация
+### init
 
 Создайте или обновите файл `AGENTS.md`. [Подробнее ](/docs/rules).
 
@@ -163,7 +163,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### модели
+### models
 
 Перечислите доступные модели.
 
@@ -175,7 +175,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### новый
+### new
 
 Начать новый сеанс. _Псевдоним_: `/clear`
 
@@ -187,7 +187,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### переделывать
+### redo
 
 Повторить ранее отмененное сообщение. Доступно только после использования `/undo`.
 
@@ -206,7 +206,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### сессии
+### sessions
 
 Составляйте список и переключайтесь между сеансами. _Псевдонимы_: `/resume`, `/continue`
 
@@ -218,7 +218,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### делиться
+### share
 
 Поделиться текущим сеансом. [Подробнее](/docs/share).
 
@@ -230,7 +230,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### темы
+### theme
 
 Список доступных тем.
 
@@ -242,7 +242,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### мышление
+### thinking
 
 Переключить видимость блоков мышления/рассуждения в разговоре. Если этот параметр включен, вы можете увидеть процесс рассуждения модели для моделей, поддерживающих расширенное мышление.
 
@@ -256,7 +256,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### отменить
+### undo
 
 Отменить последнее сообщение в разговоре. Удаляет самое последнее сообщение пользователя, все последующие ответы и любые изменения файлов.
 
@@ -275,7 +275,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### отменить совместное использование
+### unshare
 
 Отменить общий доступ к текущему сеансу. [Подробнее](/docs/share#un-sharing).
 
@@ -301,7 +301,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     export EDITOR="code --wait"
     ```
 
-    Чтобы сделать его постоянным, добавьте это в свой профиль оболочки;
+    Чтобы сделать его постоянным, добавьте это в свой профиль shell;
     `~/.bashrc`, `~/.zshrc` и т. д.
 
   </TabItem>
@@ -336,24 +336,24 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Популярные варианты редактора включают в себя:
 
-- `code` — код Visual Studio
-- `cursor` — Курсор
-- `windsurf` - Виндсерфинг
+- `code` — VS Code
+- `cursor` — Cursor
+- `windsurf` - Windsurf
 - `nvim` - Редактор Neovim
 - `vim` — редактор Vim
 - `nano` — Нано-редактор
 - `notepad` — Блокнот Windows
-- `subl` – возвышенный текст
+- `subl` — Sublime Text
 
 :::note
 Некоторые редакторы, такие как VS Code, необходимо запускать с флагом `--wait`.
 :::
 
-Некоторым редакторам для работы в режиме блокировки необходимы аргументы командной строки. Флаг `--wait` блокирует процесс редактора до его закрытия.
+Некоторым редакторам для работы в режиме блокировки необходимы CLI-аргументы. Флаг `--wait` блокирует процесс редактора до его закрытия.
 
 ---
 
-## Настроить
+## Настройка
 
 Вы можете настроить поведение TUI через файл конфигурации opencode.
 

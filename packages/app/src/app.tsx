@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
+import { ErrorBoundary, Suspense, lazy, type JSX, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -30,11 +30,25 @@ import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { Suspense, JSX } from "solid-js"
-
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
+
+const HomeRoute = () => (
+  <Suspense fallback={<Loading />}>
+    <Home />
+  </Suspense>
+)
+
+const SessionRoute = () => (
+  <SessionProviders>
+    <Suspense fallback={<Loading />}>
+      <Session />
+    </Suspense>
+  </SessionProviders>
+)
+
+const SessionIndexRoute = () => <Navigate href="session" />
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -43,13 +57,78 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[] }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[]; wsl?: boolean }
   }
 }
 
 function MarkedProviderWithNativeParser(props: ParentProps) {
   const platform = usePlatform()
   return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
+}
+
+function AppShellProviders(props: ParentProps) {
+  return (
+    <SettingsProvider>
+      <PermissionProvider>
+        <LayoutProvider>
+          <NotificationProvider>
+            <ModelsProvider>
+              <CommandProvider>
+                <HighlightsProvider>
+                  <Layout>{props.children}</Layout>
+                </HighlightsProvider>
+              </CommandProvider>
+            </ModelsProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      </PermissionProvider>
+    </SettingsProvider>
+  )
+}
+
+function SessionProviders(props: ParentProps) {
+  return (
+    <TerminalProvider>
+      <FileProvider>
+        <PromptProvider>
+          <CommentsProvider>{props.children}</CommentsProvider>
+        </PromptProvider>
+      </FileProvider>
+    </TerminalProvider>
+  )
+}
+
+function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
+  return (
+    <AppShellProviders>
+      {props.appChildren}
+      {props.children}
+    </AppShellProviders>
+  )
+}
+
+const getStoredDefaultServerUrl = (platform: ReturnType<typeof usePlatform>) => {
+  if (platform.platform !== "web") return
+  const result = platform.getDefaultServerUrl?.()
+  if (result instanceof Promise) return
+  if (!result) return
+  return normalizeServerUrl(result)
+}
+
+const resolveDefaultServerUrl = (props: {
+  defaultUrl?: string
+  storedDefaultServerUrl?: string
+  hostname: string
+  origin: string
+  isDev: boolean
+  devHost?: string
+  devPort?: string
+}) => {
+  if (props.defaultUrl) return props.defaultUrl
+  if (props.storedDefaultServerUrl) return props.storedDefaultServerUrl
+  if (props.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  if (props.isDev) return `http://${props.devHost ?? "localhost"}:${props.devPort ?? "4096"}`
+  return props.origin
 }
 
 export function AppBaseProviders(props: ParentProps) {
@@ -77,89 +156,35 @@ export function AppBaseProviders(props: ParentProps) {
 
 function ServerKey(props: ParentProps) {
   const server = useServer()
-  return (
-    <Show when={server.url} keyed>
-      {props.children}
-    </Show>
-  )
+  if (!server.url) return null
+  return props.children
 }
 
 export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {
   const platform = usePlatform()
-
-  const stored = (() => {
-    if (platform.platform !== "web") return
-    const result = platform.getDefaultServerUrl?.()
-    if (result instanceof Promise) return
-    if (!result) return
-    return normalizeServerUrl(result)
-  })()
-
-  const defaultServerUrl = () => {
-    if (props.defaultUrl) return props.defaultUrl
-    if (stored) return stored
-    if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
-    if (import.meta.env.DEV)
-      return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-
-    return window.location.origin
-  }
+  const storedDefaultServerUrl = getStoredDefaultServerUrl(platform)
+  const defaultServerUrl = resolveDefaultServerUrl({
+    defaultUrl: props.defaultUrl,
+    storedDefaultServerUrl,
+    hostname: location.hostname,
+    origin: window.location.origin,
+    isDev: import.meta.env.DEV,
+    devHost: import.meta.env.VITE_OPENCODE_SERVER_HOST,
+    devPort: import.meta.env.VITE_OPENCODE_SERVER_PORT,
+  })
 
   return (
-    <ServerProvider defaultUrl={defaultServerUrl()} isSidecar={props.isSidecar}>
+    <ServerProvider defaultUrl={defaultServerUrl} isSidecar={props.isSidecar}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Router
-              root={(routerProps) => (
-                <SettingsProvider>
-                  <PermissionProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <ModelsProvider>
-                          <CommandProvider>
-                            <HighlightsProvider>
-                              <Layout>
-                                {props.children}
-                                {routerProps.children}
-                              </Layout>
-                            </HighlightsProvider>
-                          </CommandProvider>
-                        </ModelsProvider>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </PermissionProvider>
-                </SettingsProvider>
-              )}
+              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
             >
-              <Route
-                path="/"
-                component={() => (
-                  <Suspense fallback={<Loading />}>
-                    <Home />
-                  </Suspense>
-                )}
-              />
+              <Route path="/" component={HomeRoute} />
               <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={() => <Navigate href="session" />} />
-                <Route
-                  path="/session/:id?"
-                  component={(p) => (
-                    <Show when={p.params.id ?? "new"}>
-                      <TerminalProvider>
-                        <FileProvider>
-                          <PromptProvider>
-                            <CommentsProvider>
-                              <Suspense fallback={<Loading />}>
-                                <Session />
-                              </Suspense>
-                            </CommentsProvider>
-                          </PromptProvider>
-                        </FileProvider>
-                      </TerminalProvider>
-                    </Show>
-                  )}
-                />
+                <Route path="/" component={SessionIndexRoute} />
+                <Route path="/session/:id?" component={SessionRoute} />
               </Route>
             </Router>
           </GlobalSyncProvider>

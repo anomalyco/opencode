@@ -1,6 +1,6 @@
 ---
 title: Ferramentas Personalizadas
-description: Crie ferramentas que o LLM pode chamar em opencode.
+description: Crie ferramentas que o LLM pode chamar no opencode.
 ---
 
 Ferramentas personalizadas são funções que você cria e que o LLM pode chamar durante as conversas. Elas funcionam junto com as [ferramentas integradas](/docs/tools) do opencode, como `read`, `write` e `bash`.
@@ -32,11 +32,11 @@ import { tool } from "@opencode-ai/plugin"
 export default tool({
   description: "Consultar o banco de dados do projeto",
   args: {
-    query: tool.schema.string().describe("Consulta SQL a ser executada"),
+    query: tool.schema.string().describe("Consulta SQL para executar"),
   },
   async execute(args) {
     // Sua lógica de banco de dados aqui
-    return `Executed query: ${args.query}`
+    return `Consulta executada: ${args.query}`
   },
 })
 ```
@@ -85,7 +85,7 @@ Você pode usar `tool.schema`, que é apenas [Zod](https://zod.dev), para defini
 
 ```ts "tool.schema"
 args: {
-  query: tool.schema.string().describe("Consulta SQL a ser executada")
+  query: tool.schema.string().describe("Consulta SQL para executar")
 }
 ```
 
@@ -101,7 +101,7 @@ export default {
   },
   async execute(args, context) {
     // Implementação da ferramenta
-    return "resultado"
+    return "result"
   },
 }
 ```
@@ -119,7 +119,7 @@ export default tool({
   description: "Obter informações do projeto",
   args: {},
   async execute(args, context) {
-    // Acessar informações do contexto
+    // Acessar informações de contexto
     const { agent, sessionID, messageID, directory, worktree } = context
     return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
   },
@@ -133,7 +133,7 @@ Use `context.worktree` para a raiz do worktree do git.
 
 ## Exemplos
 
-### Escreva uma ferramenta em Python
+### Escrevendo uma ferramenta em Python
 
 Você pode escrever suas ferramentas em qualquer linguagem que desejar. Aqui está um exemplo que adiciona dois números usando Python.
 

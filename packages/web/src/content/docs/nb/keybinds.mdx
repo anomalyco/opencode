@@ -1,9 +1,9 @@
 ---
-title: Keybinds
+title: Tastebindinger
 description: Tilpass tastebindingene dine.
 ---
 
-opencode har en liste over nøkkelbindinger som du kan tilpasse gjennom opencode-konfigurasjonen.
+OpenCode har en liste over tastebindinger som du kan tilpasse gjennom OpenCode-konfigurasjonen.
 
 ```json title="opencode.json"
 {
@@ -105,19 +105,19 @@ opencode har en liste over nøkkelbindinger som du kan tilpasse gjennom opencode
 
 ---
 
-## Ledernøkkel
+## Leader-tast
 
-opencode bruker en `leader`-nøkkel for de fleste nøkkelbindinger. Dette unngår konflikter i terminalen din.
+OpenCode bruker en `leader`-tast for de fleste tastebindinger. Dette unngår konflikter i terminalen din.
 
 Som standard er `ctrl+x` ledertasten, og de fleste handlinger krever at du først trykker på ledertasten og deretter snarveien. For å starte en ny økt, trykker du for eksempel først `ctrl+x` og deretter `n`.
 
-Du trenger ikke å bruke en ledernøkkel for tastebindingene dine, men vi anbefaler at du gjør det.
+Du trenger ikke å bruke en ledertast for tastebindingene dine, men vi anbefaler at du gjør det.
 
 ---
 
-## Deaktiver tastebinding
+## Deaktivering av tastebindinger
 
-Du kan deaktivere en nøkkelbinding ved å legge til nøkkelen til konfigurasjonen med verdien "ingen".
+Du kan deaktivere en tastebinding ved å legge til tasten til konfigurasjonen med verdien "none".
 
 ```json title="opencode.json"
 {
@@ -130,9 +130,9 @@ Du kan deaktivere en nøkkelbinding ved å legge til nøkkelen til konfigurasjon
 
 ---
 
-## Snarveier på skrivebordet
+## Snarveier i skrivebordsappen
 
-Spørringsinngangen for opencode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
+Prompt-feltet for OpenCode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
 
 | Snarvei  | Handling                                 |
 | -------- | ---------------------------------------- |
@@ -143,18 +143,18 @@ Spørringsinngangen for opencode-skrivebordsappen støtter vanlige snarveier i R
 | `alt+b`  | Flytt markøren ett ord tilbake           |
 | `alt+f`  | Flytt markøren ett ord fremover          |
 | `ctrl+d` | Slett tegn under markøren                |
-| `ctrl+k` | Drep til slutten av linjen               |
-| `ctrl+u` | Drep til starten av linjen               |
-| `ctrl+w` | Drep forrige ord                         |
-| `alt+d`  | Drep neste ord                           |
-| `ctrl+t` | Transponere tegn                         |
+| `ctrl+k` | Slett til slutten av linjen              |
+| `ctrl+u` | Slett til starten av linjen              |
+| `ctrl+w` | Slett forrige ord                        |
+| `alt+d`  | Slett neste ord                          |
+| `ctrl+t` | Bytt om tegn                             |
 | `ctrl+g` | Avbryt popovers / avbryt kjøring av svar |
 
 ---
 
 ## Shift+Enter
 
-Noen terminaler sender ikke modifikasjonsnøkler med Enter som standard. Du må kanskje konfigurere terminalen til å sende `Shift+Enter` som en escape-sekvens.
+Noen terminaler sender ikke modifikasjonstaster med Enter som standard. Du må kanskje konfigurere terminalen til å sende `Shift+Enter` som en escape-sekvens.
 
 ### Windows Terminal
 

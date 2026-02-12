@@ -7,9 +7,9 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) คือเอเจนต์การเข้ารหัส AI แบบโอเพ่นซอร์ส มีให้บริการในรูปแบบอินเทอร์เฟซบนเทอร์มินัล แอปเดสก์ท็อป หรือส่วนขยาย IDE
+[**OpenCode**](/) คือเอเจนต์การเข้ารหัส AI แบบโอเพ่นซอร์ส มีให้บริการในรูปแบบอินเทอร์เฟซบน terminal แอปเดสก์ท็อป หรือส่วนขยาย IDE
 
-![OpenCode TUI พร้อมธีม opencode](../../../assets/lander/screenshot.png)
+![OpenCode TUI พร้อม opencode theme](../../../assets/lander/screenshot.png)
 
 มาเริ่มกันเลย
 
@@ -17,15 +17,15 @@ export const console = config.console
 
 #### ข้อกำหนดเบื้องต้น
 
-หากต้องการใช้ OpenCode ในเทอร์มินัล คุณจะต้องมี:
+หากต้องการใช้ OpenCode ใน terminal คุณจะต้องมี:
 
-1. เทอร์มินัลอีมูเลเตอร์ที่ทันสมัยเช่น:
+1. terminal อีมูเลเตอร์ที่ทันสมัยเช่น:
    - [WezTerm](https://wezterm.org) ข้ามแพลตฟอร์ม
    - [Alacritty](https://alacritty.org) ข้ามแพลตฟอร์ม
-   - [โกสต์ตี้](https://ghostty.org), ลินุกซ์ และ macOS
-   - [คิตตี้](https://sw.kovidgoyal.net/kitty/), Linux และ macOS
+   - [Ghostty](https://ghostty.org), Linux และ macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux และ macOS
 
-2. ปุ่ม API สำหรับผู้ให้บริการ LLM ที่คุณต้องการใช้
+2. API Key สำหรับผู้ให้บริการ LLM ที่คุณต้องการใช้
 
 ---
 
@@ -39,7 +39,7 @@ curl -fsSL https://opencode.ai/install | bash
 
 คุณยังสามารถติดตั้งได้ด้วยคำสั่งต่อไปนี้:
 
-- **การใช้ Node.js**
+- **ใช้ Node.js**
 
         <Tabs>
 
@@ -73,33 +73,33 @@ curl -fsSL https://opencode.ai/install | bash
 
   </Tabs>
 
-- **การใช้ Homebrew บน macOS และ Linux**
+- **ใช้ Homebrew บน macOS และ Linux**
 
   ```bash
   brew install anomalyco/tap/opencode
   ```
 
-  > เราขอแนะนำให้ใช้การแตะ OpenCode เพื่อเผยแพร่ข้อมูลล่าสุด สูตร `brew install opencode` อย่างเป็นทางการได้รับการดูแลโดยทีมงาน Homebrew และมีการอัปเดตไม่บ่อยนัก
+  > เราขอแนะนำให้ใช้ OpenCode tap เพื่อเผยแพร่ข้อมูลล่าสุด สูตร `brew install opencode` อย่างเป็นทางการได้รับการดูแลโดยทีมงาน Homebrew และมีการอัปเดตไม่บ่อยนัก
 
-- **การใช้ Paru บน Arch Linux**
+- **ใช้ Paru บน Arch Linux**
 
   ```bash
   paru -S opencode-bin
   ```
 
-#### หน้าต่าง
+#### Windows
 
 :::tip[แนะนำ: ใช้ WSL]
 เพื่อประสบการณ์ที่ดีที่สุดบน Windows เราขอแนะนำให้ใช้ [ระบบย่อย Windows สำหรับ Linux (WSL)](/docs/windows-wsl) ให้ประสิทธิภาพที่ดีขึ้นและความเข้ากันได้เต็มรูปแบบกับคุณสมบัติของ OpenCode
 :::
 
-- **ใช้ช็อคโกแลต**
+- **ใช้ Chocolatey**
 
   ```bash
   choco install opencode
   ```
 
-- **การใช้สกู๊ป**
+- **ใช้ Scoop**
 
   ```bash
   scoop install opencode
@@ -111,13 +111,13 @@ curl -fsSL https://opencode.ai/install | bash
   npm install -g opencode-ai
   ```
 
-- ** การใช้ Mise **
+- **ใช้ Mise**
 
   ```bash
   mise use -g github:anomalyco/opencode
   ```
 
-- **การใช้นักเทียบท่า**
+- **ใช้ Docker**
 
   ```bash
   docker run -it --rm ghcr.io/anomalyco/opencode
@@ -258,11 +258,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
    ```
 
    :::tip
-   ลากและวางรูปภาพลงในเทอร์มินัลเพื่อเพิ่มลงในพรอมต์
+   ลากและวางรูปภาพลงใน terminal เพื่อเพิ่มลงในพรอมต์
    :::
 
    OpenCode สามารถสแกนรูปภาพที่คุณให้มาและเพิ่มลงในข้อความแจ้งได้ คุณสามารถ
-   ทำได้โดยลากและวางรูปภาพลงในเทอร์มินัล
+   ทำได้โดยลากและวางรูปภาพลงใน terminal
 
 3. **สร้างฟีเจอร์**
 

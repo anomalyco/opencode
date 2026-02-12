@@ -5,7 +5,7 @@ description: farklı kullanım durumları için farklı modlar.
 
 :::caution
 Modlar artık opencode yapılandırmasındaki `agent` seçeneği aracılığıyla yapılandırılıyor.
-`mode` seçeneği artık kullanımdan kaldırıldı. [Learn more](/docs/agents).
+`mode` seçeneği artık kullanımdan kaldırıldı. [Daha fazla bilgi](/docs/agents).
 :::
 
 opencode'daki modlar, farklı kullanım durumları için davranışı, araçları ve istemleri özelleştirmenize olanak tanır.
@@ -17,13 +17,13 @@ Bir oturum sırasında modlar arasında geçiş yapabilir veya bunları yapılan
 
 ---
 
-## Built-in
+## Yerleşik
 
 opencode iki yerleşik modla birlikte gelir.
 
 ---
 
-### İnşa etmek
+### Build
 
 Derleme, tüm araçların etkin olduğu **varsayılan** moddur. Bu, dosya işlemlerine ve sistem komutlarına tam erişime ihtiyaç duyduğunuz geliştirme çalışmaları için standart moddur.
 
@@ -35,14 +35,14 @@ Planlama ve analiz için tasarlanmış sınırlı bir mod. Plan modunda aşağı
 
 - `write` - Yeni dosyalar oluşturulamıyor
 - `edit` - Planın kendisini detaylandırmak için `.opencode/plans/*.md` adresinde bulunan dosyalar dışında mevcut dosyalar değiştirilemez
-- `patch` - Cannot apply patches
+- `patch` - Yamalar uygulanamaz
 - `bash` - Kabuk komutları yürütülemiyor
 
 Bu mod, yapay zekanın kod tabanınızda herhangi bir gerçek değişiklik yapmadan kodu analiz etmesini, değişiklik önermesini veya plan oluşturmasını istediğinizde kullanışlıdır.
 
 ---
 
-## Anahtarlama
+## Geçiş
 
 Bir oturum sırasında _Tab_ tuşunu kullanarak modlar arasında geçiş yapabilirsiniz. Veya yapılandırılmış `switch_mode` tuş bağlantınız.
 
@@ -50,11 +50,11 @@ Ayrıca bkz.: Kod biçimlendirme yapılandırması hakkında bilgi için [Format
 
 ---
 
-## Yapılandır
+## Yapılandırma
 
 Yerleşik modları özelleştirebilir veya yapılandırma aracılığıyla kendinizinkini oluşturabilirsiniz. Modlar iki şekilde yapılandırılabilir:
 
-### JSON Configuration
+### JSON Yapılandırması
 
 `opencode.json` yapılandırma dosyanızdaki modları yapılandırın:
 
@@ -83,7 +83,7 @@ Yerleşik modları özelleştirebilir veya yapılandırma aracılığıyla kendi
 }
 ```
 
-### Markdown Configuration
+### Markdown Yapılandırması
 
 Markdown dosyalarını kullanarak modları da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
 
@@ -112,13 +112,13 @@ Provide constructive feedback without making direct changes.
 
 Markdown dosyası adı mod adı olur (örneğin, `review.md` bir `review` modu oluşturur).
 
-Let's look at these configuration options in detail.
+Bu yapılandırma seçeneklerine ayrıntılı olarak bakalım.
 
 ---
 
-### Modeli
+### Model
 
-Bu modun varsayılan standardı geçersiz için `model` kontrolünü kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
+Bu modun varsayılan modelini geçersiz kılmak için `model` ayarını kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
 
 ```json title="opencode.json"
 {
@@ -132,7 +132,7 @@ Bu modun varsayılan standardı geçersiz için `model` kontrolünü kullanın. 
 
 ---
 
-### Temperature
+### Sıcaklık
 
 `temperature` yapılandırmasıyla yapay zekanın yanıtlarının rastgeleliğini ve yaratıcılığını kontrol edin. Düşük değerler yanıtları daha odaklı ve belirleyici hale getirirken, yüksek değerler yaratıcılığı ve değişkenliği artırır.
 
@@ -177,9 +177,9 @@ Sıcaklık belirtilmezse, opencode modele özgü varsayılanları kullanır (ço
 
 ---
 
-### Çabuk
+### İstem
 
-`prompt` analiziyle bu mod için özel bir sistem bilgi istemi dosyası destekleniyor. Bilgi istemi şeması, modun amacına özel talimatlar içermelidir.
+`prompt` yapılandırmasıyla bu mod için özel bir sistem bilgi istemi dosyası belirtin. Bilgi istemi dosyası, modun amacına özel talimatlar içermelidir.
 
 ```json title="opencode.json"
 {
@@ -196,7 +196,7 @@ hem global opencode yapılandırması hem de projeye özel yapılandırma.
 
 ---
 
-### Tools
+### Araçlar
 
 `tools` yapılandırmasıyla bu modda hangi araçların kullanılabileceğini kontrol edin. Belirli araçları `true` veya `false` olarak ayarlayarak etkinleştirebilir veya devre dışı bırakabilirsiniz.
 
@@ -225,27 +225,27 @@ Hiçbir araç belirtilmezse tüm araçlar varsayılan olarak etkindir.
 
 İşte mod yapılandırması aracılığıyla kontrol edilebilecek tüm araçlar.
 
-| Alet        | Tanım                           |
-| ----------- | ------------------------------- |
-| `bash`      | Kabuk komutlarını yürütün       |
-| `edit`      | Mevcut dosyaları değiştirin     |
-| `write`     | Yeni dosyalar oluştur           |
-| `read`      | Dosya içeriğini oku             |
-| `grep`      | Dosya içeriğini arayın          |
-| `glob`      | Dosyaları desene göre bulun     |
-| `list`      | Dizinin içeriği listele         |
-| `patch`     | Dosyalara yama uygulama         |
-| `todowrite` | Yapılacaklar listelerini yönet  |
-| `todoread`  | Yapılacaklar listelerini okuyun |
-| `webfetch`  | Web içeriğini getir             |
+| Araç        | Açıklama                       |
+| ----------- | ------------------------------ |
+| `bash`      | Kabuk komutlarını yürütün      |
+| `edit`      | Mevcut dosyaları değiştirin    |
+| `write`     | Yeni dosyalar oluştur          |
+| `read`      | Dosya içeriğini oku            |
+| `grep`      | Dosya içeriğini ara            |
+| `glob`      | Dosyaları desene göre bul      |
+| `list`      | Dizinin içeriğini listele      |
+| `patch`     | Dosyalara yama uygula          |
+| `todowrite` | Yapılacaklar listelerini yönet |
+| `todoread`  | Yapılacaklar listelerini oku   |
+| `webfetch`  | Web içeriğini getir            |
 
 ---
 
-## Custom modes
+## Özel modlar
 
 Yapılandırmaya ekleyerek kendi özel modlarınızı oluşturabilirsiniz. Her iki yaklaşımın kullanıldığı örnekler aşağıda verilmiştir:
 
-### JSON yapılandırmasını kullanma
+### JSON yapılandırması kullanma
 
 ```json title="opencode.json" {4-14}
 {
@@ -266,7 +266,7 @@ Yapılandırmaya ekleyerek kendi özel modlarınızı oluşturabilirsiniz. Her i
 }
 ```
 
-### Markdown dosyalarını kullanma
+### Markdown dosyaları kullanma
 
 Projeye özel modlar için `.opencode/modes/` veya genel modlar için `~/.config/opencode/modes/`'de mod dosyaları oluşturun:
 
@@ -318,9 +318,9 @@ Priorities:
 
 ---
 
-### Kullanım durumları
+### Kullanım Senaryoları
 
-Farklı modlar için bazı yaygın kullanım durumları aşağıda verilmiştir.
+Farklı modlar için bazı yaygın kullanım senaryoları aşağıda verilmiştir.
 
 - **Derleme modu**: Tüm araçların etkinleştirildiği tam geliştirme çalışması
 - **Plan modu**: Değişiklik yapmadan analiz ve planlama

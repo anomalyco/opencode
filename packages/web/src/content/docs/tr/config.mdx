@@ -1,6 +1,6 @@
 ---
 title: Yapılandırma
-description: opencode JSON devresini kullanmıyor.
+description: opencode JSON yapılandırması kullanır.
 ---
 
 opencode'u JSON yapılandırma dosyası kullanarak yapılandırabilirsiniz.
@@ -26,7 +26,7 @@ opencode hem **JSON** hem de **JSONC** (JSON Yorumlarla birlikte) formatlarını
 ## Konumlar
 
 Yapılandırmanızı birkaç farklı konuma yerleştirebilirsiniz ve bunların
-farklı öncelik sırası.
+farklı öncelik sırası vardır.
 
 :::note
 Yapılandırma dosyaları **birleştirilir**, değiştirilmez.
@@ -34,20 +34,20 @@ Yapılandırma dosyaları **birleştirilir**, değiştirilmez.
 
 Yapılandırma dosyaları değiştirilmez, birleştirilir. Aşağıdaki yapılandırma konumlarındaki ayarlar birleştirilir. Daha sonraki yapılandırmalar, yalnızca çakışan anahtarlar için önceki yapılandırmaları geçersiz kılar. Tüm yapılandırmalardaki çakışmayan ayarlar korunur.
 
-Örneğin, genel ayarınız `theme: "opencode"` ve `autoupdate: true`'yi ayarlıyorsa ve proje ayarlarınız `model: "anthropic/claude-sonnet-4-5"`'yi ayarlıyorsa, son tork ayarının tümünü dikkate alır.
+Örneğin, genel ayarınız `theme: "opencode"` ve `autoupdate: true`'yi ayarlıyorsa ve proje ayarlarınız `model: "anthropic/claude-sonnet-4-5"`'yi ayarlıyorsa, nihai yapılandırma üç ayarı da içerecektir.
 
 ---
 
-### Precedence order
+### Öncelik sırası
 
 Yapılandırma kaynakları bu sırayla yüklenir (sonraki kaynaklar öncekileri geçersiz kılar):
 
-1. **Uzaktan yapılandırma** (`.well-known/opencode`'dan) - kurumsal varsayılanlar
-2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
-3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
-4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` dizinleri** - aracılar, komutlar, eklentiler
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+1. **Uzak yapılandırma** (`.well-known/opencode`'dan) - kurumsal varsayılanlar
+2. **Genel yapılandırma** (`~/.config/opencode/opencode.json`) - kullanıcı tercihleri
+3. **Özel yapılandırma** (`OPENCODE_CONFIG` env var) - özel geçersiz kılmalar
+4. **Proje yapılandırması** (projedeki `opencode.json`) - projeye özgü ayarlar
+5. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
+6. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
 
 Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceği ve genel yapılandırmaların uzak organizasyonel varsayılanları geçersiz kılabileceği anlamına gelir.
 
@@ -61,7 +61,7 @@ Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceğ
 
 Kuruluşlar, `.well-known/opencode` uç noktası aracılığıyla varsayılan yapılandırmayı sağlayabilir. Bu, onu destekleyen bir sağlayıcıyla kimlik doğrulaması yaptığınızda otomatik olarak alınır.
 
-Remote config ilk olarak yüklenir ve temel katman görevi görür. Diğer tüm yapılandırma kaynakları (genel, proje) bu varsayılanları geçersiz kılabilir.
+Uzak yapılandırma ilk olarak yüklenir ve temel katman görevi görür. Diğer tüm yapılandırma kaynakları (genel, proje) bu varsayılanları geçersiz kılabilir.
 
 Örneğin, kuruluşunuz varsayılan olarak devre dışı bırakılan MCP sunucuları sağlıyorsa:
 
@@ -97,7 +97,7 @@ Yerel yapılandırmanızda belirli sunucuları etkinleştirebilirsiniz:
 
 Global opencode yapılandırmanızı `~/.config/opencode/opencode.json` içine yerleştirin. Temalar, sağlayıcılar veya tuş atamaları gibi kullanıcı çapındaki tercihler için genel yapılandırmayı kullanın.
 
-Global config overrides remote organizational defaults.
+Genel yapılandırma, uzak kurumsal varsayılanları geçersiz kılar.
 
 ---
 
@@ -131,7 +131,7 @@ opencode run "Hello world"
 ### Özel dizin
 
 `OPENCODE_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
-ortam değişkeni. Bu dizin aracılar, komutlar için aranacaktır.
+ortam değişkeni. Bu dizin agent'lar, komutlar için aranacaktır.
 modlar ve eklentiler tıpkı standart `.opencode` dizini gibi olmalıdır ve
 aynı yapıyı takip edin.
 
@@ -144,7 +144,7 @@ opencode run "Hello world"
 
 ---
 
-## Schema
+## Şema
 
 Yapılandırma dosyası [**`opencode.ai/config.json`**](https://opencode.ai/config.json)'da tanımlanan bir şemaya sahiptir.
 
@@ -175,7 +175,7 @@ Mevcut seçenekler:
 - `scroll_speed` - Özel kaydırma hızı çarpanı (varsayılan: `3`, minimum: `1`). `scroll_acceleration.enabled` `true` ise dikkate alınmaz.
 - `diff_style` - Fark oluşturmayı kontrol edin. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunu gösterir.
 
-[Learn more about using the TUI here](/docs/tui).
+[TUI kullanımı hakkında daha fazla bilgi](/docs/tui).
 
 ---
 
@@ -198,17 +198,17 @@ Mevcut seçenekler:
 
 Mevcut seçenekler:
 
-- `port` - Port to listen on.
+- `port` - Dinlenecek port.
 - `hostname` - Dinlenecek ana bilgisayar adı. `mdns` etkinleştirildiğinde ve hiçbir ana bilgisayar adı ayarlanmadığında, varsayılan değer `0.0.0.0` olur.
 - `mdns` - mDNS hizmet bulmayı etkinleştirin. Bu, ağdaki diğer cihazların opencode sunucunuzu keşfetmesine olanak tanır.
 - `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `opencode.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
 - `cors` - Tarayıcı tabanlı bir istemciden HTTP sunucusunu kullanırken CORS'ye izin verecek ek kaynaklar. Değerler tam kaynaklar olmalıdır (şema + ana bilgisayar + isteğe bağlı bağlantı noktası), örneğin `https://app.example.com`.
 
-[Learn more about the server here](/docs/server).
+[Sunucu hakkında daha fazla bilgi](/docs/server).
 
 ---
 
-### Aletler
+### Araçlar
 
 Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yönetebilirsiniz.
 
@@ -222,11 +222,11 @@ Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yön
 }
 ```
 
-[Learn more about tools here](/docs/tools).
+[Araçlar hakkında daha fazla bilgi](/docs/tools).
 
 ---
 
-### Models
+### Modeller
 
 opencode yapılandırmanızda kullanmak istediğiniz sağlayıcıları ve modelleri `provider`, `model` ve `small_model` seçenekleri aracılığıyla yapılandırabilirsiniz.
 
@@ -260,7 +260,7 @@ Sağlayıcı seçenekleri `timeout` ve `setCacheKey` içerebilir:
 - `timeout` - Milisaniye cinsinden istek zaman aşımı (varsayılan: 300000). Devre dışı bırakmak için `false` olarak ayarlayın.
 - `setCacheKey` - Belirlenen sağlayıcı için her zaman bir önbellek anahtarının ayarlandığından emin olun.
 
-Ayrıca [local models](/docs/models#local) öğesini de yapılandırabilirsiniz. [Learn more](/docs/models).
+Ayrıca [local models](/docs/models#local) ayarlayabilirsiniz. [Daha fazla bilgi](/docs/models).
 
 ---
 
@@ -268,7 +268,7 @@ Ayrıca [local models](/docs/models#local) öğesini de yapılandırabilirsiniz.
 
 Bazı sağlayıcılar genel `timeout` ve `apiKey` ayarlarının ötesinde ek yapılandırma seçeneklerini destekler.
 
-##### Amazon Ana Kayası
+##### Amazon Bedrock
 
 Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 
@@ -295,11 +295,11 @@ Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
 :::
 
-[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+[Amazon Bedrock yapılandırması hakkında daha fazla bilgi](/docs/providers#amazon-bedrock).
 
 ---
 
-### Themes
+### Temalar
 
 opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği aracılığıyla yapılandırabilirsiniz.
 
@@ -310,13 +310,13 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-[Learn more here](/docs/themes).
+[Daha fazla bilgi](/docs/themes).
 
 ---
 
-### Temsilciler
+### Agent'lar
 
-`agent` seçeneği aracılığıyla özel görevlere yönelik özel aracıları yapılandırabilirsiniz.
+`agent` seçeneği aracılığıyla özel görevlere yönelik özel agent'ları yapılandırabilirsiniz.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -330,19 +330,20 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
         // Disable file modification tools for review-only agent
         "write": false,
         "edit": false,
+        "bash": true,
       },
     },
   },
 }
 ```
 
-Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçindeki etiketleme etiketlerini kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/agents).
+Agent'ları `~/.config/opencode/agents/` veya `.opencode/agents/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/agents).
 
 ---
 
-### Varsayılan temsilci
+### Varsayılan agent
 
-`default_agent` seçeneğini kullanarak varsayılan aracıyı ayarlayabilirsiniz. Bu, hiçbiri açıkça belirtilmediğinde hangi aracının kullanılacağını belirler.
+`default_agent` seçeneğini kullanarak varsayılan agent'ı ayarlayabilirsiniz. Bu, hiçbiri açıkça belirtilmediğinde hangi agent'ın kullanılacağını belirler.
 
 ```json title="opencode.json"
 {
@@ -351,7 +352,7 @@ Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçin
 }
 ```
 
-Varsayılan aracı, birincil aracı olmalıdır (alt aracı değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir aracı ya da tanımladığınız bir [custom agent](/docs/agents) olabilir. Belirtilen aracı mevcut değilse veya bir alt aracı ise, opencode bir uyarıyla birlikte `"build"`'ye geri döner.
+Varsayılan agent, birincil agent olmalıdır (alt agent değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir agent ya da tanımladığınız bir [özel agent](/docs/agents) olabilir. Belirtilen agent mevcut değilse veya bir alt agent ise, opencode bir uyarıyla birlikte `"build"`'ye geri döner.
 
 Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü uygulaması ve GitHub Action.
 
@@ -359,7 +360,7 @@ Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü
 
 ### Paylaşma
 
-[share](/docs/share) özelliği `share` seçeneğini aracılığıyla yapılandırabilirsiniz.
+[share](/docs/share) özelliğini `share` seçeneği aracılığıyla yapılandırabilirsiniz.
 
 ```json title="opencode.json"
 {
@@ -374,7 +375,7 @@ Bu şunları gerektirir:
 - `"auto"` - Yeni konuşmaları otomatik olarak paylaş
 - `"disabled"` - Paylaşımı tamamen devre dışı bırak
 
-Varsayılan olarak paylaşım, `/share` yoğunluğu kullanılarak konuşmaları açıkça paylaşmanız gereken manuel moda ayarlanmıştır.
+Varsayılan olarak paylaşım, `/share` komutunu kullanarak konuşmaları açıkça paylaşmanız gereken manuel moda ayarlanmıştır.
 
 ---
 
@@ -400,11 +401,11 @@ Varsayılan olarak paylaşım, `/share` yoğunluğu kullanılarak konuşmaları 
 }
 ```
 
-Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki işaretleme dosyalarını kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/commands).
+Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/commands).
 
 ---
 
-### Tuş bağlantıları
+### Tuş atamaları
 
 Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirsiniz.
 
@@ -415,11 +416,11 @@ Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirs
 }
 ```
 
-[Learn more here](/docs/keybinds).
+[Daha fazla bilgi](/docs/keybinds).
 
 ---
 
-### Autoupdate
+### Otomatik Güncelleme
 
 opencode başlatıldığında yeni güncellemeleri otomatik olarak indirecektir. Bunu `autoupdate` seçeneğiyle devre dışı bırakabilirsiniz.
 
@@ -457,11 +458,11 @@ Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandıra
 }
 ```
 
-[Learn more about formatters here](/docs/formatters).
+[Formatter'lar hakkında daha fazla bilgi](/docs/formatters).
 
 ---
 
-### Permissions
+### İzinler
 
 Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izin verir**. `permission` seçeneğini kullanarak bunu değiştirebilirsiniz.
 
@@ -477,7 +478,7 @@ Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izi
 }
 ```
 
-[Learn more about permissions here](/docs/permissions).
+[İzinler hakkında daha fazla bilgi](/docs/permissions).
 
 ---
 
@@ -500,7 +501,7 @@ Bağlam sıkıştırma davranışını `compaction` seçeneği aracılığıyla 
 
 ---
 
-### Watcher
+### İzleyici
 
 Dosya izleyicinin yok sayma kalıplarını `watcher` seçeneği aracılığıyla yapılandırabilirsiniz.
 
@@ -528,13 +529,13 @@ Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yap�
 }
 ```
 
-[Learn more here](/docs/mcp-servers).
+[Daha fazla bilgi](/docs/mcp-servers).
 
 ---
 
-### Plugins
+### Eklentiler
 
-[Plugins](/docs/plugins) opencode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
+[Eklentiler](/docs/plugins) opencode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
 
 Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` içine yerleştirin. Ayrıca eklentileri `plugin` seçeneği aracılığıyla npm'den de yükleyebilirsiniz.
 
@@ -545,7 +546,7 @@ Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` i�
 }
 ```
 
-[Learn more here](/docs/plugins).
+[Daha fazla bilgi](/docs/plugins).
 
 ---
 
@@ -560,12 +561,11 @@ Kullandığınız modele ilişkin talimatları `instructions` seçeneği aracıl
 }
 ```
 
-Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Daha fazla bilgi edin
-kurallar hakkında burada](/docs/rules).
+Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Kurallar hakkında daha fazla bilgiyi buradan edinin](/docs/rules).
 
 ---
 
-### Disabled providers
+### Devre dışı bırakılan sağlayıcılar
 
 `disabled_providers` seçeneği aracılığıyla otomatik olarak yüklenen sağlayıcıları devre dışı bırakabilirsiniz. Bu, belirli sağlayıcıların kimlik bilgileri mevcut olsa bile yüklenmesini engellemek istediğinizde kullanışlıdır.
 
@@ -582,7 +582,7 @@ kurallar hakkında burada](/docs/rules).
 
 `disabled_providers` seçeneği bir dizi sağlayıcı kimliğini kabul eder. Bir sağlayıcı devre dışı bırakıldığında:
 
-- It won't be loaded even if environment variables are set.
+- Ortam değişkenleri ayarlanmış olsa bile yüklenmez.
 - API anahtarları `/connect` komutu aracılığıyla yapılandırılsa bile yüklenmeyecektir.
 - Sağlayıcının modelleri, model seçim listesinde görünmez.
 
@@ -609,7 +609,7 @@ Bir sağlayıcı hem `enabled_providers` hem de `disabled_providers`'de görün�
 
 ---
 
-### Experimental
+### Deneysel
 
 `experimental` anahtarı aktif olarak geliştirilmekte olan seçenekleri içerir.
 
@@ -621,7 +621,7 @@ Bir sağlayıcı hem `enabled_providers` hem de `disabled_providers`'de görün�
 ```
 
 :::caution
-Experimental options are not stable. They may change or be removed without notice.
+Deneysel seçenekler kararlı değildir. Bildirim yapılmaksızın değişebilir veya kaldırılabilirler.
 :::
 
 ---
@@ -632,7 +632,7 @@ Ortam değişkenlerine ve dosya içeriklerine referans vermek için yapılandır
 
 ---
 
-### Env vars
+### Ortam değişkenleri
 
 Ortam değişkenlerini değiştirmek için `{env:VARIABLE_NAME}` kullanın:
 

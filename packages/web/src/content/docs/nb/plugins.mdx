@@ -1,15 +1,15 @@
 ---
-title: Plugins
-description: Skriv dine egne plugins for å utvide opencode.
+title: Programtillegg
+description: Skriv dine egne programtillegg for å utvide opencode.
 ---
 
-Plugins lar deg utvide opencode ved å koble til ulike arrangementer og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til opencode.
+Plugins lar deg utvide OpenCode ved å koble til ulike hendelser og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til OpenCode.
 
 For eksempler, sjekk ut [plugins](/docs/ecosystem#plugins) opprettet av fellesskapet.
 
 ---
 
-## Bruk en plugin
+## Bruk av en plugin
 
 Det er to måter å laste inn plugins.
 
@@ -51,7 +51,7 @@ Bla gjennom tilgjengelige plugins i [økosystemet](/docs/ecosystem#plugins).
 
 ---
 
-### Last inn ordre
+### Lasterekkefølge
 
 Plugins lastes inn fra alle kilder og alle kroker kjøres i rekkefølge. Lastrekkefølgen er:
 
@@ -64,7 +64,7 @@ Dupliserte npm-pakker med samme navn og versjon lastes inn én gang. Imidlertid 
 
 ---
 
-## Opprett en plugin
+## Opprette en plugin
 
 En plugin er en **JavaScript/TypeScript-modul** som eksporterer en eller flere plugin-moduler
 funksjoner. Hver funksjon mottar et kontekstobjekt og returnerer et krokobjekt.
@@ -83,7 +83,7 @@ Lokale plugins og tilpassede verktøy kan bruke eksterne npm-pakker. Legg til en
 }
 ```
 
-opencode kjører `bun install` ved oppstart for å installere disse. Programtilleggene og verktøyene dine kan deretter importere dem.
+OpenCode kjører `bun install` ved oppstart for å installere disse. Programtilleggene og verktøyene dine kan deretter importere dem.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -118,8 +118,8 @@ Plugin-funksjonen mottar:
 - `project`: Gjeldende prosjektinformasjon.
 - `directory`: Gjeldende arbeidskatalog.
 - `worktree`: Git-arbeidstrebanen.
-- `client`: En opencode SDK klient for samhandling med AI.
-- `$`: Buns [skall API](https://bun.com/docs/runtime/shell) for å utføre kommandoer.
+- `client`: En OpenCode SDK klient for samhandling med AI.
+- `$`: Buns [shell API](https://bun.com/docs/runtime/shell) for å utføre kommandoer.
 
 ---
 
@@ -141,7 +141,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ### Hendelser
 
-Plugins kan abonnere på arrangementer som vist nedenfor i Eksempler-delen. Her er en liste over de forskjellige arrangementene som er tilgjengelige.
+Plugins kan abonnere på hendelser som vist nedenfor i Eksempler-delen. Her er en liste over de forskjellige hendelsene som er tilgjengelige.
 
 #### Kommandohendelser
 
@@ -211,7 +211,7 @@ Plugins kan abonnere på arrangementer som vist nedenfor i Eksempler-delen. Her 
 
 ## Eksempler
 
-Her er noen eksempler på plugins du kan bruke for å utvide opencode.
+Her er noen eksempler på plugins du kan bruke for å utvide OpenCode.
 
 ---
 
@@ -235,14 +235,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Vi bruker `osascript` for å kjøre AppleScript på macOS. Her bruker vi den til å sende varsler.
 
 :::note
-Hvis du bruker opencode-skrivebordsappen, kan den sende systemvarsler automatisk når et svar er klart eller når en økt feiler.
+Hvis du bruker OpenCode-skrivebordsappen, kan den sende systemvarsler automatisk når et svar er klart eller når en økt feiler.
 :::
 
 ---
 
 ### .env-beskyttelse
 
-Hindre opencode fra å lese `.env` filer:
+Hindre OpenCode fra å lese `.env` filer:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Injiser miljøvariabler
 
-Injiser miljøvariabler i all skallutførelse (AI verktøy og brukerterminaler):
+Injiser miljøvariabler i all shell-utførelse (AI-verktøy og brukerterminaler):
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -277,7 +277,7 @@ export const InjectEnvPlugin = async () => {
 
 ### Egendefinerte verktøy
 
-Plugins kan også legge til egendefinerte verktøy til opencode:
+Plugins kan også legge til egendefinerte verktøy til OpenCode:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool`-hjelperen lager et tilpasset verktøy som opencode kan kalle. Den tar en Zod-skjemafunksjon og returnerer en verktøydefinisjon med:
+`tool`-hjelperen lager et tilpasset verktøy som OpenCode kan kalle. Den tar en Zod-skjemafunksjon og returnerer en verktøydefinisjon med:
 
 - `description`: Hva verktøyet gjør
 - `args`: Zod-skjema for verktøyets argumenter
-- `execute`: Funksjon som kjører når verktøyet kalles
+  - `execute`: Funksjon som kjører når verktøyet kalles
 
-Dine egendefinerte verktøy vil være tilgjengelige for å opencode sammen med innebygde verktøy.
+Dine egendefinerte verktøy vil være tilgjengelige for OpenCode sammen med innebygde verktøy.
 
 ---
 
@@ -331,7 +331,7 @@ Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://openco
 
 ---
 
-### Komprimeringskroker
+### Komprimerings-hooks
 
 Tilpass konteksten inkludert når en økt komprimeres:
 
@@ -355,9 +355,9 @@ Include any state that should persist across compaction:
 }
 ```
 
-`experimental.session.compacting`-kroken avfyres før LLM genererer et fortsettelsessammendrag. Bruk den til å injisere domenespesifikk kontekst som standard komprimeringsforespørsel ville gå glipp av.
+`experimental.session.compacting`-kroken trigges før LLM genererer et fortsettelsessammendrag. Bruk den til å injisere domenespesifikk kontekst som standard komprimeringsprompt ville gå glipp av.
 
-Du kan også erstatte komprimeringsmeldingen helt ved å stille inn `output.prompt`:
+Du kan også erstatte komprimeringsprompten helt ved å stille inn `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"

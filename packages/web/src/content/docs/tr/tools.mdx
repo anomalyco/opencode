@@ -1,17 +1,17 @@
 ---
-title: Araclar
-description: LLM'in kullanabilecegi araclari yonetin.
+title: Araçlar
+description: LLM'in kullanabileceği araçları yönetin.
 ---
 
-Araclar, LLM'in kod tabaninizda eylem gerceklestirmesini saglar. opencode yerlesik bir arac setiyle gelir, ancak bunu [ozel araclarla](/docs/custom-tools) veya [MCP sunuculariyla](/docs/mcp-servers) genisletebilirsiniz.
+Araçlar, LLM'in kod tabanınızda eylem gerçekleştirmesini sağlar. opencode yerleşik bir araç setiyle gelir, ancak bunu [özel araçlarla](/docs/custom-tools) veya [MCP sunucularıyla](/docs/mcp-servers) genişletebilirsiniz.
 
-Varsayilan olarak tum araclar **etkindir** ve calismak icin izin istemez. Arac davranisini [izinler](/docs/permissions) uzerinden kontrol edebilirsiniz.
+Varsayılan olarak tüm araçlar **etkindir** ve çalışmak için izin istemez. Araç davranışını [izinler](/docs/permissions) üzerinden kontrol edebilirsiniz.
 
 ---
 
-## Yapilandirin
+## Yapılandırma
 
-Arac davranisini kontrol etmek icin `permission` alanini kullanin. Her arac icin izin verebilir, reddedebilir veya onay isteyebilirsiniz.
+Araç davranışını kontrol etmek için `permission` alanını kullanın. Her araç için izin verebilir, reddedebilir veya onay isteyebilirsiniz.
 
 ```json title="opencode.json"
 {
@@ -24,7 +24,7 @@ Arac davranisini kontrol etmek icin `permission` alanini kullanin. Her arac icin
 }
 ```
 
-Birden fazla araci ayni anda kontrol etmek icin wildcard da kullanabilirsiniz. Ornegin, bir MCP sunucusundan gelen tum araclar icin onay istemek:
+Birden fazla aracı aynı anda kontrol etmek için joker karakterler de kullanabilirsiniz. Örneğin, bir MCP sunucusundan gelen tüm araçlar için onay istemek:
 
 ```json title="opencode.json"
 {
@@ -35,19 +35,19 @@ Birden fazla araci ayni anda kontrol etmek icin wildcard da kullanabilirsiniz. O
 }
 ```
 
-Izin yapilandirmasi icin [daha fazla bilgi alin](/docs/permissions).
+İzin yapılandırması için [daha fazla bilgi alın](/docs/permissions).
 
 ---
 
-## Yerlesik
+## Yerleşik
 
-opencode icinde bulunan tum yerlesik araclar asagidadir.
+opencode içinde bulunan tüm yerleşik araçlar aşağıdadır.
 
 ---
 
 ### bash
 
-Proje ortaminizda kabuk komutlari calistirir.
+Proje ortamınızda kabuk komutları çalıştırır.
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +58,13 @@ Proje ortaminizda kabuk komutlari calistirir.
 }
 ```
 
-Bu arac LLM'in `npm install`, `git status` gibi terminal komutlarini veya diger kabuk komutlarini calistirmasini saglar.
+Bu araç LLM'in `npm install`, `git status` gibi terminal komutlarını veya diğer kabuk komutlarını çalıştırmasını sağlar.
 
 ---
 
 ### edit
 
-Birebir metin degistirme ile mevcut dosyalari duzenler.
+Birebir metin değiştirme ile mevcut dosyaları düzenler.
 
 ```json title="opencode.json" {4}
 {
@@ -75,13 +75,13 @@ Birebir metin degistirme ile mevcut dosyalari duzenler.
 }
 ```
 
-Bu arac dosyalarda kesin metin eslesmelerini degistirerek hassas duzenleme yapar. LLM'in kodu degistirmek icin kullandigi temel yontemdir.
+Bu araç dosyalarda kesin metin eşleşmelerini değiştirerek hassas düzenleme yapar. LLM'in kodu değiştirmek için kullandığı temel yöntemdir.
 
 ---
 
 ### write
 
-Yeni dosyalar olusturur veya mevcut dosyalari uzerine yazar.
+Yeni dosyalar oluşturur veya mevcut dosyaları üzerine yazar.
 
 ```json title="opencode.json" {4}
 {
@@ -92,17 +92,17 @@ Yeni dosyalar olusturur veya mevcut dosyalari uzerine yazar.
 }
 ```
 
-LLM'in yeni dosya olusturmasina izin vermek icin bunu kullanin. Dosya zaten varsa uzerine yazar.
+LLM'in yeni dosya oluşturmasına izin vermek için bunu kullanın. Dosya zaten varsa üzerine yazar.
 
 :::note
-`write` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+`write` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### read
 
-Kod tabaninizdan dosya icerigi okur.
+Kod tabanınızdan dosya içeriği okur.
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ Kod tabaninizdan dosya icerigi okur.
 }
 ```
 
-Bu arac dosyalari okur ve iceriklerini dondurur. Buyuk dosyalar icin belirli satir araliklarini okuma destegi vardir.
+Bu araç dosyaları okur ve içeriklerini döndürür. Büyük dosyalar için belirli satır aralıklarını okuma desteği vardır.
 
 ---
 
 ### grep
 
-Duzensiz ifadelerle dosya iceriginde arama yapar.
+Düzenli ifadelerle dosya içeriğinde arama yapar.
 
 ```json title="opencode.json" {4}
 {
@@ -130,13 +130,13 @@ Duzensiz ifadelerle dosya iceriginde arama yapar.
 }
 ```
 
-Kod tabaninda hizli icerik aramasi sunar. Tam regex sozdizimini ve dosya desen filtrelerini destekler.
+Kod tabanında hızlı içerik araması sunar. Tam regex sözdizimini ve dosya desen filtrelerini destekler.
 
 ---
 
 ### glob
 
-Desen eslestirme ile dosya bulur.
+Desen eşleştirme ile dosya bulur.
 
 ```json title="opencode.json" {4}
 {
@@ -147,7 +147,7 @@ Desen eslestirme ile dosya bulur.
 }
 ```
 
-`**/*.js` veya `src/**/*.ts` gibi glob desenleriyle dosya arar. Eslesen dosya yollarini degisim zamanina gore siralar.
+`**/*.js` veya `src/**/*.ts` gibi glob desenleriyle dosya arar. Eşleşen dosya yollarını değişim zamanına göre sıralar.
 
 ---
 
@@ -164,16 +164,16 @@ Verilen yoldaki dosya ve dizinleri listeler.
 }
 ```
 
-Bu arac dizin icerigini listeler. Sonuclari filtrelemek icin glob desenlerini kabul eder.
+Bu araç dizin içeriğini listeler. Sonuçları filtrelemek için glob desenlerini kabul eder.
 
 ---
 
 ### lsp (deneysel)
 
-Tanim, referans, hover bilgisi ve cagrilar hiyerarsisi gibi kod zekasi ozellikleri icin yapilandirdiginiz LSP sunuculariyla etkilesir.
+Tanım, referans, hover bilgisi ve çağrılar hiyerarşisi gibi kod zekası özellikleri için yapılandırdığınız LSP sunucularıyla etkileşir.
 
 :::note
-Bu arac yalnizca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMENTAL=true`) oldugunda kullanilabilir.
+Bu araç yalnızca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMENTAL=true`) olduğunda kullanılabilir.
 :::
 
 ```json title="opencode.json" {4}
@@ -185,9 +185,9 @@ Bu arac yalnizca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMEN
 }
 ```
 
-Desteklenen islemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
+Desteklenen işlemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
 
-Projeniz icin kullanilabilir LSP sunucularini ayarlamak icin [LSP Servers](/docs/lsp) sayfasina bakin.
+Projeniz için kullanılabilir LSP sunucularını ayarlamak için [LSP Sunucuları](/docs/lsp) sayfasına bakın.
 
 ---
 
@@ -204,17 +204,17 @@ Dosyalara patch uygular.
 }
 ```
 
-Bu arac patch dosyalarini kod tabaniniza uygular. Farkli kaynaklardan gelen diff ve patch'leri uygulamak icin kullanislidir.
+Bu araç patch dosyalarını kod tabanınıza uygular. Farklı kaynaklardan gelen diff ve patch'leri uygulamak için kullanışlıdır.
 
 :::note
-`patch` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+`patch` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### skill
 
-Bir [skill](/docs/skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya dondurur.
+Bir [skill](/docs/skills) (`SKILL.md` dosyası) yükler ve içeriğini konuşmaya döndürür.
 
 ```json title="opencode.json" {4}
 {
@@ -229,7 +229,7 @@ Bir [skill](/docs/skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya don
 
 ### todowrite
 
-Kodlama oturumlarinda yapilacaklar listesini yonetir.
+Kodlama oturumlarında yapılacaklar listesini yönetir.
 
 ```json title="opencode.json" {4}
 {
@@ -240,17 +240,17 @@ Kodlama oturumlarinda yapilacaklar listesini yonetir.
 }
 ```
 
-Karmasik islemlerde ilerlemeyi takip etmek icin gorev listeleri olusturur ve gunceller. LLM bunu cok adimli gorevleri duzenlemek icin kullanir.
+Karmaşık işlemlerde ilerlemeyi takip etmek için görev listeleri oluşturur ve günceller. LLM bunu çok adımlı görevleri düzenlemek için kullanır.
 
 :::note
-Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+Bu araç alt agent'lar için varsayılan olarak devre dışıdır, ama manuel etkinleştirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
 :::
 
 ---
 
 ### todoread
 
-Mevcut yapilacaklar listesini okur.
+Mevcut yapılacaklar listesini okur.
 
 ```json title="opencode.json" {4}
 {
@@ -261,17 +261,17 @@ Mevcut yapilacaklar listesini okur.
 }
 ```
 
-Guncel todo listesi durumunu okur. LLM bunu hangi gorevlerin bekledigini veya tamamlandigini takip etmek icin kullanir.
+Güncel todo listesi durumunu okur. LLM bunu hangi görevlerin beklediğini veya tamamlandığını takip etmek için kullanır.
 
 :::note
-Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+Bu araç alt agent'lar için varsayılan olarak devre dışıdır, ama manuel etkinleştirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Web icerigi getirir.
+Web içeriği getirir.
 
 ```json title="opencode.json" {4}
 {
@@ -282,7 +282,7 @@ Web icerigi getirir.
 }
 ```
 
-LLM'in web sayfalarini getirip okumasini saglar. Dokumantasyon aramak veya cevrimici kaynaklari incelemek icin kullanislidir.
+LLM'in web sayfalarını getirip okumasını sağlar. Dokümantasyon aramak veya çevrimiçi kaynakları incelemek için kullanışlıdır.
 
 ---
 
@@ -291,9 +291,9 @@ LLM'in web sayfalarini getirip okumasini saglar. Dokumantasyon aramak veya cevri
 Web'de bilgi arar.
 
 :::note
-Bu arac yalnizca opencode provider kullanilirken veya `OPENCODE_ENABLE_EXA` ortam degiskeni dogru degerlerden birine ayarlandiginda (ornegin `true` ya da `1`) kullanilabilir.
+Bu araç yalnızca opencode provider kullanılırken veya `OPENCODE_ENABLE_EXA` ortam değişkeni doğru değerlerden birine ayarlandığında (örneğin `true` ya da `1`) kullanılabilir.
 
-opencode baslatirken etkinlestirmek icin:
+opencode başlatırken etkinleştirmek için:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -310,19 +310,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Exa AI ile web aramasi yaparak ilgili bilgileri bulur. Egitim verisi kesim tarihinin otesindeki konulari arastirmak, guncel olaylari bulmak veya genel arastirma yapmak icin kullanislidir.
+Exa AI ile web araması yaparak ilgili bilgileri bulur. Eğitim verisi kesim tarihinin ötesindeki konuları araştırmak, güncel olayları bulmak veya genel araştırma yapmak için kullanışlıdır.
 
-API anahtari gerekmez - arac Exa AI'nin barindirilan MCP hizmetine dogrudan kimlik dogrulamasi olmadan baglanir.
+API anahtarı gerekmez - araç Exa AI'nin barındırılan MCP hizmetine doğrudan kimlik doğrulaması olmadan bağlanır.
 
 :::tip
-Bilgi kesfetmeniz gerekiyorsa `websearch`, belirli bir URL'den icerik cekmeniz gerekiyorsa `webfetch` kullanin.
+Bilgi keşfetmeniz gerekiyorsa `websearch`, belirli bir URL'den içerik çekmeniz gerekiyorsa `webfetch` kullanın.
 :::
 
 ---
 
 ### question
 
-Calisma sirasinda kullaniciya soru sorar.
+Çalışma sırasında kullanıcıya soru sorar.
 
 ```json title="opencode.json" {4}
 {
@@ -333,42 +333,42 @@ Calisma sirasinda kullaniciya soru sorar.
 }
 ```
 
-Bu arac LLM'in gorev sirasinda kullaniciya soru sormasini saglar. Sunlar icin kullanislidir:
+Bu araç LLM'in görev sırasında kullanıcıya soru sormasını sağlar. Şunlar için kullanışlıdır:
 
-- Kullanici tercihleri veya gereksinimleri toplamak
-- Belirsiz talimatlari netlestirmek
-- Uygulama seceneklerinde karar almak
-- Hangi yone gidilecegine dair secenek sunmak
+- Kullanıcı tercihleri veya gereksinimleri toplamak
+- Belirsiz talimatları netleştirmek
+- Uygulama seçeneklerinde karar almak
+- Hangi yöne gidileceğine dair seçenek sunmak
 
-Her soru bir baslik, soru metni ve secenek listesi icerir. Kullanicilar seceneklerden birini secebilir veya ozel yanit yazabilir. Birden fazla soru varsa tum yanitlari gondermeden once sorular arasinda gezebilirler.
-
----
-
-## Ozel araclar
-
-Ozel araclar, LLM'in cagirabilecegi kendi fonksiyonlarinizi tanimlamanizi saglar. Bunlar config dosyanizda tanimlanir ve keyfi kod calistirabilir.
-
-Ozel arac olusturma icin [daha fazla bilgi alin](/docs/custom-tools).
+Her soru bir başlık, soru metni ve seçenek listesi içerir. Kullanıcılar seçeneklerden birini seçebilir veya özel yanıt yazabilir. Birden fazla soru varsa tüm yanıtları göndermeden önce sorular arasında gezebilirler.
 
 ---
 
-## MCP sunuculari
+## Özel araçlar
 
-MCP (Model Context Protocol) sunuculari, harici araclari ve servisleri entegre etmenizi saglar. Buna veritabani erisimi, API entegrasyonlari ve ucuncu taraf servisler dahildir.
+Özel araçlar, LLM'in çağırabileceği kendi fonksiyonlarınızı tanımlamanızı sağlar. Bunlar config dosyanızda tanımlanır ve keyfi kod çalıştırabilir.
 
-MCP sunucularini yapilandirma icin [daha fazla bilgi alin](/docs/mcp-servers).
+Özel araç oluşturma için [daha fazla bilgi alın](/docs/custom-tools).
+
+---
+
+## MCP sunucuları
+
+MCP (Model Context Protocol) sunucuları, harici araçları ve servisleri entegre etmenizi sağlar. Buna veritabanı erişimi, API entegrasyonları ve üçüncü taraf servisler dahildir.
+
+MCP sunucularını yapılandırma için [daha fazla bilgi alın](/docs/mcp-servers).
 
 ---
 
 ## Dahili detaylar
 
-Dahilde `grep`, `glob` ve `list` gibi araclar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanir. Varsayilan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` icindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+Dahilde `grep`, `glob` ve `list` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
 
 ---
 
-### Ignore desenleri
+### Yoksayma desenleri
 
-Normalde yok sayilan dosyalari dahil etmek icin proje kokunde bir `.ignore` dosyasi olusturun. Bu dosya belirli yollari acikca izinli yapabilir.
+Normalde yok sayılan dosyaları dahil etmek için proje kökünde bir `.ignore` dosyası oluşturun. Bu dosya belirli yolları açıkça izinli yapabilir.
 
 ```text title=".ignore"
 !node_modules/
@@ -376,4 +376,4 @@ Normalde yok sayilan dosyalari dahil etmek icin proje kokunde bir `.ignore` dosy
 !build/
 ```
 
-Ornegin bu `.ignore` dosyasi, `.gitignore` icinde olsalar bile ripgrep'in `node_modules/`, `dist/` ve `build/` dizinlerinde arama yapmasina izin verir.
+Örneğin bu `.ignore` dosyası, `node_modules/` içinde olsalar bile ripgrep'in `dist/`, `build/` ve `.gitignore` dizinlerinde arama yapmasına izin verir.

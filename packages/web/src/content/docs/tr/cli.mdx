@@ -21,24 +21,24 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-opencode terminali kullanıcı arayüzünü başlatın.
+opencode terminal kullanıcı arayüzünü başlatır.
 
 ```bash
 opencode [project]
 ```
 
-#### Flags
+#### Bayraklar
 
-| Bayrak       | Kısa | Açıklama                                                                      |
-| ------------ | ---- | ----------------------------------------------------------------------------- |
-| `--continue` | `-c` | Son oturuma devam et                                                          |
-| `--session`  | `-s` | Devam edecek oturum kimliği                                                   |
-| `--fork`     |      | Continue ederken oturumu fork'la (`--continue` veya `--session` ile kullanın) |
-| `--prompt`   |      | Kullanma istemi                                                               |
-| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                   |
-| `--agent`    |      | Kullanılacak temsilci                                                         |
-| `--port`     |      | Port to listen on                                                             |
-| `--hostname` |      | Hostname to listen on                                                         |
+| Bayrak       | Kısa | Açıklama                                                                    |
+| ------------ | ---- | --------------------------------------------------------------------------- |
+| `--continue` | `-c` | Son oturuma devam et                                                        |
+| `--session`  | `-s` | Devam edecek oturum kimliği                                                 |
+| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın) |
+| `--prompt`   |      | Kullanılacak prompt                                                         |
+| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                 |
+| `--agent`    |      | Kullanılacak agent                                                          |
+| `--port`     |      | Dinlenecek port                                                             |
+| `--hostname` |      | Dinlenecek host adı                                                         |
 
 ---
 
@@ -50,7 +50,7 @@ opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
 
 ### agent
 
-opencode için aracıları yönetin.
+opencode için agent'ları yönetin.
 
 ```bash
 opencode agent [command]
@@ -85,21 +85,21 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### yaratmak
+#### create
 
-Özel yapılandırmaya sahip yeni bir aracı oluşturun.
+Özel yapılandırmaya sahip yeni bir agent oluşturun.
 
 ```bash
 opencode agent create
 ```
 
-Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir aracı oluşturma konusunda size yol gösterecektir.
+Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir agent oluşturma konusunda size yol gösterecektir.
 
 ---
 
-#### liste
+#### list
 
-Mevcut tüm acenteleri listeleyin.
+Mevcut tüm agent'ları listeleyin.
 
 ```bash
 opencode agent list
@@ -125,11 +125,11 @@ opencode, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tara
 opencode auth login
 ```
 
-opencode başlatıldığında, sağlayıcıları kimlik bilgileri dosyasından yükler. Ortamlarınızda tanımlanmış herhangi bir anahtar veya projenizde bir `.env` dosyası varsa.
+opencode başlatıldığında sağlayıcıları kimlik bilgileri dosyasından yükler. Ayrıca ortam değişkenlerindeki veya projenizdeki `.env` dosyasındaki anahtarları da kullanır.
 
 ---
 
-#### liste
+#### list
 
 Kimlik bilgileri dosyasında depolanan tüm kimliği doğrulanmış sağlayıcıları listeler.
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### düzenlemek
+#### install
 
 GitHub aracısını deponuza yükleyin.
 
@@ -173,11 +173,11 @@ GitHub aracısını deponuza yükleyin.
 opencode github install
 ```
 
-Bu, gerekli GitHub Eylemlerinin iş ayrıntılandırma ayarlarını ve süreç sürecini boyut boyunca gösterir. [Learn more](/docs/github).
+Bu komut gerekli GitHub Actions workflow'unu kurar ve yapılandırma adımlarında size rehberlik eder. [Daha fazla bilgi](/docs/github).
 
 ---
 
-#### koşmak
+#### run
 
 GitHub aracısını çalıştırın. Bu genellikle GitHub Eylemlerinde kullanılır.
 
@@ -185,7 +185,7 @@ GitHub aracısını çalıştırın. Bu genellikle GitHub Eylemlerinde kullanıl
 opencode github run
 ```
 
-##### Flags
+##### Bayraklar
 
 | Bayrak    | Açıklama                                    |
 | --------- | ------------------------------------------- |
@@ -216,7 +216,7 @@ Bu komut, yerel veya uzak bir MCP sunucusu ekleme konusunda size yol gösterecek
 
 ---
 
-#### liste
+#### list
 
 Yapılandırılmış tüm MCP sunucularını ve bağlantı durumlarını listeleyin.
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### hata ayıklama
+#### debug
 
 MCP sunucusu için OAuth bağlantı sorunlarının hatalarını ayıklayın.
 
@@ -284,9 +284,9 @@ Yapılandırılmış sağlayıcıların tüm mevcut modellerini listeleyin.
 opencode models [provider]
 ```
 
-Bu komut, sağlayıcılarınızda bulunan tüm modeller `provider/model` oluşturulan görüntüler.
+Bu komut, yapılandırdığınız sağlayıcılardaki modelleri `provider/model` formatında listeler.
 
-Bu, [your config](/docs/config/)'da kullanılacak tam modelin adını bulmak için kullanışlıdır.
+Bu, [config dosyanızda](/docs/config/) kullanmanız gereken tam model adını bulmak için kullanışlıdır.
 
 Modelleri bu sağlayıcıya göre filtrelemek için isteğe bağlı olarak bir sağlayıcı kimliğini iletebilirsiniz.
 
@@ -309,7 +309,7 @@ opencode models --refresh
 
 ---
 
-### koşmak
+### run
 
 Doğrudan bir istem ileterek opencode'u etkileşimli olmayan modda çalıştırın.
 
@@ -333,14 +333,14 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
-#### Flags
+#### Bayraklar
 
 | Bayrak       | Kısa | Açıklama                                                                          |
 | ------------ | ---- | --------------------------------------------------------------------------------- |
 | `--command`  |      | Çalıştırılacak komut, args için mesajı kullanın                                   |
 | `--continue` | `-c` | Son oturuma devam et                                                              |
 | `--session`  | `-s` | Devam edecek oturum kimliği                                                       |
-| `--fork`     |      | Continue ederken oturumu fork'la (`--continue` veya `--session` ile kullanın)     |
+| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)       |
 | `--share`    |      | Oturumu paylaşın                                                                  |
 | `--model`    | `-m` | provider/model biçiminde kullanılacak model                                       |
 | `--agent`    |      | Kullanılacak temsilci                                                             |
@@ -354,7 +354,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-API erişimi için başsız bir opencode tarayıcısı başlatılır. Tam HTTP arayüzü için [server docs](/docs/server)'e göz atın.
+API erişimi için headless bir opencode sunucusu başlatır. Tam HTTP arayüzü için [server docs](/docs/server) sayfasına bakın.
 
 ```bash
 opencode serve
@@ -373,9 +373,9 @@ Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir H
 
 ---
 
-### oturum
+### session
 
-Manage opencode sessions.
+opencode oturumlarını yönetin.
 
 ```bash
 opencode session [command]
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### liste
+#### list
 
 Tüm opencode oturumlarını listeleyin.
 
@@ -408,14 +408,14 @@ opencode oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini
 opencode stats
 ```
 
-#### Flags
+#### Bayraklar
 
 | Bayrak      | Açıklama                                                                                                    |
 | ----------- | ----------------------------------------------------------------------------------------------------------- |
 | `--days`    | Son N güne ait istatistikleri göster (tüm zamanlar)                                                         |
-| `--tools`   | Number of tools to show (all)                                                                               |
+| `--tools`   | Gösterilecek araç sayısı (tümü)                                                                             |
 | `--models`  | Model kullanım dökümünü göster (varsayılan olarak gizlidir). En üstteki N'yi göstermek için bir sayı iletin |
-| `--project` | Filter by project (all projects, empty string: current project)                                             |
+| `--project` | Projeye göre filtrele (tüm projeler, boş değer: mevcut proje)                                               |
 
 ---
 
@@ -479,13 +479,13 @@ opencode acp
 
 Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir ACP sunucusunu başlatır.
 
-#### Flags
+#### Bayraklar
 
-| Bayrak       | Açıklama              |
-| ------------ | --------------------- |
-| `--cwd`      | Çalışma dizini        |
-| `--port`     | Port to listen on     |
-| `--hostname` | Hostname to listen on |
+| Bayrak       | Açıklama            |
+| ------------ | ------------------- |
+| `--cwd`      | Çalışma dizini      |
+| `--port`     | Dinlenecek port     |
+| `--hostname` | Dinlenecek host adı |
 
 ---
 
@@ -522,23 +522,23 @@ En son sürüme yükseltmek için.
 opencode upgrade
 ```
 
-To upgrade to a specific version.
+Belirli bir sürüme yükseltmek için:
 
 ```bash
 opencode upgrade v0.1.48
 ```
 
-#### Flags
+#### Bayraklar
 
-| Bayrak     | Kısa | Açıklama                                                    |
-| ---------- | ---- | ----------------------------------------------------------- |
-| `--method` | `-m` | Kullanılan kurulum yöntemi; bukle, npm, npm, topuz, demleme |
+| Bayrak     | Kısa | Açıklama                                               |
+| ---------- | ---- | ------------------------------------------------------ |
+| `--method` | `-m` | Kullanılan kurulum yöntemi: curl, npm, pnpm, bun, brew |
 
 ---
 
-## Küresel Bayraklar
+## Global bayraklar
 
-CLI opencode'u aşağıdaki genel bayrakları alır.
+opencode CLI aşağıdaki global bayrakları destekler.
 
 | Bayrak         | Kısa | Tanım                                    |
 | -------------- | ---- | ---------------------------------------- |
@@ -549,36 +549,36 @@ CLI opencode'u aşağıdaki genel bayrakları alır.
 
 ---
 
-## Environment variables
+## Ortam değişkenleri
 
 opencode ortam değişkenleri kullanılarak yapılandırılabilir.
 
-| Değişken                              | Tür     | Açıklama                                                                    |
+| Değişken                              | Tip     | Açıklama                                                                    |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boole   | Oturumları otomatik olarak paylaş                                           |
-| `OPENCODE_GIT_BASH_PATH`              | dize    | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
-| `OPENCODE_CONFIG`                     | dize    | Yapılandırma dosyasının yolu                                                |
-| `OPENCODE_CONFIG_DIR`                 | dize    | Yapılandırma dizinine giden yol                                             |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                                                  |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                                             |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                                                 |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boole   | Otomatik terminal başlığı güncellemelerini devre dışı bırakın               |
-| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                                             |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boole   | Varsayılan eklentileri devre dışı bırakın                                   |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boole   | Otomatik LSP sunucu indirmelerini devre dışı bırakın                        |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                                                  |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction                                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boole   | `.claude`'den okumayı devre dışı bırak (istem + beceriler)                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`                                       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                                            |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boole   | Uzak kaynaklardan model getirmeyi devre dışı bırakın                        |
-| `OPENCODE_FAKE_VCS`                   | dize    | Test amaçlı sahte VCS sağlayıcısı                                           |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boole   | Optimizasyon için dosya süresi kontrolünü devre dışı bırakın                |
-| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)                                       |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                                                 |
-| `OPENCODE_SERVER_PASSWORD`            | dize    | `serve`/`web` için temel kimlik doğrulamayı etkinleştirin                   |
-| `OPENCODE_SERVER_USERNAME`            | dize    | Temel kimlik doğrulama kullanıcı adını geçersiz kıl (varsayılan `opencode`) |
-| `OPENCODE_MODELS_URL`                 | dize    | Model yapılandırmasını almak için özel URL                                  |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Oturumları otomatik olarak paylaş                                           |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
+| `OPENCODE_CONFIG`                     | string  | Yapılandırma dosyasının yolu                                                |
+| `OPENCODE_CONFIG_DIR`                 | string  | Yapılandırma dizinine giden yol                                             |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Satır içi JSON config içeriği                                               |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Otomatik güncelleme kontrollerini devre dışı bırak                          |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Eski verilerin temizlenmesini devre dışı bırak                              |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Otomatik terminal başlığı güncellemelerini devre dışı bırakın               |
+| `OPENCODE_PERMISSION`                 | string  | Satır içi JSON izin config'i                                                |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Varsayılan eklentileri devre dışı bırakın                                   |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Otomatik LSP sunucu indirmelerini devre dışı bırakın                        |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Deneysel modelleri etkinleştir                                              |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Otomatik context sıkıştırmayı devre dışı bırak                              |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`'den okumayı devre dışı bırak (istem + beceriler)                  |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` dosyasını okumayı devre dışı bırak                    |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` yüklemesini devre dışı bırak                               |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Uzak kaynaklardan model getirmeyi devre dışı bırakın                        |
+| `OPENCODE_FAKE_VCS`                   | string  | Test amaçlı sahte VCS sağlayıcısı                                           |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Optimizasyon için dosya süresi kontrolünü devre dışı bırakın                |
+| `OPENCODE_CLIENT`                     | string  | Client kimliği (varsayılan: `cli`)                                          |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Exa web arama araçlarını etkinleştir                                        |
+| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` için temel kimlik doğrulamayı etkinleştirin                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | Temel kimlik doğrulama kullanıcı adını geçersiz kıl (varsayılan `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | Model yapılandırmasını almak için özel URL                                  |
 
 ---
 
@@ -591,8 +591,8 @@ Bu ortam değişkenleri değişebilecek veya kaldırılabilecek deneysel özelli
 | `OPENCODE_EXPERIMENTAL`                         | boolean | Tüm deneysel özellikleri etkinleştir                    |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Simge bulmayı etkinleştir                               |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI'da seçim yapıldığında kopyalamayı devre dışı bırak  |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | sayı    | MS cinsinden bash komutları için varsayılan zaman aşımı |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | sayı    | LLM yanıtları için maksimum çıktı belirteçleri          |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | MS cinsinden bash komutları için varsayılan zaman aşımı |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM yanıtları için maksimum çıktı belirteçleri          |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Tüm dizin için dosya izleyiciyi etkinleştir             |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Oxfmt biçimlendiriciyi etkinleştir                      |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Deneysel LSP aracını etkinleştir                        |

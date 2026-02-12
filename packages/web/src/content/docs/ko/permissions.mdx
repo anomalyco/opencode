@@ -1,6 +1,6 @@
 ---
-title: Permissions
-description: Control which actions require approval to run.
+title: 권한
+description: 실행 승인이 필요한 작업을 제어합니다.
 ---
 
 opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해 `permission` config를 사용하거나 차단합니다.
@@ -9,12 +9,12 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 
 ---
 
-## 활동
+## 동작
 
 각 권한 규칙은 다음과 같습니다:
 
 - `"allow"` - 승인없이 실행
-- `"ask"` - 승인을위한 신속한
+- `"ask"` - 승인을위한 prompt
 - `"deny"` - 동작 차단
 
 ---
@@ -45,7 +45,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 
 ---
 
-## 과립 규칙 (Object Syntax)
+## 세부 규칙 (객체 구문)
 
 대부분의 권한을 위해 도구 입력을 기반으로 다른 작업을 적용 할 수 있습니다.
 
@@ -80,13 +80,13 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 홈 디렉토리 확장
 
-`~` 또는 `$HOME`를 사용할 수 있습니다 패턴의 시작에 홈 디렉토리를 참조. 이것은 특히 유용합니다 [`external_directory`] (#external-directories) 규칙.
+`~` 또는 `$HOME`를 사용할 수 있습니다 패턴의 시작에 홈 디렉토리를 참조. 이것은 특히 유용합니다 [`external_directory`](#external-directories) 규칙.
 
 - `~/projects/*` -> `/Users/username/projects/*`
 - `$HOME/projects/*` -> `/Users/username/projects/*`
 - `~` -> `/Users/username`
 
-## 외부 감독
+## 외부 디렉터리
 
 `external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `list`, `glob`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
 
@@ -134,8 +134,8 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 - `glob` - 파일 globbing (glob 패턴 매칭)
 - `grep` - 콘텐츠 검색 ( regex 패턴 매칭)
 - `list` - 디렉토리의 목록 파일 (폴더 경로 매칭)
-- `bash` - 쉘 명령 실행 (`git status --porcelain`와 같은 팟 명령)
-- `task` - 시약 출시 (미시 시약 유형)
+- `bash` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
+- `task` - 에이전트 실행 (작업 에이전트 유형)
 - `skill` - 기술을 로딩 (기술 이름을 매칭)
 - `lsp` - LSP 쿼리 실행 (현재 비 과립)
 - `todoread`, `todowrite` - 토도 목록의 읽기 / 업데이트
@@ -146,7 +146,7 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 
 ---
 
-## 기본
+## 기본값
 
 아무것도 지정하지 않는 경우, opencode는 permissive 기본값에서 시작합니다.
 
@@ -169,7 +169,7 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 
 ---
 
-## "Ask"는 무엇입니까?
+## "Ask"란 무엇입니까?
 
 opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 

@@ -1,23 +1,23 @@
 ---
-title: ACP Assistance
+title: Support ACP
 description: Utilisez OpenCode dans n’importe quel éditeur compatible ACP.
 ---
 
-OpenCode prend en charge le [Agent Client Protocol](https://agentclientprotocol.com) ou (ACP), vous permettant de l'utiliser directement dans les éditeurs et IDE compatibles.
+OpenCode prend en charge le [Agent Client Protocol](https://agentclientprotocol.com) (ACP), vous permettant de l'utiliser directement dans les éditeurs et IDE compatibles.
 
 :::tip
 Pour obtenir une liste des éditeurs et des outils prenant en charge ACP, consultez le [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
-ACP est un protocole ouvert qui standardise la communication entre les éditeurs de code et les agents de codage IA.
+ACP est un protocole ouvert qui standardise la communication entre les éditeurs de code et les agents de codage AI.
 
 ---
 
-## Configurer
+## Configuration
 
 Pour utiliser OpenCode via ACP, configurez votre éditeur pour exécuter la commande `opencode acp`.
 
-La commande démarre OpenCode en tant que sous-processus compatible ACP qui communique avec votre éditeur via JSON-RPC via stdio.
+La commande démarre OpenCode en tant que sous-processus compatible ACP qui communique avec votre éditeur via JSON-RPC sur stdio.
 
 Vous trouverez ci-dessous des exemples d'éditeurs populaires prenant en charge ACP.
 
@@ -25,7 +25,7 @@ Vous trouverez ci-dessous des exemples d'éditeurs populaires prenant en charge 
 
 ### Zed
 
-Ajoutez à votre configuration [Zed](https://zed.dev) (`~/.config/zed/settings.json`) :
+Ajoutez à votre configuration [Zed](https://zed.dev) (`~/.config/zed/settings.json`) :
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -40,7 +40,7 @@ Ajoutez à votre configuration [Zed](https://zed.dev) (`~/.config/zed/settings.j
 
 Pour l'ouvrir, utilisez l'action `agent: new thread` dans la **Palette de commandes**.
 
-Vous pouvez également associer un raccourci clavier en modifiant votre `keymap.json` :
+Vous pouvez également associer un raccourci clavier en modifiant votre `keymap.json` :
 
 ```json title="keymap.json"
 [
@@ -69,7 +69,7 @@ Vous pouvez également associer un raccourci clavier en modifiant votre `keymap.
 
 ### IDE JetBrains
 
-Ajoutez à votre [JetBrains IDE](https://www.jetbrains.com/) acp.json conformément à la [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) :
+Ajoutez `acp.json` à votre [IDE JetBrains](https://www.jetbrains.com/) conformément à la [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) :
 
 ```json title="acp.json"
 {
@@ -88,7 +88,7 @@ Pour l'ouvrir, utilisez le nouvel agent « OpenCode » dans le sélecteur d'agen
 
 ### Avante.nvim
 
-Ajoutez à votre configuration [Avante.nvim](https://github.com/yetone/avante.nvim) :
+Ajoutez à votre configuration [Avante.nvim](https://github.com/yetone/avante.nvim) :
 
 ```lua
 {
@@ -101,7 +101,7 @@ Ajoutez à votre configuration [Avante.nvim](https://github.com/yetone/avante.nv
 }
 ```
 
-Si vous devez transmettre des variables d'environnement :
+Si vous devez transmettre des variables d'environnement :
 
 ```lua {6-8}
 {
@@ -121,7 +121,7 @@ Si vous devez transmettre des variables d'environnement :
 
 ### CodeCompanion.nvim
 
-Pour utiliser OpenCode comme agent ACP dans [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), ajoutez ce qui suit à votre configuration Neovim :
+Pour utiliser OpenCode comme agent ACP dans [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), ajoutez ce qui suit à votre configuration Neovim :
 
 ```lua
 require("codecompanion").setup({
@@ -138,11 +138,11 @@ require("codecompanion").setup({
 
 Cette configuration configure CodeCompanion pour utiliser OpenCode comme agent ACP pour le chat.
 
-Si vous devez transmettre des variables d'environnement (comme `OPENCODE_API_KEY`), reportez-vous à [Configuration des adaptateurs : variables d'environnement ](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) dans la documentation CodeCompanion.nvim pour plus de détails.
+Si vous devez transmettre des variables d'environnement (comme `OPENCODE_API_KEY`), reportez-vous à [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) dans la documentation CodeCompanion.nvim pour plus de détails.
 
-## Soutien
+## Prise en charge
 
-OpenCode fonctionne de la même manière via ACP que dans le terminal. Toutes les fonctionnalités sont prises en charge :
+OpenCode fonctionne de la même manière via ACP que dans le terminal. Toutes les fonctionnalités sont prises en charge :
 
 :::note
 Certaines commandes slash intégrées telles que `/undo` et `/redo` ne sont actuellement pas prises en charge.

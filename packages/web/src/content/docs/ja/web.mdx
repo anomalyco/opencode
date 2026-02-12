@@ -3,9 +3,11 @@ title: ウェブ
 description: ブラウザで OpenCode を使用する。
 ---
 
-OpenCode はブラウザーで Web アプリケーションとして実行でき、ターミナルを必要とせずに同じ強力な AI コーディング エクスペリエンスを提供します。
+OpenCode はブラウザで Web アプリケーションとして実行でき、ターミナルを必要とせずに同じ強力な AI コーディングエクスペリエンスを提供します。
 
 ![OpenCode Web - 新しいセッション](../../../assets/web/web-homepage-new-session.png)
+
+---
 
 ## はじめる
 
@@ -15,19 +17,20 @@ OpenCode はブラウザーで Web アプリケーションとして実行でき
 opencode web
 ```
 
-これにより、利用可能なランダムなポートを使用して `127.0.0.1` でローカル サーバーが起動され、デフォルトのブラウザで OpenCode が自動的に開きます。
+これにより、利用可能なランダムなポートを使用して `127.0.0.1` でローカルサーバーが起動され、デフォルトのブラウザで OpenCode が自動的に開きます。
 
 :::caution
-`OPENCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワーク アクセス用に設定する必要があります。
+`OPENCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワークアクセス用に設定する必要があります。
+:::
 :::tip[Windows ユーザー]
-最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイル システムへの適切なアクセスと端末の統合が保証されます。
+最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイルシステムへの適切なアクセスとターミナルの統合が保証されます。
 :::
 
 ---
 
-## 構成
+## 設定
 
-コマンド ライン フラグを使用するか、[config file](/docs/config).config ファイル] で Web サーバーを設定できます。
+コマンドラインフラグを使用するか、[設定ファイル](/docs/config)で Web サーバーを設定できます。
 
 ### ポート
 
@@ -45,16 +48,16 @@ opencode web --port 4096
 opencode web --hostname 0.0.0.0
 ```
 
-`0.0.0.0` を使用すると、OpenCode はローカル アドレスとネットワーク アドレスの両方を表示します。
+`0.0.0.0` を使用すると、OpenCode はローカルアドレスとネットワークアドレスの両方を表示します。
 
 ```
   Local access:       http://localhost:4096
   Network access:     http://192.168.1.100:4096
 ```
 
-### mDNS ディスカバリー
+### mDNS 検出
 
-mDNS を有効にして、ローカル ネットワーク上でサーバーを検出できるようにします。
+mDNS を有効にして、ローカルネットワーク上でサーバーを検出できるようにします。
 
 ```bash
 opencode web --mdns
@@ -68,9 +71,9 @@ mDNS ドメイン名をカスタマイズして、同じネットワーク上で
 opencode web --mdns --mdns-domain myproject.local
 ```
 
-### コルス
+### CORS
 
-CORS の追加ドメインを許可するには (カスタム フロントエンドに便利):
+CORS の追加ドメインを許可するには (カスタムフロントエンドに便利):
 
 ```bash
 opencode web --cors https://example.com
@@ -102,11 +105,11 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 「サーバーを表示」をクリックすると、接続されているサーバーとそのステータスが表示されます。
 
-![OpenCode Web - Servers](../../../assets/web/web-homepage-see-servers.png) を参照
+![OpenCode Web - サーバー](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
-## 端子の取り付け
+## ターミナルの接続
 
 実行中の Web サーバーにターミナル TUI を接続できます。
 
@@ -124,7 +127,7 @@ opencode attach http://localhost:4096
 
 ## 設定ファイル
 
-`opencode.json` 構成ファイルでサーバー設定を構成することもできます。
+`opencode.json` 設定ファイルでサーバー設定を構成することもできます。
 
 ```json
 {
@@ -137,4 +140,4 @@ opencode attach http://localhost:4096
 }
 ```
 
-コマンド ライン フラグは、構成ファイルの設定よりも優先されます。
+コマンドラインフラグは、設定ファイルの設定よりも優先されます。

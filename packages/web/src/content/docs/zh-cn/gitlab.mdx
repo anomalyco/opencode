@@ -9,25 +9,25 @@ opencode 通过 GitLab CI/CD 管道或与 GitLab Duo 与您的 GitLab 工作流�
 
 ---
 
-## GitLab。
+## GitLab CI
 
-opencode 在常规 GitLab 管道中工作。您可以将其构建为管道 [CI](https://docs.gitlab.com/ee/ci/components/)
+opencode 在常规 GitLab 管道中工作。您可以将其构建为管道 [CI 组件](https://docs.gitlab.com/ee/ci/components/)
 
 在这里，我们使用社区创建的 opencode CI/CD 组件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
 
 ---
 
-### 特徵
+### 功能
 
-- **每个作业使用每个自定义配置**：使用自定义配置目录配置opencode，例如`./config/#custom-directory`以启用或禁用opencode调用的功能。
-- 错误 500（服务器错误）！！1500。这是一个错误。出现错误。请稍后重试。我们只知道这些。
-- **灵活**：CI 组件支持多种输入来自定义其行为
+- **Use custom configuration per job**: 使用自定义配置目录配置 opencode，例如 `./config/#custom-directory` 以启用或禁用 opencode 调用的功能。
+- **Authentication**: Uses OIDC for secure authentication
+- **Flexible**: CI 组件支持多种输入来自定义其行为
 
 ---
 
-### 設定
+### 设置
 
-1. 将 opencode 身份验证 JSON 作为文件类型 CI 环境变量存储在 **设置** > **CI/CD** > **变量** 下。确保将它们标记为“隐藏和隐藏”。
+1. 将 opencode 身份验证 JSON 作为文件类型 CI 环境变量存储在 **Settings** > **CI/CD** > **Variables** 下。确保将它们标记为“隐藏和隐藏”。
 2. 将以下内容添加到您的 `.gitlab-ci.yml` 文件中。
 
    ```yaml title=".gitlab-ci.yml"
@@ -44,36 +44,36 @@ opencode 在常规 GitLab 管道中工作。您可以将其构建为管道 [CI](
 
 ---
 
-## 亚搏体育app二人组
+## GitLab Duo
 
 opencode 与您的 GitLab 工作流程集成。
-在评论中提及`@opencode`，opencode 将在您的 GitLab CI 管道中执行任务。
+在评论中提及 `@opencode`，opencode 将在您的 GitLab CI 管道中执行任务。
 
 ---
 
-### 特徵
+### 功能
 
-- **分类问题**：要求 opencode 调查问题并向您解释。
-- **修复和实施**：要求opencode修复问题或实施功能。
-  它將創建一個新分支並提出包含更改的合併請求。
-- **安全**：opencode 在您的 GitLab 运行器上运行。
+- **Triage issues**: 要求 opencode 调查问题并向您解释。
+- **Fix and implement**: 要求 opencode 修复问题或实施功能。
+  它将创建一个新分支并提出包含更改的合并请求。
+- **Secure**: opencode 在您的 GitLab 运行器上运行。
 
 ---
 
-### 設定
+### 设置
 
 opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 
 :::tip
-查看[**GitLab 文档**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 获取最新说明。
+查看 [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 获取最新说明。
 :::
 
 1.  配置您的 GitLab 环境
-2.  安装CI/CD
-3.  获取AI模型成功 API键
-4.  創建服務帳戶
+2.  设置 CI/CD
+3.  获取 AI 模型提供商 API 密钥
+4.  创建服务账户
 5.  配置 CI/CD 变量
-6.  創建一個流配置文件，這是一個示例：
+6.  创建一个流配置文件，这是一个示例：
 
         <details>
 
@@ -152,7 +152,7 @@ opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 
         </details>
 
-详细说明可以参考[GitLab CLI 代理文档](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
+详细说明可以参考 [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
 
 ---
 
@@ -161,10 +161,10 @@ opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 以下是如何在 GitLab 中使用 opencode 的一些示例。
 
 :::tip
-您可以配置使用 `@opencode` 不同的触发主板。
+您可以配置使用与 `@opencode` 不同的触发词。
 :::
 
-- **解釋一個問題**
+- **Explain an issue**
 
   在 GitLab 问题中添加此评论。
 
@@ -174,7 +174,7 @@ opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 
   opencode 将阅读该问题并回复并提供清晰的解释。
 
-- **解決問題**
+- **Fix an issue**
 
   在 GitLab 问题中，说：
 
@@ -184,7 +184,7 @@ opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 
   opencode 将创建一个新分支，实施更改，并打开包含更改的合并请求。
 
-- **審查合併請求**
+- **Review merge requests**
 
   对 GitLab 合并请求留下以下评论。
 

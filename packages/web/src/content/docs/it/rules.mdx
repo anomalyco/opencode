@@ -7,7 +7,7 @@ Puoi fornire istruzioni personalizzate a opencode creando un file `AGENTS.md`. E
 
 ---
 
-## Initialize
+## Inizializza
 
 Per creare un nuovo file `AGENTS.md`, puoi eseguire il comando `/init` in opencode.
 
@@ -21,7 +21,7 @@ Se hai gia' un file `AGENTS.md` esistente, cerchera' di aggiungervi contenuti.
 
 ---
 
-## Example
+## Esempio
 
 Puoi anche creare questo file manualmente. Ecco un esempio di alcune cose che puoi inserire in un file `AGENTS.md`.
 
@@ -52,27 +52,27 @@ Qui stiamo aggiungendo istruzioni specifiche del progetto e saranno condivise co
 
 ---
 
-## Types
+## Tipi
 
 opencode supporta anche la lettura del file `AGENTS.md` da piu' posizioni, e questo serve a scopi diversi.
 
-### Project
+### Progetto
 
 Metti un `AGENTS.md` nella root del progetto per regole specifiche del progetto. Si applicano solo quando stai lavorando in questa directory o nelle sue sottodirectory.
 
-### Global
+### Globale
 
 Puoi anche avere regole globali in un file `~/.config/opencode/AGENTS.md`. Queste si applicano a tutte le sessioni di opencode.
 
 Dato che questo non viene committato in Git o condiviso con il team, consigliamo di usarlo per specificare regole personali che l'LLM deve seguire.
 
-### Claude Code Compatibility
+### Compatibilita Claude Code
 
 Per gli utenti che migrano da Claude Code, OpenCode supporta come fallback le convenzioni di file di Claude Code:
 
-- **Project rules**: `CLAUDE.md` in your project directory (used if no `AGENTS.md` exists)
-- **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
-- **Skills**: `~/.claude/skills/` — see [Agent Skills](/docs/skills/) for details
+- **Regole di progetto**: `CLAUDE.md` nella directory del progetto (usato se non esiste `AGENTS.md`)
+- **Regole globali**: `~/.claude/CLAUDE.md` (usato se non esiste `~/.config/opencode/AGENTS.md`)
+- **Skill**: `~/.claude/skills/` — vedi [Skill agente](/docs/skills/) per i dettagli
 
 Per disabilitare la compatibilita' con Claude Code, imposta una di queste variabili d'ambiente:
 
@@ -84,23 +84,23 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## Precedence
+## Priorita
 
 Quando opencode si avvia, cerca i file di regole in questo ordine:
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
-2. **Global file** at `~/.config/opencode/AGENTS.md`
-3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
+1. **File locali** risalendo dalla directory corrente (`AGENTS.md`, `CLAUDE.md`)
+2. **File globale** in `~/.config/opencode/AGENTS.md`
+3. **File Claude Code** in `~/.claude/CLAUDE.md` (se non disabilitato)
 
 In ogni categoria vince il primo file corrispondente. Per esempio, se hai sia `AGENTS.md` sia `CLAUDE.md`, viene usato solo `AGENTS.md`. Allo stesso modo, `~/.config/opencode/AGENTS.md` ha priorita' su `~/.claude/CLAUDE.md`.
 
 ---
 
-## Custom Instructions
+## Istruzioni personalizzate
 
 Puoi specificare file di istruzioni personalizzati nel tuo `opencode.json` o nel globale `~/.config/opencode/opencode.json`. Questo permette a te e al tuo team di riusare regole esistenti invece di doverle duplicare in AGENTS.md.
 
-Example:
+Esempio:
 
 ```json title="opencode.json"
 {
@@ -109,7 +109,7 @@ Example:
 }
 ```
 
-You can also use remote URLs to load instructions from the web.
+Puoi anche usare URL remoti per caricare istruzioni dal web.
 
 ```json title="opencode.json"
 {
@@ -124,11 +124,11 @@ Tutti i file di istruzioni vengono combinati con i tuoi file `AGENTS.md`.
 
 ---
 
-## Referencing External Files
+## Riferisci file esterni
 
 Anche se opencode non interpreta automaticamente i riferimenti a file in `AGENTS.md`, puoi ottenere una funzionalita' simile in due modi:
 
-### Using opencode.json
+### Usa opencode.json
 
 L'approccio consigliato e' usare il campo `instructions` in `opencode.json`:
 
@@ -139,7 +139,7 @@ L'approccio consigliato e' usare il campo `instructions` in `opencode.json`:
 }
 ```
 
-### Manual Instructions in AGENTS.md
+### Istruzioni manuali in AGENTS.md
 
 Puoi insegnare a opencode a leggere file esterni fornendo istruzioni esplicite nel tuo `AGENTS.md`. Ecco un esempio pratico:
 
@@ -170,10 +170,10 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 
 Questo approccio ti permette di:
 
-- Create modular, reusable rule files
-- Share rules across projects via symlinks or git submodules
-- Keep AGENTS.md concise while referencing detailed guidelines
-- Ensure opencode loads files only when needed for the specific task
+- Crea file di regole modulari e riutilizzabili
+- Condividi regole tra progetti con symlink o submodule Git
+- Mantieni AGENTS.md conciso riferendoti a linee guida dettagliate
+- Assicurati che opencode carichi file solo quando servono per il task specifico
 
 :::tip
 Per monorepo o progetti con standard condivisi, usare `opencode.json` con pattern glob (come `packages/*/AGENTS.md`) e' piu' manutenibile rispetto alle istruzioni manuali.

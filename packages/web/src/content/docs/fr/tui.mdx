@@ -69,7 +69,7 @@ Voici toutes les commandes slash disponibles :
 
 ---
 
-### connecter
+### connect
 
 Ajoutez un fournisseur à OpenCode. Vous permet de sélectionner parmi les fournisseurs disponibles et d’ajouter leurs clés API.
 
@@ -91,7 +91,7 @@ Compactez la session en cours. *Alias* : `/summarize`
 
 ---
 
-### détails
+### details
 
 Basculer les détails d'exécution de l'outil.
 
@@ -103,7 +103,7 @@ Basculer les détails d'exécution de l'outil.
 
 ---
 
-### éditeur
+### editor
 
 Ouvrez un éditeur externe pour rédiger des messages. Utilise l'éditeur défini dans votre variable d'environnement `EDITOR`. [En savoir plus](#editor-setup).
 
@@ -115,7 +115,7 @@ Ouvrez un éditeur externe pour rédiger des messages. Utilise l'éditeur défin
 
 ---
 
-### sortie
+### exit
 
 Quittez OpenCode. *Alias* : `/quit`, `/q`
 
@@ -127,7 +127,7 @@ Quittez OpenCode. *Alias* : `/quit`, `/q`
 
 ---
 
-### exporter
+### export
 
 Exportez la conversation en cours vers Markdown et ouvrez-la dans votre éditeur par défaut. Utilise l'éditeur défini dans votre variable d'environnement `EDITOR`. [En savoir plus](#editor-setup).
 
@@ -139,7 +139,7 @@ Exportez la conversation en cours vers Markdown et ouvrez-la dans votre éditeur
 
 ---
 
-### aide
+### help
 
 Afficher la boîte de dialogue d'aide.
 
@@ -151,7 +151,7 @@ Afficher la boîte de dialogue d'aide.
 
 ---
 
-### initialisation
+### init
 
 Créez ou mettez à jour le fichier `AGENTS.md`. [En savoir plus](/docs/rules).
 
@@ -163,7 +163,7 @@ Créez ou mettez à jour le fichier `AGENTS.md`. [En savoir plus](/docs/rules).
 
 ---
 
-### modèles
+### models
 
 Liste des modèles disponibles.
 
@@ -175,7 +175,7 @@ Liste des modèles disponibles.
 
 ---
 
-### nouveau
+### new
 
 Démarrez une nouvelle session. *Alias* : `/clear`
 
@@ -187,7 +187,7 @@ Démarrez une nouvelle session. *Alias* : `/clear`
 
 ---
 
-### refaire
+### redo
 
 Refaire un message précédemment annulé. Disponible uniquement après avoir utilisé `/undo`.
 
@@ -206,7 +206,7 @@ En interne, cela utilise Git pour gérer les modifications de fichiers. Votre pr
 
 ---
 
-### séances
+### sessions
 
 Répertoriez et basculez entre les sessions. *Alias* : `/resume`, `/continue`
 
@@ -218,7 +218,7 @@ Répertoriez et basculez entre les sessions. *Alias* : `/resume`, `/continue`
 
 ---
 
-### partager
+### share
 
 Partager la session en cours. [En savoir plus](/docs/share).
 
@@ -230,7 +230,7 @@ Partager la session en cours. [En savoir plus](/docs/share).
 
 ---
 
-### thèmes
+### theme
 
 Répertoriez les thèmes disponibles.
 
@@ -242,7 +242,7 @@ Répertoriez les thèmes disponibles.
 
 ---
 
-### pensée
+### thinking
 
 Activez/désactivez la visibilité des blocages de réflexion/raisonnement dans la conversation. Lorsque cette option est activée, vous pouvez voir le processus de raisonnement du modèle pour les modèles prenant en charge la réflexion étendue.
 
@@ -256,7 +256,7 @@ Cette commande contrôle uniquement si les blocs de réflexion sont **affichés*
 
 ---
 
-### défaire
+### undo
 
 Annuler le dernier message de la conversation. Supprime le message utilisateur le plus récent, toutes les réponses ultérieures et toutes les modifications de fichier.
 
@@ -275,7 +275,7 @@ En interne, cela utilise Git pour gérer les modifications de fichiers. Votre pr
 
 ---
 
-### annuler le partage
+### unshare
 
 Annuler le partage de la session en cours. [En savoir plus](/docs/share#un-sharing).
 
@@ -369,7 +369,7 @@ Vous pouvez personnaliser le comportement de TUI via votre fichier de configurat
 }
 ```
 
-### Possibilités
+### Options
 
 - `scroll_acceleration` - Activez l'accélération de défilement de style macOS pour un défilement fluide et naturel. Lorsqu'elle est activée, la vitesse de défilement augmente avec les gestes de défilement rapides et reste précise pour les mouvements plus lents. **Ce paramètre est prioritaire sur `scroll_speed` et le remplace lorsqu'il est activé.**
 - `scroll_speed` - Contrôle la vitesse de défilement du TUI lors de l'utilisation des commandes de défilement (minimum : `1`). La valeur par défaut est `3`. **Remarque : Ceci est ignoré si `scroll_acceleration.enabled` est défini sur `true`.**

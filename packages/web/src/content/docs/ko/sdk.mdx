@@ -1,6 +1,6 @@
 ---
 title: SDK
-description: Type-safe JS client for opencode server.
+description: opencode 서버를 위한 타입 안전한 JS 클라이언트.
 ---
 
 import config from "../../../../config.mjs"
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 opencode의 인스턴스 만들기:
 
 ```javascript
-import { createopencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const { client } = await createopencode()
+const { client } = await createOpencode()
 ```
 
 서버와 클라이언트 모두 시작
@@ -47,14 +47,14 @@ const { client } = await createopencode()
 
 ---
 
-## 콘피그
+## 구성
 
 구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
-import { createopencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const opencode = await createopencode({
+const opencode = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
 
 ```javascript
-import { createopencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@opencode-ai/sdk"
 
-const client = createopencodeClient({
+const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -91,7 +91,7 @@ const client = createopencodeClient({
 
 ---
 
-## 유형
+## 타입
 
 SDK에는 모든 API 유형의 TypeScript 정의가 포함되어 있습니다. 직접 가져 오기 :
 
@@ -125,7 +125,7 @@ SDK는 type-safe 클라이언트를 통해 모든 서버 API를 노출합니다.
 
 ## 글로벌
 
-| 방법              | 설명                   | 응답                                 |
+| 메서드            | 설명                   | 응답                                 |
 | ----------------- | ---------------------- | ------------------------------------ |
 | `global.health()` | 서버 건강 및 버전 확인 | `{ healthy: true, version: string }` |
 
@@ -205,7 +205,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-#### 콘피그
+#### 구성
 
 | 방법                 | 설명                       | 응답                                                                                                  |
 | -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -226,27 +226,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ## 세션
 
-| 방법                                                       | 묘사                            | 주                                                                                                                               |
-| ---------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | 세션 일람                       | <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
-| `session.get({ path })`                                    | 세션 가져 오기                  | <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.children({ path })`                               | 목록 어린이 세션                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.create({ body })`                                 | 세션 만들기                     | 리턴 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.delete({ path })`                                 | 세션 삭제                       | `boolean` 반품                                                                                                                   |
-| `session.update({ path, body })`                           | 업데이트 세션 속성              | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.init({ path, body })`                             | Analyze 앱을 만들고 `AGENTS.md` | `boolean`를 반환                                                                                                                 |
-| `session.abort({ path })`                                  | 운영 중인 세션                  | 반품 `boolean`                                                                                                                   |
-| `session.share({ path })`                                  | 공유 세션                       | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.unshare({ path })`                                | 공유 세션                       | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.summarize({ path, body })`                        | 세션 요약                       | 반품 `boolean`                                                                                                                   |
-| `session.messages({ path })`                               | 세션의 메시지 목록              | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part</code></a>`}[]`                    |
-| `session.message({ path })`                                | 메시지 상세정보                 | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`               |
-| `session.prompt({ path, body })`                           | 신속한 메시지 보내기            | `body.noReply: true` 반환 UserMessage (콘텍스트 전용). 과태 반환 <a href={typesUrl}><code>AssistantMessage</code></a> 에 AI 응답 |
-| `session.command({ path, body })`                          | 세션으로 명령을 전송            | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
-| `session.shell({ path, body })`                            | 쉘 명령을 실행                  | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
-| `session.revert({ path, body })`                           | 메시지 다시 변환                | <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.unrevert({ path })`                               | 통일된 메시지                   | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                  | 반품 `boolean`                                                                                                                   |
+| 메서드                                                     | 설명                          | 비고                                                                                                                             |
+| ---------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | 세션 일람                     | <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
+| `session.get({ path })`                                    | 세션 가져 오기                | <a href={typesUrl}><code>Session</code></a>                                                                                      |
+| `session.children({ path })`                               | 하위 세션 목록                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.create({ body })`                                 | 세션 만들기                   | 리턴 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.delete({ path })`                                 | 세션 삭제                     | `boolean` 반품                                                                                                                   |
+| `session.update({ path, body })`                           | 업데이트 세션 속성            | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.init({ path, body })`                             | 앱 초기화 및 `AGENTS.md` 분석 | `boolean`를 반환                                                                                                                 |
+| `session.abort({ path })`                                  | 운영 중인 세션                | 반품 `boolean`                                                                                                                   |
+| `session.share({ path })`                                  | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.unshare({ path })`                                | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.summarize({ path, body })`                        | 세션 요약                     | 반품 `boolean`                                                                                                                   |
+| `session.messages({ path })`                               | 세션의 메시지 목록            | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part</code></a>`}[]`                    |
+| `session.message({ path })`                                | 메시지 상세정보               | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`               |
+| `session.prompt({ path, body })`                           | prompt 메시지 보내기          | `body.noReply: true` 반환 UserMessage (콘텍스트 전용). 기본 반환 <a href={typesUrl}><code>AssistantMessage</code></a> 에 AI 응답 |
+| `session.command({ path, body })`                          | 세션으로 명령을 전송          | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
+| `session.shell({ path, body })`                            | shell 명령을 실행             | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
+| `session.revert({ path, body })`                           | 메시지 다시 변환              | <a href={typesUrl}><code>Session</code></a>                                                                                      |
+| `session.unrevert({ path })`                               | 메시지 되돌리기 취소          | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                | 반품 `boolean`                                                                                                                   |
 
 ---
 
@@ -287,7 +287,7 @@ await client.session.prompt({
 | ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | 파일에서 텍스트 검색         | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`와 일치하는 개체의 배열 |
 | `find.files({ query })`   | 이름의 파일 및 디렉토리 찾기 | `string[]` (경로)                                                                      |
-| `find.symbols({ query })` | 업무 공간 기호 찾기          | <a href={typesUrl}><code>Symbol[]</code></a>                                           |
+| `find.symbols({ query })` | 작업 공간 심볼 찾기          | <a href={typesUrl}><code>Symbol[]</code></a>                                           |
 | `file.read({ query })`    | 파일 보기                    | `{ type: "raw" \| "patch", content: string }`                                          |
 | `file.status({ query? })` | 트랙 된 파일 상태를 확인     | <a href={typesUrl}><code>File[]</code></a>                                             |
 
@@ -329,12 +329,12 @@ const content = await client.file.read({
 | `tui.appendPrompt({ body })`   | 프롬프트에 텍스트를 부여 | `boolean` |
 | `tui.openHelp()`               | 도움말 열기              | `boolean` |
 | `tui.openSessions()`           | 세션 선택 안내           | `boolean` |
-| `tui.openThemes()`             | 테마 선택 해제           | `boolean` |
+| `tui.openThemes()`             | 테마 선택 열기           | `boolean` |
 | `tui.openModels()`             | 모델 선택 안내           | `boolean` |
 | `tui.submitPrompt()`           | 현재 프롬프트 제출       | `boolean` |
 | `tui.clearPrompt()`            | 프롬프트 클리어          | `boolean` |
 | `tui.executeCommand({ body })` | 명령어 실행              | `boolean` |
-| `tui.showToast({ body })`      | 쇼 토스트 알림           | `boolean` |
+| `tui.showToast({ body })`      | 토스트 알림 표시         | `boolean` |
 
 ---
 
@@ -353,7 +353,7 @@ await client.tui.showToast({
 
 ---
 
-##### 가을
+##### 인증
 
 | 방법                | 설명           | 응답      |
 | ------------------- | -------------- | --------- |

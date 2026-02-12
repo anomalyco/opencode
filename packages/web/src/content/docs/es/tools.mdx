@@ -9,7 +9,7 @@ De forma predeterminada, todas las herramientas están **habilitadas** y no nece
 
 ---
 
-## Configurar
+## Configuración
 
 Utilice el campo `permission` para controlar el comportamiento de la herramienta. Puede permitir, denegar o exigir aprobación para cada herramienta.
 
@@ -39,13 +39,13 @@ También puedes utilizar comodines para controlar varias herramientas a la vez. 
 
 ---
 
-## Incorporado
+## Integradas
 
 Aquí están todas las herramientas integradas disponibles en OpenCode.
 
 ---
 
-### fiesta
+### bash
 
 Ejecute comandos de shell en el entorno de su proyecto.
 
@@ -62,7 +62,7 @@ Esta herramienta permite que LLM ejecute comandos de terminal como `npm install`
 
 ---
 
-### editar
+### edit
 
 Modifique archivos existentes utilizando reemplazos de cadenas exactas.
 
@@ -79,7 +79,7 @@ Esta herramienta realiza ediciones precisas de archivos reemplazando coincidenci
 
 ---
 
-### escribir
+### write
 
 Cree nuevos archivos o sobrescriba los existentes.
 
@@ -100,7 +100,7 @@ La herramienta `write` está controlada por el permiso `edit`, que cubre todas l
 
 ---
 
-### leer
+### read
 
 Lea el contenido del archivo desde su base de código.
 
@@ -134,7 +134,7 @@ Búsqueda rápida de contenido en su base de código. Admite sintaxis de expresi
 
 ---
 
-### globo
+### glob
 
 Encuentre archivos por coincidencia de patrones.
 
@@ -151,7 +151,7 @@ Busque archivos usando patrones globales como `**/*.js` o `src/**/*.ts`. Devuelv
 
 ---
 
-### lista
+### list
 
 Enumere archivos y directorios en una ruta determinada.
 
@@ -191,7 +191,7 @@ Para configurar qué servidores LSP están disponibles para su proyecto, consult
 
 ---
 
-### parche
+### patch
 
 Aplicar parches a los archivos.
 
@@ -212,7 +212,7 @@ La herramienta `patch` está controlada por el permiso `edit`, que cubre todas l
 
 ---
 
-### habilidad
+### skill
 
 Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su contenido en la conversación.
 
@@ -227,7 +227,7 @@ Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su conte
 
 ---
 
-### todo escribir
+### todowrite
 
 Administre listas de tareas pendientes durante las sesiones de codificación.
 
@@ -248,7 +248,7 @@ Esta herramienta está deshabilitada para los subagentes de forma predeterminada
 
 ---
 
-### todo leer
+### todoread
 
 Leer listas de tareas pendientes existentes.
 
@@ -269,7 +269,7 @@ Esta herramienta está deshabilitada para los subagentes de forma predeterminada
 
 ---
 
-### búsqueda web
+### webfetch
 
 Obtener contenido web.
 
@@ -286,7 +286,7 @@ Permite que LLM busque y lea páginas web. Útil para buscar documentación o in
 
 ---
 
-### búsqueda web
+### websearch
 
 Busque información en la web.
 
@@ -320,7 +320,7 @@ Utilice `websearch` cuando necesite encontrar información (descubrimiento) y `w
 
 ---
 
-### pregunta
+### question
 
 Haga preguntas al usuario durante la ejecución.
 
@@ -352,9 +352,9 @@ Las herramientas personalizadas le permiten definir sus propias funciones a las 
 
 ---
 
-## MCP servidores
+## Servidores MCP
 
-Los servidores MCP (Protocolo de contexto modelo) le permiten integrar herramientas y servicios externos. Esto incluye acceso a bases de datos, integraciones API y servicios de terceros.
+Los servidores MCP (Model Context Protocol) le permiten integrar herramientas y servicios externos. Esto incluye acceso a bases de datos, integraciones API y servicios de terceros.
 
 [Más información](/docs/mcp-servers) sobre la configuración de servidores MCP.
 

@@ -3,13 +3,13 @@ title: Verktøy
 description: Administrer verktøyene en LLM kan bruke.
 ---
 
-Verktøy lar LLM utføre handlinger i kodebasen din. opencode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
+Verktøy lar LLM utføre handlinger i kodebasen din. OpenCode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
 
 Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for å kjøre. Du kan kontrollere verktøyets oppførsel gjennom [tillatelser](/docs/permissions).
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
 Bruk feltet `permission` for å kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
 
@@ -41,7 +41,7 @@ Du kan også bruke jokertegn for å kontrollere flere verktøy samtidig. For eks
 
 ## Innebygd
 
-Her er alle de innebygde verktøyene som er tilgjengelige i opencode.
+Her er alle de innebygde verktøyene som er tilgjengelige i OpenCode.
 
 ---
 
@@ -58,11 +58,11 @@ Utfør skallkommandoer i prosjektmiljøet ditt.
 }
 ```
 
-Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen shell-kommando.
+Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen skallkommando.
 
 ---
 
-### rediger
+### edit
 
 Endre eksisterende filer ved å bruke eksakte strengerstatninger.
 
@@ -79,7 +79,7 @@ Dette verktøyet utfører nøyaktige redigeringer av filer ved å erstatte eksak
 
 ---
 
-### skriv
+### write
 
 Opprett nye filer eller overskriv eksisterende.
 
@@ -100,7 +100,7 @@ Bruk denne for å la LLM lage nye filer. Den vil overskrive eksisterende filer h
 
 ---
 
-### lest
+### read
 
 Les filinnholdet fra kodebasen din.
 
@@ -151,7 +151,7 @@ Søk etter filer ved å bruke glob-mønstre som `**/*.js` eller `src/**/*.ts`. R
 
 ---
 
-### liste
+### list
 
 List filer og kataloger i en gitt bane.
 
@@ -170,7 +170,7 @@ Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for å filtr
 
 ### lsp (eksperimentell)
 
-Samhandle med dine konfigurerte LSP-servere for å få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
+Samhandle med dine konfigurerte LSP-servere for å få kodeintelligens-funksjoner som definisjoner, referanser, hover-informasjon og kallhierarki.
 
 :::note
 Dette verktøyet er bare tilgjengelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
@@ -204,7 +204,7 @@ Bruk patcher på filer.
 }
 ```
 
-Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påføre diff og lapper fra forskjellige kilder.
+Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påføre diffs og patcher fra forskjellige kilder.
 
 :::note
 `patch`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
@@ -212,7 +212,7 @@ Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påf�
 
 ---
 
-### ferdighet
+### skill
 
 Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet i samtalen.
 
@@ -227,7 +227,7 @@ Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet 
 
 ---
 
-### for å skrive
+### todowrite
 
 Administrer gjøremålslister under kodingsøkter.
 
@@ -269,7 +269,7 @@ Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere 
 
 ---
 
-### webhenting
+### webfetch
 
 Hent nettinnhold.
 
@@ -286,14 +286,14 @@ Lar LLM hente og lese nettsider. Nyttig for å slå opp dokumentasjon eller fors
 
 ---
 
-### nettsøk
+### websearch
 
 Søk på nettet for informasjon.
 
 :::note
-Dette verktøyet er bare tilgjengelig når du bruker opencode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
+Dette verktøyet er bare tilgjengelig når du bruker OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sann verdi (f.eks. `true` eller `1`).
 
-Slik aktiverer du når du starter opencode:
+Slik aktiverer du når du starter OpenCode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -320,7 +320,7 @@ Bruk `websearch` når du trenger å finne informasjon (oppdagelse), og `webfetch
 
 ---
 
-### spørsmål
+### question
 
 Still brukeren spørsmål under utførelse.
 
@@ -362,7 +362,7 @@ MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjen
 
 ## Internaler
 
-Internt bruker verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og oppføringer.
+Internt bruker verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) i bakgrunnen. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og oppføringer.
 
 ---
 

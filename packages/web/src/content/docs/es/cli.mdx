@@ -1,11 +1,11 @@
 ---
 title: CLI
-description: OpenCode CLI opciones y comandos.
+description: Opciones y comandos de la CLI de OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-El OpenCode CLI de forma predeterminada inicia el [TUI](/docs/tui) cuando se ejecuta sin ningún argumento.
+La CLI de OpenCode de forma predeterminada inicia el [TUI](/docs/tui) cuando se ejecuta sin ningún argumento.
 
 ```bash
 opencode
@@ -27,9 +27,9 @@ Inicie la interfaz de usuario del terminal OpenCode.
 opencode [project]
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera      | Corto | Descripción                                                           |
+| Opción       | Corta | Descripción                                                           |
 | ------------ | ----- | --------------------------------------------------------------------- |
 | `--continue` | `-c`  | Continuar la última sesión                                            |
 | `--session`  | `-s`  | ID de sesión para continuar                                           |
@@ -44,11 +44,11 @@ opencode [project]
 
 ## Comandos
 
-El OpenCode CLI también tiene los siguientes comandos.
+La CLI de OpenCode también tiene los siguientes comandos.
 
 ---
 
-### agente
+### agent
 
 Administrar agentes para OpenCode.
 
@@ -58,7 +58,7 @@ opencode agent [command]
 
 ---
 
-### adjuntar
+### attach
 
 Conecte una terminal a un servidor backend OpenCode que ya se esté ejecutando y iniciado mediante los comandos `serve` o `web`.
 
@@ -76,16 +76,16 @@ opencode web --port 4096 --hostname 0.0.0.0
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera     | Corto | Descripción                               |
+| Opción      | Corta | Descripción                               |
 | ----------- | ----- | ----------------------------------------- |
 | `--dir`     |       | Directorio de trabajo para iniciar TUI en |
 | `--session` | `-s`  | ID de sesión para continuar               |
 
 ---
 
-#### crear
+#### create
 
 Cree un nuevo agente con configuración personalizada.
 
@@ -97,7 +97,7 @@ Este comando lo guiará en la creación de un nuevo agente con un mensaje del si
 
 ---
 
-#### lista
+#### list
 
 Enumere todos los agentes disponibles.
 
@@ -107,7 +107,7 @@ opencode agent list
 
 ---
 
-### autenticación
+### auth
 
 Comando para administrar credenciales e iniciar sesión para proveedores.
 
@@ -117,7 +117,7 @@ opencode auth [command]
 
 ---
 
-#### acceso
+#### login
 
 OpenCode funciona con la lista de proveedores en [Models.dev](https://models.dev), por lo que puede usar `opencode auth login` para configurar las claves API para cualquier proveedor que desee utilizar. Esto se almacena en `~/.local/share/opencode/auth.json`.
 
@@ -129,7 +129,7 @@ Cuando se inicia OpenCode, carga los proveedores desde el archivo de credenciale
 
 ---
 
-#### lista
+#### list
 
 Enumera todos los proveedores autenticados tal como están almacenados en el archivo de credenciales.
 
@@ -145,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### cerrar sesión
+#### logout
 
 Cierra tu sesión de un proveedor eliminándolo del archivo de credenciales.
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### instalar
+#### install
 
 Instale el agente GitHub en su repositorio.
 
@@ -177,7 +177,7 @@ Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a tra
 
 ---
 
-#### correr
+#### run
 
 Ejecute el agente GitHub. Esto se usa normalmente en acciones GitHub.
 
@@ -185,9 +185,9 @@ Ejecute el agente GitHub. Esto se usa normalmente en acciones GitHub.
 opencode github run
 ```
 
-##### Banderas
+##### Opciones
 
-| Bandera   | Descripción                                    |
+| Opción    | Descripción                                    |
 | --------- | ---------------------------------------------- |
 | `--event` | GitHub evento simulado para ejecutar el agente |
 | `--token` | GitHub token de acceso personal                |
@@ -204,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### agregar
+#### add
 
 Agregue un servidor MCP a su configuración.
 
@@ -216,7 +216,7 @@ Este comando lo guiará para agregar un servidor MCP local o remoto.
 
 ---
 
-#### lista
+#### list
 
 Enumere todos los servidores MCP configurados y su estado de conexión.
 
@@ -232,7 +232,7 @@ opencode mcp ls
 
 ---
 
-#### autenticación
+#### auth
 
 Autentíquese con un servidor MCP habilitado para OAuth.
 
@@ -256,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### cerrar sesión
+#### logout
 
 Elimine las credenciales OAuth para un servidor MCP.
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### depurar
+#### debug
 
 Depurar problemas de conexión OAuth para un servidor MCP.
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### modelos
+### models
 
 Enumere todos los modelos disponibles de los proveedores configurados.
 
@@ -294,9 +294,9 @@ Opcionalmente, puede pasar un ID de proveedor para filtrar modelos por ese prove
 opencode models anthropic
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera     | Descripción                                                                 |
+| Opción      | Descripción                                                                 |
 | ----------- | --------------------------------------------------------------------------- |
 | `--refresh` | Actualizar la caché de modelos desde models.dev                             |
 | `--verbose` | Utilice una salida del modelo más detallada (incluye metadatos como costos) |
@@ -309,7 +309,7 @@ opencode models --refresh
 
 ---
 
-### correr
+### run
 
 Ejecute opencode en modo no interactivo pasando un mensaje directamente.
 
@@ -333,9 +333,9 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera      | Corto | Descripción                                                                         |
+| Opción       | Corta | Descripción                                                                         |
 | ------------ | ----- | ----------------------------------------------------------------------------------- |
 | `--command`  |       | El comando a ejecutar, use mensaje para args                                        |
 | `--continue` | `-c`  | Continuar la última sesión                                                          |
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ---
 
-### atender
+### serve
 
 Inicie un servidor OpenCode sin cabeza para acceso API. Consulte los [documentos del servidor](/docs/server) para conocer la interfaz HTTP completa.
 
@@ -362,9 +362,9 @@ opencode serve
 
 Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
-#### Banderas
+#### Opciones
 
-| Bandera      | Descripción                                          |
+| Opción       | Descripción                                          |
 | ------------ | ---------------------------------------------------- |
 | `--port`     | Puerto para escuchar                                 |
 | `--hostname` | Nombre de host para escuchar                         |
@@ -373,7 +373,7 @@ Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad openc
 
 ---
 
-### sesión
+### session
 
 Administrar OpenCode sesiones.
 
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### lista
+#### list
 
 Enumere todas las sesiones OpenCode.
 
@@ -391,16 +391,16 @@ Enumere todas las sesiones OpenCode.
 opencode session list
 ```
 
-##### Banderas
+##### Opciones
 
-| Bandera       | Corto | Descripción                             |
+| Opción        | Corta | Descripción                             |
 | ------------- | ----- | --------------------------------------- |
 | `--max-count` | `-n`  | Limitar a N sesiones más recientes      |
 | `--format`    |       | Formato de salida: tabla o json (tabla) |
 
 ---
 
-### estadísticas
+### stats
 
 Muestre el uso de tokens y las estadísticas de costos para sus sesiones OpenCode.
 
@@ -408,9 +408,9 @@ Muestre el uso de tokens y las estadísticas de costos para sus sesiones OpenCod
 opencode stats
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera     | Descripción                                                                                                              |
+| Opción      | Descripción                                                                                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `--days`    | Mostrar estadísticas de los últimos N días (todo el tiempo)                                                              |
 | `--tools`   | Número de herramientas para mostrar (todas)                                                                              |
@@ -419,7 +419,7 @@ opencode stats
 
 ---
 
-### exportar
+### export
 
 Exportar datos de la sesión como JSON.
 
@@ -431,7 +431,7 @@ Si no proporciona una ID de sesión, se le pedirá que seleccione entre las sesi
 
 ---
 
-### importar
+### import
 
 Importe datos de sesión desde un archivo JSON o una URL compartida OpenCode.
 
@@ -458,9 +458,9 @@ opencode web
 
 Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
-#### Banderas
+#### Opciones
 
-| Bandera      | Descripción                                          |
+| Opción       | Descripción                                          |
 | ------------ | ---------------------------------------------------- |
 | `--port`     | Puerto para escuchar                                 |
 | `--hostname` | Nombre de host para escuchar                         |
@@ -471,7 +471,7 @@ Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a t
 
 ### acp
 
-Inicie un servidor ACP (Protocolo de cliente de agente).
+Inicie un servidor ACP (Agent Client Protocol).
 
 ```bash
 opencode acp
@@ -479,9 +479,9 @@ opencode acp
 
 Este comando inicia un servidor ACP que se comunica a través de stdin/stdout usando nd-JSON.
 
-#### Banderas
+#### Opciones
 
-| Bandera      | Descripción                  |
+| Opción       | Descripción                  |
 | ------------ | ---------------------------- |
 | `--cwd`      | Directorio de trabajo        |
 | `--port`     | Puerto para escuchar         |
@@ -489,7 +489,7 @@ Este comando inicia un servidor ACP que se comunica a través de stdin/stdout us
 
 ---
 
-### desinstalar
+### uninstall
 
 Desinstale OpenCode y elimine todos los archivos relacionados.
 
@@ -497,9 +497,9 @@ Desinstale OpenCode y elimine todos los archivos relacionados.
 opencode uninstall
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera         | Corto | Descripción                               |
+| Opción          | Corta | Descripción                               |
 | --------------- | ----- | ----------------------------------------- |
 | `--keep-config` | `-c`  | Mantener archivos de configuración        |
 | `--keep-data`   | `-d`  | Conservar datos de sesión e instantáneas  |
@@ -508,7 +508,7 @@ opencode uninstall
 
 ---
 
-### mejora
+### upgrade
 
 Actualiza opencode a la última versión o a una versión específica.
 
@@ -528,24 +528,24 @@ Para actualizar a una versión específica.
 opencode upgrade v0.1.48
 ```
 
-#### Banderas
+#### Opciones
 
-| Bandera    | Corto | Descripción                                                                  |
-| ---------- | ----- | ---------------------------------------------------------------------------- |
-| `--method` | `-m`  | El método de instalación que se utilizó; rizo, npm, pnpm, bollo, preparación |
+| Opción     | Corta | Descripción                                                         |
+| ---------- | ----- | ------------------------------------------------------------------- |
+| `--method` | `-m`  | El método de instalación que se utilizó; curl, npm, pnpm, bun, brew |
 
 ---
 
-## Banderas globales
+## Opciones globales
 
-El opencode CLI toma las siguientes banderas globales.
+La CLI de OpenCode toma las siguientes banderas globales.
 
-| Bandera        | Corto | Descripción                                                     |
-| -------------- | ----- | --------------------------------------------------------------- |
-| `--help`       | `-h`  | Mostrar ayuda                                                   |
-| `--version`    | `-v`  | Número de versión de impresión                                  |
-| `--print-logs` |       | Imprimir registros en stderr                                    |
-| `--log-level`  |       | Nivel de registro (DEPURACIÓN, INFORMACIÓN, ADVERTENCIA, ERROR) |
+| Opción         | Corta | Descripción                                  |
+| -------------- | ----- | -------------------------------------------- |
+| `--help`       | `-h`  | Mostrar ayuda                                |
+| `--version`    | `-v`  | Número de versión de impresión               |
+| `--print-logs` |       | Imprimir registros en stderr                 |
+| `--log-level`  |       | Nivel de registro (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
@@ -553,7 +553,7 @@ El opencode CLI toma las siguientes banderas globales.
 
 OpenCode se puede configurar mediante variables de entorno.
 
-| Variables                             | Tipo     | Descripción                                                                     |
+| Variable                              | Type     | Description                                                                     |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
 | `OPENCODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
 | `OPENCODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
@@ -586,7 +586,7 @@ OpenCode se puede configurar mediante variables de entorno.
 
 Estas variables de entorno habilitan funciones experimentales que pueden cambiar o eliminarse.
 
-| Variables                                       | Tipo     | Descripción                                                |
+| Variable                                        | Type     | Description                                                |
 | ----------------------------------------------- | -------- | ---------------------------------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | booleano | Habilitar todas las funciones experimentales               |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
@@ -599,5 +599,5 @@ Estas variables de entorno habilitan funciones experimentales que pueden cambiar
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar la verificación de tipo experimental LSP         |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booleano | Habilitar funciones de rebajas experimentales              |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booleano | Habilitar funciones de Markdown experimentales             |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |

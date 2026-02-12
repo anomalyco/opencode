@@ -11,18 +11,18 @@ description: 编写您自己的插件来扩展 opencode。
 
 ## 使用插件
 
-有兩種加載插件的方法。
+有两种加載插件的方法。
 
 ---
 
-### 從本地文件
+### 从本地文件
 
 将 JavaScript 或 TypeScript 文件放置在插件目录中。
 
 - `.opencode/plugins/` - 项目级插件
 - `~/.config/opencode/plugins/` - 全局插件
 
-這些目錄中的文件會在啟動時自動加載。
+这些目录中的文件会在启动時自动加載。
 
 ---
 
@@ -43,7 +43,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-### 插件是如何安裝的
+### 插件是如何安装的
 
 **npm 插件** 在启动时使用 Bun 自动安装。包及其依赖项缓存在 `~/.cache/opencode/node_modules/` 中。
 
@@ -51,9 +51,9 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-### 加載順序
+### 加载顺序
 
-插件從所有源加載，所有掛鉤按順序運行。加載順序為：
+插件從所有源加載，所有掛鉤按顺序運行。加載顺序为：
 
 1. 全局配置 (`~/.config/opencode/opencode.json`)
 2. 项目配置（`opencode.json`）
@@ -64,14 +64,14 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-## 創建一個插件
+## 创建一个插件
 
 插件是一个 **JavaScript/TypeScript 模块多个**，它导出一个或插件
-功能。每個函數接收一個上下文對象並返回一個鉤子對象。
+功能。每个函數接收一个上下文对象并返回一个鉤子对象。
 
 ---
 
-### 依賴關係
+### 依赖关系
 
 本地插件和自定义工具可以使用外部 npm 包。将 `package.json` 添加到您的配置目录，其中包含您需要的依赖项。
 
@@ -101,7 +101,7 @@ export const MyPlugin = async (ctx) => {
 
 ---
 
-### 基本結構
+### 基本结构
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -139,7 +139,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### 活動
+### 事件
 
 插件可以訂閱事件，如下面的示例部分所示。以下是可用的不同事件的列表。
 
@@ -152,11 +152,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `file.edited`
 - `file.watcher.updated`
 
-#### 安裝活動
+#### 安装事件
 
 - `installation.updated`
 
-#### LSP活动
+#### LSP 事件
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -168,16 +168,16 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `message.removed`
 - `message.updated`
 
-#### 權限事件
+#### 权限事件
 
 - `permission.asked`
 - `permission.replied`
 
-#### 服務器事件
+#### 服务器事件
 
 - `server.connected`
 
-#### 會議活動
+#### 会话事件
 
 - `session.created`
 - `session.compacted`
@@ -188,11 +188,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `session.status`
 - `session.updated`
 
-#### 都都活動
+#### 待办事项事件
 
 - `todo.updated`
 
-#### 殼牌活動
+#### Shell 事件
 
 - `shell.env`
 
@@ -201,7 +201,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI 活動
+#### TUI 事件
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -215,9 +215,9 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### 發送通知
+### 发送通知
 
-當某些事件發生時發送通知：
+当某些事件發生時發送通知：
 
 ```js title=".opencode/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -258,7 +258,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
-### 注入環境變量
+### 注入环境变量
 
 将环境变量注入所有shell执行（AI工具和用户终端）：
 
@@ -275,7 +275,7 @@ export const InjectEnvPlugin = async () => {
 
 ---
 
-### 定制工具
+### 自定义工具
 
 插件还可以向 opencode 添加自定义工具：
 
@@ -306,11 +306,11 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 - `args`：Zod 模式的工具参数
 - `execute`：调用工具时运行的函数
 
-您的自定義工具將可與內置工具一起用於opencode。
+您的自定義工具将可与内置工具一起用于opencode。
 
 ---
 
-### 記錄
+### 日志
 
 使用 `client.app.log()` 而不是 `console.log` 进行成型日志记录：
 
@@ -331,9 +331,9 @@ export const MyPlugin = async ({ client }) => {
 
 ---
 
-### 壓實鉤
+### 压缩钩子
 
-自定義壓縮會話時包含的上下文：
+自定義壓縮会话時包含的上下文：
 
 ```ts title=".opencode/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"

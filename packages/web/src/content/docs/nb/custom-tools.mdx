@@ -1,9 +1,9 @@
 ---
 title: Egendefinerte verktøy
-description: Lag verktøy som LLM kan kalle inn opencode.
+description: Lag verktøy som LLM kan kalle inn OpenCode.
 ---
 
-Egendefinerte verktøy er funksjoner du oppretter som LLM kan ringe under samtaler. De fungerer sammen med opencode sine [innebygde verktøy](/docs/tools) som `read`, `write` og `bash`.
+Egendefinerte verktøy er funksjoner du oppretter som LLM kan kalle under samtaler. De fungerer sammen med OpenCode sine [innebygde verktøy](/docs/tools) som `read`, `write` og `bash`.
 
 ---
 
@@ -47,7 +47,7 @@ export default tool({
 
 #### Flere verktøy per fil
 
-Du kan også eksportere flere verktøy fra en enkelt fil. Hver eksport blir **et eget verktøy** med navnet **`<filename>_<exportname>`**:
+Du kan også eksportere flere verktøy fra en enkelt fil. Hver eksport blir **et separat verktøy** med navnet **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
 import { tool } from "@opencode-ai/plugin"
@@ -127,13 +127,13 @@ export default tool({
 ```
 
 Bruk `context.directory` for øktens arbeidskatalog.
-Bruk `context.worktree` for git-arbeidstreroten.
+Bruk `context.worktree` for git-arbeidstreet.
 
 ---
 
 ## Eksempler
 
-### Skriv et verktøy i Python
+### Skrive et verktøy i Python
 
 Du kan skrive verktøyene dine på hvilket som helst språk du vil. Her er et eksempel som legger til to tall ved hjelp av Python.
 

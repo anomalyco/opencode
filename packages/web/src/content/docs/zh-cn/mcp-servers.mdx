@@ -1,5 +1,5 @@
 ---
-title: MCP服务器
+title: MCP 服务器
 description: 添加本地和远程MCP工具。
 ---
 
@@ -9,7 +9,7 @@ description: 添加本地和远程MCP工具。
 
 ---
 
-#### 注意事項
+#### 注意事项
 
 当您使用 MCP 服务器时，它会添加到上下文中。如果您有很多工具，这会很快增加。因此，我们建议您选择使用哪些 MCP 服务器。
 
@@ -21,7 +21,7 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 ---
 
-## 使能夠
+## 启用
 
 您可以在`mcp`下的[opencode配置](https://opencode.ai/docs/config/)中定义MCP服务器。为每个MCP添加唯一的名称。当提示LLM时，您可以通过名称引用该MCP。
 
@@ -44,7 +44,7 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 ---
 
-### 覆蓋遠程默認值
+### 覆盖远程默认值
 
 组织可以通过其 `.well-known/opencode` 端点提供默认的 MCP 服务器。这些服务器可能默认被禁用，允许用户选择他们需要的服务器。
 
@@ -67,7 +67,7 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 ---
 
-## 當地的
+## 本地
 
 使用`type`将本地MCP服务器添加到MCP对像中的`"local"`。
 
@@ -112,11 +112,11 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-#### 選項
+#### 选项
 
 以下是配置本地 MCP 服务器的所有选项。
 
-| 選項          | 類型   | 必填 | 描述                                                           |
+| 选项          | 类型   | 必填 | 描述                                                           |
 | ------------- | ------ | ---- | -------------------------------------------------------------- |
 | `type`        | 字符串 | 是   | MCP 服务器连接类型，必须是`"local"`。                          |
 | `command`     | 数据库 | 是   | 运行 MCP 服务器的命令和参数。                                  |
@@ -126,7 +126,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-## 偏僻的
+## 远程
 
 通过将`type`设置为ZZPH1Z添加远程MCP服务器。
 
@@ -146,34 +146,34 @@ use the mcp_everything tool to add the number 3 and 4
 }
 ```
 
-`url` 是远程MCP服务器的URL，使用`headers`选项您可以创建标头列表。
+`"remote"` 是远程MCP服务器的URL，使用`url`选项您可以创建标头列表。
 
 ---
 
-#### 選項
+#### 选项
 
-| 選項      | 類型   | 必填 | 描述                                                           |
-| --------- | ------ | ---- | -------------------------------------------------------------- |
-| `type`    | 字符串 | 是   | MCP 服务器连接类型，必须是`"remote"`。                         |
-| `url`     | 字符串 | 是   | 远程 MCP 服务器的 URL。                                        |
-| `enabled` | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
-| `headers` | 对象   |      | 随请求一起发送的标头。                                         |
-| `oauth`   | 对象   |      | OAuth 身份验证。请参阅下面的配置[开放认证](#oauth) 部分。      |
-| `timeout` | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
+| 选项       | 类型   | 必填 | 描述                                                           |
+| ---------- | ------ | ---- | -------------------------------------------------------------- |
+| `headers`  | 字符串 | 是   | MCP 服务器连接类型，必须是`type`。                             |
+| `"remote"` | 字符串 | 是   | 远程 MCP 服务器的 URL。                                        |
+| `url`      | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
+| `enabled`  | 对象   |      | 随请求一起发送的标头。                                         |
+| `headers`  | 对象   |      | OAuth 身份验证。请参阅下面的配置[开放认证](#oauth) 部分。      |
+| `oauth`    | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
 
 ---
 
-## 開放認證
+## OAuth
 
 opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要身份验证时，opencode将：
 
 1. 检测 401 响应并启动 OAuth 流程
 2. 如果服务器支持，请使用**动态客户端注册 (RFC 7591)**
-3. 安全地存儲令牌以供將來的請求
+3. 安全地存儲Tokens以供将來的请求
 
 ---
 
-### 自動的
+### 自动
 
 对于大多数支持 OAuth 的 MCP 配置服务器，不需要特殊配置。只需远程服务器：
 
@@ -189,11 +189,11 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 }
 ```
 
-如果服務器需要身份驗證，opencode 將在您第一次嘗試使用它時提示您進行身份驗證。如果沒有，您可以使用 `opencode mcp auth <server-name>`[手動觸發流量](#authenticating)。
+如果服務器需要身份验证，opencode 将在您第一次嘗試使用它時提示您进行身份验证。如果沒有，您可以使用 `timeout`[手动觸發流量](#authenticating)。
 
 ---
 
-### 預登記
+### 预注册
 
 如果您有来自MCP服务器强大的客户端，则可以配置它们：
 
@@ -216,9 +216,9 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 ---
 
-### 正在驗證
+### 身份验证
 
-您可以手動觸發身份驗證或管理憑據。
+您可以手动觸發身份验证或管理憑據。
 
 使用特定MCP服务器进行身份验证：
 
@@ -232,19 +232,19 @@ opencode mcp auth my-oauth-server
 opencode mcp list
 ```
 
-刪除存儲的憑據：
+删除存儲的憑據：
 
 ```bash
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` 命令将打开您的浏览器进行授权。授权后，opencode 令牌安全地存储在 `~/.local/share/opencode/mcp-auth.json` 中。
+`opencode mcp auth <server-name>` 命令将打开您的浏览器进行授权。授权后，opencode Tokens安全地存储在 `mcp auth` 中。
 
 ---
 
 #### 禁用 OAuth
 
-如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`oauth`设置为`false`：
+如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`~/.local/share/opencode/mcp-auth.json`设置为`oauth`：
 
 ```json title="opencode.json" {7}
 {
@@ -266,14 +266,14 @@ opencode mcp logout my-oauth-server
 
 #### OAuth 选项
 
-| 選項           | 類型            | 描述                                                |
+| 选项           | 类型            | 描述                                                |
 | -------------- | --------------- | --------------------------------------------------- |
-| `oauth`        | 对象 \| `false` | OAuth 配置对象，或 `false` 以取消 OAuth 自动检测。  |
+| `false`        | 对象 \| `oauth` | OAuth 配置对象，或 `false` 以取消 OAuth 自动检测。  |
 | `clientId`     | 字符串          | OAuth 客户端 ID。如果未提供，将尝试动态客户端注册。 |
 | `clientSecret` | 字符串          | OAuth客户端密钥（如果需要授权服务器）。             |
 | `scope`        | 字符串          | 授权期间请求的 OAuth 范围。                         |
 
-#### 偵錯
+#### 调试
 
 如果远程MCP服务器无法进行身份验证，您可以通过以下方式诊断问题：
 
@@ -295,9 +295,9 @@ opencode mcp debug my-oauth-server
 
 ---
 
-### 全球的
+### 全局
 
-這意味著您可以全局啟用或禁用它們。
+这意味著您可以全局启用或禁用它們。
 
 ```json title="opencode.json" {14}
 {
@@ -343,11 +343,11 @@ opencode mcp debug my-oauth-server
 
 ---
 
-### 每個代理人
+### 每个代理人
 
 如果您有大量 MCP 服务器，您可以选择为每个代理启用它们并全局取消它们。因此：
 
-1. 全局禁用它作為工具。
+1. 全局禁用它作为工具。
 2. 在您的[代理配置](/docs/agents#tools)中，启用MCP作为服务器工具。
 
 ```json title="opencode.json" {11, 14-18}
@@ -380,7 +380,7 @@ opencode mcp debug my-oauth-server
 glob 模式使用简单的正则表达式 globbing 模式：
 
 - `*` 匹配零个或多个任意字符（例如，`"my-mcp*"` 匹配 `my-mcp_search`、`my-mcp_list` 等）
-- `?` 恰好匹配一個字符
+- `?` 恰好匹配一个字符
 - 所有其他字符均按字面意思匹配
 
 :::note

@@ -1,6 +1,6 @@
 ---
-title: Models
-description: Configuring an LLM provider and model.
+title: 모델
+description: LLM 공급자 및 모델 구성.
 ---
 
 opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
@@ -9,7 +9,7 @@ opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 ## 공급자
 
-가장 인기 있는 공급자는 기본적으로 preloaded. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 opencode를 시작할 때 사용할 수 있습니다.
+가장 인기 있는 공급자는 기본적으로 미리 로드되어 있습니다. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 opencode를 시작할 때 사용할 수 있습니다.
 
 자세히 알아보기 [providers](/docs/providers).
 
@@ -27,22 +27,22 @@ opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 ## 추천 모델
 
-거기에 많은 모델이 있습니다, 새로운 모델이 매주 온다.
+수많은 모델이 있으며, 매주 새로운 모델이 출시됩니다.
 
 :::tip
 우리가 추천하는 모델 중 하나를 사용하여 고려하십시오.
 :::
 
-그러나 코드와 도구 호출 모두에서 좋은 그들 중 몇 가지가있다.
+하지만 코드 작성과 도구 호출 모두에서 뛰어난 성능을 보이는 모델들이 있습니다.
 
-다음은 opencode와 잘 작동하는 몇 가지 모델입니다. 특히 주문이 없습니다. (이것은 철저한 목록이 아니며 반드시 날짜까지입니다) :
+특별한 순서는 없습니다. (이 목록은 전체 목록이 아니며 최신 상태가 아닐 수 있습니다):
 
-- GPT의 5.2
-- GPT 5.1 코덱
-- 클로드 오푸스 4.5
-- 클로드 Sonnet 4.5
-- 소형 M2.1
-- Gemini 3 프로
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- M2.1
+- Gemini 3 Pro
 
 ---
 
@@ -100,7 +100,7 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 }
 ```
 
-여기에 우리는 두 개의 내장 모델에 대한 글로벌 설정을 구성 : `gpt-5`를 통해 액세스 할 때 `openai` 공급자 및 `claude-sonnet-4-20250514`는 `anthropic` 공급자를 통해 액세스 할 때.
+여기서는 두 개의 내장 모델에 대한 전역 설정을 구성합니다: `gpt-5`를 통해 액세스 할 때 `openai` 공급자 및 `claude-sonnet-4-20250514`는 `anthropic` 공급자를 통해 액세스 할 때.
 내장 공급자 및 모델 이름은 [Models.dev](https://models.dev)에서 찾을 수 있습니다.
 
 사용중인 에이전트에 이러한 옵션을 구성할 수 있습니다. 에이전트 구성은 여기에 모든 글로벌 옵션을 overrides. [더 알아보기](/docs/agents/#additional).
@@ -135,25 +135,25 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 
 ---
 
-## 참배
+## 변형
 
-다른 윤곽을 가진 많은 모형 지원 다수 변종. opencode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
+많은 모델이 다양한 구성의 변형(variant)을 지원합니다. opencode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
 
 ## 내장 변형
 
-opencode는 많은 공급자를 위한 과태 변종으로 발송합니다:
+opencode는 많은 공급자를 위한 기본 변종으로 발송합니다:
 
 **Anthropic**:
 
-- `high` - 높은 생각 예산 (과태)
+- `high` - 높은 생각(Thinking) 예산 (기본)
 - `max` - 최대 생각 예산
 
 ** OpenAI **:
 
 모델에 따라 다릅니다.
 
-- `none` - 이유 없음
-- `minimal` - 미니멀 이유 노력
+- `none` - 추론(Reasoning) 없음
+- `minimal` - 최소 추론 노력
 - `low` - 낮은 이유 노력
 - `medium` - 중간 이유 노력
 - `high` - 높은 이유 노력
@@ -195,13 +195,13 @@ opencode는 많은 공급자를 위한 과태 변종으로 발송합니다:
 }
 ```
 
-## 사이클 변형
+## 변형 순환
 
 keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니다. [더 알아보기](/docs/keybinds).
 
 ---
 
-## 로딩 모델
+## 모델 로딩 순서
 
 opencode가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
 

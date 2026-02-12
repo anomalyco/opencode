@@ -1,21 +1,21 @@
 ---
 title: Giriş
-description: opencode'u kullanmaya başlayın.
+description: opencode kullanmaya başlayın.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) açık kaynaklı bir AI kodlama aracısıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**opencode**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
 ![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
-Hadi başlayalım.
+Başlayalım.
 
 ---
 
-#### Prerequisites
+#### Ön koşullar
 
 opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
@@ -29,7 +29,7 @@ opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 ---
 
-## Düzenlemek
+## Kurulum
 
 opencode'u kurmanın en kolay yolu kurulum betiğidir.
 
@@ -79,7 +79,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
   brew install anomalyco/tap/opencode
   ```
 
-  > En güncel sürümler için opencode dokunuşunu kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
+  > En güncel sürümler için opencode tap'ini kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
 
 - **Paru'yu Arch Linux'ta kullanma**
 
@@ -93,13 +93,13 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
 Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve opencode'un özellikleriyle tam uyumluluğu sağlar.
 :::
 
-- **Çikolata Kullanımı**
+- **Chocolatey Kullanımı**
 
   ```bash
   choco install opencode
   ```
 
-- **Kepçe Kullanımı**
+- **Scoop Kullanımı**
 
   ```bash
   scoop install opencode
@@ -129,13 +129,12 @@ opencode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 
 ---
 
-## Yapılandır
+## Yapılandırma
 
 opencode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
 LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-opencode tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir
-team.
+opencode ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
 
 1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
@@ -158,7 +157,7 @@ Alternatif olarak diğer sağlayıcılardan birini seçebilirsiniz. [Daha fazla 
 
 ---
 
-## Başlat
+## Başlatma
 
 Artık bir sağlayıcı yapılandırdığınıza göre, bir projeye gidebilirsiniz.
 üzerinde çalışmak istiyorsun.
@@ -186,22 +185,19 @@ proje kökü.
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, opencode'un proje yapısını ve kodlama modellerini anlamasına yardımcı olur
-kullanılmış.
+Bu, opencode'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
 
 ---
 
-## Usage
+## Kullanım
 
-Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Sormaktan çekinmeyin
-anything!
+Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
 
-Yapay zeka kodlama aracısını kullanma konusunda yeniyseniz aşağıda bazı örnekleri bulabilirsiniz:
-help.
+AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
 
 ---
 
-### Soru sor
+### Soru Sorma
 
 opencode'dan kod tabanını size açıklamasını isteyebilirsiniz.
 
@@ -217,22 +213,22 @@ Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı ol
 
 ---
 
-### Add features
+### Özellik Ekleme
 
 opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   opencode, değişiklik yapma yeteneğini devre dışı bırakan bir _Plan moduna_ sahiptir ve
-   bunun yerine özelliğin nasıl uygulanacağını önerin.
+   opencode, değişiklik yapma özelliğini kapatan bir \_Plan modu_na sahiptir.
+   Bu modda, özelliğin nasıl uygulanacağını önerir.
 
    **Sekme** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
 
-   ```bash frame="none" title="Switch to Plan mode"
+   ```bash frame="none" title="Plan moduna geç"
    <TAB>
    ```
 
-   Now let's describe what we want it to do.
+   Şimdi ne yapmasını istediğimizi anlatalım.
 
    ```txt frame="none"
    When a user deletes a note, we'd like to flag it as deleted in the database.
@@ -240,13 +236,15 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   opencode'a ne istediğinizi anlamak için yeterli ayrıntıyı vermek istiyorsunuz. Yardımcı olur
-   onunla ekibinizdeki kıdemsiz bir geliştiriciyle konuşuyormuş gibi konuşmak.
+   opencode'un isteğinizi anlaması için yeterli ayrıntı verin.
+   Ekibinizdeki junior bir geliştiriciyle konuşur gibi yazmak genelde iyi sonuç verir.
 
    :::tip
-   opencode'a, ne anladığınızı anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
-   want.
+   opencode'a bol bağlam ve örnek verin.
    :::
+
+   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 2. **Planı yineleyin**
 
@@ -261,19 +259,18 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   opencode, verdiğiniz tüm görselleri tarayabilir ve istemlere ekleyebilir. Yapabilirsiniz
-   bunu bir görüntüyü terminale sürükleyip bırakarak yapın.
+   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 3. **Özelliği oluşturun**
 
-   Plan konusunda kendinizi rahat hissettiğinizde, şu şekilde _Oluşturma moduna_ geri dönün:
-   **Sekme** tuşuna tekrar basmak.
+   Planı yeterli bulduğunuzda **Sekme** tuşuna tekrar basarak \_Build modu_na dönün.
 
    ```bash frame="none"
    <TAB>
    ```
 
-   Ve ondan değişiklikleri yapmasını istiyoruz.
+   Ardından değişiklikleri yapmasını isteyin.
 
    ```bash frame="none"
    Sounds good! Go ahead and make the changes.
@@ -281,10 +278,9 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ---
 
-### Değişiklik yap
+### Değişiklik Yapma
 
-Daha basit değişiklikler için opencode'dan bunu doğrudan oluşturmasını isteyebilirsiniz.
-Önce planı gözden geçirmeye gerek kalmadan.
+Daha basit değişikliklerde, önce planı incelemeden opencode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -292,12 +288,11 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-opencode'un doğru kararı vermesi için yeterli miktarda ayrıntı sağladığınızdan emin olmak istiyorsunuz.
-değişiklikler.
+opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
 
 ---
 
-### Undo changes
+### Değişiklikleri Geri Alma
 
 Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 
@@ -312,8 +307,7 @@ Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilir
 /undo
 ```
 
-opencode artık yaptığınız değişiklikleri geri alacak ve orijinal mesajınızı gösterecek
-again.
+opencode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -333,10 +327,9 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ---
 
-## Paylaşmak
+## Paylaşma
 
-opencode ile yaptığınız görüşmeler [eşinizle paylaşılabilir]
-takım](/docs/share).
+opencode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
 ```bash frame="none"
 /share
@@ -352,8 +345,8 @@ Konuşmalar varsayılan olarak paylaşılmaz.
 
 ---
 
-## Customize
+## Özelleştirme
 
 İşte bu kadar! Artık opencode'u kullanma konusunda profesyonelsiniz.
 
-Kendinize ait hale getirmek için [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands) veya [opencode config](/docs/config) ile oynamanızı öneririz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [opencode config](/docs/config) ile oynayabilirsiniz.

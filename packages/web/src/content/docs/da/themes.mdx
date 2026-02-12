@@ -3,31 +3,31 @@ title: Temaer
 description: Velg et innebygd tema eller definer ditt eget.
 ---
 
-Med OpenCode kan du velge fra ett av flere innebygde temaer, bruke et tema som tilpasser seg terminaltemaet ditt, eller definere ditt eget tilpassede tema.
+Med OpenCode kan du velge fra ett av flere innebygde temaer, bruge et tema som tilpasser seg terminaltemaet ditt, eller definere ditt eget tilpassede tema.
 
-Som standard bruker OpenCode vårt eget `opencode`-tema.
+Som standard bruger OpenCode vårt eget `opencode`-tema.
 
 ---
 
 ## Terminalkrav
 
-For at temaer skal vises riktig med fullfargepalett, må terminalen din støtte **truecolor** (24-biters farger). De fleste moderne terminaler støtter dette som standard, men du må kanskje aktivere det:
+For at temaer skal vises riktig med fullfarvepalett, må terminalen din støtte **truecolor** (24-biters farver). De fleste moderne terminaler støtter dette som standard, men du må kanskje aktivere det:
 
-- **Sjekk støtte**: Kjør `echo $COLORTERM` - den skal gi ut `truecolor` eller `24bit`
-- **Aktiver truecolor**: Sett miljøvariabelen `COLORTERM=truecolor` i skallprofilen din
-- **Terminalkompatibilitet**: Sørg for at terminalemulatoren din støtter 24-bits farger (de fleste moderne terminaler som iTerm2, Alacritty, Kitty, Windows Terminal og nyere versjoner av GNOME Terminal gjør det)
+- **Tjek støtte**: Kjør `echo $COLORTERM` - den skal gi ut `truecolor` eller `24bit`
+- **Aktiver truecolor**: Sett miljøvariabelen `COLORTERM=truecolor` i shellprofilen din
+- **Terminalkompatibilitet**: Sørg for at terminalemulatoren din støtter 24-bits farver (de fleste moderne terminaler som iTerm2, Alacritty, Kitty, Windows Terminal og nyere versioner av GNOME Terminal gør det)
 
-Uten truecolor-støtte kan temaer vises med redusert fargenøyaktighet eller falle tilbake til nærmeste 256-fargers tilnærming.
+Uden truecolor-støtte kan temaer vises med redusert farvenøjagtighed eller falde tilbage til nærmeste 256-farvers tilnærming.
 
 ---
 
-## Innebygde temaer
+## Indbyggede temaer
 
 OpenCode kommer med flere innebygde temaer.
 
 | Navn                   | Beskrivelse                                                               |
 | ---------------------- | ------------------------------------------------------------------------- |
-| `system`               | Tilpasser seg terminalens bakgrunnsfarge                                  |
+| `system`               | Tilpasser seg terminalens bakgrunnsfarve                                  |
 | `tokyonight`           | Basert på [Tokyonight](https://github.com/folke/tokyonight.nvim)-temaet   |
 | `everforest`           | Basert på [Everforest](https://github.com/sainnhe/everforest)-temaet      |
 | `ayu`                  | Basert på [Ayu](https://github.com/ayu-theme) mørke tema                  |
@@ -39,29 +39,29 @@ OpenCode kommer med flere innebygde temaer.
 | `matrix`               | Hacker-stil grønt på svart tema                                           |
 | `one-dark`             | Basert på [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Mørkt tema |
 
-Og mer, vi legger stadig til nye temaer.
+Og mer, vi tilføjer stadig til nye temaer.
 
 ---
 
 ## Systemtema
 
-`system`-temaet er designet for å automatisk tilpasse seg terminalens fargevalg. I motsetning til tradisjonelle temaer som bruker faste farger, er _system_-temaet:
+`system`-temaet er designet for at automatisk tilpasse seg terminalens farvevalg. I motsetning til tradisjonelle temaer som bruger faste farver, er _system_-temaet:
 
-- **Genererer gråskala**: Oppretter en tilpasset gråskala basert på terminalens bakgrunnsfarge, og sikrer optimal kontrast.
-- **Bruker ANSI farger**: Bruker standard ANSI farger (0-15) for syntaksutheving og UI elementer, som respekterer terminalens fargepalett.
-- **Bevarer terminalens standardinnstillinger**: Bruker `none` for tekst- og bakgrunnsfarger for å opprettholde terminalens opprinnelige utseende.
+- **Genererer gråskala**: Opreter en brugerdefineret gråskala basert på terminalens bakgrunnsfarve, og sikrer optimal kontrast.
+- **Bruger ANSI farver**: Bruger standard ANSI farver (0-15) for syntaksutheving og UI elementer, som respekterer terminalens farvepalett.
+- **Bevarer terminalens standardinnstillinger**: Bruger `none` for tekst- og bakgrunnsfarver for at opretholde terminalens opprinnelige utseende.
 
-Systemtemaet er for brukere som:
+Systemtemaet er for brugere som:
 
 - Vil at OpenCode skal matche terminalens utseende
-- Bruk tilpassede terminalfargeskjemaer
+- Brug tilpassede terminalfarveskjemaer
 - Foretrekker et konsistent utseende på tvers av alle terminalapplikasjoner
 
 ---
 
-## Bruke et tema
+## Brug et tema
 
-Du kan velge et tema ved å hente frem temavalg med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
+Du kan velge et tema ved at hente frem temavalg med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
 
 ```json title="opencode.json" {3}
 {
@@ -72,9 +72,9 @@ Du kan velge et tema ved å hente frem temavalg med kommandoen `/theme`. Eller d
 
 ---
 
-## Egendefinerte temaer
+## Brugerdefinerede temaer
 
-OpenCode støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt lage og tilpasse temaer.
+OpenCode støtter et fleksibelt JSON-basert temasystem som lar brugere enkelt lage og tilpasse temaer.
 
 ---
 
@@ -83,19 +83,19 @@ OpenCode støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt la
 Temaer lastes inn fra flere kataloger i følgende rekkefølge der senere kataloger overstyrer tidligere:
 
 1. **Innebygde temaer** - Disse er innebygd i binæren
-2. **Brukerkonfigurasjonskatalog** - Definert i `~/.config/opencode/themes/*.json` eller `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **Brugerkonfigurasjonskatalog** - Definert i `~/.config/opencode/themes/*.json` eller `$XDG_CONFIG_HOME/opencode/themes/*.json`
 3. **Prosjektrotkatalog** - Definert i `<project-root>/.opencode/themes/*.json`
-4. **Gjeldende arbeidskatalog** - Definert i `./.opencode/themes/*.json`
+4. **Nuværende arbejdskatalog** - Definert i `./.opencode/themes/*.json`
 
-Hvis flere kataloger inneholder et tema med samme navn, vil temaet fra katalogen med høyere prioritet bli brukt.
+Hvis flere kataloger inneholder et tema med samme navn, vil temaet fra katalogen med høyere prioritet bli brugt.
 
 ---
 
-### Opprette et tema
+### Oprettelse af et tema
 
-For å lage et tilpasset tema, lag en JSON-fil i en av temakatalogene.
+For at lage et brugerdefineret tema, lag en JSON-fil i en av temakatalogene.
 
-For brukeromfattende temaer:
+For brugeromfattende temaer:
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
@@ -111,36 +111,36 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### JSON format
+### JSON-format
 
-Temaer bruker et fleksibelt JSON-format med støtte for:
+Temaer bruger et fleksibelt JSON-format med støtte for:
 
-- **Sekskantfarger**: `"#ffffff"`
-- **ANSI farger**: `3` (0-255)
-- **Fargereferanser**: `"primary"` eller egendefinerte definisjoner
+- **Sekskantfarver**: `"#ffffff"`
+- **ANSI farver**: `3` (0-255)
+- **Farvereferanser**: `"primary"` eller egendefinerte definisjoner
 - **Mørke/lyse varianter**: `{"dark": "#000", "light": "#fff"}`
-- **Ingen farge**: `"none"` - Bruker terminalens standardfarge eller transparent
+- **Ingen farve**: `"none"` - Bruger terminalens standardfarve eller transparent
 
 ---
 
-### Fargedefinisjoner
+### Farvedefinitioner
 
-`defs`-delen er valgfri, og den lar deg definere gjenbrukbare farger som kan refereres til i temaet.
+`defs`-delen er valgfri, og den lar deg definere gjenbrugbare farver som kan refereres til i temaet.
 
 ---
 
 ### Terminalstandarder
 
-Spesialverdien `"none"` kan brukes for hvilken som helst farge for å arve terminalens standardfarge. Dette er spesielt nyttig for å lage temaer som passer sømløst med terminalens fargeskjema:
+Spesialverdien `"none"` kan bruges for hvilken som helst farve for at arve terminalens standardfarve. Dette er spesielt nyttig for at lage temaer som passer sømløst med terminalens farveskjema:
 
-- `"text": "none"` - Bruker terminalens standard forgrunnsfarge
-- `"background": "none"` - Bruker terminalens standard bakgrunnsfarge
+- `"text": "none"` - Bruger terminalens standard forgrunnsfarve
+- `"background": "none"` - Bruger terminalens standard bakgrunnsfarve
 
 ---
 
 ### Eksempel
 
-Her er et eksempel på et tilpasset tema:
+Her er et eksempel på et brugerdefineret tema:
 
 ```json title="my-theme.json"
 {

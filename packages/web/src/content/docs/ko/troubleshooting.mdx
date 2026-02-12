@@ -1,13 +1,13 @@
 ---
-title: Troubleshooting
-description: Common issues and how to resolve them.
+title: 문제 해결
+description: 일반적인 문제와 해결 방법.
 ---
 
 opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하여 디스크에 저장합니다.
 
 ---
 
-## 로그인
+## 로깅
 
 로그 파일은 다음과 같습니다:
 
@@ -21,7 +21,7 @@ opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 
 ---
 
-## 저장
+## 저장소
 
 opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
@@ -39,23 +39,23 @@ opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
 ---
 
-## 데스크탑 앱
+## 데스크톱 앱
 
 opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sidecar)를 실행합니다. 대부분의 문제는 misbehaving 플러그인, 손상된 캐시, 또는 나쁜 서버 설정에 의해 발생합니다.
 
-## 빠른 체크
+## 빠른 확인
 
 - 완전히 종료하고 앱을 다시 시작.
 - 앱이 오류 화면을 보여 주면 ** Restart**를 클릭하고 오류 세부 정보를 복사합니다.
-- macOS만: `opencode` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
+- macOS만: `OpenCode` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
 
 ---
 
-## Disable 플러그인
+## 플러그인 비활성화
 
 데스크톱 앱이 출시, 거는, 또는 이상한 것에서 충돌하면 플러그인을 비활성화하여 시작합니다.
 
-### 글로벌 설정 확인
+### 전역 설정 확인
 
 글로벌 설정 파일을 열고 `plugin` 키를 찾습니다.
 
@@ -101,17 +101,17 @@ opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 
 ---
 
-## 수정 서버 연결 문제
+## 서버 연결 문제 수정
 
-opencode 데스크톱은 자체 로컬 서버(과태)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
+opencode 데스크톱은 자체 로컬 서버(기본)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
 
 **"Connection Failed"** 대화 상자 (또는 앱이 스패시 화면을 지나지 않습니다), 사용자 정의 서버 URL을 확인합니다.
 
-### 바탕 화면 기본 서버 URL 삭제
+### 데스크톱 기본 서버 URL 삭제
 
 Home 화면에서 Server Picker를 열려면 서버 이름(상태 점)을 클릭하십시오. **기본 서버** 섹션에서 **Clear**를 클릭합니다.
 
-####는 `server.port`/`server.hostname`를 당신의 설정에서 제거합니다
+#### 설정에서 server.port/server.hostname 제거
 
 `opencode.json(c)`가 `server` 섹션을 포함하면 일시적으로 제거하고 데스크톱 앱을 다시 시작합니다.
 
@@ -123,7 +123,7 @@ Home 화면에서 Server Picker를 열려면 서버 이름(상태 점)을 클릭
 
 ---
 
-## Linux: 웨이랜드 / X11 문제
+## Linux: Wayland / X11 문제
 
 Linux에서 일부 Wayland 설정은 공백 창이나 compositor 오류를 일으킬 수 있습니다.
 
@@ -132,7 +132,7 @@ Linux에서 일부 Wayland 설정은 공백 창이나 compositor 오류를 일�
 
 ---
 
-## Windows: WebView2 실행 시간
+## Windows: WebView2 런타임
 
 Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 **를 요구합니다. 앱이 공백 창에 열거나 시작하지 않을 경우, install/update WebView2를 설치하고 다시 시도하십시오.
 
@@ -140,11 +140,11 @@ Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 
 
 ## Windows: 일반 성능 문제
 
-느린 성능, 파일 액세스 문제 또는 Windows의 터미널 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 opencode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
+느린 성능, 파일 액세스 문제 또는 Windows의 terminal 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 opencode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
 
 ---
 
-## 알림 표시되지 않음
+## 알림이 표시되지 않음
 
 opencode 데스크톱은 시스템 알림을 보여줍니다 :
 
@@ -153,7 +153,7 @@ opencode 데스크톱은 시스템 알림을 보여줍니다 :
 
 ---
 
-## 재설정 데스크톱 앱 스토리지 (마지막 리조트)
+## 데스크톱 앱 저장소 재설정 (최후의 수단)
 
 앱이 시작되지 않은 경우 UI 내부에서 설정을 취소할 수 없습니다. 데스크탑 앱의 저장된 상태를 재설정하십시오.
 
@@ -201,7 +201,7 @@ opencode와 문제가 발생하면:
 ## opencode가 시작되지 않습니다.
 
 1. 오류 메시지에 대한 로그 확인
-2. 맨끝에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
+2. terminal에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
 3. 당신은 `opencode upgrade`를 가진 최신 버전이 있는 것을 지킵니다
 
 ---
@@ -214,7 +214,7 @@ opencode와 문제가 발생하면:
 
 ---
 
-#### 모델 사용할 수 없습니다
+#### 모델을 사용할 수 없음
 
 1. 공급자와 정통한 확인
 2. config의 모델명을 수정한다.
@@ -234,13 +234,13 @@ opencode와 문제가 발생하면:
 
 ---
 
-## 공급자InitError
+## ProviderInitError
 
 ProviderInitError가 발생하면 잘못된 구성이나 손상된 구성이 있습니다.
 
 해결하기:
 
-1. 첫째로, 당신의 공급자는 [providers guide] (./providers)를 따르기 위하여 제대로 설치됩니다
+1. 첫째로, 당신의 공급자는 [providers guide](./providers)를 따르기 위하여 제대로 설치됩니다
 2. 문제가 발생하면 저장된 구성을 삭제하십시오.
 
    ```bash
@@ -253,7 +253,7 @@ Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.local\sh
 
 ---
 
-### AI APICallError와 공급자 포장 문제점
+### AI_APICallError 및 공급자 패키지 문제
 
 API 호출 오류가 발생하면, 이 공급 업체 패키지로 인해 발생할 수 있습니다. opencode 동적 설치 공급자 패키지 (OpenAI, Anthropic, Google 등) 필요 하 고 로컬로 캐시.
 
@@ -273,7 +273,7 @@ Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.cache\op
 
 ---
 
-#### 복사 / Linux에서 작동하지 않음
+#### Linux에서 복사/붙여넣기 작동 안 함
 
 Linux 사용자는 다음과 같은 클립 보드 유틸리티 중 하나가 복사 / 붙여 넣기 기능에 설치해야합니다.
 

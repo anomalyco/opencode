@@ -1,6 +1,6 @@
 ---
-title: Plugins
-description: Write your own plugins to extend opencode.
+title: 플러그인
+description: OpenCode를 확장하기 위해 자신만의 플러그인을 작성하세요.
 ---
 
 플러그인은 다양한 이벤트와 사용자 정의 행동으로 후킹하여 opencode를 확장 할 수 있습니다. 플러그인을 만들 수 있습니다 새로운 기능을 추가, 외부 서비스와 통합, 또는 opencode의 기본 동작을 수정.
@@ -15,7 +15,7 @@ description: Write your own plugins to extend opencode.
 
 ---
 
-## 현지 파일에서
+## 로컬 파일에서
 
 플러그인 디렉토리에 JavaScript 또는 TypeScript 파일을 배치합니다.
 
@@ -26,7 +26,7 @@ description: Write your own plugins to extend opencode.
 
 ---
 
-### 부터 npm
+### npm에서
 
 config 파일에 npm 패키지를 지정합니다.
 
@@ -45,22 +45,22 @@ config 파일에 npm 패키지를 지정합니다.
 
 ## 플러그인이 설치되는 방법
 
-**npm 플러그인**는 시작시 Bun을 사용하여 자동으로 설치됩니다. 패키지와 그들의 의존성은 `~/.cache/opencode/node_modules/`에서 캐시됩니다.
+**npm 플러그인**은 시작시 Bun을 사용하여 자동으로 설치됩니다. 패키지와 그들의 의존성은 `~/.cache/opencode/node_modules/`에서 캐시됩니다.
 
-**Local 플러그인 ** 플러그인 디렉토리에서 직접로드됩니다. 외부 패키지를 사용하려면 구성 디렉토리 내 `package.json`를 작성해야 합니다 ([Dependencies](#dependencies)), 또는 플러그인을 npm에 게시하고 [config에 추가](/docs/config#plugins).
+**로컬 플러그인**은 플러그인 디렉토리에서 직접로드됩니다. 외부 패키지를 사용하려면 구성 디렉토리 내 `package.json`를 작성해야 합니다 ([Dependencies](#dependencies)), 또는 플러그인을 npm에 게시하고 [config에 추가](/docs/config#plugins).
 
 ---
 
-## 짐 순서
+## 로드 순서
 
-플러그인은 모든 소스에서로드되며 모든 후크는 순서대로 실행됩니다. 짐 순서는:
+플러그인은 모든 소스에서로드되며 모든 후크는 순서대로 실행됩니다. 로드 순서는 다음과 같습니다:
 
 1. 글로벌 구성 (`~/.config/opencode/opencode.json`)
 2. 프로젝트 구성 (`opencode.json`)
 3. 글로벌 플러그인 디렉토리 (`~/.config/opencode/plugins/`)
 4. 프로젝트 플러그인 디렉토리 (`.opencode/plugins/`)
 
-동일한 이름과 버전을 가진 중복 npm 포장은 한 번 적재됩니다. 하지만, 로컬 플러그인과 같은 이름과 npm 플러그인은 모두 별도로로드됩니다.
+중복 npm 패키지는 한 번만 로드됩니다. 하지만, 로컬 플러그인과 같은 이름과 npm 플러그인은 모두 별도로로드됩니다.
 
 ---
 
@@ -71,7 +71,7 @@ config 파일에 npm 패키지를 지정합니다.
 
 ---
 
-### 종점
+### 의존성
 
 로컬 플러그인 및 사용자 정의 도구는 외부 npm 패키지를 사용할 수 있습니다. `package.json`를 config 디렉토리에 추가하면 필요한 의존도가 있습니다.
 
@@ -192,7 +192,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 - `todo.updated`
 
-#### 포탄 사건
+#### 셸 이벤트
 
 - `shell.env`
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Inject 환경 변수
 
-환경 변수를 모든 쉘 실행 (AI 도구 및 사용자 터미널)로 주사하십시오.
+환경 변수를 모든 shell 실행 (AI 도구 및 사용자 terminal)로 주사하십시오.
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -312,7 +312,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 ### 로깅
 
-구조화된 로깅을 위한 `console.log` 대신에 `client.app.log()`를 사용하십시오:
+구조화된 로깅을 위한 `client.app.log()` 대신에 `console.log`를 사용하십시오:
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
@@ -331,7 +331,7 @@ export const MyPlugin = async ({ client }) => {
 
 ---
 
-## Compaction 걸이
+## Compaction 훅
 
 세션이 압축 될 때 포함 된 컨텍스트를 사용자 지정:
 
@@ -355,7 +355,7 @@ Include any state that should persist across compaction:
 }
 ```
 
-LLM의 앞에 `experimental.session.compacting` 걸이 불은 오염 요약을 생성합니다. 기본 압축 프롬프트가 놓을 수 있도록 도메인 별 컨텍스트를 주입합니다.
+LLM이 압축 요약을 생성하기 전에 `experimental.session.compacting` 훅이 실행됩니다. 기본 압축 프롬프트를 대체할 수 있도록 도메인 별 컨텍스트를 주입합니다.
 
 당신은 또한 `output.prompt`를 조정해서 조밀함을 전적으로 대체할 수 있습니다:
 

@@ -1,5 +1,5 @@
 ---
-title: イントロ
+title: はじめに
 description: OpenCode を始めましょう。
 ---
 
@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) は、オープンソースの AI コーディング エージェントです。これは、ターミナルベースのインターフェイス、デスクトップ アプリ、または IDE 拡張機能として利用できます。
+[**OpenCode**](/) は、オープンソースの AI コーディングエージェントです。これは、ターミナルベースのインターフェイス、デスクトップアプリ、または IDE 拡張機能として利用できます。
 
 ![opencodeテーマ](../../../assets/lander/screenshot.png)を使用したOpenCode TUI
 
@@ -19,7 +19,7 @@ export const console = config.console
 
 ターミナルで OpenCode を使用するには、次のものが必要です。
 
-1. 次のような最新のターミナル エミュレータ:
+1. 次のような最新のターミナルエミュレータ:
    - [WezTerm](https://wezterm.org)、クロスプラットフォーム
    - [Alacritty](https://alacritty.org)、クロスプラットフォーム
    - [Ghostty](https://ghostty.org)、Linux および macOS
@@ -31,7 +31,7 @@ export const console = config.console
 
 ## インストール
 
-OpenCode をインストールする最も簡単な方法は、インストール スクリプトを使用することです。
+OpenCode をインストールする最も簡単な方法は、インストールスクリプトを使用することです。
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -87,7 +87,7 @@ curl -fsSL https://opencode.ai/install | bash
   paru -S opencode-bin
   ```
 
-#### 窓
+#### Windows
 
 :::tip[推奨: WSL を使用する]
 Windows で最高のエクスペリエンスを得るには、[Windows Subsystem for Linux (WSL)](/docs/windows-wsl) を使用することをお勧めします。これにより、パフォーマンスが向上し、OpenCode の機能との完全な互換性が提供されます。
@@ -99,19 +99,19 @@ Windows で最高のエクスペリエンスを得るには、[Windows Subsystem
   choco install opencode
   ```
 
-- **スクープの使用**
+- **Scoop の使用**
 
   ```bash
   scoop install opencode
   ```
 
-- **NPM の使用**
+- **npm の使用**
 
   ```bash
   npm install -g opencode-ai
   ```
 
-- **ミセの使い方**
+- **Mise の使用**
 
   ```bash
   mise use -g github:anomalyco/opencode
@@ -129,15 +129,14 @@ Bun を使用して Windows に OpenCode をインストールするためのサ
 
 ---
 
-## 設定する
+## 設定
 
 OpenCode を使用すると、API キーを構成することで任意の LLM プロバイダーを使用できます。
 
-LLM プロバイダーを初めて使用する場合は、[OpenCode Zen](/docs/zen).
-これは、OpenCode によってテストおよび検証されたモデルの厳選されたリストです。
-team.
+LLM プロバイダーを初めて使用する場合は、[OpenCode Zen](/docs/zen) をお勧めします。
+これは、OpenCode チームによってテストおよび検証されたモデルの厳選されたリストです。
 
-1. TUI で `/connect` コマンドを実行し、opencode を選択して、[opencode.ai/auth](https://opencode.ai/auth).
+1. TUI で `/connect` コマンドを実行し、opencode を選択して、[opencode.ai/auth](https://opencode.ai/auth) で認証します。
 
    ```txt
    /connect
@@ -158,10 +157,9 @@ team.
 
 ---
 
-## 初期化する
+## 初期化
 
-プロバイダーを構成したので、次のプロジェクトに移動できます。
-取り組みたいと考えています。
+プロバイダーを構成したので、取り組みたいプロジェクトに移動できます。
 
 ```bash
 cd /path/to/project
@@ -179,25 +177,21 @@ opencode
 /init
 ```
 
-これにより、OpenCode がプロジェクトを分析し、`AGENTS.md` ファイルを作成します。
-プロジェクトのルート。
+これにより、OpenCode がプロジェクトを分析し、プロジェクトのルートに `AGENTS.md` ファイルを作成します。
 
 :::tip
 プロジェクトの `AGENTS.md` ファイルを Git にコミットする必要があります。
 :::
 
-これは、OpenCode がプロジェクトの構造とコーディング パターンを理解するのに役立ちます。
-used.
+これは、OpenCode がプロジェクトの構造と使用されているコーディングパターンを理解するのに役立ちます。
 
 ---
 
 ## 使用法
 
-これで、OpenCode を使用してプロジェクトに取り組む準備が整いました。お気軽にお尋ねください
-何でも！
+これで、OpenCode を使用してプロジェクトに取り組む準備が整いました。何でもお気軽にお尋ねください！
 
-AI コーディング エージェントを初めて使用する場合は、次の例を参考にしてください。
-help.
+AI コーディングエージェントを初めて使用する場合は、次の例を参考にしてください。
 
 ---
 
@@ -223,29 +217,28 @@ OpenCode に新しい機能をプロジェクトに追加するよう依頼で�
 
 1. **計画を作成する**
 
-OpenCode には、変更を加える機能を無効にする _Plan モード_ があり、
-代わりに、その機能を*どのように*実装するかを提案してください。
+OpenCode には、変更を加える機能を無効にする _Plan mode_ があり、
+代わりに、その機能を*どのように*実装するかを提案します。
 
 **Tab** キーを使用してそれに切り替えます。右下隅にこれを示すインジケーターが表示されます。
 
 ```bash frame="none" title="Switch to Plan mode"
-<TAB>
+   <TAB>
 ```
 
 では、何をしたいのかを説明しましょう。
 
 ```txt frame="none"
-When a user deletes a note, we'd like to flag it as deleted in the database.
-Then create a screen that shows all the recently deleted notes.
-From this screen, the user can undelete a note or permanently delete it.
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
 ```
 
-自分が何を望んでいるのかを理解するために、OpenCode に十分な詳細を提供したいと考えています。役に立ちます
-チームの若手開発者と話しているように話すことができます。
+自分が何を望んでいるのかを理解するために、OpenCode に十分な詳細を提供したいと考えています。
+チームの若手開発者と話しているように話すと良いでしょう。
 
 :::tip
 OpenCode に多くのコンテキストと例を提供して、意図する内容を理解できるようにします。
-want.
 :::
 
 2. **計画を反復する**
@@ -253,30 +246,30 @@ want.
 計画が示されたら、フィードバックを送信したり、詳細を追加したりできます。
 
 ```txt frame="none"
-We'd like to design this new screen using a design I've used before.
-[Image #1] Take a look at this image and use it as a reference.
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
 ```
 
 :::tip
-画像をターミナルにドラッグ アンド ドロップして、プロンプトに追加します。
+画像をターミナルにドラッグアンドドロップして、プロンプトに追加します。
 :::
 
-OpenCode は、指定された画像をスキャンしてプロンプトに追加できます。あなたはできる
-これを行うには、画像をターミナルにドラッグ アンド ドロップします。
+OpenCode は、指定された画像をスキャンしてプロンプトに追加できます。
+画像をターミナルにドラッグアンドドロップしてこれを行うことができます。
 
 3. **機能を構築する**
 
-計画に慣れたら、*Build モード*に戻ります。
+計画に慣れたら、*Build mode*に戻ります。
 **Tab** キーをもう一度押します。
 
 ```bash frame="none"
-<TAB>
+   <TAB>
 ```
 
 そして変更を加えるように依頼します。
 
 ```bash frame="none"
-Sounds good! Go ahead and make the changes.
+   Sounds good! Go ahead and make the changes.
 ```
 
 ---
@@ -292,8 +285,7 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-OpenCode が適切な情報を提供できるように、十分な量の詳細を確実に提供する必要があります。
-changes.
+OpenCode が適切な変更を行えるように、十分な量の詳細を確実に提供する必要があります。
 
 ---
 
@@ -312,8 +304,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-OpenCode は加えた変更を元に戻し、元のメッセージを表示します。
-again.
+OpenCode は加えた変更を元に戻し、元のメッセージを再度表示します。
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -335,8 +326,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 共有
 
-OpenCode との会話は [他のユーザーと共有できます]
-チーム](/docs/share)。
+OpenCode との会話は [他のチームメンバーと共有できます](/docs/share)。
 
 ```bash frame="none"
 /share
@@ -356,4 +346,4 @@ OpenCode との会話は [他のユーザーと共有できます]
 
 それで終わりです！これであなたは OpenCode の使い方のプロになりました。
 
-独自のものにするには、[テーマ](/docs/themes) を選択する、[キーバインドをカスタマイズする ](/docs/keybinds)、[コード フォーマッタ ](/docs/formatters) を設定する、[カスタム コマンド ](/docs/commands) を作成する]、または [OpenCode config](/docs/config) を試してみる] ことをお勧めします。
+独自のものにするには、[テーマ](/docs/themes) を選択する、[キーバインドをカスタマイズする](/docs/keybinds)、[コードフォーマッタ](/docs/formatters) を設定する、[カスタムコマンド](/docs/commands) を作成する、または [OpenCode設定](/docs/config) を試してみることをお勧めします。
