@@ -22,7 +22,7 @@ opencode 搜索这些位置：
 
 ---
 
-## 瞭解發現
+## 了解发现
 
 对于专案本地路径， opencode 从当前工作目录向上走，直到到达 git 工作树。
 It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
@@ -31,7 +31,7 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 
 ---
 
-## 寫前言
+## 编写 Frontmatter
 
 每个 `SKILL.md` 必须以 YAML frontmatter 。
 仅識別这些欄位：
@@ -46,7 +46,7 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 
 ---
 
-## 驗證姓名
+## 验证名称
 
 `name` 必须：
 
@@ -64,7 +64,7 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 
 ---
 
-## 遵循長度规则
+## 遵循长度规则
 
 `description` 必须是 1-1024 个字元。
 保持足夠具體，以便代理能夠正确选择。
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## 識別工具說明
+## 识别工具说明
 
 opencode 列出了 `skill` 工具描述中的可用技能。
 每个条目都包含技能名称和描述：
@@ -212,7 +212,7 @@ tools:
 
 ---
 
-## 解決載入問題
+## 解决加载问题
 
 如果某項技能沒有显示：
 

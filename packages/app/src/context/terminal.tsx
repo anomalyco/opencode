@@ -3,6 +3,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
+import type { Platform } from "./platform"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 
 export type LocalPTY = {
@@ -37,14 +38,14 @@ type TerminalCacheEntry = {
 
 const caches = new Set<Map<string, TerminalCacheEntry>>()
 
-export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[]) {
+export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
   for (const cache of caches) {
     const entry = cache.get(key)
     entry?.value.clear()
   }
 
-  removePersisted(Persist.workspace(dir, "terminal"))
+  removePersisted(Persist.workspace(dir, "terminal"), platform)
 
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
@@ -53,7 +54,7 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[]) {
     }
   }
   for (const key of legacy) {
-    removePersisted({ key })
+    removePersisted({ key }, platform)
   }
 }
 

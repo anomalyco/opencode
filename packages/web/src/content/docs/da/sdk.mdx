@@ -13,7 +13,7 @@ Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
 
 ---
 
-## Installer
+## Installation
 
 Installer SDK fra npm:
 
@@ -35,7 +35,7 @@ const { client } = await createOpencode()
 
 Dette starter både en server og en klient
 
-#### Alternativer
+#### Indstillinger
 
 | Alternativ | Skriv         | Beskrivelse                      | Standard    |
 | ---------- | ------------- | -------------------------------- | ----------- |
@@ -79,7 +79,7 @@ const client = createOpencodeClient({
 })
 ```
 
-#### Alternativer
+#### Indstillinger
 
 | Alternativ      | Skriv inn  | Beskrivelse                        | Standard                |
 | --------------- | ---------- | ---------------------------------- | ----------------------- |
@@ -103,7 +103,7 @@ Alle typer er generert fra serverens OpenAPI-spesifikasjon og tilgængelig i <a 
 
 ---
 
-## Feil
+## Fejl
 
 SDK kan gi feil som du kan fange opp og håndtere:
 
@@ -117,7 +117,7 @@ try {
 
 ---
 
-## APIer
+## API'er
 
 SDK avslører alle server-APIer gjennom en typesikker klient.
 
@@ -167,7 +167,7 @@ const agents = await client.app.agents()
 
 ---
 
-### Prosjekt
+### Projekt
 
 | Metode              | Beskrivelse                | Svar                                           |
 | ------------------- | -------------------------- | ---------------------------------------------- |
@@ -205,7 +205,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-### Konfig
+### Konfiguration
 
 | Metode               | Beskrivelse                            | Svar                                                                                                  |
 | -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -224,7 +224,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### sessioner
+### Sessioner
 
 | Metode                                                     | Beskrivelse                       | Noter                                                                                                                                            |
 | ---------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -353,7 +353,7 @@ await client.tui.showToast({
 
 ---
 
-### Auth
+### Godkendelse
 
 | Metode              | Beskrivelse                     | Svar      |
 | ------------------- | ------------------------------- | --------- |
@@ -372,7 +372,7 @@ await client.auth.set({
 
 ---
 
-### Hendelser
+### Hændelser
 
 | Metode              | Beskrivelse                    | Svar                           |
 | ------------------- | ------------------------------ | ------------------------------ |
