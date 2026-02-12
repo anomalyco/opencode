@@ -2,7 +2,7 @@
   description = "OpenCode development flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable-small";
   };
 
   outputs =
