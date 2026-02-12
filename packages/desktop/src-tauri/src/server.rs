@@ -11,15 +11,9 @@ use crate::{
     constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
 pub struct WslConfig {
     pub enabled: bool,
-}
-
-impl Default for WslConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 #[tauri::command]
