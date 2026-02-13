@@ -41,7 +41,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
     <div
       classList={{
         "bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip": true,
-        "h-20": store.collapsed,
+        "h-[78px]": store.collapsed,
       }}
     >
       <div
