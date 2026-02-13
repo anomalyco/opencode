@@ -111,8 +111,8 @@ export namespace HotReload {
     () => {
       if (!Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD) return {}
 
-      const debounce = Flag.OPENCODE_HOT_RELOAD_DEBOUNCE_MS ?? 700
-      const cooldown = Flag.OPENCODE_HOT_RELOAD_COOLDOWN_MS ?? 1500
+      const debounce = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_DEBOUNCE_MS ?? 700
+      const cooldown = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_COOLDOWN_MS ?? 1500
       let timer: ReturnType<typeof setTimeout> | undefined
       let busy = false
       let last = 0
