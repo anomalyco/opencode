@@ -1,0 +1,385 @@
+---
+title: プラグイン
+description: OpenCode を拡張する独自のプラグインを作成します。
+---
+
+プラグインを使用すると、さまざまなイベントにフックして動作をカスタマイズすることで OpenCode を拡張できます。プラグインを作成して、新しい機能を追加したり、外部サービスと統合したり、OpenCode のデフォルトの動作を変更したりできます。
+
+たとえば、コミュニティによって作成された [plugins](/docs/ecosystem#plugins) をチェックしてください。
+
+---
+
+## プラグインの使用
+
+プラグインをロードするには 2 つの方法があります。
+
+---
+
+### ローカルファイルから
+
+JavaScript または TypeScript ファイルをプラグインディレクトリに配置します。
+
+- `.opencode/plugins/` - プロジェクトレベルのプラグイン
+- `~/.config/opencode/plugins/` - グローバルプラグイン
+
+これらのディレクトリ内のファイルは起動時に自動的にロードされます。
+
+---
+
+### npm から
+
+設定ファイルで npm パッケージを指定します。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+通常の npm パッケージとスコープ指定された npm パッケージの両方がサポートされています。
+
+[ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### プラグインのインストール
+
+**npm プラグイン** は、起動時に Bun を使用して自動的にインストールされます。パッケージとその依存関係は `~/.cache/opencode/node_modules/` にキャッシュされます。
+
+**ローカルプラグイン**は、プラグインディレクトリから直接ロードされます。外部パッケージを使用するには、config ディレクトリ内に `package.json` を作成するか ([Dependency](#dependencies) を参照)、プラグインを npm に公開して [config](/docs/config#plugins) に追加する必要があります。
+
+---
+
+### ロード順序
+
+プラグインはすべてのソースからロードされ、すべてのフックが順番に実行されます。ロード順序は次のとおりです。
+
+1. グローバル設定 (`~/.config/opencode/opencode.json`)
+2. プロジェクト設定 (`opencode.json`)
+3. グローバルプラグインディレクトリ (`~/.config/opencode/plugins/`)
+4. プロジェクトプラグインディレクトリ (`.opencode/plugins/`)
+
+同じ名前とバージョンを持つ重複した npm パッケージは 1 回ロードされます。ただし、似た名前のローカルプラグインと npm プラグインは両方とも別々にロードされます。
+
+---
+
+## プラグインを作成する
+
+プラグインは、1 つ以上のプラグインをエクスポートする **JavaScript/TypeScript モジュール**です。
+各関数はコンテキストオブジェクトを受け取り、フックオブジェクトを返します。
+
+---
+
+### 依存関係
+
+ローカルプラグインとカスタムツールは外部の npm パッケージを使用できます。必要な依存関係を含む `package.json` を config ディレクトリに追加します。
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode は起動時に `bun install` を実行してこれらをインストールします。プラグインとツールはそれらをインポートできるようになります。
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### 基本構造
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+プラグイン関数は以下を受け取ります。
+
+- `project`: 現在のプロジェクト情報。
+- `directory`: 現在の作業ディレクトリ。
+- `worktree`: git ワークツリーのパス。
+- `client`: AI と対話するための OpenCode SDK クライアント。
+- `$`: Bun の [コマンドを実行するためのシェル API](https://bun.com/docs/runtime/shell)。
+
+---
+
+### TypeScript のサポート
+
+TypeScript プラグインの場合、プラグインパッケージから型をインポートできます。
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### イベント
+
+以下の「例」セクションに示すように、プラグインはイベントをサブスクライブできます。利用可能なさまざまなイベントのリストは次のとおりです。
+
+#### コマンドイベント
+
+- `command.executed`
+
+#### ファイルイベント
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### インストールイベント
+
+- `installation.updated`
+
+#### LSPイベント
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### メッセージイベント
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### 許可イベント
+
+- `permission.asked`
+- `permission.replied`
+
+#### サーバーイベント
+
+- `server.connected`
+
+#### セッションイベント
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### ToDo イベント
+
+- `todo.updated`
+
+#### シェルイベント
+
+- `shell.env`
+
+#### ツールイベント
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUIイベント
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## 例
+
+ここでは、OpenCode を拡張するために使用できるプラグインの例をいくつか示します。
+
+---
+
+### 通知を送信する
+
+特定のイベントが発生したときに通知を送信します。
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+macOS 上で AppleScript を実行するために `osascript` を使用しています。ここでは通知を送信するために使用しています。
+
+:::note
+OpenCode デスクトップアプリを使用している場合は、応答の準備ができたとき、またはセッションエラーが発生したときにシステム通知を自動的に送信できます。
+:::
+
+---
+
+### .env の保護
+
+OpenCode が `.env` ファイルを読み取らないようにします。
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### 環境変数を挿入する
+
+すべてのシェル実行 (AI ツールとユーザーターミナル) に環境変数を挿入します。
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### カスタムツール
+
+プラグインは OpenCode にカスタムツールを追加することもできます。
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+`tool` ヘルパーは、OpenCode が呼び出すことができるカスタムツールを作成します。 Zod スキーマ関数を受け取り、次のようなツール定義を返します。
+
+- `description`: ツールの機能
+- `args`: ツールの引数の Zod スキーマ
+- `execute`: ツールが呼び出されたときに実行される関数
+
+カスタムツールは、組み込みツールと並行して OpenCode で使用できます。
+
+---
+
+### ロギング
+
+構造化ログには `client.app.log()` の代わりに `console.log` を使用します。
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk) を参照してください。
+
+---
+
+### 圧縮フック
+
+セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+`experimental.session.compacting` フックは、LLM が継続概要を生成する前に起動します。これを使用して、デフォルトの圧縮プロンプトでは見逃されるドメイン固有のコンテキストを挿入します。
+
+`output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+`output.prompt` を設定すると、デフォルトの圧縮プロンプトが完全に置き換えられます。この場合、`output.context` 配列は無視されます。

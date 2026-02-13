@@ -1,0 +1,170 @@
+---
+title: 엔터프라이즈
+description: 조직에서 OpenCode를 안전하게 사용하세요.
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode Enterprise는 코드와 데이터가 인프라를 결코 나타낸다는 것을 보증하는 단체입니다. SSO 및 내부 AI 게이트웨이와 통합하는 중앙화 된 구성을 사용하여 이것을 할 수 있습니다.
+
+:::note
+opencode는 코드 또는 컨텍스트 데이터를 저장하지 않습니다.
+:::
+
+opencode Enterprise로 시작하려면:
+
+1. 시험은 당신의 팀과 내부적으로 합니다.
+2. **<a href={email}> 연락처</a>** 가격 및 구현 옵션을 논의합니다.
+
+---
+
+## 시험
+
+opencode는 오픈 소스이며 코드를 저장하지 않거나 컨텍스트 데이터, 그래서 개발자는 단순히 [get start](/docs/) 그리고 재판을 수행 할 수 있습니다.
+
+---
+
+## 데이터 처리
+
+**opencode는 코드 또는 컨텍스트 데이터를 저장하지 않습니다. ** 모든 처리는 로컬 또는 직접 API 호출을 통해 AI 공급자.
+
+이것은 당신이 신뢰하는 공급자, 또는 내부를 사용하고 있는 경우에
+AI 게이트웨이, opencode를 안전하게 사용할 수 있습니다.
+
+여기에서 유일한 caveat는 선택적인 `/share` 특징입니다.
+
+---
+
+### 공유 대화
+
+사용자가 `/share` 기능을 활성화하면 대화와 관련된 데이터가 opencode.ai에서 이러한 공유 페이지를 호스팅하는 데 사용됩니다.
+
+데이터는 현재 CDN의 가장자리 네트워크를 통해 제공되며 사용자가 가까운 가장자리에 캐시됩니다.
+
+우리는 당신이 당신의 재판을 위해 이것을 비활성화하는 것을 추천합니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[공유에 대해 더 알아보기](/docs/share).
+
+---
+
+### 코드 소유권
+
+**opencode에 의해 생성 된 모든 코드를 소유합니다. ** 제한 또는 소유권 주장이 없습니다.
+
+---
+
+## 가격
+
+opencode Enterprise의 per-seat 모델을 사용합니다. LLM 게이트웨이를 가지고 있다면 토큰을 사용할 수 없습니다. 가격 및 구현 옵션에 대한 자세한 내용은 **<a href={email}>contact us</a>**.
+
+---
+
+## 배포
+
+시험이 완료되면 opencode를 사용해야합니다.
+조직, 당신은 할 수 있습니다 **<a href={email}>contact us</a>** 토론하기
+가격 및 구현 옵션.
+
+---
+
+### 중앙 구성
+
+opencode를 설정하여 전체 조직의 단일 중앙 구성을 사용할 수 있습니다.
+
+이 중앙 집중식 구성은 SSO 공급자와 통합할 수 있으며 내부 AI 게이트웨이 만 모든 사용자 액세스를 보장합니다.
+
+---
+
+### SSO 통합
+
+중앙 구성을 통해 opencode는 인증 기관의 SSO 공급자와 통합 할 수 있습니다.
+
+opencode는 기존 ID 관리 시스템을 통해 내부 AI 게이트웨이에 대한 자격 증명을 얻을 수 있습니다.
+
+---
+
+## 내부 AI 게이트웨이
+
+중앙 설정으로, opencode는 내부 AI 게이트웨이만 사용할 수 있습니다.
+
+또한 다른 모든 AI 제공 업체를 비활성화 할 수 있습니다, 모든 요청은 조직의 승인 된 인프라를 통해 이동합니다.
+
+---
+
+## 셀프 호스팅
+
+공유 페이지를 비활성화하는 것이 좋습니다.
+당신의 조직, 우리는 또한 당신의 인프라에 자기 호스팅을 도울 수 있습니다.
+
+이것은 현재 우리의 로드맵에 있습니다. 관심이 있다면, **<a href={email}>는</a>**를 알려줍니다.
+
+---
+
+## 자주 묻는 질문
+
+<details>
+<summary>opencode Enterprise란 무엇입니까?</summary>
+
+opencode Enterprise는 코드와 데이터가 인프라를 결코 나타낸다는 것을 보증하는 단체입니다. SSO 및 내부 AI 게이트웨이와 통합하는 중앙화 된 구성을 사용하여 이것을 할 수 있습니다.
+
+</details>
+
+<details>
+<summary>opencode Enterprise를 어떻게 시작하나요?</summary>
+
+단순히 팀과 내부 평가판을 시작합니다. 기본값으로 opencode는 코드를 저장하지 않거나 context data, 시작하기 쉬운 만들기.
+
+그런 다음 **<a href={email}>contact us</a>**는 가격과 구현 옵션을 논의합니다.
+
+</details>
+
+<details>
+<summary>엔터프라이즈 가격 정책은 어떻게 되나요?</summary>
+
+우리는 per-seat 기업 가격을 제안합니다. LLM 게이트웨이를 가지고 있다면 토큰을 사용할 수 없습니다. 더 자세한 내용은 **<a href={email}>contact us</a>** 를 통해 조직의 요구에 따라 맞춤형 견적을 제공합니다.
+
+</details>
+
+<details>
+<summary>opencode Enterprise에서 내 데이터는 안전한가요?</summary>
+
+예. opencode는 코드 또는 컨텍스트 데이터를 저장하지 않습니다. 모든 처리는 로컬 또는 직접 API 호출을 통해 AI 공급자. 중앙 설정 및 SSO 통합으로 데이터는 조직의 인프라 내에서 안전하게 유지됩니다.
+
+</details>
+
+<details>
+<summary>자체 비공개 npm 레지스트리를 사용할 수 있나요?</summary>
+
+opencode는 Bun's native `.npmrc` 파일 지원을 통해 개인 npm 등록을 지원합니다. 조직이 JFrog Artifactory, Nexus 또는 이와 같은 개인 레지스트리를 사용한다면, 개발자가 opencode를 실행하기 전에 인증됩니다.
+
+개인 레지스트리로 인증을 설정하려면:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+`~/.npmrc`를 인증 세부 사항으로 만듭니다. opencode는 자동으로
+지금 구매하세요.
+
+:::caution
+opencode를 실행하기 전에 개인 레지스트리에 로그인해야합니다.
+:::
+
+또는 `.npmrc` 파일을 수동으로 구성할 수 있습니다.
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+개발자는 opencode를 실행하기 전에 개인 레지스트리에 로그인해야하며 패키지를 설치할 수 있습니다.
+
+</details>

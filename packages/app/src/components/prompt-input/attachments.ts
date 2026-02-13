@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -11,8 +12,10 @@ type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isFocused: () => boolean
   isDialogActive: () => boolean
-  setDragging: (value: boolean) => void
+  setDraggingType: (type: "image" | "@mention" | null) => void
+  focusEditor: () => void
   addPart: (part: ContentPart) => void
+  readClipboardImage?: () => Promise<File | null>
 }
 
 export function createPromptAttachments(input: PromptAttachmentsInput) {
@@ -29,7 +32,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID(),
+        id: uuid(),
         filename: file.name,
         mime: file.type,
         dataUrl,
@@ -75,7 +78,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     const plainText = clipboardData.getData("text/plain") ?? ""
+
+    // Desktop: Browser clipboard has no images and no text, try platform's native clipboard for images
+    if (input.readClipboardImage && !plainText) {
+      const file = await input.readClipboardImage()
+      if (file) {
+        await addImageAttachment(file)
+        return
+      }
+    }
+
     if (!plainText) return
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
+    if (inserted) return
+
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
@@ -84,15 +100,18 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
+    const hasText = event.dataTransfer?.types.includes("text/plain")
     if (hasFiles) {
-      input.setDragging(true)
+      input.setDraggingType("image")
+    } else if (hasText) {
+      input.setDraggingType("@mention")
     }
   }
 
   const handleGlobalDragLeave = (event: DragEvent) => {
     if (input.isDialogActive()) return
     if (!event.relatedTarget) {
-      input.setDragging(false)
+      input.setDraggingType(null)
     }
   }
 
@@ -100,7 +119,16 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (input.isDialogActive()) return
 
     event.preventDefault()
-    input.setDragging(false)
+    input.setDraggingType(null)
+
+    const plainText = event.dataTransfer?.getData("text/plain")
+    const filePrefix = "file:"
+    if (plainText?.startsWith(filePrefix)) {
+      const filePath = plainText.slice(filePrefix.length)
+      input.focusEditor()
+      input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+      return
+    }
 
     const dropped = event.dataTransfer?.files
     if (!dropped) return
