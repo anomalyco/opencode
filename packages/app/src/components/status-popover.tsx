@@ -173,12 +173,9 @@ export function StatusPopover() {
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.url, health))
   const mcp = useMcpToggle({ sync, sdk, language })
   const defaultServer = useDefaultServerUrl(platform.getDefaultServerUrl)
-  const mcpItems = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
-      .map(([name, status]) => ({ name, status: status.status }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  )
-  const mcpConnected = createMemo(() => mcpItems().filter((item) => item.status === "connected").length)
+  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
@@ -186,7 +183,10 @@ export function StatusPopover() {
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
-    const anyMcpIssue = mcpItems().some((item) => item.status !== "connected" && item.status !== "disabled")
+    const anyMcpIssue = mcpNames().some((name) => {
+      const status = mcpStatus(name)
+      return status !== "connected" && status !== "disabled"
+    })
     return serverHealthy && !anyMcpIssue
   })
 
@@ -306,39 +306,40 @@ export function StatusPopover() {
             <div class="flex flex-col px-2 pb-2">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
-                  when={mcpItems().length > 0}
+                  when={mcpNames().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
                       {language.t("dialog.mcp.empty")}
                     </div>
                   }
                 >
-                  <For each={mcpItems()}>
-                    {(item) => {
-                      const enabled = () => item.status === "connected"
+                  <For each={mcpNames()}>
+                    {(name) => {
+                      const status = () => mcpStatus(name)
+                      const enabled = () => status() === "connected"
                       return (
                         <button
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                          onClick={() => mcp.toggle(item.name)}
-                          disabled={mcp.loading() === item.name}
+                          onClick={() => mcp.toggle(name)}
+                          disabled={mcp.loading() === name}
                         >
                           <div
                             classList={{
                               "size-1.5 rounded-full shrink-0": true,
-                              "bg-icon-success-base": item.status === "connected",
-                              "bg-icon-critical-base": item.status === "failed",
-                              "bg-border-weak-base": item.status === "disabled",
+                              "bg-icon-success-base": status() === "connected",
+                              "bg-icon-critical-base": status() === "failed",
+                              "bg-border-weak-base": status() === "disabled",
                               "bg-icon-warning-base":
-                                item.status === "needs_auth" || item.status === "needs_client_registration",
+                                status() === "needs_auth" || status() === "needs_client_registration",
                             }}
                           />
-                          <span class="text-14-regular text-text-base truncate flex-1">{item.name}</span>
+                          <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={mcp.loading() === item.name}
-                              onChange={() => mcp.toggle(item.name)}
+                              disabled={mcp.loading() === name}
+                              onChange={() => mcp.toggle(name)}
                             />
                           </div>
                         </button>

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -311,12 +311,14 @@ export function SessionHeader() {
     platform,
   })
 
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
+  const leftMount = createMemo(
+    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
+  )
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={leftMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <button
@@ -404,23 +406,25 @@ export function SessionHeader() {
                                     setPrefs("app", value as OpenApp)
                                   }}
                                 >
-                                  {options().map((o) => (
-                                    <DropdownMenu.RadioItem
-                                      value={o.id}
-                                      onSelect={() => {
-                                        setMenu("open", false)
-                                        openDir(o.id)
-                                      }}
-                                    >
-                                      <div class="flex size-5 shrink-0 items-center justify-center">
-                                        <AppIcon id={o.icon} class={openIconSize(o.icon)} />
-                                      </div>
-                                      <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                      <DropdownMenu.ItemIndicator>
-                                        <Icon name="check-small" size="small" class="text-icon-weak" />
-                                      </DropdownMenu.ItemIndicator>
-                                    </DropdownMenu.RadioItem>
-                                  ))}
+                                  <For each={options()}>
+                                    {(o) => (
+                                      <DropdownMenu.RadioItem
+                                        value={o.id}
+                                        onSelect={() => {
+                                          setMenu("open", false)
+                                          openDir(o.id)
+                                        }}
+                                      >
+                                        <div class="flex size-5 shrink-0 items-center justify-center">
+                                          <AppIcon id={o.icon} class={openIconSize(o.icon)} />
+                                        </div>
+                                        <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
+                                        <DropdownMenu.ItemIndicator>
+                                          <Icon name="check-small" size="small" class="text-icon-weak" />
+                                        </DropdownMenu.ItemIndicator>
+                                      </DropdownMenu.RadioItem>
+                                    )}
+                                  </For>
                                 </DropdownMenu.RadioGroup>
                               </DropdownMenu.Group>
                               <DropdownMenu.Separator />
@@ -548,7 +552,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
+              <div class="hidden lg:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
@@ -581,7 +585,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -611,7 +615,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind
                   title={language.t("command.fileTree.toggle")}
                   keybind={command.keybind("fileTree.toggle")}

@@ -119,7 +119,7 @@ try {
 
 ## Structured Output
 
-You can request structured JSON output from the model by specifying an `outputFormat` with a JSON schema. The model will use a `StructuredOutput` tool to return validated JSON matching your schema.
+You can request structured JSON output from the model by specifying an `format` with a JSON schema. The model will use a `StructuredOutput` tool to return validated JSON matching your schema.
 
 ### Basic Usage
 
@@ -128,7 +128,7 @@ const result = await client.session.prompt({
   path: { id: sessionId },
   body: {
     parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
-    outputFormat: {
+    format: {
       type: "json_schema",
       schema: {
         type: "object",

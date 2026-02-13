@@ -274,6 +274,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "attach to a running opencode server (e.g., http://localhost:4096)",
       })
+      .option("dir", {
+        type: "string",
+        describe: "directory to run in, path on remote server if attaching",
+      })
       .option("port", {
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
@@ -292,6 +296,18 @@ export const RunCommand = cmd({
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
+
+    const directory = (() => {
+      if (!args.dir) return undefined
+      if (args.attach) return args.dir
+      try {
+        process.chdir(args.dir)
+        return process.cwd()
+      } catch {
+        UI.error("Failed to change directory to " + args.dir)
+        process.exit(1)
+      }
+    })()
 
     const files: { type: "file"; url: string; filename: string; mime: string }[] = []
     if (args.file) {
@@ -582,7 +598,7 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach })
+      const sdk = createOpencodeClient({ baseUrl: args.attach, directory })
       return await execute(sdk)
     }
 

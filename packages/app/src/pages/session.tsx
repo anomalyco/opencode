@@ -232,7 +232,7 @@ export default function Page() {
     })
   }
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = createMediaQuery("(min-width: 1024px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -1551,7 +1551,13 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+      <div
+        class="flex-1 min-h-0 flex"
+        classList={{
+          "flex-col": !isDesktop(),
+          "flex-row": isDesktop(),
+        }}
+      >
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
           mobileTab={store.mobileTab}
