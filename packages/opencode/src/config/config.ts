@@ -150,6 +150,7 @@ export namespace Config {
     }
 
     const deps = []
+    let installChain: Promise<void> = Promise.resolve()
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
@@ -163,12 +164,11 @@ export namespace Config {
         }
       }
 
-      deps.push(
-        iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
-        }),
-      )
+      installChain = installChain.then(async () => {
+        const shouldInstall = await needsInstall(dir)
+        if (shouldInstall) await installDependencies(dir)
+      })
+      deps.push(installChain)
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))

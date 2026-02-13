@@ -9,7 +9,7 @@ on:
 jobs:
   unit:
     name: unit (linux)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
     defaults:
       run:
         shell: bash
@@ -38,10 +38,10 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: ubuntu-latest
+            host: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
             playwright: bunx playwright install --with-deps
           - name: windows
-            host: windows-latest
+            host: ${{ vars.RUNNER_WINDOWS || 'blacksmith-4vcpu-windows-2025' }}
             playwright: bunx playwright install
     runs-on: ${{ matrix.settings.host }}
     env:
@@ -81,7 +81,7 @@ jobs:
 
   required:
     name: test (linux)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
     needs:
       - unit
       - e2e
