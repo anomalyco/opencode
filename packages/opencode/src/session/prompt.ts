@@ -660,7 +660,6 @@ export namespace SessionPrompt {
         abort,
         sessionID,
         profileID: input.profileID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         system,
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
