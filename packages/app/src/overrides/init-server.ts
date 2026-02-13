@@ -33,6 +33,36 @@ function hideShareButton() {
   })
 }
 
+function initPanelStates() {
+  if (typeof localStorage === "undefined") return
+
+  try {
+    const LAYOUT_KEY = "opencode.settings.dat:layout.v6"
+    const layoutData = localStorage.getItem(LAYOUT_KEY)
+
+    if (!layoutData) {
+      // Initialize with panels closed
+      const defaultLayout = {
+        review: {
+          diffStyle: "split",
+          panelOpened: false,
+        },
+        fileTree: {
+          opened: false,
+          width: 344,
+          tab: "changes",
+        },
+      }
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(defaultLayout))
+      console.log("[init-server] Panels set to hidden by default")
+    } else {
+      console.log("[init-server] Layout already configured")
+    }
+  } catch (error) {
+    console.error("[init-server] Failed to set panel states:", error)
+  }
+}
+
 export function initDefaultServer() {
   if (typeof localStorage === "undefined") return
 
@@ -48,6 +78,9 @@ export function initDefaultServer() {
   } catch (error) {
     console.error("[init-server] Failed to set default server:", error)
   }
+
+  // Initialize panel states
+  initPanelStates()
 
   // Hide share button
   if (document.readyState === "loading") {

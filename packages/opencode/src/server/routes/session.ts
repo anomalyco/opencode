@@ -727,6 +727,8 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         c.status(200)
         c.header("Content-Type", "application/json")
+        // Prevent buffering by proxies/load balancers
+        c.header("X-Accel-Buffering", "no")
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
@@ -759,6 +761,8 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         c.status(204)
         c.header("Content-Type", "application/json")
+        // Prevent buffering by proxies/load balancers
+        c.header("X-Accel-Buffering", "no")
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")

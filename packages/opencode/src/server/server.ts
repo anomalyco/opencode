@@ -493,6 +493,8 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
+            // Prevent buffering by proxies/load balancers
+            c.header("X-Accel-Buffering", "no")
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({

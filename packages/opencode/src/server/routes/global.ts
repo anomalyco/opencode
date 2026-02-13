@@ -66,6 +66,8 @@ export const GlobalRoutes = lazy(() =>
       }),
       async (c) => {
         log.info("global event connected")
+        // Prevent buffering by proxies/load balancers
+        c.header("X-Accel-Buffering", "no")
         return streamSSE(c, async (stream) => {
           stream.writeSSE({
             data: JSON.stringify({
