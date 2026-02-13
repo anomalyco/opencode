@@ -550,8 +550,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     if (isDesktop) {
       // Desktop: push sidebar state to server on every change (debounced)
+      // Use globalThis.fetch for local server to avoid Tauri plugin-http resource retention
       let pushTimer: ReturnType<typeof setTimeout> | undefined
-      const doFetch = platform.fetch ?? globalThis.fetch
       createEffect(
         on(
           () => JSON.stringify(server.projects.list().map((p) => [p.worktree, p.expanded])),
@@ -563,15 +563,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 worktree: p.worktree,
                 expanded: p.expanded,
               }))
-              doFetch(globalSdk.url + "/mirror/sidebar", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-              }).catch(() => {})
+              globalThis
+                .fetch(globalSdk.url + "/mirror/sidebar", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                })
+                .catch(() => {})
             }, 300)
           },
         ),
       )
+      onCleanup(() => clearTimeout(pushTimer))
     }
 
     if (isMirror) {
