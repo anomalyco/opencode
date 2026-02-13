@@ -420,48 +420,77 @@ export namespace Worktree {
     }
 
     const directory = await canonical(input.directory)
+    const locate = async (stdout: Uint8Array | undefined) => {
+      const lines = outputText(stdout)
+        .split("\n")
+        .map((line) => line.trim())
+      const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+        if (!line) return acc
+        if (line.startsWith("worktree ")) {
+          acc.push({ path: line.slice("worktree ".length).trim() })
+          return acc
+        }
+        const current = acc[acc.length - 1]
+        if (!current) return acc
+        if (line.startsWith("branch ")) {
+          current.branch = line.slice("branch ".length).trim()
+        }
+        return acc
+      }, [])
+
+      return (async () => {
+        for (const item of entries) {
+          if (!item.path) continue
+          const key = await canonical(item.path)
+          if (key === directory) return item
+        }
+      })()
+    }
+
+    const clean = (target: string) =>
+      fs
+        .rm(target, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+        })
+
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
 
-    const lines = outputText(list.stdout)
-      .split("\n")
-      .map((line) => line.trim())
-    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
-      if (!line) return acc
-      if (line.startsWith("worktree ")) {
-        acc.push({ path: line.slice("worktree ".length).trim() })
-        return acc
-      }
-      const current = acc[acc.length - 1]
-      if (!current) return acc
-      if (line.startsWith("branch ")) {
-        current.branch = line.slice("branch ".length).trim()
-      }
-      return acc
-    }, [])
-
-    const entry = await (async () => {
-      for (const item of entries) {
-        if (!item.path) continue
-        const key = await canonical(item.path)
-        if (key === directory) return item
-      }
-    })()
+    const entry = await locate(list.stdout)
 
     if (!entry?.path) {
       const directoryExists = await exists(directory)
       if (directoryExists) {
-        await fs.rm(directory, { recursive: true, force: true })
+        await clean(directory)
       }
       return true
     }
 
     const removed = await $`git worktree remove --force ${entry.path}`.quiet().nothrow().cwd(Instance.worktree)
     if (removed.exitCode !== 0) {
-      throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
+      const next = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+      if (next.exitCode !== 0) {
+        throw new RemoveFailedError({
+          message: errorText(removed) || errorText(next) || "Failed to remove git worktree",
+        })
+      }
+
+      const stale = await locate(next.stdout)
+      if (stale?.path) {
+        throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
+      }
     }
+
+    await clean(entry.path)
 
     const branch = entry.branch?.replace(/^refs\/heads\//, "")
     if (branch) {
