@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BUMP_TYPE=${1:-patch}
+
+bun ./packages/claxedo-app/scripts/release.ts "$BUMP_TYPE"
+

@@ -1,5 +1,4 @@
-import { createEffect, on, onCleanup, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, on, onCleanup, createSignal, type Accessor, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
@@ -23,6 +22,7 @@ export interface SessionReviewTabProps {
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
+  actions?: JSX.Element
   classes?: {
     root?: string
     header?: string
@@ -31,7 +31,7 @@ export interface SessionReviewTabProps {
 }
 
 export function StickyAddButton(props: { children: JSX.Element }) {
-  const [state, setState] = createStore({ stuck: false })
+  const [stuck, setStuck] = createSignal(false)
   let button: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -44,7 +44,7 @@ export function StickyAddButton(props: { children: JSX.Element }) {
     const handler = () => {
       const rect = node.getBoundingClientRect()
       const scrollRect = scroll.getBoundingClientRect()
-      setState("stuck", rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
+      setStuck(rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
     }
 
     scroll.addEventListener("scroll", handler, { passive: true })
@@ -61,7 +61,7 @@ export function StickyAddButton(props: { children: JSX.Element }) {
     <div
       ref={button}
       class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
-      classList={{ "border-l": state.stuck }}
+      classList={{ "border-l": stuck() }}
     >
       {props.children}
     </div>
@@ -79,10 +79,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)
-      .catch((error) => {
-        console.debug("[session-review] failed to read file", { path, error })
-        return undefined
-      })
+      .catch(() => undefined)
   }
 
   const restoreScroll = () => {
@@ -143,7 +140,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
-        root: props.classes?.root ?? "pb-6",
+        root: props.classes?.root ?? "pb-40",
         header: props.classes?.header ?? "px-6",
         container: props.classes?.container ?? "px-6",
       }}
@@ -157,6 +154,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}
+      actions={props.actions}
     />
   )
 }

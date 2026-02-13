@@ -38,6 +38,8 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@opencode-ai/app-shared": "workspace:*",
+    "@tanstack/solid-query": "5.90.23",
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",

@@ -1,0 +1,7 @@
+[test]
+preload = ["./happydom.ts"]
+
+# NOTE: SolidJS needs --conditions=browser to use the browser build
+# (with working createEffect/createMemo). This cannot be set in bunfig.toml.
+# Use `bun run test` (which invokes the package.json script with --conditions=browser)
+# instead of `bun test` directly.

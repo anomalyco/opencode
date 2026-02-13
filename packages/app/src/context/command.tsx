@@ -11,7 +11,6 @@ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(na
 const PALETTE_ID = "command.palette"
 const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
-const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new"])
 
 function actionId(id: string) {
   if (!id.startsWith(SUGGESTED_PREFIX)) return id
@@ -34,9 +33,29 @@ function signatureFromEvent(event: KeyboardEvent) {
   return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
-function isAllowedEditableKeybind(id: string | undefined) {
-  if (!id) return false
-  return EDITABLE_KEYBIND_IDS.has(actionId(id))
+function isTerminalElement(target: EventTarget | null | undefined) {
+  if (!(target instanceof Element)) return false
+  return !!target.closest('[data-component="terminal"]')
+}
+
+export function isTerminalEvent(event: Pick<KeyboardEvent, "target" | "composedPath">) {
+  if (isTerminalElement(event.target)) return true
+  if (typeof event.composedPath === "function" && event.composedPath().some((item) => isTerminalElement(item))) return true
+  if (typeof document === "object" && isTerminalElement(document.activeElement)) return true
+  return false
+}
+
+const RESERVED_TERMINAL_SIGS = new Set([
+  signature("d", false, true, false, false),
+  signature("d", false, true, true, false),
+  signature("w", false, true, false, false),
+  signature("d", true, false, false, false),
+  signature("d", true, false, true, false),
+  signature("w", true, false, false, false),
+])
+
+export function isReservedTerminalShortcut(sig: string) {
+  return RESERVED_TERMINAL_SIGS.has(sig)
 }
 
 export type KeybindConfig = string
@@ -61,8 +80,6 @@ export interface CommandOption {
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
   onHighlight?: () => (() => void) | void
 }
-
-type CommandSource = "palette" | "keybind" | "slash"
 
 export type CommandCatalogItem = {
   title: string
@@ -177,14 +194,6 @@ export function formatKeybind(config: string): string {
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  if (target.closest("[contenteditable='true']")) return true
-  if (target.closest("input, textarea, select")) return true
-  return false
-}
-
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({
   name: "Command",
   init: () => {
@@ -291,18 +300,13 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       return map
     })
 
-    const optionMap = createMemo(() => {
-      const map = new Map<string, CommandOption>()
+    const run = (id: string, source?: "palette" | "keybind" | "slash") => {
       for (const option of options()) {
-        map.set(option.id, option)
-        map.set(actionId(option.id), option)
+        if (option.id === id || option.id === "suggested." + id) {
+          option.onSelect?.(source)
+          return
+        }
       }
-      return map
-    })
-
-    const run = (id: string, source?: CommandSource) => {
-      const option = optionMap().get(id)
-      option?.onSelect?.(source)
     }
 
     const showPalette = () => {
@@ -313,18 +317,15 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       if (suspended() || dialog.active) return
 
       const sig = signatureFromEvent(event)
-      const isPalette = palette().has(sig)
-      const option = keymap().get(sig)
-      const modified = event.ctrlKey || event.metaKey || event.altKey
+      if (isTerminalEvent(event) && isReservedTerminalShortcut(sig)) return
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified) return
-
-      if (isPalette) {
+      if (palette().has(sig)) {
         event.preventDefault()
         showPalette()
         return
       }
 
+      const option = keymap().get(sig)
       if (!option) return
       event.preventDefault()
       option.onSelect?.("keybind")
@@ -357,7 +358,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     return {
       register,
-      trigger(id: string, source?: CommandSource) {
+      trigger(id: string, source?: "palette" | "keybind" | "slash") {
         run(id, source)
       },
       keybind(id: string) {
@@ -376,7 +377,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       show: showPalette,
       keybinds(enabled: boolean) {
-        setStore("suspendCount", (count) => Math.max(0, count + (enabled ? -1 : 1)))
+        setStore("suspendCount", (count) => count + (enabled ? -1 : 1))
       },
       suspended,
       get catalog() {

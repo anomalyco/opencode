@@ -1,0 +1,27 @@
+name: Deploy Claxedo Gateway
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'claxedo/**'
+      - 'packages/app/src/**'
+      - 'packages/claxedo-app/src/**'
+      - 'packages/ui/src/**'
+      - 'packages/app-shared/**'
+      - 'packages/util/**'
+      - 'packages/sdk/js/**'
+      - '.dockerignore'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - run: flyctl deploy --config claxedo/fly.toml --dockerfile claxedo/Dockerfile
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"

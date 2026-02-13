@@ -776,6 +776,7 @@ export const dict = {
   "session.delete.button": "Delete session",
 
   "workspace.new": "New workspace",
+  "workspace.creating": "Creating workspace...",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Failed to create workspace",

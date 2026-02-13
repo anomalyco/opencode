@@ -62,6 +62,8 @@ export namespace Server {
         .onError((err, c) => {
           log.error("failed", {
             error: err,
+            method: c.req.method,
+            path: c.req.path,
           })
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
@@ -586,15 +588,17 @@ export namespace Server {
       fetch: App().fetch,
       websocket: websocket,
     } as const
+    let lastError: unknown
     const tryServe = (port: number) => {
       try {
         return Bun.serve({ ...args, port })
-      } catch {
+      } catch (err) {
+        lastError = err
         return undefined
       }
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
-    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+    if (!server) throw lastError ?? new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
 

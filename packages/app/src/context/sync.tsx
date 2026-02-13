@@ -7,20 +7,6 @@ import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
-function sortParts(parts: Part[]) {
-  return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
-}
-
-function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
-  const pending = map.get(key)
-  if (pending) return pending
-  const promise = task().finally(() => {
-    map.delete(key)
-  })
-  map.set(key, promise)
-  return promise
-}
-
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -50,7 +36,7 @@ export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticAddI
     const result = Binary.search(messages, input.message.id, (m) => m.id)
     messages.splice(result.index, 0, input.message)
   }
-  draft.part[input.message.id] = sortParts(input.parts)
+  draft.part[input.message.id] = input.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
 
 export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticRemoveInput) {
@@ -60,34 +46,6 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
     if (result.found) messages.splice(result.index, 1)
   }
   delete draft.part[input.messageID]
-}
-
-function setOptimisticAdd(setStore: (...args: unknown[]) => void, input: OptimisticAddInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return [input.message]
-    const result = Binary.search(messages, input.message.id, (m) => m.id)
-    const next = [...messages]
-    next.splice(result.index, 0, input.message)
-    return next
-  })
-  setStore("part", input.message.id, sortParts(input.parts))
-}
-
-function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: OptimisticRemoveInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return messages
-    const result = Binary.search(messages, input.messageID, (m) => m.id)
-    if (!result.found) return messages
-    const next = [...messages]
-    next.splice(result.index, 1)
-    return next
-  })
-  setStore("part", (part: Record<string, Part[] | undefined>) => {
-    if (!(input.messageID in part)) return part
-    const next = { ...part }
-    delete next[input.messageID]
-    return next
-  })
 }
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
@@ -105,7 +63,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const messagePageSize = 400
+    const chunk = 400
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()
@@ -123,25 +81,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     }
 
     const limitFor = (count: number) => {
-      if (count <= messagePageSize) return messagePageSize
-      return Math.ceil(count / messagePageSize) * messagePageSize
-    }
-
-    const fetchMessages = async (input: { client: typeof sdk.client; sessionID: string; limit: number }) => {
-      const messages = await retry(() =>
-        input.client.session.messages({ sessionID: input.sessionID, limit: input.limit }),
-      )
-      const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-      const session = items
-        .map((x) => x.info)
-        .filter((m) => !!m?.id)
-        .sort((a, b) => cmp(a.id, b.id))
-      const part = items.map((message) => ({ id: message.info.id, part: sortParts(message.parts) }))
-      return {
-        session,
-        part,
-        complete: session.length < input.limit,
-      }
+      if (count <= chunk) return chunk
+      return Math.ceil(count / chunk) * chunk
     }
 
     const loadMessages = async (input: {
@@ -155,15 +96,30 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       if (meta.loading[key]) return
 
       setMeta("loading", key, true)
-      await fetchMessages(input)
-        .then((next) => {
+      await retry(() => input.client.session.messages({ sessionID: input.sessionID, limit: input.limit }))
+        .then((messages) => {
+          const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+          const next = items
+            .map((x) => x.info)
+            .filter((m) => !!m?.id)
+            .sort((a, b) => cmp(a.id, b.id))
+
           batch(() => {
-            input.setStore("message", input.sessionID, reconcile(next.session, { key: "id" }))
-            for (const message of next.part) {
-              input.setStore("part", message.id, reconcile(message.part, { key: "id" }))
+            input.setStore("message", input.sessionID, reconcile(next, { key: "id" }))
+
+            for (const message of items) {
+              input.setStore(
+                "part",
+                message.info.id,
+                reconcile(
+                  message.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+                  { key: "id" },
+                ),
+              )
             }
+
             setMeta("limit", key, input.limit)
-            setMeta("complete", key, next.complete)
+            setMeta("complete", key, next.length < input.limit)
           })
         })
         .finally(() => {
@@ -195,11 +151,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         optimistic: {
           add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
             const [, setStore] = target(input.directory)
-            setOptimisticAdd(setStore as (...args: unknown[]) => void, input)
+            setStore(
+              produce((draft) => {
+                applyOptimisticAdd(draft as OptimisticStore, input)
+              }),
+            )
           },
           remove(input: { directory?: string; sessionID: string; messageID: string }) {
             const [, setStore] = target(input.directory)
-            setOptimisticRemove(setStore as (...args: unknown[]) => void, input)
+            setStore(
+              produce((draft) => {
+                applyOptimisticRemove(draft as OptimisticStore, input)
+              }),
+            )
           },
         },
         addOptimisticMessage(input: {
@@ -218,11 +182,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             model: input.model,
           }
           const [, setStore] = target()
-          setOptimisticAdd(setStore as (...args: unknown[]) => void, {
-            sessionID: input.sessionID,
-            message,
-            parts: input.parts,
-          })
+          setStore(
+            produce((draft) => {
+              applyOptimisticAdd(draft as OptimisticStore, {
+                sessionID: input.sessionID,
+                message,
+                parts: input.parts,
+              })
+            }),
+          )
         },
         async sync(sessionID: string) {
           const directory = sdk.directory
@@ -237,9 +205,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const hasMessages = store.message[sessionID] !== undefined
           const hydrated = meta.limit[key] !== undefined
           if (hasSession && hasMessages && hydrated) return
+          const pending = inflight.get(key)
+          if (pending) return pending
 
           const count = store.message[sessionID]?.length ?? 0
-          const limit = hydrated ? (meta.limit[key] ?? messagePageSize) : limitFor(count)
+          const limit = hydrated ? (meta.limit[key] ?? chunk) : limitFor(count)
 
           const sessionReq = hasSession
             ? Promise.resolve()
@@ -270,7 +240,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   limit,
                 })
 
-          return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
+          const promise = Promise.all([sessionReq, messagesReq])
+            .then(() => {})
+            .catch(() => {})
+            .finally(() => {
+              inflight.delete(key)
+            })
+
+          inflight.set(key, promise)
+          return promise
         },
         async diff(sessionID: string) {
           const directory = sdk.directory
@@ -279,11 +257,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.session_diff[sessionID] !== undefined) return
 
           const key = keyFor(directory, sessionID)
-          return runInflight(inflightDiff, key, () =>
-            retry(() => client.session.diff({ sessionID })).then((diff) => {
+          const pending = inflightDiff.get(key)
+          if (pending) return pending
+
+          const promise = retry(() => client.session.diff({ sessionID }))
+            .then((diff) => {
               setStore("session_diff", sessionID, reconcile(diff.data ?? [], { key: "file" }))
-            }),
-          )
+            })
+            .catch(() => {})
+            .finally(() => {
+              inflightDiff.delete(key)
+            })
+
+          inflightDiff.set(key, promise)
+          return promise
         },
         async todo(sessionID: string) {
           const directory = sdk.directory
@@ -292,11 +279,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.todo[sessionID] !== undefined) return
 
           const key = keyFor(directory, sessionID)
-          return runInflight(inflightTodo, key, () =>
-            retry(() => client.session.todo({ sessionID })).then((todo) => {
+          const pending = inflightTodo.get(key)
+          if (pending) return pending
+
+          const promise = retry(() => client.session.todo({ sessionID }))
+            .then((todo) => {
               setStore("todo", sessionID, reconcile(todo.data ?? [], { key: "id" }))
-            }),
-          )
+            })
+            .catch(() => {})
+            .finally(() => {
+              inflightTodo.delete(key)
+            })
+
+          inflightTodo.set(key, promise)
+          return promise
         },
         history: {
           more(sessionID: string) {
@@ -311,7 +307,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const key = keyFor(sdk.directory, sessionID)
             return meta.loading[key] ?? false
           },
-          async loadMore(sessionID: string, count = messagePageSize) {
+          async loadMore(sessionID: string, count = chunk) {
             const directory = sdk.directory
             const client = sdk.client
             const [, setStore] = globalSync.child(directory)
@@ -319,7 +315,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             if (meta.loading[key]) return
             if (meta.complete[key]) return
 
-            const currentLimit = meta.limit[key] ?? messagePageSize
+            const currentLimit = meta.limit[key] ?? chunk
             await loadMessages({
               directory,
               client,

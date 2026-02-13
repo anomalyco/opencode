@@ -1,0 +1,48 @@
+/* xterm.js terminal styling */
+
+/* Ensure xterm fills container */
+.xterm {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.xterm .xterm-scrollable-element {
+  height: 100%;
+}
+
+.xterm-screen {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+/* Ensure viewport doesn't overflow */
+.xterm .xterm-viewport {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Slim rounded xterm scrollbar (JS-rendered DOM inside .xterm-scrollable-element) */
+.xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: 8px !important;
+  background: transparent !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: 6px !important;
+  left: 1px !important;
+  border-radius: 3px !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider.active {
+  background: rgba(255, 255, 255, 0.3) !important;
+}

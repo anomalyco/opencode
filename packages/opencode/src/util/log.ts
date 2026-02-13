@@ -88,7 +88,7 @@ export namespace Log {
   }
 
   function formatError(error: Error, depth = 0): string {
-    const result = error.message
+    const result = error.message || error.name || String(error)
     return error.cause instanceof Error && depth < 10
       ? result + " Caused by: " + formatError(error.cause, depth + 1)
       : result

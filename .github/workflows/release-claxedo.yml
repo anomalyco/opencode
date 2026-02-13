@@ -1,0 +1,543 @@
+name: Release Claxedo
+
+on:
+  push:
+    tags:
+      - "claxedo-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.2.3)"
+        required: false
+        type: string
+      platforms:
+        description: "Platforms to build"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
+          - linux
+          - web
+
+env:
+  CLAXEDO_OVERRIDES: "1"
+
+jobs:
+  # Determine version from tag or input
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/claxedo-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/claxedo-v}"
+          else
+            # Fallback: read from package.json (for workflow_dispatch without version input)
+            VERSION=$(jq -r .version packages/claxedo-desktop/package.json)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=claxedo-v$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+  # Build patched CLI for all platforms (with Claxedo agent hooks)
+  build-cli:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build patched CLI
+        run: bun run --cwd packages/claxedo-app opencode:build
+        env:
+          OPENCODE_VERSION: ${{ needs.prepare.outputs.version }}
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/claxedo-app/dist-opencode
+          retention-days: 7
+
+  # Build web assets
+  build-web:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build web
+        working-directory: packages/claxedo-app
+        run: bun run build
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: claxedo-web-${{ needs.prepare.outputs.version }}
+          path: packages/claxedo-app/dist/
+          retention-days: 7
+
+  # Build desktop bundles (Tauri) for all platforms
+  build-tauri:
+    needs: [prepare, build-cli]
+    runs-on: ${{ matrix.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            host: macos-latest
+            target: aarch64-apple-darwin
+            cli_binary: opencode-darwin-arm64
+          - platform: macos
+            host: macos-latest
+            target: x86_64-apple-darwin
+            cli_binary: opencode-darwin-x64
+          - platform: windows
+            host: windows-latest
+            target: x86_64-pc-windows-msvc
+            cli_binary: opencode-windows-x64
+          - platform: linux
+            host: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            cli_binary: opencode-linux-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli
+          path: cli-dist
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Setup CLI sidecar
+        working-directory: packages/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/sidecars
+
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp ../../cli-dist/${{ matrix.cli_binary }}/bin/opencode.exe src-tauri/sidecars/opencode-cli-${{ matrix.target }}.exe
+            ls -la src-tauri/sidecars/ || true
+            exit 0
+          fi
+
+          cp ../../cli-dist/${{ matrix.cli_binary }}/bin/opencode src-tauri/sidecars/opencode-cli-${{ matrix.target }}
+          chmod +x src-tauri/sidecars/opencode-cli-${{ matrix.target }}
+          ls -la src-tauri/sidecars/
+
+      - name: Build frontend
+        working-directory: packages/claxedo-app
+        run: bunx vite build --config vite.desktop.config.ts
+
+      - name: Import Apple certificate
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Decode certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+
+          # Create and configure keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Add to search list
+          security list-keychain -d user -s $KEYCHAIN_PATH login.keychain-db
+
+          # Clean up certificate file
+          rm $RUNNER_TEMP/certificate.p12
+
+      - name: Build Tauri (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 30
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+          CLAXEDO_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > src-tauri/tauri.claxedo.override.json <<EOF
+          {
+            "version": "${{ needs.prepare.outputs.version }}",
+            "build": {
+              "beforeBuildCommand": "",
+              "frontendDist": "../../claxedo-app/dist-desktop"
+            },
+            "productName": "Claxedo",
+            "mainBinaryName": "Claxedo",
+            "identifier": "ai.claxedo.desktop",
+            "bundle": {
+              "icon": [
+                "icons/claxedo/32x32.png",
+                "icons/claxedo/128x128.png",
+                "icons/claxedo/128x128@2x.png",
+                "icons/claxedo/icon.icns",
+                "icons/claxedo/icon.ico"
+              ]
+            },
+            "plugins": {
+              "updater": {
+                "pubkey": "${TAURI_SIGNING_PUBLIC_KEY}",
+                "endpoints": ["${CLAXEDO_UPDATER_ENDPOINT}"]
+              }
+            }
+          }
+          EOF
+          bun run tauri -- build \
+            --target ${{ matrix.target }} \
+            --config src-tauri/tauri.prod.conf.json \
+            --config src-tauri/tauri.claxedo.override.json
+
+      - name: Build Tauri (Windows)
+        if: runner.os == 'Windows'
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+          CLAXEDO_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+        run: |
+          @"
+          {
+            "version": "${{ needs.prepare.outputs.version }}",
+            "build": {
+              "beforeBuildCommand": "",
+              "frontendDist": "../../claxedo-app/dist-desktop"
+            },
+            "productName": "Claxedo",
+            "mainBinaryName": "Claxedo",
+            "identifier": "ai.claxedo.desktop",
+            "bundle": {
+              "icon": [
+                "icons/claxedo/32x32.png",
+                "icons/claxedo/128x128.png",
+                "icons/claxedo/128x128@2x.png",
+                "icons/claxedo/icon.icns",
+                "icons/claxedo/icon.ico"
+              ]
+            },
+            "plugins": {
+              "updater": {
+                "pubkey": "$env:TAURI_SIGNING_PUBLIC_KEY",
+                "endpoints": ["$env:CLAXEDO_UPDATER_ENDPOINT"]
+              }
+            }
+          }
+          "@ | Out-File -FilePath src-tauri/tauri.claxedo.override.json -Encoding utf8
+          bun run tauri -- build `
+            --config src-tauri/tauri.prod.conf.json `
+            --config src-tauri/tauri.claxedo.override.json
+
+      - name: Build Tauri (Linux)
+        if: runner.os == 'Linux'
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+          CLAXEDO_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+        run: |
+          cat > src-tauri/tauri.claxedo.override.json <<EOF
+          {
+            "version": "${{ needs.prepare.outputs.version }}",
+            "build": {
+              "beforeBuildCommand": "",
+              "frontendDist": "../../claxedo-app/dist-desktop"
+            },
+            "productName": "Claxedo",
+            "mainBinaryName": "Claxedo",
+            "identifier": "ai.claxedo.desktop",
+            "plugins": {
+              "updater": {
+                "pubkey": "${TAURI_SIGNING_PUBLIC_KEY}",
+                "endpoints": ["${CLAXEDO_UPDATER_ENDPOINT}"]
+              }
+            }
+          }
+          EOF
+          bun run tauri -- build \
+            --config src-tauri/tauri.prod.conf.json \
+            --config src-tauri/tauri.claxedo.override.json
+
+      - name: Upload macOS artifacts
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claxedo-macos-${{ matrix.target }}-${{ needs.prepare.outputs.version }}
+          path: |
+            packages/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            packages/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+            packages/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.tar.gz
+            packages/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.zip
+            packages/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Windows artifacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claxedo-windows-${{ needs.prepare.outputs.version }}
+          path: |
+            packages/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            packages/desktop/src-tauri/target/release/bundle/msi/*.msi
+            packages/desktop/src-tauri/target/release/bundle/**/*.tar.gz
+            packages/desktop/src-tauri/target/release/bundle/**/*.zip
+            packages/desktop/src-tauri/target/release/bundle/**/*.sig
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Linux artifacts
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claxedo-linux-${{ needs.prepare.outputs.version }}
+          path: |
+            packages/desktop/src-tauri/target/release/bundle/deb/*.deb
+            packages/desktop/src-tauri/target/release/bundle/rpm/*.rpm
+            packages/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            packages/desktop/src-tauri/target/release/bundle/**/*.tar.gz
+            packages/desktop/src-tauri/target/release/bundle/**/*.zip
+            packages/desktop/src-tauri/target/release/bundle/**/*.sig
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Cleanup keychain
+        if: runner.os == 'macOS' && always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain $KEYCHAIN_PATH || true
+          fi
+
+  # Create GitHub Release
+  create-release:
+    needs: [prepare, build-web, build-tauri]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Deduplicate artifacts
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          # Create a flat release directory with unique filenames
+          mkdir -p release
+
+          # macOS: use per-arch artifacts (not universal, which is just an arm64 copy)
+          cp artifacts/claxedo-macos-aarch64-apple-darwin-${VERSION}/dmg/*.dmg release/ 2>/dev/null || true
+          cp artifacts/claxedo-macos-aarch64-apple-darwin-${VERSION}/macos/*.tar.gz release/Claxedo_aarch64.app.tar.gz 2>/dev/null || true
+          cp artifacts/claxedo-macos-aarch64-apple-darwin-${VERSION}/macos/*.tar.gz.sig release/Claxedo_aarch64.app.tar.gz.sig 2>/dev/null || true
+
+          cp artifacts/claxedo-macos-x86_64-apple-darwin-${VERSION}/dmg/*.dmg release/ 2>/dev/null || true
+          cp artifacts/claxedo-macos-x86_64-apple-darwin-${VERSION}/macos/*.tar.gz release/Claxedo_x64.app.tar.gz 2>/dev/null || true
+          cp artifacts/claxedo-macos-x86_64-apple-darwin-${VERSION}/macos/*.tar.gz.sig release/Claxedo_x64.app.tar.gz.sig 2>/dev/null || true
+
+          # Windows
+          cp artifacts/claxedo-windows-${VERSION}/**/*.exe release/ 2>/dev/null || true
+          cp artifacts/claxedo-windows-${VERSION}/**/*.msi release/ 2>/dev/null || true
+          cp artifacts/claxedo-windows-${VERSION}/**/*.sig release/ 2>/dev/null || true
+
+          # Linux
+          cp artifacts/claxedo-linux-${VERSION}/**/*.deb release/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.rpm release/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage release/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage.tar.gz release/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage.tar.gz.sig release/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.rpm.sig release/ 2>/dev/null || true
+
+          echo "Release artifacts:"
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Claxedo v${{ needs.prepare.outputs.version }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Generate update manifest for auto-updater
+  generate-update-manifest:
+    needs: [prepare, create-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare update artifacts
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          mkdir -p updater
+
+          # Copy updater payloads with architecture-unique names (matching release asset names)
+          cp artifacts/claxedo-macos-aarch64-apple-darwin-${VERSION}/macos/*.tar.gz updater/Claxedo_aarch64.app.tar.gz 2>/dev/null || true
+          cp artifacts/claxedo-macos-aarch64-apple-darwin-${VERSION}/macos/*.tar.gz.sig updater/Claxedo_aarch64.app.tar.gz.sig 2>/dev/null || true
+          cp artifacts/claxedo-macos-x86_64-apple-darwin-${VERSION}/macos/*.tar.gz updater/Claxedo_x64.app.tar.gz 2>/dev/null || true
+          cp artifacts/claxedo-macos-x86_64-apple-darwin-${VERSION}/macos/*.tar.gz.sig updater/Claxedo_x64.app.tar.gz.sig 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage.tar.gz updater/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage.tar.gz.sig updater/ 2>/dev/null || true
+          cp artifacts/claxedo-linux-${VERSION}/**/*.AppImage updater/Claxedo.AppImage 2>/dev/null || true
+          cp artifacts/claxedo-windows-${VERSION}/**/*-setup.exe updater/ 2>/dev/null || true
+          cp artifacts/claxedo-windows-${VERSION}/**/*-setup.exe.sig updater/ 2>/dev/null || true
+
+          echo "Updater artifacts:"
+          ls -la updater/
+
+      - name: Generate latest.json
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+
+          root = "updater"
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["CLAXEDO_TAG"]
+          version = os.environ["CLAXEDO_VERSION"]
+
+          def pick(patterns: list[str]) -> str:
+            hits: list[str] = []
+            for p in patterns:
+              hits.extend(glob.glob(os.path.join(root, p)))
+            hits = [h for h in hits if os.path.isfile(h)]
+            if len(hits) == 0:
+              raise SystemExit(f"missing artifact matching {patterns}")
+            hits.sort(key=lambda p: (len(p), p))
+            return hits[0]
+
+          def sig(path: str) -> str:
+            direct = f"{path}.sig"
+            if os.path.isfile(direct):
+              return open(direct, "r", encoding="utf-8").read().strip()
+            raise SystemExit(f"missing signature for {os.path.basename(path)}")
+
+          def url(filename: str) -> str:
+            return f"https://github.com/{repo}/releases/download/{tag}/{filename}"
+
+          mac_arm = pick(["*aarch64*.app.tar.gz"])
+          mac_x64 = pick(["*x64*.app.tar.gz"])
+          win = pick(["*-setup.exe"])
+          try:
+            linux = pick(["*.AppImage.tar.gz", "*.AppImage"])
+          except SystemExit:
+            linux = None
+
+          out = {
+            "version": version,
+            "notes": f"See release notes at https://github.com/{repo}/releases/tag/{tag}",
+            "pub_date": os.popen("date -u +%Y-%m-%dT%H:%M:%SZ").read().strip(),
+            "platforms": {
+              "darwin-aarch64": {"signature": sig(mac_arm), "url": url(os.path.basename(mac_arm))},
+              "darwin-x86_64": {"signature": sig(mac_x64), "url": url(os.path.basename(mac_x64))},
+              "windows-x86_64": {"signature": sig(win), "url": url(os.path.basename(win))},
+            },
+          }
+
+          if linux:
+            out["platforms"]["linux-x86_64"] = {"signature": sig(linux), "url": url(os.path.basename(linux))}
+            print(f"Linux updater: {os.path.basename(linux)}")
+          else:
+            print("Linux updater: not available (no AppImage found)")
+
+          with open("latest.json", "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2, sort_keys=True)
+            f.write("\n")
+          print("latest.json generated")
+          PY
+        env:
+          CLAXEDO_VERSION: ${{ needs.prepare.outputs.version }}
+          CLAXEDO_TAG: ${{ needs.prepare.outputs.tag }}
+
+      - name: Upload latest.json to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

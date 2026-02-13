@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "bun run typecheck && vite build",
     "preview": "vite preview",
+    "perf:summary": "bun ./scripts/perf-summary.ts",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -21,14 +22,14 @@
     "@tauri-apps/plugin-clipboard-manager": "~2",
     "@tauri-apps/plugin-deep-link": "~2",
     "@tauri-apps/plugin-dialog": "~2",
+    "@tauri-apps/plugin-http": "~2",
+    "@tauri-apps/plugin-notification": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "~2",
-    "@tauri-apps/plugin-notification": "~2",
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "~2",
     "@tauri-apps/plugin-store": "~2",
     "@tauri-apps/plugin-updater": "~2",
-    "@tauri-apps/plugin-http": "~2",
     "@tauri-apps/plugin-window-state": "~2",
     "solid-js": "catalog:",
     "@solidjs/meta": "catalog:"

@@ -1,0 +1,45 @@
+# Docker Compose for local development/testing
+# Usage: docker compose --env-file .env.local up --build
+
+services:
+  claxedo:
+    build:
+      context: ..
+      dockerfile: claxedo/Dockerfile
+      args:
+        - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+        - VITE_CONVEX_URL=${VITE_CONVEX_URL}
+        - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL}
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - CONVEX_URL=${VITE_CONVEX_URL}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - DAYTONA_API_KEY=${DAYTONA_API_KEY}
+      - DAYTONA_API_URL=${DAYTONA_API_URL}
+      - DAYTONA_TARGET=${DAYTONA_TARGET:-}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      - SANDBOX_ENABLED=${SANDBOX_ENABLED:-false}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/global/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - claxedo-network
+
+networks:
+  claxedo-network:
+    driver: bridge

@@ -1,0 +1,10 @@
+/* Hide all scrollbars by default */
+::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Firefox scrollbar hiding */
+* {
+  scrollbar-width: none !important;
+}
+

@@ -1,0 +1,21 @@
+{
+  "productName": "Claxedo",
+  "identifier": "ai.claxedo.desktop",
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "../../claxedo-desktop/icons/prod/32x32.png",
+      "../../claxedo-desktop/icons/prod/128x128.png",
+      "../../claxedo-desktop/icons/prod/128x128@2x.png",
+      "../../claxedo-desktop/icons/prod/icon.icns",
+      "../../claxedo-desktop/icons/prod/icon.ico"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["claxedo"]
+      }
+    }
+  }
+}

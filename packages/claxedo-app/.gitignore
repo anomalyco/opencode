@@ -1,0 +1,34 @@
+# Build output
+dist/
+dist-desktop/
+
+# Dependencies (handled by root)
+node_modules/
+
+# Local env files
+.env.local
+.env.*.local
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.turbo/

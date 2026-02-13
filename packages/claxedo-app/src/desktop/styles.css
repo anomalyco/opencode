@@ -1,0 +1,32 @@
+button.decorum-tb-btn,
+button#decorum-tb-minimize,
+button#decorum-tb-maximize,
+button#decorum-tb-close,
+div[data-tauri-decorum-tb] {
+  height: calc(var(--spacing) * 10) !important;
+}
+
+
+/* Hold-to-delete fill animation */
+@keyframes hold-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-hold-fill {
+  animation: hold-fill 800ms linear forwards;
+}
+
+@keyframes pulse-splash {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

@@ -487,12 +487,27 @@ export function SessionTurn(
     overflowAnchor: "auto",
   })
 
+  const suspended = () => typeof document !== "undefined" && document.documentElement.dataset.terminalResizeSuspended === "1"
+
   createResizeObserver(
     () => stickyRef(),
     ({ height }) => {
+      if (suspended()) return
       updateStickyHeight(height)
     },
   )
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const handleFit = () => {
+      if (suspended()) return
+      const sticky = stickyRef()
+      if (!sticky) return
+      updateStickyHeight(sticky.getBoundingClientRect().height)
+    }
+    window.addEventListener("opencode:terminal-fit", handleFit)
+    onCleanup(() => window.removeEventListener("opencode:terminal-fit", handleFit))
+  })
 
   createEffect(() => {
     const root = rootRef()

@@ -1,8 +1,6 @@
 name: stale-issues
 
 on:
-  schedule:
-    - cron: "30 1 * * *" # Daily at 1:30 AM
   workflow_dispatch:
 
 env:

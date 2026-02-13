@@ -113,7 +113,7 @@ export function TerminalPanel(props: {
                         icon="plus-small"
                         variant="ghost"
                         iconSize="large"
-                        onClick={props.terminal.new}
+                        onClick={() => props.terminal.new()}
                         aria-label={props.language.t("command.terminal.new")}
                       />
                     </TooltipKeybind>

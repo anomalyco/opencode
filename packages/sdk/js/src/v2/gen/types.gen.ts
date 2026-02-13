@@ -2111,6 +2111,37 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type WorkspaceFile = {
+  path: string
+  added: number
+  removed: number
+  status: "added" | "deleted" | "modified"
+  staged: boolean
+}
+
+export type WorkspaceStatus = {
+  branch?: string
+  staged: Array<WorkspaceFile>
+  unstaged: Array<WorkspaceFile>
+  untracked: Array<WorkspaceFile>
+}
+
+export type WorkspaceDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+  status: "added" | "deleted" | "modified"
+  staged: boolean
+}
+
+export type BranchInfo = {
+  name: string
+  current: boolean
+  remote?: boolean
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -4192,6 +4223,186 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type WorkspaceStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/status"
+}
+
+export type WorkspaceStatusResponses = {
+  /**
+   * Workspace status
+   */
+  200: WorkspaceStatus
+}
+
+export type WorkspaceStatusResponse = WorkspaceStatusResponses[keyof WorkspaceStatusResponses]
+
+export type WorkspaceDiffData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    scope?: "staged" | "unstaged" | "all"
+  }
+  url: "/workspace/diff"
+}
+
+export type WorkspaceDiffResponses = {
+  /**
+   * Workspace diffs
+   */
+  200: Array<WorkspaceDiff>
+}
+
+export type WorkspaceDiffResponse = WorkspaceDiffResponses[keyof WorkspaceDiffResponses]
+
+export type WorkspaceBranchDiffData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    base: string
+  }
+  url: "/workspace/branch-diff"
+}
+
+export type WorkspaceBranchDiffResponses = {
+  /**
+   * Branch diffs
+   */
+  200: Array<WorkspaceDiff>
+}
+
+export type WorkspaceBranchDiffResponse = WorkspaceBranchDiffResponses[keyof WorkspaceBranchDiffResponses]
+
+export type WorkspaceBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/branches"
+}
+
+export type WorkspaceBranchesResponses = {
+  /**
+   * List of branches
+   */
+  200: Array<BranchInfo>
+}
+
+export type WorkspaceBranchesResponse = WorkspaceBranchesResponses[keyof WorkspaceBranchesResponses]
+
+export type WorkspaceStageData = {
+  body?: {
+    files: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/stage"
+}
+
+export type WorkspaceStageResponses = {
+  /**
+   * Files staged successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type WorkspaceStageResponse = WorkspaceStageResponses[keyof WorkspaceStageResponses]
+
+export type WorkspaceUnstageData = {
+  body?: {
+    files: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/unstage"
+}
+
+export type WorkspaceUnstageResponses = {
+  /**
+   * Files unstaged successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type WorkspaceUnstageResponse = WorkspaceUnstageResponses[keyof WorkspaceUnstageResponses]
+
+export type WorkspaceStageAllData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/stage-all"
+}
+
+export type WorkspaceStageAllResponses = {
+  /**
+   * All files staged successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type WorkspaceStageAllResponse = WorkspaceStageAllResponses[keyof WorkspaceStageAllResponses]
+
+export type WorkspaceUnstageAllData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/unstage-all"
+}
+
+export type WorkspaceUnstageAllResponses = {
+  /**
+   * All files unstaged successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type WorkspaceUnstageAllResponse = WorkspaceUnstageAllResponses[keyof WorkspaceUnstageAllResponses]
+
+export type WorkspaceDiscardData = {
+  body?: {
+    files: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/discard"
+}
+
+export type WorkspaceDiscardResponses = {
+  /**
+   * Changes discarded successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type WorkspaceDiscardResponse = WorkspaceDiscardResponses[keyof WorkspaceDiscardResponses]
 
 export type FindTextData = {
   body?: never

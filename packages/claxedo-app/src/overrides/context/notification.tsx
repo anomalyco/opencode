@@ -1,0 +1,209 @@
+/**
+ * Claxedo override of notification context.
+ *
+ * Removes playSound() calls from session.idle and session.error handlers.
+ * Sound notifications are now handled centrally by the agent lifecycle listener
+ * (useSessionStatusListener in agent-hooks/listener.ts), which only plays sound
+ * when the session tab is not active — matching the behavior of terminal CLI agents.
+ *
+ * Everything else (notification list, OS notifications, persistence) is preserved.
+ */
+
+import { createStore } from "solid-js/store"
+import { createEffect, createMemo, onCleanup } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
+import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
+import { Binary } from "@opencode-ai/util/binary"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
+import { EventSessionError, type Session } from "@opencode-ai/sdk/v2"
+import { Persist, persisted } from "@/utils/persist"
+import { buildNotificationIndex } from "@/context/notification-index"
+
+type NotificationBase = {
+  directory?: string
+  session?: string
+  metadata?: any
+  time: number
+  viewed: boolean
+}
+
+type TurnCompleteNotification = NotificationBase & {
+  type: "turn-complete"
+}
+
+type ErrorNotification = NotificationBase & {
+  type: "error"
+  error: EventSessionError["properties"]["error"]
+}
+
+export type Notification = TurnCompleteNotification | ErrorNotification
+
+const MAX_NOTIFICATIONS = 500
+const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
+
+function pruneNotifications(list: Notification[]) {
+  const cutoff = Date.now() - NOTIFICATION_TTL_MS
+  const pruned = list.filter((n) => n.time >= cutoff)
+  if (pruned.length <= MAX_NOTIFICATIONS) return pruned
+  return pruned.slice(pruned.length - MAX_NOTIFICATIONS)
+}
+
+export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
+  name: "Notification",
+  init: () => {
+    const params = useParams()
+    const globalSDK = useGlobalSDK()
+    const globalSync = useGlobalSync()
+    const platform = usePlatform()
+    const settings = useSettings()
+    const language = useLanguage()
+
+    const empty: Notification[] = []
+
+    const currentDirectory = createMemo(() => {
+      return decode64(params.dir)
+    })
+
+    const currentSession = createMemo(() => params.id)
+
+    const [store, setStore, _, ready] = persisted(
+      Persist.global("notification", ["notification.v1"]),
+      createStore({
+        list: [] as Notification[],
+      }),
+    )
+
+    const meta = { pruned: false }
+
+    createEffect(() => {
+      if (!ready()) return
+      if (meta.pruned) return
+      meta.pruned = true
+      setStore("list", pruneNotifications(store.list))
+    })
+
+    const append = (notification: Notification) => {
+      setStore("list", (list) => pruneNotifications([...list, notification]))
+    }
+
+    const index = createMemo(() => buildNotificationIndex(store.list))
+
+    const unsub = globalSDK.event.listen((e) => {
+      const event = e.details
+      if (event.type !== "session.idle" && event.type !== "session.error") return
+
+      const directory = e.name
+      const time = Date.now()
+      const viewed = (sessionID?: string) => {
+        const activeDirectory = currentDirectory()
+        const activeSession = currentSession()
+        if (!activeDirectory) return false
+        if (!activeSession) return false
+        if (!sessionID) return false
+        if (directory !== activeDirectory) return false
+        return sessionID === activeSession
+      }
+      switch (event.type) {
+        case "session.idle": {
+          const sessionID = event.properties.sessionID
+          const [syncStore] = globalSync.child(directory, { bootstrap: false })
+          const match = Binary.search(syncStore.session, sessionID, (s: Session) => s.id)
+          const session = match.found ? syncStore.session[match.index] : undefined
+          if (session?.parentID) break
+
+          // Sound is handled by useSessionStatusListener — not here
+
+          append({
+            directory,
+            time,
+            viewed: viewed(sessionID),
+            type: "turn-complete",
+            session: sessionID,
+          })
+
+          const href = `/${base64Encode(directory)}/session/${sessionID}`
+          if (settings.notifications.agent()) {
+            void platform.notify(
+              language.t("notification.session.responseReady.title"),
+              session?.title ?? sessionID,
+              href,
+            )
+          }
+          break
+        }
+        case "session.error": {
+          const sessionID = event.properties.sessionID
+          const [syncStore] = globalSync.child(directory, { bootstrap: false })
+          const match = sessionID ? Binary.search(syncStore.session, sessionID, (s: Session) => s.id) : undefined
+          const session = sessionID && match?.found ? syncStore.session[match.index] : undefined
+          if (session?.parentID) break
+
+          // Sound is handled by useSessionStatusListener — not here
+
+          const error = "error" in event.properties ? event.properties.error : undefined
+          append({
+            directory,
+            time,
+            viewed: viewed(sessionID),
+            type: "error",
+            session: sessionID ?? "global",
+            error,
+          })
+          const description =
+            session?.title ??
+            (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+          const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+          if (settings.notifications.errors()) {
+            void platform.notify(language.t("notification.session.error.title"), description, href)
+          }
+          break
+        }
+      }
+    })
+    onCleanup(unsub)
+
+    return {
+      ready,
+      session: {
+        all(session: string) {
+          return index().session.all.get(session) ?? empty
+        },
+        unseen(session: string) {
+          return index().session.unseen.get(session) ?? empty
+        },
+        unseenCount(session: string) {
+          return index().session.unseenCount.get(session) ?? 0
+        },
+        unseenHasError(session: string) {
+          return index().session.unseenHasError.get(session) ?? false
+        },
+        markViewed(session: string) {
+          setStore("list", (n) => n.session === session, "viewed", true)
+        },
+      },
+      project: {
+        all(directory: string) {
+          return index().project.all.get(directory) ?? empty
+        },
+        unseen(directory: string) {
+          return index().project.unseen.get(directory) ?? empty
+        },
+        unseenCount(directory: string) {
+          return index().project.unseenCount.get(directory) ?? 0
+        },
+        unseenHasError(directory: string) {
+          return index().project.unseenHasError.get(directory) ?? false
+        },
+        markViewed(directory: string) {
+          setStore("list", (n) => n.directory === directory, "viewed", true)
+        },
+      },
+    }
+  },
+})

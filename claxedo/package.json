@@ -1,0 +1,51 @@
+{
+  "name": "claxedo",
+  "version": "0.1.0",
+  "description": "Cloud-first fork of OpenCode with Convex, Clerk auth, and Daytona sandboxes",
+  "type": "module",
+  "scripts": {
+    "dev": "npx convex dev",
+    "convex:dev": "npx convex dev",
+    "convex:deploy": "npx convex deploy",
+    "start:server": "npx tsx src/server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "fetch-models": "npx tsx scripts/fetch-models.ts",
+    "build": "npm run fetch-models && tsc"
+  },
+  "keywords": [
+    "opencode",
+    "ai",
+    "coding",
+    "cloud",
+    "sandbox"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@clerk/backend": "^1.21.0",
+    "@daytonaio/sdk": "^0.134.0",
+    "@hono/node-server": "^1.19.9",
+    "@hono/node-ws": "^1.3.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
+    "@opentelemetry/resources": "^1.28.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
+    "@opentelemetry/sdk-trace-node": "^1.28.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
+    "@sandbox-agent/cli-darwin-arm64": "^0.1.11",
+    "@sentry/node": "^8.0.0",
+    "@types/ws": "^8.18.1",
+    "convex": "^1.17.4",
+    "dotenv": "^17.2.3",
+    "hono": "^4.11.5",
+
+    "prom-client": "^15.1.0",
+    "sandbox-agent": "^0.1.11",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.7",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

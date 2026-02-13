@@ -27,6 +27,21 @@ To create a production `dist/` and build the native app bundle:
 bun run --cwd packages/desktop tauri build
 ```
 
+## Performance benchmarking
+
+Enable perf logging (writes JSONL):
+
+```bash
+OC_PERF=1 OC_PERF_DIR="$PWD/logs/perf" bun run --cwd packages/desktop tauri dev
+```
+
+- The splash screen shows the perf file path while the server starts.
+- Summarize a run:
+
+```bash
+bun run --cwd packages/desktop perf:summary /path/to/desktop-startup-*.jsonl
+```
+
 ## Prerequisites
 
 Running the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.

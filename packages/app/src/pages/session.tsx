@@ -37,10 +37,10 @@ import { useComments } from "@/context/comments"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
-import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
+import { SessionHeader, SessionContextTab, SortableTab, SortableTerminalTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
+import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { Terminal } from "@/components/terminal"
 
 type HandoffSession = {
   prompt: string
@@ -232,16 +233,8 @@ export default function Page() {
     })
   }
 
-  const isDesktop = createMediaQuery("(min-width: 1024px)")
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
-  const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
-  })
-  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -260,18 +253,12 @@ export default function Page() {
     return next
   }
 
-  const openReviewPanel = () => {
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-  }
-
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
 
     const path = file.pathFromTab(next)
-    if (!path) return
-    file.load(path)
-    openReviewPanel()
+    if (path) file.load(path)
   }
 
   createEffect(() => {
@@ -394,19 +381,6 @@ export default function Page() {
       })
   }
 
-  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
-    if (params.id !== sessionID) return
-    if (parentID) {
-      navigate(`/${params.dir}/session/${parentID}`)
-      return
-    }
-    if (nextSessionID) {
-      navigate(`/${params.dir}/session/${nextSessionID}`)
-      return
-    }
-    navigate(`/${params.dir}/session`)
-  }
-
   async function archiveSession(sessionID: string) {
     const session = sync.session.get(sessionID)
     if (!session) return
@@ -424,7 +398,17 @@ export default function Page() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+
+        if (params.id !== sessionID) return
+        if (session.parentID) {
+          navigate(`/${params.dir}/session/${session.parentID}`)
+          return
+        }
+        if (nextSession) {
+          navigate(`/${params.dir}/session/${nextSession.id}`)
+          return
+        }
+        navigate(`/${params.dir}/session`)
       })
       .catch((err) => {
         showToast({
@@ -490,7 +474,16 @@ export default function Page() {
       }),
     )
 
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    if (params.id !== sessionID) return true
+    if (session.parentID) {
+      navigate(`/${params.dir}/session/${session.parentID}`)
+      return true
+    }
+    if (nextSession) {
+      navigate(`/${params.dir}/session/${nextSession.id}`)
+      return true
+    }
+    navigate(`/${params.dir}/session`)
     return true
   }
 
@@ -838,9 +831,11 @@ export default function Page() {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const currentTabs = tabs().all()
-      const toIndex = getTabReorderIndex(currentTabs, draggable.id.toString(), droppable.id.toString())
-      if (toIndex === undefined) return
-      tabs().move(draggable.id.toString(), toIndex)
+      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
+      const toIndex = currentTabs?.indexOf(droppable.id.toString())
+      if (fromIndex !== toIndex && toIndex !== undefined) {
+        tabs().move(draggable.id.toString(), toIndex)
+      }
     }
   }
 
@@ -1115,7 +1110,6 @@ export default function Page() {
   }
 
   const focusReviewDiff = (path: string) => {
-    openReviewPanel()
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
     setTree({ activeDiff: path, pendingDiff: path })
@@ -1234,7 +1228,7 @@ export default function Page() {
     if (!id) return
 
     const wants = isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      ? view().reviewPanel.opened() && (layout.fileTree.opened() || activeTab() === "review")
       : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
@@ -1247,6 +1241,7 @@ export default function Page() {
   createEffect(() => {
     const dir = sdk.directory
     if (!isDesktop()) return
+    if (!view().reviewPanel.opened()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
@@ -1526,18 +1521,15 @@ export default function Page() {
   createEffect(() => {
     if (!file.ready()) return
     setSessionHandoff(sessionKey(), {
-      files: tabs()
-        .all()
-        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-          const path = file.pathFromTab(tab)
-          if (!path) return acc
-          const selected = file.selectedLines(path)
-          acc[path] =
-            selected && typeof selected === "object" && "start" in selected && "end" in selected
-              ? (selected as SelectedLineRange)
-              : null
-          return acc
-        }, {}),
+      files: Object.fromEntries(
+        tabs()
+          .all()
+          .flatMap((tab) => {
+            const path = file.pathFromTab(tab)
+            if (!path) return []
+            return [[path, file.selectedLines(path) ?? null] as const]
+          }),
+      ),
     })
   })
 
@@ -1551,16 +1543,9 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div
-        class="flex-1 min-h-0 flex"
-        classList={{
-          "flex-col": !isDesktop(),
-          "flex-row": isDesktop(),
-        }}
-      >
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
-          mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
@@ -1573,10 +1558,10 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": desktopSidePanelOpen(),
+            "md:flex-none": view().reviewPanel.opened(),
           }}
           style={{
-            width: sessionPanelWidth(),
+            width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1703,7 +1688,7 @@ export default function Page() {
             setPromptDockRef={(el) => (promptDock = el)}
           />
 
-          <Show when={desktopReviewOpen()}>
+          <Show when={isDesktop() && view().reviewPanel.opened()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -1715,14 +1700,14 @@ export default function Page() {
         </div>
 
         <SessionSidePanel
-          open={desktopSidePanelOpen()}
-          reviewOpen={desktopReviewOpen()}
+          open={isDesktop() && view().reviewPanel.opened()}
           language={language}
           layout={layout}
           command={command}
           dialog={dialog}
           file={file}
           comments={comments}
+          sync={sync}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
@@ -1734,12 +1719,10 @@ export default function Page() {
           openTab={openTab}
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
-          vm={{
-            messages,
-            visibleUserMessages,
-            view,
-            info,
-          }}
+          messages={messages as () => unknown[]}
+          visibleUserMessages={visibleUserMessages as () => unknown[]}
+          view={view}
+          info={info as () => unknown}
           handoffFiles={() => handoff.session.get(sessionKey())?.files}
           codeComponent={codeComponent}
           addCommentToContext={addCommentToContext}
@@ -1757,21 +1740,151 @@ export default function Page() {
         />
       </div>
 
-      <TerminalPanel
-        open={view().terminal.opened()}
-        height={layout.terminal.height()}
-        resize={layout.terminal.resize}
-        close={view().terminal.close}
-        terminal={terminal}
-        language={language}
-        command={command}
-        handoff={() => handoff.terminal.get(params.dir!) ?? []}
-        activeTerminalDraggable={() => store.activeTerminalDraggable}
-        handleTerminalDragStart={handleTerminalDragStart}
-        handleTerminalDragOver={handleTerminalDragOver}
-        handleTerminalDragEnd={handleTerminalDragEnd}
-        onCloseTab={() => setUi("autoCreated", false)}
-      />
+      <Show when={isDesktop() && view().terminal.opened()}>
+        <div
+          id="terminal-panel"
+          role="region"
+          aria-label={language.t("terminal.title")}
+          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
+          style={{ height: `${layout.terminal.height()}px` }}
+        >
+          <ResizeHandle
+            direction="vertical"
+            size={layout.terminal.height()}
+            min={100}
+            max={window.innerHeight * 0.6}
+            collapseThreshold={50}
+            onResize={layout.terminal.resize}
+            onCollapse={view().terminal.close}
+          />
+          <Show
+            when={terminal.ready()}
+            fallback={
+              <div class="flex flex-col h-full pointer-events-none">
+                <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
+                  <For each={handoff.terminal.get(params.dir!) ?? []}>
+                    {(title) => (
+                      <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
+                        {title}
+                      </div>
+                    )}
+                  </For>
+                  <div class="flex-1" />
+                  <div class="text-text-weak pr-2">
+                    {language.t("common.loading")}
+                    {language.t("common.loading.ellipsis")}
+                  </div>
+                </div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">
+                  {language.t("terminal.loading")}
+                </div>
+              </div>
+            }
+          >
+            <DragDropProvider
+              onDragStart={handleTerminalDragStart}
+              onDragEnd={handleTerminalDragEnd}
+              onDragOver={handleTerminalDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragYAxis />
+              <div class="flex flex-col h-full">
+                <Tabs
+                  variant="alt"
+                  value={terminal.active()}
+                  onChange={(id) => {
+                    // Only switch tabs if not in the middle of starting edit mode
+                    terminal.open(id)
+                  }}
+                  class="!h-auto !flex-none"
+                >
+                  <Tabs.List class="h-10">
+                    <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                      <For each={terminal.all()}>
+                        {(pty) => (
+                          <SortableTerminalTab
+                            terminal={pty}
+                            onClose={() => {
+                              view().terminal.close()
+                              setUi("autoCreated", false)
+                            }}
+                          />
+                        )}
+                      </For>
+                    </SortableProvider>
+                    <div class="h-full flex items-center justify-center">
+                      <TooltipKeybind
+                        title={language.t("command.terminal.new")}
+                        keybind={command.keybind("terminal.new")}
+                        class="flex items-center"
+                      >
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={() => terminal.new()}
+                          aria-label={language.t("command.terminal.new")}
+                        />
+                      </TooltipKeybind>
+                    </div>
+                  </Tabs.List>
+                </Tabs>
+                <div class="flex-1 min-h-0 relative">
+                  <For each={terminal.all()}>
+                    {(pty) => (
+                      <div
+                        id={`terminal-wrapper-${pty.id}`}
+                        class="absolute inset-0"
+                        style={{
+                          display: terminal.active() === pty.id ? "block" : "none",
+                        }}
+                      >
+                        <Show when={pty.id} keyed>
+                          <Terminal
+                            pty={pty}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(pty.id)}
+                          />
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <DragOverlay>
+                <Show when={store.activeTerminalDraggable}>
+                  {(draggedId) => {
+                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
+                    return (
+                      <Show when={pty()}>
+                        {(t) => (
+                          <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                            {(() => {
+                              const title = t().title
+                              const number = t().titleNumber
+                              const match = title.match(/^Terminal (\d+)$/)
+                              const parsed = match ? Number(match[1]) : undefined
+                              const isDefaultTitle =
+                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+                              if (title && !isDefaultTitle) return title
+                              if (Number.isFinite(number) && number > 0)
+                                return language.t("terminal.title.numbered", { number })
+                              if (title) return title
+                              return language.t("terminal.title")
+                            })()}
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
+                </Show>
+              </DragOverlay>
+            </DragDropProvider>
+          </Show>
+        </div>
+      </Show>
     </div>
   )
 }

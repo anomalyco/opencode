@@ -1,0 +1,918 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const features = [
+  {
+    icon: '🚀',
+    title: '10+ Parallel Agents',
+    description: 'Run multiple AI coding agents simultaneously. No more waiting for one task to finish before starting another.'
+  },
+  {
+    icon: '📁',
+    title: 'Multi-Project Workspace',
+    description: 'Work on multiple codebases at once. Each project gets isolated agent sessions with dedicated terminals.'
+  },
+  {
+    icon: '🖥️',
+    title: 'Native Desktop App',
+    description: 'Optimized desktop experience with Tauri. Fast startup, auto-updates, and native OS integration.'
+  },
+  {
+    icon: '🔧',
+    title: 'Multiple Agent Types',
+    description: 'Support for Claude, Codex, Amp, Aider, Goose, Cline, and more. Use the best tool for each task.'
+  },
+  {
+    icon: '📊',
+    title: 'Real-time Status',
+    description: 'Visual indicators for each agent: loading, needs attention, or completed. Always know what\'s happening.'
+  },
+  {
+    icon: '☁️',
+    title: 'Cloud Ready',
+    description: 'Optional cloud features for team sync, remote access, and workspace persistence across devices.'
+  }
+];
+
+const agents = [
+  { name: 'Claude', color: '#d97706' },
+  { name: 'Codex', color: '#10b981' },
+  { name: 'Amp', color: '#6366f1' },
+  { name: 'Aider', color: '#ec4899' },
+  { name: 'Goose', color: '#8b5cf6' },
+  { name: 'Cline', color: '#06b6d4' }
+];
+
+const comparison = [
+  { feature: 'Single agent session', opencode: true, claxedo: true },
+  { feature: 'Multiple parallel agents', opencode: false, claxedo: true },
+  { feature: 'Multi-project support', opencode: false, claxedo: true },
+  { feature: 'Agent status monitoring', opencode: false, claxedo: true },
+  { feature: 'Desktop-native UI', opencode: true, claxedo: true },
+  { feature: 'Cloud sync', opencode: false, claxedo: true }
+];
+---
+
+<Layout title="Claxedo - Multi-agent AI Coding Environment">
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="container nav-content">
+      <a href="/" class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">Claxedo</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#agents">Agents</a>
+        <a href="#comparison">Compare</a>
+        <a href="https://github.com/opencode-ai/opencode" class="btn-secondary" style="padding: 10px 20px; font-size: 14px;">
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="container hero-content">
+      <div class="hero-badge">Built on OpenCode</div>
+      <h1 class="hero-title">
+        Multi-agent AI coding<br />
+        <span class="gradient-text">at massive scale</span>
+      </h1>
+      <p class="hero-description">
+        Run 10+ AI coding agents in parallel across multiple projects.
+        Stop waiting. Start shipping faster.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/opencode-ai/opencode/releases" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7,10 12,15 17,10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download for Free
+        </a>
+        <a href="#features" class="btn-secondary">
+          Learn More
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <span class="stat-value">10+</span>
+          <span class="stat-label">Parallel Agents</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-value">6</span>
+          <span class="stat-label">Agent Types</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-value">3</span>
+          <span class="stat-label">Platforms</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Terminal Preview -->
+  <section class="preview">
+    <div class="container">
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-tabs">
+            <span class="tab active">
+              <span class="tab-indicator done"></span>
+              Claude #1
+            </span>
+            <span class="tab">
+              <span class="tab-indicator loading"></span>
+              Codex #2
+            </span>
+            <span class="tab">
+              <span class="tab-indicator attention"></span>
+              Aider #3
+            </span>
+            <span class="tab">
+              <span class="tab-indicator loading"></span>
+              Claude #4
+            </span>
+          </div>
+        </div>
+        <div class="terminal-content">
+          <div class="terminal-line">
+            <span class="prompt">~/project $</span>
+            <span class="command">claude "Implement user authentication with JWT"</span>
+          </div>
+          <div class="terminal-line output">
+            <span class="success">✓</span> Created src/auth/jwt.ts
+          </div>
+          <div class="terminal-line output">
+            <span class="success">✓</span> Created src/middleware/auth.ts
+          </div>
+          <div class="terminal-line output">
+            <span class="success">✓</span> Updated src/routes/user.ts
+          </div>
+          <div class="terminal-line output">
+            <span class="success">✓</span> Added tests in src/auth/__tests__/
+          </div>
+          <div class="terminal-line">
+            <span class="complete">Task completed in 45 seconds</span>
+          </div>
+          <div class="terminal-line">
+            <span class="prompt">~/project $</span>
+            <span class="cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Everything you need to <span class="gradient-text">ship faster</span></h2>
+        <p class="section-description">
+          Claxedo supercharges your development workflow with parallel AI agents
+        </p>
+      </div>
+      <div class="features-grid">
+        {features.map((feature) => (
+          <div class="feature-card">
+            <div class="feature-icon">{feature.icon}</div>
+            <h3 class="feature-title">{feature.title}</h3>
+            <p class="feature-description">{feature.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Agents Section -->
+  <section id="agents" class="agents">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Support for <span class="gradient-text">your favorite agents</span></h2>
+        <p class="section-description">
+          Use the best AI coding agent for each task. Mix and match as needed.
+        </p>
+      </div>
+      <div class="agents-grid">
+        {agents.map((agent) => (
+          <div class="agent-card" style={`--agent-color: ${agent.color}`}>
+            <div class="agent-icon">{agent.name.charAt(0)}</div>
+            <span class="agent-name">{agent.name}</span>
+          </div>
+        ))}
+      </div>
+      <p class="agents-note">
+        Plus built-in <strong>Build Agent</strong> (full access) and <strong>Plan Agent</strong> (read-only analysis)
+      </p>
+    </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <section id="comparison" class="comparison">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Why <span class="gradient-text">Claxedo</span>?</h2>
+        <p class="section-description">
+          Built on OpenCode with powerful extensions for parallel workflows
+        </p>
+      </div>
+      <div class="comparison-table-wrapper">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>OpenCode</th>
+              <th class="highlight">Claxedo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.map((row) => (
+              <tr>
+                <td>{row.feature}</td>
+                <td>
+                  {row.opencode ? (
+                    <span class="check">✓</span>
+                  ) : (
+                    <span class="cross">—</span>
+                  )}
+                </td>
+                <td class="highlight">
+                  {row.claxedo ? (
+                    <span class="check">✓</span>
+                  ) : (
+                    <span class="cross">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it Works -->
+  <section class="how-it-works">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Get started in <span class="gradient-text">minutes</span></h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3 class="step-title">Download</h3>
+          <p class="step-description">Get Claxedo for macOS, Windows, or Linux</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3 class="step-title">Add Projects</h3>
+          <p class="step-description">Open your codebases as workspaces</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3 class="step-title">Launch Agents</h3>
+          <p class="step-description">Spin up multiple agents in parallel</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <h3 class="step-title">Ship Fast</h3>
+          <p class="step-description">Watch your productivity multiply</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta">
+    <div class="container">
+      <div class="cta-content">
+        <h2 class="cta-title">Ready to supercharge your coding?</h2>
+        <p class="cta-description">
+          Join developers who are shipping faster with parallel AI agents
+        </p>
+        <div class="cta-actions">
+          <a href="https://github.com/opencode-ai/opencode/releases" class="btn-primary">
+            Download Claxedo
+          </a>
+          <a href="https://github.com/opencode-ai/opencode" class="btn-secondary">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-content">
+      <div class="footer-brand">
+        <span class="logo-icon">⚡</span>
+        <span>Claxedo</span>
+      </div>
+      <p class="footer-text">
+        Built with ❤️ on <a href="https://github.com/opencode-ai/opencode">OpenCode</a>
+      </p>
+    </div>
+  </footer>
+</Layout>
+
+<style>
+  /* Navigation */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 16px 0;
+    background: rgba(10, 10, 15, 0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .nav-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 20px;
+  }
+
+  .logo-icon {
+    font-size: 24px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .nav-links a {
+    color: var(--text-secondary);
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: var(--text-primary);
+  }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    padding: 160px 0 80px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .hero-bg {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1000px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-content {
+    position: relative;
+  }
+
+  .hero-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  .hero-title {
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 24px;
+  }
+
+  .hero-description {
+    font-size: 20px;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 60px;
+  }
+
+  .hero-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .stat-value {
+    font-size: 36px;
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .stat-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .stat-divider {
+    width: 1px;
+    height: 40px;
+    background: var(--border-color);
+  }
+
+  /* Terminal Preview */
+  .preview {
+    padding: 0 0 100px;
+  }
+
+  .terminal-window {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .terminal-dots {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27ca40; }
+
+  .terminal-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .tab-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .tab-indicator.loading {
+    background: #f59e0b;
+    animation: pulse 1.5s infinite;
+  }
+
+  .tab-indicator.attention {
+    background: #ef4444;
+    animation: pulse 0.8s infinite;
+  }
+
+  .tab-indicator.done {
+    background: #22c55e;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .terminal-content {
+    padding: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 1.8;
+  }
+
+  .terminal-line {
+    display: flex;
+    gap: 8px;
+  }
+
+  .terminal-line.output {
+    padding-left: 24px;
+    color: var(--text-secondary);
+  }
+
+  .prompt {
+    color: #22c55e;
+  }
+
+  .command {
+    color: var(--text-primary);
+  }
+
+  .success {
+    color: #22c55e;
+  }
+
+  .complete {
+    color: var(--accent-primary);
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: var(--text-primary);
+    animation: blink 1s infinite;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Features */
+  .features {
+    padding: 100px 0;
+  }
+
+  .section-header {
+    text-align: center;
+    margin-bottom: 60px;
+  }
+
+  .section-title {
+    font-size: clamp(32px, 4vw, 48px);
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .section-description {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+
+  .feature-card {
+    padding: 32px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .feature-card:hover {
+    border-color: var(--accent-primary);
+    transform: translateY(-4px);
+  }
+
+  .feature-icon {
+    font-size: 40px;
+    margin-bottom: 16px;
+  }
+
+  .feature-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .feature-description {
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Agents */
+  .agents {
+    padding: 100px 0;
+    background: var(--bg-secondary);
+  }
+
+  .agents-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+
+  .agent-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: all 0.2s;
+  }
+
+  .agent-card:hover {
+    border-color: var(--agent-color);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--agent-color) 30%, transparent);
+  }
+
+  .agent-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--agent-color);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  .agent-name {
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  .agents-note {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  /* Comparison */
+  .comparison {
+    padding: 100px 0;
+  }
+
+  .comparison-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .comparison-table {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+    border-collapse: collapse;
+  }
+
+  .comparison-table th,
+  .comparison-table td {
+    padding: 16px 24px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .comparison-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .comparison-table th.highlight,
+  .comparison-table td.highlight {
+    background: rgba(99, 102, 241, 0.1);
+  }
+
+  .check {
+    color: #22c55e;
+    font-weight: 700;
+  }
+
+  .cross {
+    color: var(--text-muted);
+  }
+
+  /* How it Works */
+  .how-it-works {
+    padding: 100px 0;
+    background: var(--bg-secondary);
+  }
+
+  .steps {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .step {
+    text-align: center;
+    max-width: 200px;
+  }
+
+  .step-number {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    background: var(--accent-gradient);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 20px;
+  }
+
+  .step-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .step-description {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .step-connector {
+    width: 60px;
+    height: 2px;
+    background: var(--border-color);
+    margin-top: 24px;
+  }
+
+  /* CTA */
+  .cta {
+    padding: 100px 0;
+  }
+
+  .cta-content {
+    text-align: center;
+    padding: 60px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 500px;
+    height: 200px;
+    background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
+  }
+
+  .cta-title {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .cta-description {
+    font-size: 18px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    position: relative;
+  }
+
+  .cta-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 40px 0;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+
+  .footer-text {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .footer-text a {
+    color: var(--accent-primary);
+  }
+
+  .footer-text a:hover {
+    text-decoration: underline;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .nav-links a:not(.btn-secondary) {
+      display: none;
+    }
+
+    .hero-stats {
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .stat-divider {
+      width: 40px;
+      height: 1px;
+    }
+
+    .terminal-tabs {
+      display: none;
+    }
+
+    .step-connector {
+      display: none;
+    }
+
+    .steps {
+      flex-direction: column;
+      align-items: center;
+    }
+  }
+</style>
