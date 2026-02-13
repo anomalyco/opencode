@@ -5,6 +5,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
+import { Filesystem } from "../../src/util/filesystem"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -99,7 +100,7 @@ describe("tool.read external_directory permission", () => {
         await read.execute({ filePath: path.join(outerTmp.path, "external") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "external", "*"))
+        expect(extDirReq!.patterns).toContain(Filesystem.join(outerTmp.path, "external", "*"))
       },
     })
   })

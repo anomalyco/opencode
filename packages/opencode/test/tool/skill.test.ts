@@ -6,6 +6,7 @@ import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SkillTool } from "../../src/tool/skill"
 import { tmpdir } from "../fixture/fixture"
+import { Filesystem } from "../../src/util/filesystem"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: "test",
@@ -92,14 +93,14 @@ Use this skill.
 
           const result = await tool.execute({ name: "tool-skill" }, ctx)
           const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
-          const file = path.resolve(dir, "scripts", "demo.txt")
+          const file = Filesystem.resolve(dir, "scripts", "demo.txt")
 
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("skill")
           expect(requests[0].patterns).toContain("tool-skill")
           expect(requests[0].always).toContain("tool-skill")
 
-          expect(result.metadata.dir).toBe(dir)
+          expect(result.metadata.dir).toBe(Filesystem.normalize(dir))
           expect(result.output).toContain(`<skill_content name="tool-skill">`)
           expect(result.output).toContain(`Base directory for this skill: ${pathToFileURL(dir).href}`)
           expect(result.output).toContain(`<file>${file}</file>`)

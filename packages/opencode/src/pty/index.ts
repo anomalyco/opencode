@@ -8,6 +8,7 @@ import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -135,7 +136,8 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const normalizedCwd = Filesystem.normalize(cwd)
+    const shellEnv = await Plugin.trigger("shell.env", { cwd: normalizedCwd }, { env: {} })
     const env = {
       ...process.env,
       ...input.env,
@@ -149,7 +151,7 @@ export namespace Pty {
       env.LC_CTYPE = "C.UTF-8"
       env.LANG = "C.UTF-8"
     }
-    log.info("creating session", { id, cmd: command, args, cwd })
+    log.info("creating session", { id, cmd: command, args, cwd: normalizedCwd })
 
     const spawn = await pty()
     const ptyProcess = spawn(command, args, {

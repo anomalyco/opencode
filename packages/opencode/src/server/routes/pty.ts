@@ -6,6 +6,7 @@ import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Filesystem } from "@/filesystem"
 
 export const PtyRoutes = lazy(() =>
   new Hono()
