@@ -42,6 +42,17 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      rlm: z
+        .union([
+          z.boolean(),
+          z.object({
+            enabled: z.boolean().optional(),
+            max_iterations: z.number().int().positive().optional(),
+            max_depth: z.number().int().positive().optional(),
+            sub_model: z.string().optional(),
+          }),
+        ])
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -228,6 +239,7 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+      if (value.rlm !== undefined) item.rlm = value.rlm
     }
 
     // Ensure Truncate.GLOB is allowed unless explicitly configured

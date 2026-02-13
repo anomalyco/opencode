@@ -118,18 +118,19 @@ export function Session() {
   const session = createMemo(() => sync.session.get(route.sessionID))
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
-    return sync.data.session
+    if (!parentID) return []
+    return (sync.data.session ?? [])
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const messages = createMemo(() => sync.data.message?.[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return children().flatMap((x) => sync.data.permission?.[x.id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return children().flatMap((x) => sync.data.question?.[x.id] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -164,7 +165,7 @@ export function Session() {
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
-    const tui = sync.data.config.tui
+    const tui = sync.data.config?.tui
     if (tui?.scroll_acceleration?.enabled) {
       return new MacOSScrollAccel()
     }
@@ -320,7 +321,7 @@ export function Session() {
       suggested: route.type === "session",
       keybind: "session_share",
       category: "Session",
-      enabled: sync.data.config.share !== "disabled",
+      enabled: sync.data.config?.share !== "disabled",
       slash: {
         name: "share",
       },
@@ -1115,6 +1116,7 @@ export function Session() {
               />
             </box>
           </Show>
+          <Footer />
           <Toast />
         </box>
         <Show when={sidebarVisible()}>

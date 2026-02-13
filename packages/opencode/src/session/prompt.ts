@@ -42,6 +42,7 @@ import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
+import { RLMContext } from "@/rlm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
@@ -293,11 +294,21 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+    await RLMContext.init(sessionID)
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+
+      // On first iteration, feed all existing messages into RLM context
+      // (handles session restore / resume)
+      if (step === 0) {
+        for (const msg of msgs) {
+          const entries = RLMContext.fromMessage(msg)
+          if (entries.length > 0) await RLMContext.append(sessionID, entries)
+        }
+      }
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
@@ -673,6 +684,16 @@ export namespace SessionPrompt {
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
+
+      // Feed the new assistant message into RLM context
+      {
+        const latest = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+        const newest = latest.findLast((m) => m.info.role === "assistant")
+        if (newest) {
+          const entries = RLMContext.fromMessage(newest)
+          if (entries.length > 0) await RLMContext.append(sessionID, entries)
+        }
+      }
 
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully

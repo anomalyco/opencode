@@ -703,6 +703,18 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      rlm: z
+        .union([
+          z.boolean(),
+          z.object({
+            enabled: z.boolean().optional(),
+            max_iterations: z.number().int().positive().optional(),
+            max_depth: z.number().int().positive().optional(),
+            sub_model: ModelId.optional(),
+          }),
+        ])
+        .optional()
+        .describe("Enable RLM mode for this agent. Set to true or provide config overrides."),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -723,6 +735,7 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
+        "rlm",
       ])
 
       // Extract unknown properties into options
@@ -782,6 +795,7 @@ export namespace Config {
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
+      rlm_toggle: z.string().optional().default("none").describe("Toggle RLM mode for current session"),
       messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
       messages_page_down: z
         .string()
@@ -1169,6 +1183,28 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      rlm: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable RLM (Recursive Language Model) mode globally (default: false)"),
+          max_iterations: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of RLM iterations before forcing a final answer (default: 30)"),
+          max_depth: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum recursion depth for nested RLM calls (default: 1)"),
+          sub_model: ModelId.optional().describe(
+            "Model to use for sub-LLM queries inside the REPL environment, in provider/model format. Defaults to the main model.",
+          ),
+          verbose: z.boolean().optional().describe("Enable verbose RLM logging (default: false)"),
+        })
+        .optional()
+        .describe("RLM (Recursive Language Model) configuration for iterative REPL-based reasoning"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

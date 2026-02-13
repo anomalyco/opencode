@@ -48,6 +48,8 @@ export namespace SystemPrompt {
             : ""
         }`,
         `</directories>`,
+        ``,
+        `You have access to a \`context_query\` tool that lets you query the full conversation history using JavaScript — including messages that were compacted away from your visible context. Use it to verify facts when you are uncertain: re-check what the user asked for, what files were changed, what decisions were made, or what constraints were given. Do not guess — confirm.`,
       ].join("\n"),
     ]
   }

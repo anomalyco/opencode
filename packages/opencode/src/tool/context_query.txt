@@ -1,0 +1,25 @@
+Query the conversation's persistent context memory using JavaScript code.
+
+The `context` variable contains an array of ALL messages from this conversation (including sub-agent tasks), persisted across compactions and session reloads. Each entry has:
+```
+{ role: "user"|"assistant"|"tool-call"|"tool-result"|"sub-agent", content: string, toolName?: string, toolCallId?: string, time: number, sourceSessionID?: string }
+```
+
+Use this tool to VERIFY facts before acting on them. When you are uncertain about:
+- What the user previously asked for or specified as requirements
+- Which files were modified, created, or read earlier in the conversation
+- What decisions were made and why
+- What instructions or constraints the user gave
+- What was already accomplished vs what remains
+
+...query the context to confirm rather than guessing or assuming. This reduces hallucination and ensures you act on what actually happened, not what you think happened.
+
+Example queries:
+- Verify requirements: `console.log(context.filter(m => m.role === "user").map(m => m.content).join("\n---\n"))`
+- Check what files were written: `console.log(context.filter(m => m.role === "tool-call" && m.toolName === "write").map(m => m.content))`
+- Find a specific discussion: `console.log(context.filter(m => m.content.includes("keyword")).map(m => m.role + ": " + m.content.slice(0, 200)))`
+- Count compactions: `console.log(context.filter(m => m.content.includes("compaction")).length)`
+
+Write JavaScript code that will run in a sandboxed REPL. Use `console.log()` to output results. Variables persist across calls. The code has access to: Array, Map, Set, JSON, Math, RegExp, String, Date, Promise, setTimeout.
+
+IMPORTANT: The context memory contains the COMPLETE conversation history from the very start, even across compactions. Use this tool when you need to verify something from earlier in the conversation that may have been compacted away from your visible message history.

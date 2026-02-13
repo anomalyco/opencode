@@ -34,12 +34,6 @@ incremental steps - use the todo tool to track your progress.
 
 ## 1. Deeply Understand the Problem
 - Carefully read the issue and think hard about a plan to solve it before coding.
-- Break down the problem into manageable parts. Consider the following:
-- What is the expected behavior?
-- What are the edge cases?
-- What are the potential pitfalls?
-- How does this fit into the larger context of the codebase?
-- What are the dependencies and interactions with other parts of the code
 
 ## 2. Codebase Investigation
 - Explore relevant files and directories.
