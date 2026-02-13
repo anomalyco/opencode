@@ -17,6 +17,7 @@ use futures::{
 #[cfg(windows)]
 use job_object::*;
 use std::{
+    collections::VecDeque,
     env,
     net::TcpListener,
     path::PathBuf,
@@ -639,6 +640,7 @@ async fn set_default_editor(app: AppHandle, editor: Option<String>) -> Result<()
     }
     store.save().map_err(|e| format!("Failed to save settings: {}", e))?;
     Ok(())
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -676,6 +678,7 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

@@ -23,6 +23,14 @@ import {
   toOaCompatibleRequest,
   toOaCompatibleResponse,
 } from "./openai-compatible"
+import {
+  fromGoogleChunk,
+  fromGoogleRequest,
+  fromGoogleResponse,
+  toGoogleChunk,
+  toGoogleRequest,
+  toGoogleResponse,
+} from "./google"
 
 export type UsageInfo = {
   inputTokens: number
@@ -168,10 +176,12 @@ export function createBodyConverter(from: ZenData.Format, to: ZenData.Format) {
 
     let raw: CommonRequest
     if (from === "anthropic") raw = fromAnthropicRequest(body)
+    else if (from === "google") raw = fromGoogleRequest(body)
     else if (from === "openai") raw = fromOpenaiRequest(body)
     else raw = fromOaCompatibleRequest(body)
 
     if (to === "anthropic") return toAnthropicRequest(raw)
+    if (to === "google") return toGoogleRequest(raw)
     if (to === "openai") return toOpenaiRequest(raw)
     if (to === "oa-compat") return toOaCompatibleRequest(raw)
   }
@@ -183,6 +193,7 @@ export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Form
 
     let raw: CommonChunk | string
     if (from === "anthropic") raw = fromAnthropicChunk(part)
+    else if (from === "google") raw = fromGoogleChunk(part)
     else if (from === "openai") raw = fromOpenaiChunk(part)
     else raw = fromOaCompatibleChunk(part)
 
@@ -190,6 +201,7 @@ export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Form
     if (typeof raw === "string") return raw
 
     if (to === "anthropic") return toAnthropicChunk(raw)
+    if (to === "google") return toGoogleChunk(raw)
     if (to === "openai") return toOpenaiChunk(raw)
     if (to === "oa-compat") return toOaCompatibleChunk(raw)
   }
@@ -201,10 +213,12 @@ export function createResponseConverter(from: ZenData.Format, to: ZenData.Format
 
     let raw: CommonResponse
     if (from === "anthropic") raw = fromAnthropicResponse(response)
+    else if (from === "google") raw = fromGoogleResponse(response)
     else if (from === "openai") raw = fromOpenaiResponse(response)
     else raw = fromOaCompatibleResponse(response)
 
     if (to === "anthropic") return toAnthropicResponse(raw)
+    if (to === "google") return toGoogleResponse(raw)
     if (to === "openai") return toOpenaiResponse(raw)
     if (to === "oa-compat") return toOaCompatibleResponse(raw)
   }
