@@ -387,28 +387,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const all = prompt.current()
     const parts = all.filter((part) => part.type !== "image")
     const images = all.filter((part): part is ImageAttachmentPart => part.type === "image")
-    const len = promptLength(parts)
-    const add = len > 0 ? "\n" + text : text
-    const last = parts.at(-1)
-    const next =
-      last?.type === "text"
-        ? [
-            ...parts.slice(0, -1),
-            {
-              ...last,
-              content: last.content + add,
-              end: last.end + add.length,
-            },
-          ]
-        : [
-            ...parts,
-            {
-              type: "text" as const,
-              content: add,
-              start: len,
-              end: len + add.length,
-            },
-          ]
+    const existing = parts
+      .flatMap((p) => (p.type === "text" ? [p.content] : []))
+      .join("")
+      .trim()
+    const combined = existing ? text + "\n" + existing : text
+    const next = [
+      {
+        type: "text" as const,
+        content: combined,
+        start: 0,
+        end: combined.length,
+      },
+    ]
     prompt.set([...next, ...images], promptLength([...next, ...images]))
     closePopover()
     queueScroll()

@@ -101,7 +101,9 @@ export function Prompt(props: PromptProps) {
       if (!input || input.isDestroyed) return
       if (evt.properties.sessionID && evt.properties.sessionID !== props.sessionID) return
       if (!evt.properties.text.trim()) return
-      const text = input.plainText.trim() ? "\n" + evt.properties.text : evt.properties.text
+      const existing = input.plainText.trim()
+      const text = existing ? evt.properties.text + "\n" + existing : evt.properties.text
+      input.clear()
       input.insertText(text)
       setTimeout(() => {
         // setTimeout is a workaround and needs to be addressed properly
