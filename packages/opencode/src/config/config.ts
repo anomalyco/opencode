@@ -930,7 +930,6 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
     no_terminal_padding_x: z.boolean().optional().describe("Remove horizontal padding in the terminal interface"),
   })
-  export type TUI = z.infer<typeof TUI>
 
   export const Server = z
     .object({
