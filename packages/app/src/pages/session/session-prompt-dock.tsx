@@ -132,12 +132,14 @@ export function SessionPromptDock(props: {
                 expandLabel={props.t("session.todo.expand")}
               />
             </Show>
-            <PromptInput
-              ref={props.inputRef}
-              newSessionWorktree={props.newSessionWorktree}
-              onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-              onSubmit={props.onSubmit}
-            />
+            <div class="relative z-10 -mt-9">
+              <PromptInput
+                ref={props.inputRef}
+                newSessionWorktree={props.newSessionWorktree}
+                onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                onSubmit={props.onSubmit}
+              />
+            </div>
           </Show>
         </Show>
       </div>
