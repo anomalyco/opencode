@@ -109,24 +109,13 @@ pub fn use_decorations(env: &SessionEnv) -> bool {
 }
 
 fn default_use_decorations(env: &SessionEnv) -> bool {
-    if is_i3_session(env) {
+    if is_known_tiling_session(env) {
         return false;
     }
     if !is_wayland_session(env) {
         return true;
     }
-    if is_known_tiling_session(env) {
-        return false;
-    }
     is_full_desktop_session(env)
-}
-
-fn is_i3_session(env: &SessionEnv) -> bool {
-    if env.i3_sock {
-        return true;
-    }
-
-    desktop_tokens(env).any(|value| matches!(value.as_str(), "i3" | "i3wm" | "i3-gnome"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,11 +192,13 @@ fn is_known_tiling_session(env: &SessionEnv) -> bool {
             value.as_str(),
             "niri"
                 | "sway"
+                | "swayfx"
                 | "hyprland"
                 | "river"
                 | "i3"
                 | "i3wm"
                 | "bspwm"
+                | "dwm"
                 | "qtile"
                 | "xmonad"
                 | "leftwm"
@@ -372,6 +363,17 @@ mod tests {
         let env = SessionEnv {
             xdg_current_desktop: Some("labwc".into()),
             wayland_display: true,
+            ..Default::default()
+        };
+
+        assert!(!use_decorations(&env));
+    }
+
+    #[test]
+    fn disables_decorations_for_dwm_on_x11() {
+        let env = SessionEnv {
+            xdg_current_desktop: Some("dwm".into()),
+            display: true,
             ..Default::default()
         };
 
