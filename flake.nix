@@ -1,6 +1,11 @@
 {
   description = "OpenCode development flake";
 
+  nixConfig = {
+    extra-substituters = [ "https://weyl-ai.cachix.org" ];
+    extra-trusted-public-keys = [ "weyl-ai.cachix.org-1:NWy8MiNiSLvkompKqN5+WZ8rDWiMXPrkVQO2c4FqXWQ=" ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
