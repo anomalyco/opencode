@@ -1,6 +1,6 @@
 ---
 title: Ferramentas Personalizadas
-description: Crie ferramentas que o LLM pode chamar em opencode.
+description: Crie ferramentas que o LLM pode chamar no opencode.
 ---
 
 Ferramentas personalizadas são funções que você cria e que o LLM pode chamar durante as conversas. Elas funcionam junto com as [ferramentas integradas](/docs/tools) do opencode, como `read`, `write` e `bash`.
@@ -30,13 +30,13 @@ A maneira mais fácil de criar ferramentas é usando o helper `tool()`, que forn
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Query the project database",
+  description: "Consultar o banco de dados do projeto",
   args: {
-    query: tool.schema.string().describe("SQL query to execute"),
+    query: tool.schema.string().describe("Consulta SQL para executar"),
   },
   async execute(args) {
-    // Your database logic here
-    return `Executed query: ${args.query}`
+    // Sua lógica de banco de dados aqui
+    return `Consulta executada: ${args.query}`
   },
 })
 ```
@@ -53,10 +53,10 @@ Você também pode exportar várias ferramentas de um único arquivo. Cada expor
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
-  description: "Add two numbers",
+  description: "Adicionar dois números",
   args: {
-    a: tool.schema.number().describe("First number"),
-    b: tool.schema.number().describe("Second number"),
+    a: tool.schema.number().describe("Primeiro número"),
+    b: tool.schema.number().describe("Segundo número"),
   },
   async execute(args) {
     return args.a + args.b
@@ -64,10 +64,10 @@ export const add = tool({
 })
 
 export const multiply = tool({
-  description: "Multiply two numbers",
+  description: "Multiplicar dois números",
   args: {
-    a: tool.schema.number().describe("First number"),
-    b: tool.schema.number().describe("Second number"),
+    a: tool.schema.number().describe("Primeiro número"),
+    b: tool.schema.number().describe("Segundo número"),
   },
   async execute(args) {
     return args.a * args.b
@@ -85,7 +85,7 @@ Você pode usar `tool.schema`, que é apenas [Zod](https://zod.dev), para defini
 
 ```ts "tool.schema"
 args: {
-  query: tool.schema.string().describe("SQL query to execute")
+  query: tool.schema.string().describe("Consulta SQL para executar")
 }
 ```
 
@@ -95,12 +95,12 @@ Você também pode importar [Zod](https://zod.dev) diretamente e retornar um obj
 import { z } from "zod"
 
 export default {
-  description: "Tool description",
+  description: "Descrição da ferramenta",
   args: {
-    param: z.string().describe("Parameter description"),
+    param: z.string().describe("Descrição do parâmetro"),
   },
   async execute(args, context) {
-    // Tool implementation
+    // Implementação da ferramenta
     return "result"
   },
 }
@@ -116,10 +116,10 @@ As ferramentas recebem contexto sobre a sessão atual:
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Get project information",
+  description: "Obter informações do projeto",
   args: {},
   async execute(args, context) {
-    // Access context information
+    // Acessar informações de contexto
     const { agent, sessionID, messageID, directory, worktree } = context
     return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
   },
@@ -133,7 +133,7 @@ Use `context.worktree` para a raiz do worktree do git.
 
 ## Exemplos
 
-### Escreva uma ferramenta em Python
+### Escrevendo uma ferramenta em Python
 
 Você pode escrever suas ferramentas em qualquer linguagem que desejar. Aqui está um exemplo que adiciona dois números usando Python.
 
@@ -154,10 +154,10 @@ import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
 export default tool({
-  description: "Add two numbers using Python",
+  description: "Adicionar dois números usando Python",
   args: {
-    a: tool.schema.number().describe("First number"),
-    b: tool.schema.number().describe("Second number"),
+    a: tool.schema.number().describe("Primeiro número"),
+    b: tool.schema.number().describe("Segundo número"),
   },
   async execute(args, context) {
     const script = path.join(context.worktree, ".opencode/tools/add.py")

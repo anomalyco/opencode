@@ -1,8 +1,9 @@
 import { checksum } from "@opencode-ai/util/encode"
-import { FileDiff, type SelectedLineRange } from "@pierre/diffs"
+import { FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
+import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 
 type SelectionSide = "additions" | "deletions"
@@ -52,6 +53,7 @@ function findSide(node: Node | null): SelectionSide | undefined {
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
   let observer: MutationObserver | undefined
+  let sharedVirtualizer: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
   let dragFrame: number | undefined
@@ -91,6 +93,16 @@ export function Diff<T>(props: DiffProps<T>) {
   let instance: FileDiff<T> | undefined
   const [current, setCurrent] = createSignal<FileDiff<T> | undefined>(undefined)
   const [rendered, setRendered] = createSignal(0)
+
+  const getVirtualizer = () => {
+    if (sharedVirtualizer) return sharedVirtualizer.virtualizer
+
+    const result = acquireVirtualizer(container)
+    if (!result) return
+
+    sharedVirtualizer = result
+    return result.virtualizer
+  }
 
   const getRoot = () => {
     const host = container.querySelector("diffs-container")
@@ -147,10 +159,10 @@ export function Diff<T>(props: DiffProps<T>) {
     const root = getRoot()
     if (!root) return
 
-    const diffs = root.querySelector("[data-diffs]")
+    const diffs = root.querySelector("[data-diff]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.type === "split"
+    const split = diffs.dataset.diffType === "split"
 
     const start = rowIndex(root, split, range.start, range.side)
     const end = rowIndex(root, split, range.end, range.endSide ?? range.side)
@@ -261,15 +273,19 @@ export function Diff<T>(props: DiffProps<T>) {
       node.removeAttribute("data-comment-selected")
     }
 
-    const diffs = root.querySelector("[data-diffs]")
+    const diffs = root.querySelector("[data-diff]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.type === "split"
+    const split = diffs.dataset.diffType === "split"
 
-    const code = Array.from(diffs.querySelectorAll("[data-code]")).filter(
+    const rows = Array.from(diffs.querySelectorAll("[data-line-index]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
-    if (code.length === 0) return
+    if (rows.length === 0) return
+
+    const annotations = Array.from(diffs.querySelectorAll("[data-line-annotation]")).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
 
     for (const range of ranges) {
       const start = rowIndex(root, split, range.start, range.side)
@@ -285,19 +301,18 @@ export function Diff<T>(props: DiffProps<T>) {
       const first = Math.min(start, end)
       const last = Math.max(start, end)
 
-      for (const block of code) {
-        for (const element of Array.from(block.children)) {
-          if (!(element instanceof HTMLElement)) continue
-          const idx = lineIndex(split, element)
-          if (idx === undefined) continue
-          if (idx > last) break
-          if (idx < first) continue
-          element.setAttribute("data-comment-selected", "")
-          const next = element.nextSibling
-          if (next instanceof HTMLElement && next.hasAttribute("data-line-annotation")) {
-            next.setAttribute("data-comment-selected", "")
-          }
-        }
+      for (const row of rows) {
+        const idx = lineIndex(split, row)
+        if (idx === undefined) continue
+        if (idx < first || idx > last) continue
+        row.setAttribute("data-comment-selected", "")
+      }
+
+      for (const annotation of annotations) {
+        const idx = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
+        if (Number.isNaN(idx)) continue
+        if (idx < first || idx > last) continue
+        annotation.setAttribute("data-comment-selected", "")
       }
     }
   }
@@ -514,12 +529,15 @@ export function Diff<T>(props: DiffProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = getWorkerPool(props.diffStyle)
+    const virtualizer = getVirtualizer()
     const annotations = local.annotations
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
 
     instance?.cleanUp()
-    instance = new FileDiff<T>(opts, workerPool)
+    instance = virtualizer
+      ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
+      : new FileDiff<T>(opts, workerPool)
     setCurrent(instance)
 
     container.innerHTML = ""
@@ -606,6 +624,8 @@ export function Diff<T>(props: DiffProps<T>) {
 
     instance?.cleanUp()
     setCurrent(undefined)
+    sharedVirtualizer?.release()
+    sharedVirtualizer = undefined
   })
 
   return <div data-component="diff" style={styleVariables} ref={container} />
