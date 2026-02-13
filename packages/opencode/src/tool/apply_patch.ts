@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { PlanMode } from "@/permission/plan-mode"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -22,6 +23,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
   description: DESCRIPTION,
   parameters: PatchParams,
   async execute(params, ctx) {
+    if (PlanMode.isPlanMode(ctx.agent)) {
+      throw new Error("The 'apply_patch' tool is not allowed in plan mode. Plan mode is read-only. Switch to 'build' mode to make changes.")
+    }
+
     if (!params.patchText) {
       throw new Error("patchText is required")
     }

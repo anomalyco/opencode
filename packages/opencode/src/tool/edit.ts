@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { PlanMode } from "@/permission/plan-mode"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -33,6 +34,10 @@ export const EditTool = Tool.define("edit", {
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
   async execute(params, ctx) {
+    if (PlanMode.isPlanMode(ctx.agent)) {
+      throw new Error("The 'edit' tool is not allowed in plan mode. Plan mode is read-only. Switch to 'build' mode to make changes.")
+    }
+
     if (!params.filePath) {
       throw new Error("filePath is required")
     }
