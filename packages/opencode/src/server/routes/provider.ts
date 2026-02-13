@@ -5,7 +5,7 @@ import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
-import { mapValues } from "remeda"
+import { mapValues, pickBy } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -47,6 +47,17 @@ export const ProviderRoutes = lazy(() =>
           }
         }
 
+        // Inject Open WebUI as a known provider if not already present
+        if (!filteredProviders["openwebui"] && (enabled ? enabled.has("openwebui") : true) && !disabled.has("openwebui")) {
+          filteredProviders["openwebui"] = {
+            id: "openwebui",
+            name: "Open WebUI",
+            api: "",
+            env: ["OPEN_WEBUI_API_KEY"],
+            models: {},
+          }
+        }
+
         const connected = await Provider.list()
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
@@ -54,7 +65,10 @@ export const ProviderRoutes = lazy(() =>
         )
         return c.json({
           all: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: mapValues(
+            pickBy(providers, (item) => Object.keys(item.models).length > 0),
+            (item) => Provider.sort(Object.values(item.models))[0].id,
+          ),
           connected: Object.keys(connected),
         })
       },

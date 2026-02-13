@@ -37,6 +37,7 @@ export function createDialogProviderOptions() {
           opencode: "(Recommended)",
           anthropic: "(Claude Max or API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
+          openwebui: "(API key + base URL)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
@@ -83,6 +84,9 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
+            if (provider.id === "openwebui") {
+              return dialog.replace(() => <OpenWebUIMethod />)
+            }
             return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
@@ -239,5 +243,81 @@ function ApiMethod(props: ApiMethodProps) {
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
+  )
+}
+
+function OpenWebUIMethod() {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  return (
+    <DialogPrompt
+      title="Open WebUI"
+      placeholder="https://your-instance.com"
+      description={
+        <text fg={theme.textMuted}>Enter the base URL of your Open WebUI instance</text>
+      }
+      onConfirm={async (baseURL) => {
+        if (!baseURL) return
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Open WebUI"
+            placeholder="API key"
+            description={
+              <text fg={theme.textMuted}>Enter your Open WebUI API key</text>
+            }
+            onConfirm={async (apiKey) => {
+              if (!apiKey) return
+              await sdk.client.config.update({
+                config: {
+                  provider: {
+                    openwebui: {
+                      options: { baseURL },
+                    },
+                  },
+                },
+              })
+              await sdk.client.auth.set({
+                providerID: "openwebui",
+                auth: {
+                  type: "api",
+                  key: apiKey,
+                },
+              })
+              await sdk.client.instance.dispose()
+              await sync.bootstrap()
+              const provider = sync.data.provider_next.connected.includes("openwebui")
+              if (!provider) {
+                dialog.replace(() => <OpenWebUIError />)
+                return
+              }
+              dialog.replace(() => <DialogModel providerID="openwebui" />)
+            }}
+          />
+        ))
+      }}
+    />
+  )
+}
+
+function OpenWebUIError() {
+  const { theme } = useTheme()
+  const dialog = useDialog()
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.error}>
+          Open WebUI
+        </text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <text fg={theme.error}>No models found on the Open WebUI instance.</text>
+      <text fg={theme.textMuted}>Check that the base URL and API key are correct and that your instance has models available.</text>
+    </box>
   )
 }

@@ -265,6 +265,15 @@ export const AuthLoginCommand = cmd({
               filtered[key] = value
             }
           }
+          // Inject Open WebUI as a known provider if not already present
+          if (!filtered["openwebui"] && (enabled ? enabled.has("openwebui") : true) && !disabled.has("openwebui")) {
+            filtered["openwebui"] = {
+              id: "openwebui",
+              name: "Open WebUI",
+              env: ["OPEN_WEBUI_API_KEY"],
+              models: {},
+            }
+          }
           return filtered
         })
 
@@ -356,6 +365,75 @@ export const AuthLoginCommand = cmd({
           prompts.log.info(
             "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
           )
+        }
+
+        if (provider === "openwebui") {
+          const baseURL = await prompts.text({
+            message: "Enter your Open WebUI instance URL",
+            placeholder: "https://your-instance.com",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(baseURL)) throw new UI.CancelledError()
+
+          const key = await prompts.password({
+            message: "Enter your API key",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+
+          const normalizedBaseURL = baseURL.replace(/\/+$/, "")
+          const apiBase = normalizedBaseURL.endsWith("/api") ? normalizedBaseURL : `${normalizedBaseURL}/api`
+
+          const spinner = prompts.spinner()
+          spinner.start("Fetching models from Open WebUI...")
+
+          try {
+            const response = await fetch(`${apiBase}/models`, {
+              headers: {
+                Authorization: `Bearer ${key}`,
+              },
+              signal: AbortSignal.timeout(10_000),
+            })
+
+            if (!response.ok) {
+              spinner.stop("Failed to connect to Open WebUI", 1)
+              prompts.log.error(`Models endpoint returned status ${response.status}. Check your base URL and API key.`)
+              prompts.outro("Failed")
+              return
+            }
+
+            const data = (await response.json()) as { data?: Array<{ id: string }> }
+            const modelCount = data.data?.length ?? 0
+
+            if (modelCount === 0) {
+              spinner.stop("No models found", 1)
+              prompts.log.error("The Open WebUI instance returned no models. Check that your instance has models available.")
+              prompts.outro("Failed")
+              return
+            }
+
+            spinner.stop(`Found ${modelCount} model${modelCount === 1 ? "" : "s"}`)
+          } catch (e) {
+            spinner.stop("Failed to connect to Open WebUI", 1)
+            prompts.log.error("Could not reach the Open WebUI instance. Check your base URL.")
+            prompts.outro("Failed")
+            return
+          }
+
+          await Config.updateGlobal({
+            provider: {
+              openwebui: {
+                options: { baseURL },
+              },
+            },
+          })
+          await Auth.set(provider, {
+            type: "api",
+            key,
+          })
+
+          prompts.outro("Done")
+          return
         }
 
         const key = await prompts.password({

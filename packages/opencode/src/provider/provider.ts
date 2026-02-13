@@ -535,6 +535,22 @@ export namespace Provider {
         },
       }
     },
+    openwebui: async () => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["openwebui"]
+      const baseURL = providerConfig?.options?.baseURL ?? Env.get("OPEN_WEBUI_BASE_URL")
+      if (!baseURL) return { autoload: false }
+
+      const normalizedBaseURL = baseURL.replace(/\/+$/, "")
+      const apiBaseURL = normalizedBaseURL.endsWith("/api") ? normalizedBaseURL : `${normalizedBaseURL}/api`
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: apiBaseURL,
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -738,6 +754,105 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Open WebUI: Auto-discover models from instance
+    if (!database["openwebui"]) {
+      const openwebuiConfig = config.provider?.["openwebui"]
+      const openwebuiBaseURL = (openwebuiConfig?.options?.baseURL ?? Env.get("OPEN_WEBUI_BASE_URL"))?.replace(
+        /\/+$/,
+        "",
+      )
+      const openwebuiApiKey = await (async () => {
+        if (openwebuiConfig?.options?.apiKey) return openwebuiConfig.options.apiKey
+        const envKey = Env.get("OPEN_WEBUI_API_KEY")
+        if (envKey) return envKey
+        const auth = await Auth.get("openwebui")
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      if (openwebuiBaseURL) {
+        const apiBase = openwebuiBaseURL.endsWith("/api") ? openwebuiBaseURL : `${openwebuiBaseURL}/api`
+        const models: Record<string, Model> = {}
+
+        if (openwebuiApiKey) {
+          try {
+            const response = await fetch(`${apiBase}/models`, {
+              headers: {
+                Authorization: `Bearer ${openwebuiApiKey}`,
+              },
+              signal: AbortSignal.timeout(10_000),
+            })
+
+            if (response.ok) {
+              const data = (await response.json()) as {
+                data?: Array<{ id: string; name?: string }>
+              }
+
+              for (const entry of data.data ?? []) {
+                const modelID = entry.id
+                models[modelID] = {
+                  id: modelID,
+                  providerID: "openwebui",
+                  name: entry.name ?? modelID,
+                  api: {
+                    id: modelID,
+                    url: apiBase,
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: {},
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+                  limit: {
+                    context: 128_000,
+                    output: 4_096,
+                  },
+                  capabilities: {
+                    temperature: true,
+                    reasoning: false,
+                    attachment: false,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: false, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  release_date: "",
+                  variants: {},
+                }
+              }
+              if (Object.keys(models).length === 0) {
+                log.error("Open WebUI instance returned no models", {
+                  url: `${apiBase}/models`,
+                })
+              }
+            } else {
+              log.error("Open WebUI models endpoint returned non-ok status", {
+                status: response.status,
+                url: `${apiBase}/models`,
+              })
+            }
+          } catch (e) {
+            log.error("Failed to fetch Open WebUI models", { error: e })
+          }
+        }
+
+        if (Object.keys(models).length > 0) {
+          database["openwebui"] = {
+            id: "openwebui",
+            name: "Open WebUI",
+            source: "custom",
+            env: ["OPEN_WEBUI_API_KEY"],
+            options: {},
+            models,
+          }
+        }
       }
     }
 

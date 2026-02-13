@@ -1297,6 +1297,68 @@ To use Ollama Cloud with OpenCode:
 
 ---
 
+### Open WebUI
+
+[Open WebUI](https://openwebui.com/) is a self-hosted AI interface that provides an OpenAI-compatible API. OpenCode can automatically discover all models available on your Open WebUI instance.
+
+1. Run the `/connect` command and search for **Open WebUI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Enter the base URL of your Open WebUI instance.
+
+   ```txt
+   ┌ Base URL
+   │ https://your-instance.com
+   │
+   └ enter
+   ```
+
+3. Enter your Open WebUI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. OpenCode will fetch the available models from your instance. Run the `/models` command to select one.
+
+   ```txt
+   /models
+   ```
+
+##### Environment variables
+
+You can also configure Open WebUI using environment variables instead of `/connect`.
+
+```bash
+export OPEN_WEBUI_BASE_URL="https://your-instance.com"
+export OPEN_WEBUI_API_KEY="your-api-key"
+```
+
+##### Config file
+
+Alternatively, you can set the base URL in your `opencode.json`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openwebui": {
+      "options": {
+        "baseURL": "https://your-instance.com"
+      }
+    }
+  }
+}
+```
+
+---
+
 ### OpenAI
 
 We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
