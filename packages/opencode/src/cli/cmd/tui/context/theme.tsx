@@ -36,6 +36,18 @@ import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import carbonfox from "./theme/carbonfox.json" with { type: "json" }
+import onoSendaiRazorgirl from "./theme/ono-sendai-razorgirl.json" with { type: "json" }
+import onoSendaiTuned from "./theme/ono-sendai-tuned.json" with { type: "json" }
+import onoSendaiChiba from "./theme/ono-sendai-chiba.json" with { type: "json" }
+import onoSendaiMemphis from "./theme/ono-sendai-memphis.json" with { type: "json" }
+import onoSendaiSprawl from "./theme/ono-sendai-sprawl.json" with { type: "json" }
+import onoSendaiGithub from "./theme/ono-sendai-github.json" with { type: "json" }
+import onoSendaiSpectrum from "./theme/ono-sendai-spectrum.json" with { type: "json" }
+import onoSendaiUntuned from "./theme/ono-sendai-untuned.json" with { type: "json" }
+import maasNeoform from "./theme/maas-neoform.json" with { type: "json" }
+import maasBioptic from "./theme/maas-bioptic.json" with { type: "json" }
+import maasGhost from "./theme/maas-ghost.json" with { type: "json" }
+import maasTessier from "./theme/maas-tessier.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
@@ -171,6 +183,18 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
+  ["ono-sendai-razorgirl"]: onoSendaiRazorgirl,
+  ["ono-sendai-tuned"]: onoSendaiTuned,
+  ["ono-sendai-chiba"]: onoSendaiChiba,
+  ["ono-sendai-memphis"]: onoSendaiMemphis,
+  ["ono-sendai-sprawl"]: onoSendaiSprawl,
+  ["ono-sendai-github"]: onoSendaiGithub,
+  ["ono-sendai-spectrum"]: onoSendaiSpectrum,
+  ["ono-sendai-untuned"]: onoSendaiUntuned,
+  ["maas-neoform"]: maasNeoform,
+  ["maas-bioptic"]: maasBioptic,
+  ["maas-ghost"]: maasGhost,
+  ["maas-tessier"]: maasTessier,
 }
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {

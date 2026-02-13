@@ -1,0 +1,174 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "bg": "#e8ecf0",
+    "bgAlt": "#dce2e9",
+    "bgHl": "#c8d1dc",
+    "comment": "#7a8a9c",
+    "fgAlt": "#556270",
+    "fg": "#384452",
+    "fgLight": "#252e38",
+    "ice": "#3272b5",
+    "sky": "#4080c4",
+    "hero": "#4d8fd4",
+    "deep": "#5a9de3",
+    "matrix": "#6aabef",
+    "link": "#3272b5",
+    "soft": "#4080c4",
+    "corp": "#5c6e85",
+    "addedBg": "#d3e0ee",
+    "removedBg": "#cddae7"
+  },
+  "theme": {
+    "primary": {
+      "light": "hero"
+    },
+    "secondary": {
+      "light": "soft"
+    },
+    "accent": {
+      "light": "ice"
+    },
+    "error": {
+      "light": "ice"
+    },
+    "warning": {
+      "light": "sky"
+    },
+    "success": {
+      "light": "deep"
+    },
+    "info": {
+      "light": "link"
+    },
+    "text": {
+      "light": "fg"
+    },
+    "textMuted": {
+      "light": "fgAlt"
+    },
+    "background": {
+      "light": "bg"
+    },
+    "backgroundPanel": {
+      "light": "bgAlt"
+    },
+    "backgroundElement": {
+      "light": "bgHl"
+    },
+    "border": {
+      "light": "bgHl"
+    },
+    "borderActive": {
+      "light": "hero"
+    },
+    "borderSubtle": {
+      "light": "bgAlt"
+    },
+    "diffAdded": {
+      "light": "deep"
+    },
+    "diffRemoved": {
+      "light": "ice"
+    },
+    "diffContext": {
+      "light": "comment"
+    },
+    "diffHunkHeader": {
+      "light": "comment"
+    },
+    "diffHighlightAdded": {
+      "light": "deep"
+    },
+    "diffHighlightRemoved": {
+      "light": "ice"
+    },
+    "diffAddedBg": {
+      "light": "addedBg"
+    },
+    "diffRemovedBg": {
+      "light": "removedBg"
+    },
+    "diffContextBg": {
+      "light": "bgAlt"
+    },
+    "diffLineNumber": {
+      "light": "comment"
+    },
+    "diffAddedLineNumberBg": {
+      "light": "addedBg"
+    },
+    "diffRemovedLineNumberBg": {
+      "light": "removedBg"
+    },
+    "markdownText": {
+      "light": "fg"
+    },
+    "markdownHeading": {
+      "light": "hero"
+    },
+    "markdownLink": {
+      "light": "link"
+    },
+    "markdownLinkText": {
+      "light": "soft"
+    },
+    "markdownCode": {
+      "light": "sky"
+    },
+    "markdownBlockQuote": {
+      "light": "comment"
+    },
+    "markdownEmph": {
+      "light": "soft"
+    },
+    "markdownStrong": {
+      "light": "ice"
+    },
+    "markdownHorizontalRule": {
+      "light": "comment"
+    },
+    "markdownListItem": {
+      "light": "hero"
+    },
+    "markdownListEnumeration": {
+      "light": "link"
+    },
+    "markdownImage": {
+      "light": "link"
+    },
+    "markdownImageText": {
+      "light": "soft"
+    },
+    "markdownCodeBlock": {
+      "light": "fg"
+    },
+    "syntaxComment": {
+      "light": "comment"
+    },
+    "syntaxKeyword": {
+      "light": "soft"
+    },
+    "syntaxFunction": {
+      "light": "link"
+    },
+    "syntaxVariable": {
+      "light": "ice"
+    },
+    "syntaxString": {
+      "light": "deep"
+    },
+    "syntaxNumber": {
+      "light": "sky"
+    },
+    "syntaxType": {
+      "light": "hero"
+    },
+    "syntaxOperator": {
+      "light": "fg"
+    },
+    "syntaxPunctuation": {
+      "light": "fgAlt"
+    }
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "bg": "#191c20",
+    "bgAlt": "#1f232a",
+    "bgHl": "#2a3039",
+    "comment": "#3a424f",
+    "fgAlt": "#6b7689",
+    "fg": "#c5d0dd",
+    "fgLight": "#dce3ec",
+    "ice": "#b6e3ff",
+    "sky": "#80ccff",
+    "hero": "#54aeff",
+    "deep": "#218bff",
+    "matrix": "#0969da",
+    "link": "#4d9fff",
+    "soft": "#6cb6ff",
+    "corp": "#1f6feb",
+    "addedBg": "#1a2d41",
+    "removedBg": "#313a41"
+  },
+  "theme": {
+    "primary": {
+      "dark": "hero"
+    },
+    "secondary": {
+      "dark": "soft"
+    },
+    "accent": {
+      "dark": "ice"
+    },
+    "error": {
+      "dark": "ice"
+    },
+    "warning": {
+      "dark": "sky"
+    },
+    "success": {
+      "dark": "deep"
+    },
+    "info": {
+      "dark": "link"
+    },
+    "text": {
+      "dark": "fg"
+    },
+    "textMuted": {
+      "dark": "fgAlt"
+    },
+    "background": {
+      "dark": "bg"
+    },
+    "backgroundPanel": {
+      "dark": "bgAlt"
+    },
+    "backgroundElement": {
+      "dark": "bgHl"
+    },
+    "border": {
+      "dark": "bgHl"
+    },
+    "borderActive": {
+      "dark": "hero"
+    },
+    "borderSubtle": {
+      "dark": "bgAlt"
+    },
+    "diffAdded": {
+      "dark": "deep"
+    },
+    "diffRemoved": {
+      "dark": "ice"
+    },
+    "diffContext": {
+      "dark": "comment"
+    },
+    "diffHunkHeader": {
+      "dark": "comment"
+    },
+    "diffHighlightAdded": {
+      "dark": "deep"
+    },
+    "diffHighlightRemoved": {
+      "dark": "ice"
+    },
+    "diffAddedBg": {
+      "dark": "addedBg"
+    },
+    "diffRemovedBg": {
+      "dark": "removedBg"
+    },
+    "diffContextBg": {
+      "dark": "bgAlt"
+    },
+    "diffLineNumber": {
+      "dark": "comment"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "addedBg"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "removedBg"
+    },
+    "markdownText": {
+      "dark": "fg"
+    },
+    "markdownHeading": {
+      "dark": "hero"
+    },
+    "markdownLink": {
+      "dark": "link"
+    },
+    "markdownLinkText": {
+      "dark": "soft"
+    },
+    "markdownCode": {
+      "dark": "sky"
+    },
+    "markdownBlockQuote": {
+      "dark": "comment"
+    },
+    "markdownEmph": {
+      "dark": "soft"
+    },
+    "markdownStrong": {
+      "dark": "ice"
+    },
+    "markdownHorizontalRule": {
+      "dark": "comment"
+    },
+    "markdownListItem": {
+      "dark": "hero"
+    },
+    "markdownListEnumeration": {
+      "dark": "link"
+    },
+    "markdownImage": {
+      "dark": "link"
+    },
+    "markdownImageText": {
+      "dark": "soft"
+    },
+    "markdownCodeBlock": {
+      "dark": "fg"
+    },
+    "syntaxComment": {
+      "dark": "comment"
+    },
+    "syntaxKeyword": {
+      "dark": "soft"
+    },
+    "syntaxFunction": {
+      "dark": "link"
+    },
+    "syntaxVariable": {
+      "dark": "ice"
+    },
+    "syntaxString": {
+      "dark": "deep"
+    },
+    "syntaxNumber": {
+      "dark": "sky"
+    },
+    "syntaxType": {
+      "dark": "hero"
+    },
+    "syntaxOperator": {
+      "dark": "fg"
+    },
+    "syntaxPunctuation": {
+      "dark": "fgAlt"
+    }
+  }
+}
