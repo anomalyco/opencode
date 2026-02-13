@@ -43,7 +43,7 @@
     gap: 8px;
     color: var(--text-weak);
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     min-height: 20px;
