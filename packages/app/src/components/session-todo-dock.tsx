@@ -2,7 +2,7 @@ import type { Todo } from "@opencode-ai/sdk/v2"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 
 function dot(status: Todo["status"]) {
@@ -109,34 +109,48 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
 }
 
 function TodoList(props: { todos: Todo[] }) {
+  const [stuck, setStuck] = createSignal(false)
+
   return (
-    <div class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
-      <For each={props.todos}>
-        {(todo) => (
-          <Checkbox
-            readOnly
-            checked={todo.status === "completed"}
-            indeterminate={todo.status === "in_progress"}
-            icon={dot(todo.status)}
-          >
-            <span
-              class="text-14-regular min-w-0 break-words"
-              classList={{
-                "text-text-weak": todo.status === "completed" || todo.status === "cancelled",
-                "text-text-strong": todo.status !== "completed" && todo.status !== "cancelled",
-              }}
-              style={{
-                "text-decoration":
-                  todo.status === "completed" || todo.status === "cancelled" ? "line-through" : undefined,
-              }}
+    <div class="relative">
+      <div
+        class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
+        onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
+      >
+        <For each={props.todos}>
+          {(todo) => (
+            <Checkbox
+              readOnly
+              checked={todo.status === "completed"}
+              indeterminate={todo.status === "in_progress"}
+              icon={dot(todo.status)}
             >
-              <Show when={todo.status === "in_progress"} fallback={todo.content}>
-                <TextShimmer text={todo.content} />
-              </Show>
-            </span>
-          </Checkbox>
-        )}
-      </For>
+              <span
+                class="text-14-regular min-w-0 break-words"
+                classList={{
+                  "text-text-weak": todo.status === "completed" || todo.status === "cancelled",
+                  "text-text-strong": todo.status !== "completed" && todo.status !== "cancelled",
+                }}
+                style={{
+                  "text-decoration":
+                    todo.status === "completed" || todo.status === "cancelled" ? "line-through" : undefined,
+                }}
+              >
+                <Show when={todo.status === "in_progress"} fallback={todo.content}>
+                  <TextShimmer text={todo.content} />
+                </Show>
+              </span>
+            </Checkbox>
+          )}
+        </For>
+      </div>
+      <div
+        class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity duration-150"
+        style={{
+          background: "linear-gradient(to bottom, var(--background-base), transparent)",
+          opacity: stuck() ? 1 : 0,
+        }}
+      />
     </div>
   )
 }
