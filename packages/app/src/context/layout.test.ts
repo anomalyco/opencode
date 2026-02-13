@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { createSessionKeyReader, ensureSessionKey, normalizeReviewDiffStyle, pruneSessionKeys } from "./layout"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -65,5 +65,19 @@ describe("pruneSessionKeys", () => {
     })
 
     expect(drop).toEqual([])
+  })
+})
+
+describe("normalizeReviewDiffStyle", () => {
+  test("keeps supported styles", () => {
+    expect(normalizeReviewDiffStyle("unified")).toBe("unified")
+    expect(normalizeReviewDiffStyle("split")).toBe("split")
+    expect(normalizeReviewDiffStyle("before")).toBe("before")
+    expect(normalizeReviewDiffStyle("after")).toBe("after")
+  })
+
+  test("falls back for unknown styles", () => {
+    expect(normalizeReviewDiffStyle(undefined)).toBe("split")
+    expect(normalizeReviewDiffStyle("stacked")).toBe("split")
   })
 })

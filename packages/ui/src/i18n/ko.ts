@@ -3,6 +3,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
+  "ui.sessionReview.diffStyle.before": "이전",
+  "ui.sessionReview.diffStyle.after": "이후",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
   "ui.sessionReview.change.added": "추가됨",

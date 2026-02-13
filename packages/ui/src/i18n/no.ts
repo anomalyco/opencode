@@ -6,6 +6,8 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.title.lastTurn": "Endringer i siste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Delt",
+  "ui.sessionReview.diffStyle.before": "Før",
+  "ui.sessionReview.diffStyle.after": "Etter",
   "ui.sessionReview.expandAll": "Utvid alle",
   "ui.sessionReview.collapseAll": "Fold sammen alle",
   "ui.sessionReview.change.added": "Lagt til",

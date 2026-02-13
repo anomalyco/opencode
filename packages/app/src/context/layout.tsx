@@ -49,7 +49,12 @@ type TabHandoff = {
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
-export type ReviewDiffStyle = "unified" | "split"
+export type ReviewDiffStyle = "unified" | "split" | "before" | "after"
+
+export function normalizeReviewDiffStyle(style: string | undefined): ReviewDiffStyle {
+  if (style === "unified" || style === "split" || style === "before" || style === "after") return style
+  return "split"
+}
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)
@@ -549,13 +554,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       review: {
-        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        diffStyle: createMemo(() => normalizeReviewDiffStyle(store.review?.diffStyle)),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+            setStore("review", { diffStyle: normalizeReviewDiffStyle(diffStyle), panelOpened: true })
             return
           }
-          setStore("review", "diffStyle", diffStyle)
+          setStore("review", "diffStyle", normalizeReviewDiffStyle(diffStyle))
         },
       },
       fileTree: {

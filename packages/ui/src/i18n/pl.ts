@@ -3,6 +3,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Zmiany z ostatniej tury",
   "ui.sessionReview.diffStyle.unified": "Ujednolicony",
   "ui.sessionReview.diffStyle.split": "Podzielony",
+  "ui.sessionReview.diffStyle.before": "Przed",
+  "ui.sessionReview.diffStyle.after": "Po",
   "ui.sessionReview.expandAll": "Rozwiń wszystko",
   "ui.sessionReview.collapseAll": "Zwiń wszystko",
 

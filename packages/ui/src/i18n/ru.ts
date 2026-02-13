@@ -3,6 +3,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Изменения последнего хода",
   "ui.sessionReview.diffStyle.unified": "Объединённый",
   "ui.sessionReview.diffStyle.split": "Разделённый",
+  "ui.sessionReview.diffStyle.before": "До",
+  "ui.sessionReview.diffStyle.after": "После",
   "ui.sessionReview.expandAll": "Развернуть всё",
   "ui.sessionReview.collapseAll": "Свернуть всё",
 

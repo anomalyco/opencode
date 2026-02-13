@@ -7,6 +7,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Promjene u posljednjem potezu",
   "ui.sessionReview.diffStyle.unified": "Ujedinjeno",
   "ui.sessionReview.diffStyle.split": "Podijeljeno",
+  "ui.sessionReview.diffStyle.before": "Prije",
+  "ui.sessionReview.diffStyle.after": "Poslije",
   "ui.sessionReview.expandAll": "Proširi sve",
   "ui.sessionReview.collapseAll": "Sažmi sve",
   "ui.sessionReview.change.added": "Dodano",

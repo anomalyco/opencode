@@ -7,6 +7,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "上一轮变更",
   "ui.sessionReview.diffStyle.unified": "统一",
   "ui.sessionReview.diffStyle.split": "拆分",
+  "ui.sessionReview.diffStyle.before": "变更前",
+  "ui.sessionReview.diffStyle.after": "变更后",
   "ui.sessionReview.expandAll": "全部展开",
   "ui.sessionReview.collapseAll": "全部收起",
   "ui.sessionReview.change.added": "已添加",

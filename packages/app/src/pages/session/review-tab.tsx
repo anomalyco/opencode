@@ -7,7 +7,7 @@ import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
 import type { LineComment } from "@/context/comments"
 
-export type DiffStyle = "unified" | "split"
+export type DiffStyle = "unified" | "split" | "before" | "after"
 
 export interface SessionReviewTabProps {
   title?: JSX.Element

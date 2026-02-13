@@ -3,6 +3,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
+  "ui.sessionReview.diffStyle.before": "Before",
+  "ui.sessionReview.diffStyle.after": "After",
   "ui.sessionReview.expandAll": "すべて展開",
   "ui.sessionReview.collapseAll": "すべて折りたたむ",
 

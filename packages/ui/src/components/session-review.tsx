@@ -7,6 +7,7 @@ import { Icon } from "./icon"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
+import { useCodeComponent } from "../context/code"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
@@ -17,7 +18,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 
-export type SessionReviewDiffStyle = "unified" | "split"
+export type SessionReviewDiffStyle = "unified" | "split" | "before" | "after"
 
 export type SessionReviewComment = {
   id: string
@@ -170,11 +171,23 @@ function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
   return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
 }
 
+function normalizeSelectionForStyle(style: SessionReviewDiffStyle, range: SelectedLineRange) {
+  if (style !== "before" && style !== "after") return range
+  const side = style === "before" ? "deletions" : "additions"
+  if (range.side === side && (range.endSide === undefined || range.endSide === side)) return range
+  return {
+    ...range,
+    side,
+    endSide: range.endSide !== undefined ? side : undefined,
+  }
+}
+
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
   const i18n = useI18n()
   const diffComponent = useDiffComponent()
+  const codeComponent = useCodeComponent()
   const anchors = new Map<string, HTMLElement>()
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
@@ -186,6 +199,8 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const open = () => props.open ?? store.open
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
+  const isDiffStyle = () => diffStyle() === "unified" || diffStyle() === "split"
+  const pierreDiffStyle = () => (diffStyle() === "split" ? "split" : "unified")
   const hasDiffs = () => props.diffs.length > 0
 
   const handleChange = (open: string[]) => {
@@ -206,7 +221,10 @@ export const SessionReview = (props: SessionReviewProps) => {
     return `lines ${start}-${end}`
   }
 
-  const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+  const selectionSide = (range: SelectedLineRange) => {
+    const normalized = normalizeSelectionForStyle(diffStyle(), range)
+    return normalized.endSide ?? normalized.side ?? "additions"
+  }
 
   const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
     const side = selectionSide(range)
@@ -294,12 +312,15 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <RadioGroup
-              options={["unified", "split"] as const}
+              options={["unified", "split", "before", "after"] as const}
               current={diffStyle()}
               value={(style) => style}
-              label={(style) =>
-                i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
-              }
+              label={(style) => {
+                if (style === "unified") return i18n.t("ui.sessionReview.diffStyle.unified")
+                if (style === "split") return i18n.t("ui.sessionReview.diffStyle.split")
+                if (style === "before") return i18n.t("ui.sessionReview.diffStyle.before")
+                return i18n.t("ui.sessionReview.diffStyle.after")
+              }}
               onSelect={(style) => style && props.onDiffStyleChange?.(style)}
             />
           </Show>
@@ -478,7 +499,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                     return
                   }
 
-                  setSelection({ file: diff.file, range })
+                  const normalized = normalizeSelectionForStyle(diffStyle(), range)
+                  setSelection({ file: diff.file, range: normalized })
                 }
 
                 const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
@@ -489,8 +511,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     return
                   }
 
-                  setSelection({ file: diff.file, range })
-                  setCommenting({ file: diff.file, range })
+                  const normalized = normalizeSelectionForStyle(diffStyle(), range)
+                  setSelection({ file: diff.file, range: normalized })
+                  setCommenting({ file: diff.file, range: normalized })
                 }
 
                 const openComment = (comment: SessionReviewComment) => {
@@ -592,28 +615,49 @@ export const SessionReview = (props: SessionReviewProps) => {
                             </div>
                           </Match>
                           <Match when={!isImage()}>
-                            <Dynamic
-                              component={diffComponent}
-                              preloadedDiff={diff.preloaded}
-                              diffStyle={diffStyle()}
-                              onRendered={() => {
-                                props.onDiffRendered?.()
-                                scheduleAnchors()
-                              }}
-                              enableLineSelection={props.onLineComment != null}
-                              onLineSelected={handleLineSelected}
-                              onLineSelectionEnd={handleLineSelectionEnd}
-                              selectedLines={selectedLines()}
-                              commentedLines={commentedLines()}
-                              before={{
-                                name: diff.file!,
-                                contents: typeof diff.before === "string" ? diff.before : "",
-                              }}
-                              after={{
-                                name: diff.file!,
-                                contents: typeof diff.after === "string" ? diff.after : "",
-                              }}
-                            />
+                            <Switch>
+                              <Match when={isDiffStyle()}>
+                                <Dynamic
+                                  component={diffComponent}
+                                  preloadedDiff={diff.preloaded}
+                                  diffStyle={pierreDiffStyle()}
+                                  onRendered={() => {
+                                    props.onDiffRendered?.()
+                                    scheduleAnchors()
+                                  }}
+                                  enableLineSelection={props.onLineComment != null}
+                                  onLineSelected={handleLineSelected}
+                                  onLineSelectionEnd={handleLineSelectionEnd}
+                                  selectedLines={selectedLines()}
+                                  commentedLines={commentedLines()}
+                                  before={{
+                                    name: diff.file!,
+                                    contents: typeof diff.before === "string" ? diff.before : "",
+                                  }}
+                                  after={{
+                                    name: diff.file!,
+                                    contents: typeof diff.after === "string" ? diff.after : "",
+                                  }}
+                                />
+                              </Match>
+                              <Match when={true}>
+                                <Dynamic
+                                  component={codeComponent}
+                                  file={{
+                                    name: diff.file!,
+                                    contents: diffStyle() === "before" ? beforeText() : afterText(),
+                                  }}
+                                  onRendered={() => {
+                                    props.onDiffRendered?.()
+                                    scheduleAnchors()
+                                  }}
+                                  enableLineSelection={props.onLineComment != null}
+                                  onLineSelectionEnd={handleLineSelectionEnd}
+                                  selectedLines={selectedLines()}
+                                  commentedLines={commentedLines()}
+                                />
+                              </Match>
+                            </Switch>
                           </Match>
                         </Switch>
 

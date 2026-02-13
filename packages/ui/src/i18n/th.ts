@@ -3,6 +3,8 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "การเปลี่ยนแปลงของเทิร์นล่าสุด",
   "ui.sessionReview.diffStyle.unified": "แบบรวม",
   "ui.sessionReview.diffStyle.split": "แบบแยก",
+  "ui.sessionReview.diffStyle.before": "ก่อน",
+  "ui.sessionReview.diffStyle.after": "หลัง",
   "ui.sessionReview.expandAll": "ขยายทั้งหมด",
   "ui.sessionReview.collapseAll": "ย่อทั้งหมด",
   "ui.sessionReview.change.added": "เพิ่ม",
