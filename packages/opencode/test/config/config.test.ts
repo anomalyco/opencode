@@ -645,7 +645,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
-}, 15000)
+})
 
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
