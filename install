@@ -68,7 +68,6 @@ done
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
-# If --binary is provided, skip all download/detection logic
 if [ -n "$binary_path" ]; then
     if [ ! -f "$binary_path" ]; then
         echo -e "${RED}Error: Binary not found at ${binary_path}${NC}"
@@ -189,12 +188,10 @@ else
             exit 1
         fi
     else
-        # Strip leading 'v' if present
         requested_version="${requested_version#v}"
         url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
-        # Verify the release exists before downloading
         http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
@@ -261,18 +258,12 @@ print_progress() {
     local empty=$(printf "%*s" "$off" "")
     empty=${empty// /･}
 
-    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
+    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent"
 }
 
 download_with_progress() {
     local url="$1"
     local output="$2"
-
-    if [ -t 2 ]; then
-        exec 4>&2
-    else
-        exec 4>/dev/null
-    fi
 
     local tmp_dir=${TMPDIR:-/tmp}
     local basename="${tmp_dir}/opencode_install_$$"
@@ -281,10 +272,9 @@ download_with_progress() {
     rm -f "$tracefile"
     mkfifo "$tracefile"
 
-    # Hide cursor
-    printf "\033[?25l" >&4
+    printf "\033[?25l"
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h'" RETURN
 
     (
         curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
@@ -320,7 +310,7 @@ download_with_progress() {
 
     wait $curl_pid
     local ret=$?
-    echo "" >&4
+    echo ""
     return $ret
 }
 
@@ -330,7 +320,6 @@ download_and_install() {
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
-        # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
@@ -362,6 +351,9 @@ fi
 add_to_path() {
     local config_file=$1
     local command=$2
+
+    mkdir -p "$(dirname "$config_file")"
+    [[ ! -f "$config_file" ]] && touch "$config_file"
 
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
@@ -395,7 +387,6 @@ case $current_shell in
         config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
     ;;
     *)
-        # Default case if none of the above matches
         config_files="$HOME/.bashrc $HOME/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
     ;;
 esac
@@ -410,32 +401,20 @@ if [[ "$no_modify_path" != "true" ]]; then
     done
 
     if [[ -z $config_file ]]; then
-        print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
-        print_message info "  export PATH=$INSTALL_DIR:\$PATH"
-    elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        config_file=$(echo $config_files | awk '{print $1}')
+    fi
+
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         case $current_shell in
             fish)
                 add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
             ;;
-            zsh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            bash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            ash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            sh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
             *)
-                export PATH=$INSTALL_DIR:$PATH
-                print_message warning "Manually add the directory to $config_file (or similar):"
-                print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=\"$INSTALL_DIR:\$PATH\""
             ;;
         esac
     fi
+    export PATH="$INSTALL_DIR:$PATH"
 fi
 
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
@@ -444,7 +423,7 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
+echo -e "${MUTED}                    ${NC}             ▄     "
 echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
 echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
 echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
@@ -453,7 +432,12 @@ echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
-echo -e "opencode      ${MUTED}# Run command${NC}"
+if command -v opencode >/dev/null 2>&1; then
+    echo -e "opencode      ${MUTED}# Run command${NC}"
+else
+    echo -e "${ORANGE}Action required: Run this to activate now:${NC}"
+    echo -e "source $config_file && opencode"
+fi
 echo -e ""
 echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
