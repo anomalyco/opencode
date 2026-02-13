@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -700,6 +701,13 @@ export namespace SessionPrompt {
         }
       }
 
+      if (result === "blocked") {
+        await restoreQueued({
+          sessionID,
+          after: lastUser.id,
+        })
+        break
+      }
       if (result === "stop") break
       if (result === "compact") {
         await SessionCompaction.create({
@@ -722,6 +730,55 @@ export namespace SessionPrompt {
     }
     throw new Error("Impossible")
   })
+
+  async function restoreQueued(input: { sessionID: string; after: string }) {
+    const waiting = state()[input.sessionID]?.callbacks.length ?? 0
+    if (waiting === 0) return
+
+    const queued = [] as MessageV2.WithParts[]
+    for await (const item of MessageV2.stream(input.sessionID)) {
+      if (item.info.role !== "user") continue
+      if (item.info.id <= input.after) break
+      queued.push(item)
+      if (queued.length >= waiting) break
+    }
+    if (queued.length === 0) return
+
+    const list = queued.toReversed()
+    const text = list
+      .map((msg) =>
+        msg.parts
+          .flatMap((part) => {
+            if (part.type !== "text" || part.synthetic || part.ignored) return []
+            const trimmed = part.text.trim()
+            if (!trimmed) return []
+            return [trimmed]
+          })
+          .join("\n"),
+      )
+      .filter(Boolean)
+      .join("\n")
+
+    for (const msg of list.toReversed()) {
+      for (const part of msg.parts) {
+        await Session.removePart({
+          sessionID: msg.info.sessionID,
+          messageID: msg.info.id,
+          partID: part.id,
+        })
+      }
+      await Session.removeMessage({
+        sessionID: msg.info.sessionID,
+        messageID: msg.info.id,
+      })
+    }
+    if (!text) return
+
+    await Bus.publish(TuiEvent.PromptAppend, {
+      text,
+      sessionID: input.sessionID,
+    } as unknown as z.output<typeof TuiEvent.PromptAppend.properties>)
+  }
 
   async function lastModel(sessionID: string) {
     for await (const item of MessageV2.stream(sessionID)) {

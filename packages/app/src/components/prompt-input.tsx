@@ -381,6 +381,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const appendRestore = (value: string) => {
+    const text = value.trim()
+    if (!text) return
+    const all = prompt.current()
+    const parts = all.filter((part) => part.type !== "image")
+    const images = all.filter((part): part is ImageAttachmentPart => part.type === "image")
+    const len = promptLength(parts)
+    const add = len > 0 ? "\n" + text : text
+    const last = parts.at(-1)
+    const next =
+      last?.type === "text"
+        ? [
+            ...parts.slice(0, -1),
+            {
+              ...last,
+              content: last.content + add,
+              end: last.end + add.length,
+            },
+          ]
+        : [
+            ...parts,
+            {
+              type: "text" as const,
+              content: add,
+              start: len,
+              end: len + add.length,
+            },
+          ]
+    prompt.set([...next, ...images], promptLength([...next, ...images]))
+    closePopover()
+    queueScroll()
+  }
+
   const currentCursor = () => {
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return null
@@ -410,6 +443,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     closePopover()
     setComposing(false)
   }
+
+  createEffect(() => {
+    const unsub = sdk.event.on("tui.prompt.append", (evt) => {
+      const payload = evt.properties as typeof evt.properties & { sessionID?: string }
+      if (payload.sessionID && payload.sessionID !== params.id) return
+      appendRestore(payload.text)
+    })
+    onCleanup(unsub)
+  })
 
   const agentList = createMemo(() =>
     sync.data.agent

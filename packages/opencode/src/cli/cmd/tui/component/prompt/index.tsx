@@ -98,7 +98,11 @@ export function Prompt(props: PromptProps) {
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
-    input.insertText(evt.properties.text)
+    const payload = evt.properties as typeof evt.properties & { sessionID?: string }
+    if (payload.sessionID && payload.sessionID !== props.sessionID) return
+    if (!payload.text.trim()) return
+    const text = input.plainText.trim() ? "\n" + payload.text : payload.text
+    input.insertText(text)
     setTimeout(() => {
       // setTimeout is a workaround and needs to be addressed properly
       if (!input || input.isDestroyed) return
