@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 APP=opencode
+APPLE_CONTAINER_RELEASE_API="https://api.github.com/repos/apple/container/releases/latest"
+APPLE_CONTAINER_IMAGE="kalilinux/kali-rolling"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -9,7 +11,7 @@ NC='\033[0m' # No Color
 
 usage() {
     cat <<EOF
-OpenCode Installer
+OpenSec Installer
 
 Usage: install.sh [options]
 
@@ -29,6 +31,7 @@ EOF
 requested_version=${VERSION:-}
 no_modify_path=false
 binary_path=""
+skip_download=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -218,6 +221,124 @@ print_message() {
     echo -e "${color}${message}${NC}"
 }
 
+is_apple_container_target() {
+    local host_os
+    host_os=$(uname -s)
+    if [ "$host_os" != "Darwin" ]; then
+        return 1
+    fi
+
+    local host_arch
+    host_arch=$(uname -m)
+    if [ "$host_arch" = "aarch64" ]; then
+        host_arch="arm64"
+    fi
+    if [ "$host_arch" = "x86_64" ]; then
+        host_arch="x64"
+    fi
+
+    if [ "$host_arch" = "x64" ]; then
+        local rosetta_flag
+        rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+        if [ "$rosetta_flag" = "1" ]; then
+            host_arch="arm64"
+        fi
+    fi
+
+    if [ "$host_arch" != "arm64" ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+apple_container_pkg_url() {
+    local release_json
+    release_json=$(curl -fsSL "$APPLE_CONTAINER_RELEASE_API") || return 1
+    local pkg_url
+    pkg_url=$(printf "%s" "$release_json" | sed -n 's/.*"browser_download_url": *"\([^"]*container-installer-signed\.pkg\)".*/\1/p' | head -n 1)
+    if [ -z "$pkg_url" ]; then
+        return 1
+    fi
+
+    printf "%s" "$pkg_url"
+}
+
+ensure_apple_container() {
+    if ! is_apple_container_target; then
+        return
+    fi
+
+    print_message info "\n${MUTED}Preparing ${NC}Apple container runtime"
+
+    local container_bin
+    container_bin=$(command -v container || true)
+
+    if [ -z "$container_bin" ]; then
+        print_message info "${MUTED}Installing ${NC}apple/container ${MUTED}runtime${NC}"
+        if ! command -v sudo >/dev/null 2>&1; then
+            print_message error "Error: 'sudo' is required to install Apple container runtime"
+            print_message info "Install manually from: https://github.com/apple/container/releases/latest"
+            exit 1
+        fi
+
+        local tmp_dir="${TMPDIR:-/tmp}/opencode_container_install_$$"
+        mkdir -p "$tmp_dir"
+        local pkg="$tmp_dir/container-installer-signed.pkg"
+        local pkg_url
+        pkg_url=$(apple_container_pkg_url) || {
+            rm -rf "$tmp_dir"
+            print_message error "Error: Failed to locate Apple container installer package"
+            print_message info "Install manually from: https://github.com/apple/container/releases/latest"
+            exit 1
+        }
+
+        if ! curl -fsSL -o "$pkg" "$pkg_url"; then
+            rm -rf "$tmp_dir"
+            print_message error "Error: Failed to download Apple container installer"
+            print_message info "URL: $pkg_url"
+            exit 1
+        fi
+
+        if ! sudo installer -pkg "$pkg" -target / >/dev/null; then
+            rm -rf "$tmp_dir"
+            print_message error "Error: Apple container installer failed"
+            print_message info "Run manually: curl -fsSL -o /tmp/container-installer-signed.pkg \"$pkg_url\" && sudo installer -pkg /tmp/container-installer-signed.pkg -target /"
+            exit 1
+        fi
+
+        rm -rf "$tmp_dir"
+        container_bin=$(command -v container || true)
+        if [ -z "$container_bin" ]; then
+            print_message error "Error: Apple container runtime install completed but 'container' command is still missing"
+            print_message info "Open a new terminal and run: container system status"
+            exit 1
+        fi
+    fi
+
+    if ! "$container_bin" system start --enable-kernel-install >/dev/null 2>&1; then
+        if ! "$container_bin" system start >/dev/null 2>&1; then
+            print_message error "Error: Failed to start Apple container runtime"
+            print_message info "Run manually: container system start --enable-kernel-install"
+            exit 1
+        fi
+    fi
+
+    if ! "$container_bin" system status >/dev/null 2>&1; then
+        print_message error "Error: Apple container runtime is installed but not healthy"
+        print_message info "Run manually: container system status"
+        exit 1
+    fi
+
+    if ! "$container_bin" image pull --platform linux/arm64 "$APPLE_CONTAINER_IMAGE" >/dev/null 2>&1; then
+        print_message error "Error: Failed to pull required image '$APPLE_CONTAINER_IMAGE'"
+        print_message info "Run manually: container image pull --platform linux/arm64 $APPLE_CONTAINER_IMAGE"
+        exit 1
+    fi
+
+    print_message info "${MUTED}Apple container runtime is ready${NC}"
+}
+
 check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
@@ -229,7 +350,8 @@ check_version() {
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
         else
             print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
-            exit 0
+            skip_download=true
+            return 0
         fi
     fi
 }
@@ -355,8 +477,12 @@ if [ -n "$binary_path" ]; then
     install_from_binary
 else
     check_version
-    download_and_install
+    if [ "$skip_download" != "true" ]; then
+        download_and_install
+    fi
 fi
+
+ensure_apple_container
 
 
 add_to_path() {
@@ -450,7 +576,7 @@ echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░
 echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
 echo -e ""
 echo -e ""
-echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
+echo -e "${MUTED}OpenSec includes free models, to start:${NC}"
 echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"

@@ -9,6 +9,9 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { AppleContainer } from "@/container/apple"
+import { bootstrap } from "@/cli/bootstrap"
+import { upgrade } from "@/cli/upgrade"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 
 declare global {
@@ -43,12 +46,12 @@ function createEventSource(client: RpcClient): EventSource {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start opensec tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start opensec in",
       })
       .option("model", {
         type: "string",
@@ -95,6 +98,51 @@ export const TuiThreadCommand = cmd({
       // Resolve relative paths against PWD to preserve behavior when using --cwd flag
       const baseCwd = process.env.PWD ?? process.cwd()
       const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+      try {
+        process.chdir(cwd)
+      } catch {
+        UI.error("Failed to change directory to " + cwd)
+        return
+      }
+
+      const prompt = await iife(async () => {
+        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+        if (!args.prompt) return piped
+        return piped ? piped + "\n" + args.prompt : args.prompt
+      })
+      const networkOpts = await resolveNetworkOptions(args)
+      const tuiArgs = {
+        continue: args.continue,
+        sessionID: args.session,
+        agent: args.agent,
+        model: args.model,
+        prompt,
+        fork: args.fork,
+      }
+
+      if (AppleContainer.enabled()) {
+        const runtime = await AppleContainer.start({ directory: cwd, network: networkOpts }).catch((error) => {
+          UI.error(error instanceof Error ? error.message : String(error))
+          process.exit(1)
+        })
+        if (!runtime) return
+
+        setTimeout(() => {
+          bootstrap(cwd, async () => {
+            await upgrade().catch(() => {})
+          }).catch(() => {})
+        }, 1000)
+
+        await tui({
+          url: runtime.url,
+          directory: runtime.directory,
+          headers: runtime.headers,
+          args: tuiArgs,
+          onExit: runtime.stop,
+        }).finally(() => runtime.stop())
+        return
+      }
+
       const localWorker = new URL("./worker.ts", import.meta.url)
       const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
       const workerPath = await iife(async () => {
@@ -102,12 +150,6 @@ export const TuiThreadCommand = cmd({
         if (await Bun.file(distWorker).exists()) return distWorker
         return localWorker
       })
-      try {
-        process.chdir(cwd)
-      } catch (e) {
-        UI.error("Failed to change directory to " + cwd)
-        return
-      }
 
       const worker = new Worker(workerPath, {
         env: Object.fromEntries(
@@ -128,14 +170,7 @@ export const TuiThreadCommand = cmd({
         await client.call("reload", undefined)
       })
 
-      const prompt = await iife(async () => {
-        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
-        if (!args.prompt) return piped
-        return piped ? piped + "\n" + args.prompt : args.prompt
-      })
-
       // Check if server should be started (port or hostname explicitly set in CLI or config)
-      const networkOpts = await resolveNetworkOptions(args)
       const shouldStartServer =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -163,14 +198,7 @@ export const TuiThreadCommand = cmd({
         url,
         fetch: customFetch,
         events,
-        args: {
-          continue: args.continue,
-          sessionID: args.session,
-          agent: args.agent,
-          model: args.model,
-          prompt,
-          fork: args.fork,
-        },
+        args: tuiArgs,
         onExit: async () => {
           await client.call("shutdown", undefined)
         },
