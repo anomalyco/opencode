@@ -777,7 +777,7 @@ export namespace SessionPrompt {
     await Bus.publish(TuiEvent.PromptAppend, {
       text,
       sessionID: input.sessionID,
-    } as unknown as z.output<typeof TuiEvent.PromptAppend.properties>)
+    })
   }
 
   async function lastModel(sessionID: string) {

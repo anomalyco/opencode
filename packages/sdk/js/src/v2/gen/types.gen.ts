@@ -719,6 +719,7 @@ export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
     text: string
+    sessionID?: string
   }
 }
 
@@ -4684,6 +4685,7 @@ export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectRe
 export type TuiAppendPromptData = {
   body?: {
     text: string
+    sessionID?: string
   }
   path?: never
   query?: {

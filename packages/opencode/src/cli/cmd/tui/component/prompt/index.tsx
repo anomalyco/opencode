@@ -96,21 +96,22 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    if (!input || input.isDestroyed) return
-    const payload = evt.properties as typeof evt.properties & { sessionID?: string }
-    if (payload.sessionID && payload.sessionID !== props.sessionID) return
-    if (!payload.text.trim()) return
-    const text = input.plainText.trim() ? "\n" + payload.text : payload.text
-    input.insertText(text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
+  onCleanup(
+    sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
       if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
+      if (evt.properties.sessionID && evt.properties.sessionID !== props.sessionID) return
+      if (!evt.properties.text.trim()) return
+      const text = input.plainText.trim() ? "\n" + evt.properties.text : evt.properties.text
+      input.insertText(text)
+      setTimeout(() => {
+        // setTimeout is a workaround and needs to be addressed properly
+        if (!input || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+    }),
+  )
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement

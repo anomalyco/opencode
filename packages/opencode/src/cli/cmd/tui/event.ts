@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {
-  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string(), sessionID: z.string().optional() })),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({

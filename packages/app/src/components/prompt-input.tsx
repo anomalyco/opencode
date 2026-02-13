@@ -446,9 +446,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(() => {
     const unsub = sdk.event.on("tui.prompt.append", (evt) => {
-      const payload = evt.properties as typeof evt.properties & { sessionID?: string }
-      if (payload.sessionID && payload.sessionID !== params.id) return
-      appendRestore(payload.text)
+      if (evt.properties.sessionID && evt.properties.sessionID !== params.id) return
+      appendRestore(evt.properties.text)
     })
     onCleanup(unsub)
   })

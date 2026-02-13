@@ -2747,6 +2747,7 @@ export class Tui extends HeyApiClient {
     parameters?: {
       directory?: string
       text?: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2757,6 +2758,7 @@ export class Tui extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "text" },
+            { in: "body", key: "sessionID" },
           ],
         },
       ],
