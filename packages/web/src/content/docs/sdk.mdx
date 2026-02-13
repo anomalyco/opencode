@@ -260,6 +260,52 @@ const currentProject = await client.project.current()
 
 ---
 
+### Automations
+
+| Method                      | Description                       | Response                                                   |
+| --------------------------- | --------------------------------- | ---------------------------------------------------------- |
+| `automation.list()`         | List automations                  | <a href={typesUrl}><code>Automation[]</code></a>           |
+| `automation.create()`       | Create automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `automation.update()`       | Update automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `automation.remove()`       | Delete automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `automation.run()`          | Run automation immediately        | <a href={typesUrl}><code>Automation</code></a>             |
+| `automation.history()`      | List automation run history       | <a href={typesUrl}><code>AutomationRun[]</code></a>        |
+| `automation.clearHistory()` | Clear automation run history      | <a href={typesUrl}><code>AutomationHistoryClear</code></a> |
+| `automation.preview()`      | Validate schedule + next run time | <a href={typesUrl}><code>AutomationPreview</code></a>      |
+
+---
+
+#### Examples
+
+```javascript
+// Create automation
+const automation = await client.automation.create({
+  body: {
+    name: "Daily summary",
+    projects: ["/path/to/project"],
+    prompt: "Summarize recent changes",
+    schedule: "0 9 * * 1-5",
+    enabled: true,
+  },
+})
+
+// Preview schedule
+const preview = await client.automation.preview({
+  body: {
+    schedule: "0 9 * * 1-5",
+  },
+})
+
+// Run automation now
+await client.automation.run({
+  path: {
+    automationID: automation.data.id,
+  },
+})
+```
+
+---
+
 ### Path
 
 | Method       | Description      | Response                                 |

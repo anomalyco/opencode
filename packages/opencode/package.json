@@ -98,6 +98,7 @@
     "bun-pty": "0.4.8",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
+    "cron-parser": "4.9.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
     "fuzzysort": "3.1.0",

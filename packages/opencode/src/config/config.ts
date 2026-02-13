@@ -225,7 +225,30 @@ export namespace Config {
       result.share = "auto"
     }
 
-    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
+    const keybinds = (result.keybinds ?? {}) as Record<string, string>
+    const defaults = Info.shape.keybinds.parse({})
+    const base = defaults as NonNullable<typeof defaults>
+    const merged = { ...base, ...keybinds } as typeof defaults
+    const legacyAutomationDefaults: Record<string, string[]> = {
+      automation_create: ["ctrl+n", "alt+n", "<leader>n"],
+      automation_run: ["ctrl+r", "alt+r", "<leader>r"],
+      automation_open: ["ctrl+o", "alt+o", "<leader>o"],
+      automation_history: ["ctrl+h", "alt+h", "<leader>h"],
+      automation_edit: ["ctrl+e", "alt+e", "<leader>e"],
+      automation_delete: ["ctrl+d", "alt+d", "<leader>d"],
+      automation_clear_history: ["ctrl+l", "alt+l", "<leader>l"],
+      automation_export: ["ctrl+x", "alt+x", "<leader>x"],
+      automation_export_all: ["ctrl+shift+x", "alt+shift+x", "shift+<leader>x"],
+      automation_import: ["ctrl+i", "alt+i", "<leader>i"],
+    }
+    const normalized: Record<string, string> = {}
+    for (const [key, legacy] of Object.entries(legacyAutomationDefaults)) {
+      const value = keybinds[key]
+      if (!value) continue
+      if (!legacy.includes(value)) continue
+      normalized[key] = base[key as keyof typeof base]
+    }
+    result.keybinds = { ...merged, ...normalized } as typeof defaults
 
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
@@ -771,6 +794,17 @@ export namespace Config {
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
+      automation_list: z.string().optional().default("<leader>o").describe("List automations"),
+      automation_create: z.string().optional().default("shift+n").describe("Create automation"),
+      automation_run: z.string().optional().default("shift+r").describe("Run automation"),
+      automation_open: z.string().optional().default("shift+o").describe("Open automation session"),
+      automation_history: z.string().optional().default("shift+h").describe("View automation history"),
+      automation_edit: z.string().optional().default("shift+e").describe("Edit automation"),
+      automation_delete: z.string().optional().default("shift+d").describe("Delete automation"),
+      automation_clear_history: z.string().optional().default("shift+l").describe("Clear automation history"),
+      automation_export: z.string().optional().default("shift+x").describe("Export automation"),
+      automation_export_all: z.string().optional().default("shift+a").describe("Export all automations"),
+      automation_import: z.string().optional().default("shift+i").describe("Import automations"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
       session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),

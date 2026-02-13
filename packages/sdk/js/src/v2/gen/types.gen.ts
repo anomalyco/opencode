@@ -828,6 +828,10 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  automation?: {
+    id: string
+    name?: string
+  }
 }
 
 export type EventSessionCreated = {
@@ -879,6 +883,57 @@ export type EventVcsBranchUpdated = {
   properties: {
     branch?: string
   }
+}
+
+export type Automation = {
+  id: string
+  name: string
+  projects: Array<string>
+  prompt: string
+  schedule: string | null
+  enabled: boolean
+  time: {
+    created: number
+    updated: number
+  }
+  lastRun?: number
+  nextRun?: number
+  lastSession?: {
+    id: string
+    directory: string
+  }
+  createdBy?: string
+  updatedBy?: string
+}
+
+export type EventAutomationCreated = {
+  type: "automation.created"
+  properties: Automation
+}
+
+export type EventAutomationUpdated = {
+  type: "automation.updated"
+  properties: Automation
+}
+
+export type EventAutomationDeleted = {
+  type: "automation.deleted"
+  properties: Automation
+}
+
+export type AutomationRun = {
+  id: string
+  automationID: string
+  directory: string
+  sessionID?: string
+  status: "success" | "failed"
+  error?: string
+  time: number
+}
+
+export type EventAutomationRun = {
+  type: "automation.run"
+  properties: AutomationRun
 }
 
 export type Pty = {
@@ -972,6 +1027,10 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
+  | EventAutomationCreated
+  | EventAutomationUpdated
+  | EventAutomationDeleted
+  | EventAutomationRun
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -1032,6 +1091,50 @@ export type KeybindsConfig = {
    * List all sessions
    */
   session_list?: string
+  /**
+   * List automations
+   */
+  automation_list?: string
+  /**
+   * Create automation
+   */
+  automation_create?: string
+  /**
+   * Run automation
+   */
+  automation_run?: string
+  /**
+   * Open automation session
+   */
+  automation_open?: string
+  /**
+   * View automation history
+   */
+  automation_history?: string
+  /**
+   * Edit automation
+   */
+  automation_edit?: string
+  /**
+   * Delete automation
+   */
+  automation_delete?: string
+  /**
+   * Clear automation history
+   */
+  automation_clear_history?: string
+  /**
+   * Export automation
+   */
+  automation_export?: string
+  /**
+   * Export all automations
+   */
+  automation_export_all?: string
+  /**
+   * Import automations
+   */
+  automation_import?: string
   /**
    * Show session timeline
    */
@@ -1891,6 +1994,23 @@ export type BadRequestError = {
   success: false
 }
 
+export type AutomationPreview = {
+  valid: boolean
+  nextRun?: number
+  error?: string
+}
+
+export type AutomationHistoryClear = {
+  cleared: number
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -1912,13 +2032,6 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
-  }
-}
 
 export type Model = {
   id: string
@@ -2328,6 +2441,237 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
+export type AutomationListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/automation"
+}
+
+export type AutomationListResponses = {
+  /**
+   * List of automations
+   */
+  200: Array<Automation>
+}
+
+export type AutomationListResponse = AutomationListResponses[keyof AutomationListResponses]
+
+export type AutomationCreateData = {
+  body?: {
+    name: string
+    projects: Array<string>
+    prompt: string
+    schedule?: string | null
+    enabled?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/automation"
+}
+
+export type AutomationCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AutomationCreateError = AutomationCreateErrors[keyof AutomationCreateErrors]
+
+export type AutomationCreateResponses = {
+  /**
+   * Created automation
+   */
+  200: Automation
+}
+
+export type AutomationCreateResponse = AutomationCreateResponses[keyof AutomationCreateResponses]
+
+export type AutomationPreviewData = {
+  body?: {
+    schedule?: string | null
+  }
+  path?: never
+  query?: never
+  url: "/automation/preview"
+}
+
+export type AutomationPreviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AutomationPreviewError = AutomationPreviewErrors[keyof AutomationPreviewErrors]
+
+export type AutomationPreviewResponses = {
+  /**
+   * Schedule preview
+   */
+  200: AutomationPreview
+}
+
+export type AutomationPreviewResponse = AutomationPreviewResponses[keyof AutomationPreviewResponses]
+
+export type AutomationClearHistoryData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/automation/history"
+}
+
+export type AutomationClearHistoryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AutomationClearHistoryError = AutomationClearHistoryErrors[keyof AutomationClearHistoryErrors]
+
+export type AutomationClearHistoryResponses = {
+  /**
+   * History cleared
+   */
+  200: AutomationHistoryClear
+}
+
+export type AutomationClearHistoryResponse = AutomationClearHistoryResponses[keyof AutomationClearHistoryResponses]
+
+export type AutomationRemoveData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: never
+  url: "/automation/{automationID}"
+}
+
+export type AutomationRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AutomationRemoveError = AutomationRemoveErrors[keyof AutomationRemoveErrors]
+
+export type AutomationRemoveResponses = {
+  /**
+   * Deleted automation
+   */
+  200: Automation
+}
+
+export type AutomationRemoveResponse = AutomationRemoveResponses[keyof AutomationRemoveResponses]
+
+export type AutomationUpdateData = {
+  body?: {
+    name?: string
+    projects?: Array<string>
+    prompt?: string
+    schedule?: string | null
+    enabled?: boolean
+  }
+  path: {
+    automationID: string
+  }
+  query?: never
+  url: "/automation/{automationID}"
+}
+
+export type AutomationUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AutomationUpdateError = AutomationUpdateErrors[keyof AutomationUpdateErrors]
+
+export type AutomationUpdateResponses = {
+  /**
+   * Updated automation
+   */
+  200: Automation
+}
+
+export type AutomationUpdateResponse = AutomationUpdateResponses[keyof AutomationUpdateResponses]
+
+export type AutomationHistoryData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: {
+    limit?: number
+  }
+  url: "/automation/{automationID}/history"
+}
+
+export type AutomationHistoryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AutomationHistoryError = AutomationHistoryErrors[keyof AutomationHistoryErrors]
+
+export type AutomationHistoryResponses = {
+  /**
+   * Automation run history
+   */
+  200: Array<AutomationRun>
+}
+
+export type AutomationHistoryResponse = AutomationHistoryResponses[keyof AutomationHistoryResponses]
+
+export type AutomationRunData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: never
+  url: "/automation/{automationID}/run"
+}
+
+export type AutomationRunErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunError = AutomationRunErrors[keyof AutomationRunErrors]
+
+export type AutomationRunResponses = {
+  /**
+   * Automation run started
+   */
+  200: Automation
+}
+
+export type AutomationRunResponse = AutomationRunResponses[keyof AutomationRunResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -2926,6 +3270,10 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    automation?: {
+      id: string
+      name?: string
+    }
   }
   path?: never
   query?: {

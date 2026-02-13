@@ -8,6 +8,14 @@ import { Log } from "../../src/util/log"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
+function auth(): Record<string, string> {
+  const password = process.env.OPENCODE_SERVER_PASSWORD
+  if (!password) return {}
+  const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+  const value = Buffer.from(`${username}:${password}`).toString("base64")
+  return { Authorization: `Basic ${value}` }
+}
+
 describe("session.list", () => {
   test("filters by directory", async () => {
     await Instance.provide({
@@ -23,7 +31,9 @@ describe("session.list", () => {
           fn: async () => Session.create({}),
         })
 
-        const response = await app.request(`/session?directory=${encodeURIComponent(projectRoot)}`)
+        const response = await app.request(`/session?directory=${encodeURIComponent(projectRoot)}`, {
+          headers: auth(),
+        })
         expect(response.status).toBe(200)
 
         const body = (await response.json()) as unknown[]
