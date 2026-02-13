@@ -171,9 +171,9 @@ function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
   return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
 }
 
-function normalizeSelectionForStyle(style: SessionReviewDiffStyle, range: SelectedLineRange) {
+function normalizeSelectionForStyle(style: SessionReviewDiffStyle, range: SelectedLineRange): SelectedLineRange {
   if (style !== "before" && style !== "after") return range
-  const side = style === "before" ? "deletions" : "additions"
+  const side: NonNullable<SelectedLineRange["side"]> = style === "before" ? "deletions" : "additions"
   if (range.side === side && (range.endSide === undefined || range.endSide === side)) return range
   return {
     ...range,
