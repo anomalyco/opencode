@@ -38,7 +38,12 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
   })
 
   return (
-    <div class="bg-surface-inset-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
+    <div
+      classList={{
+        "bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip": true,
+        "h-20": store.collapsed,
+      }}
+    >
       <div
         class="pl-3 pr-2 py-2 flex items-center gap-2"
         role="button"
@@ -54,7 +59,12 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         <Show when={progress()}>
           <span class="text-14-regular text-text-weak">{progress()}</span>
         </Show>
-        <div class="ml-auto">
+        <div class="ml-1 flex-1 min-w-0">
+          <Show when={store.collapsed && preview()}>
+            <div class="text-14-regular text-text-base truncate">{preview()}</div>
+          </Show>
+        </div>
+        <div class="ml-1">
           <IconButton
             icon="chevron-down"
             size="normal"
@@ -75,10 +85,6 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
 
       <div hidden={store.collapsed}>
         <TodoList todos={props.todos} />
-      </div>
-
-      <div hidden={!store.collapsed} class="px-3 pb-11 text-14-regular text-text-base truncate">
-        {preview()}
       </div>
     </div>
   )
