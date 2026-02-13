@@ -545,7 +545,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     // Mirror sidebar sync: Desktop → Server → Mirror (one-way).
     // Desktop writes its sidebar state, Mirror reads it. No loops possible.
-    const platform = usePlatform()
     const isMirror = platform.platform === "desktop" && !platform.storage
     const isDesktop = platform.platform === "desktop" && !!platform.storage
 
