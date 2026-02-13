@@ -4,27 +4,6 @@ import { ToolRegistry } from "../../src/tool/registry"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-/**
- * Hashline Mode Selection Tests
- *
- * This test file validates the feature-flag behavior for hashline experimental edit mode.
- * It tests the registry exposure matrix for OFF vs ON states.
- *
- * Registry Exposure Matrix:
- * | Flag State                          | Edit Tool Schema        | Description                          |
- * |-------------------------------------|------------------------|--------------------------------------|
- * | All flags OFF (default)             | replace (old_text/new_text) | Byte-for-byte equivalent to current |
- * | OPENCODE_EXPERIMENTAL=1             | hashline (set_line, replace_lines, insert_after, replace) | Umbrella enables hashline |
- * | OPENCODE_EXPERIMENTAL_HASHLINE=true | hashline               | Direct flag enable                   |
- * | OPENCODE_EXPERIMENTAL_EDIT=true     | hashline               | Umbrella alias for edit experiments |
- *
- * MVP Operation Schema Contract (locked):
- * - set_line: { anchor: "LINE:HASH", new_text: "..." }
- * - replace_lines: { start_anchor: "LINE:HASH", end_anchor: "LINE:HASH", new_text: "..." }
- * - insert_after: { anchor: "LINE:HASH", text: "..." }
- * - replace: { old_text: "...", new_text: "...", all?: boolean }
- */
-
 describe("flag.OPENCODE_EXPERIMENTAL_HASHLINE", () => {
   const originalEnv = { ...process.env }
 
@@ -226,7 +205,20 @@ describe("tool registry exposure", () => {
     process.env = originalEnv
   })
 
-  test("flag off exposes edit and hides hashline", async () => {
+  test("flag off exposes edit", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tools = await ToolRegistry.tools({ providerID: "anthropic", modelID: "claude-3-7-sonnet" })
+        const ids = tools.map((item) => item.id)
+        expect(ids).toContain("edit")
+      },
+    })
+  })
+
+  test("flag on keeps edit id and switches schema to hashline operations", async () => {
+    process.env.OPENCODE_EXPERIMENTAL_HASHLINE = "true"
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -235,25 +227,25 @@ describe("tool registry exposure", () => {
         const ids = tools.map((item) => item.id)
         expect(ids).toContain("edit")
         expect(ids).not.toContain("hashline")
+
+        const edit = tools.find((item) => item.id === "edit")
+        expect(edit).toBeDefined()
+        const hashlineInput = {
+          filePath: "/tmp/example.ts",
+          operations: [{ op: "set_line", anchor: "1:aa", new_text: "const a = 1" }],
+        }
+        const replaceInput = {
+          filePath: "/tmp/example.ts",
+          oldString: "a",
+          newString: "b",
+        }
+        expect(edit!.parameters.safeParse(hashlineInput).success).toBe(true)
+        expect(edit!.parameters.safeParse(replaceInput).success).toBe(false)
       },
     })
   })
 
-  test("flag on hides edit and exposes hashline", async () => {
-    process.env.OPENCODE_EXPERIMENTAL_HASHLINE = "true"
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const tools = await ToolRegistry.tools({ providerID: "anthropic", modelID: "claude-3-7-sonnet" })
-        const ids = tools.map((item) => item.id)
-        expect(ids).toContain("hashline")
-        expect(ids).not.toContain("edit")
-      },
-    })
-  })
-
-  test("gpt model keeps apply_patch and exposes hashline together", async () => {
+  test("gpt model keeps apply_patch and hides edit/write/hashline", async () => {
     process.env.OPENCODE_EXPERIMENTAL_HASHLINE = "true"
     await using tmp = await tmpdir()
     await Instance.provide({
@@ -262,8 +254,8 @@ describe("tool registry exposure", () => {
         const tools = await ToolRegistry.tools({ providerID: "openai", modelID: "gpt-5" })
         const ids = tools.map((item) => item.id)
         expect(ids).toContain("apply_patch")
-        expect(ids).toContain("hashline")
         expect(ids).not.toContain("edit")
+        expect(ids).not.toContain("hashline")
         expect(ids).not.toContain("write")
       },
     })

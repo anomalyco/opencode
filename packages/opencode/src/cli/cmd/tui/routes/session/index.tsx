@@ -40,7 +40,6 @@ import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
-import type { HashlineTool } from "@/tool/hashline"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
@@ -1469,9 +1468,6 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "edit"}>
           <Edit {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "hashline"}>
-          <Hashline {...toolprops} />
-        </Match>
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
         </Match>
@@ -1974,72 +1970,6 @@ function Edit(props: ToolProps<typeof EditTool>) {
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
           Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
-        </InlineTool>
-      </Match>
-    </Switch>
-  )
-}
-
-function Hashline(props: ToolProps<typeof HashlineTool>) {
-  const ctx = use()
-  const { theme, syntax } = useTheme()
-
-  const view = createMemo(() => {
-    const diffStyle = ctx.sync.data.config.tui?.diff_style
-    if (diffStyle === "stacked") return "unified"
-    return ctx.width > 120 ? "split" : "unified"
-  })
-
-  const ft = createMemo(() => filetype(props.input.filePath))
-  const diffContent = createMemo(() => props.metadata.diff)
-  const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
-    const arr = props.metadata.diagnostics?.[filePath] ?? []
-    return arr.filter((x) => x.severity === 1).slice(0, 3)
-  })
-
-  return (
-    <Switch>
-      <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Hashline " + normalizePath(props.input.filePath!)} part={props.part}>
-          <box paddingLeft={1}>
-            <diff
-              diff={diffContent()}
-              view={view()}
-              filetype={ft()}
-              syntaxStyle={syntax()}
-              showLineNumbers={true}
-              width="100%"
-              wrapMode={ctx.diffWrapMode()}
-              fg={theme.text}
-              addedBg={theme.diffAddedBg}
-              removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
-              addedSignColor={theme.diffHighlightAdded}
-              removedSignColor={theme.diffHighlightRemoved}
-              lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
-              addedLineNumberBg={theme.diffAddedLineNumberBg}
-              removedLineNumberBg={theme.diffRemovedLineNumberBg}
-            />
-          </box>
-          <Show when={diagnostics().length}>
-            <box>
-              <For each={diagnostics()}>
-                {(diagnostic) => (
-                  <text fg={theme.error}>
-                    Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
-                    {diagnostic.message}
-                  </text>
-                )}
-              </For>
-            </box>
-          </Show>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="←" pending="Preparing hashline edit..." complete={props.input.filePath} part={props.part}>
-          Hashline {normalizePath(props.input.filePath!)}
         </InlineTool>
       </Match>
     </Switch>

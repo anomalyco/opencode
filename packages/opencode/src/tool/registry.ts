@@ -145,20 +145,22 @@ export namespace ToolRegistry {
           const usePatch =
             model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
           const useHashline = Flag.OPENCODE_EXPERIMENTAL_HASHLINE || Flag.OPENCODE_EXPERIMENTAL_EDIT
+          const useHashlineEdit = useHashline && !usePatch
           if (t.id === "apply_patch") return usePatch
-          if (t.id === "edit") return !usePatch && !useHashline
+          if (t.id === "edit") return !usePatch && !useHashlineEdit
           if (t.id === "write") return !usePatch
 
           if (t.id === "hashline") {
-            return useHashline
+            return useHashlineEdit
           }
 
           return true
         })
         .map(async (t) => {
           using _ = log.time(t.id)
+          const id = t.id === "hashline" ? "edit" : t.id
           return {
-            id: t.id,
+            id,
             ...(await t.init({ agent })),
           }
         }),
