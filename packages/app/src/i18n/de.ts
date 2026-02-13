@@ -545,6 +545,8 @@ export const dict = {
   "settings.general.row.theme.description": "Das Thema von OpenCode anpassen.",
   "settings.general.row.font.title": "Schriftart",
   "settings.general.row.font.description": "Die in Codeblöcken verwendete Monospace-Schriftart anpassen",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
   "settings.general.row.wayland.description": "X11-Fallback unter Wayland deaktivieren. Erfordert Neustart.",
   "settings.general.row.wayland.tooltip":

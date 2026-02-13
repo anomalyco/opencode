@@ -596,6 +596,8 @@ export const dict = {
   "settings.general.row.theme.description": "ปรับแต่งวิธีการที่ OpenCode มีธีม",
   "settings.general.row.font.title": "ฟอนต์",
   "settings.general.row.font.description": "ปรับแต่งฟอนต์โมโนที่ใช้ในบล็อกโค้ด",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.wayland.title": "ใช้ Wayland แบบเนทีฟ",
   "settings.general.row.wayland.description": "ปิดใช้งาน X11 fallback บน Wayland ต้องรีสตาร์ท",

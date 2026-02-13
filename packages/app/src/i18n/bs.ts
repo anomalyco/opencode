@@ -601,6 +601,8 @@ export const dict = {
   "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Prilagodi monospace font koji se koristi u blokovima koda",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",

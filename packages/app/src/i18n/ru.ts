@@ -602,6 +602,8 @@ export const dict = {
   "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",

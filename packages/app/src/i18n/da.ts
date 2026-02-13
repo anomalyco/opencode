@@ -596,6 +596,8 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpas hvordan OpenCode er temabestemt.",
   "settings.general.row.font.title": "Skrifttype",
   "settings.general.row.font.description": "Tilpas mono-skrifttypen brugt i kodeblokke",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.wayland.title": "Brug native Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Kræver genstart.",

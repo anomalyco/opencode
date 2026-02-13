@@ -591,6 +591,8 @@ export const dict = {
   "settings.general.row.theme.description": "自訂 OpenCode 的主題。",
   "settings.general.row.font.title": "字型",
   "settings.general.row.font.description": "自訂程式碼區塊使用的等寬字型",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上停用 X11 後備模式。需要重新啟動。",

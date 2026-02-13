@@ -595,6 +595,8 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上禁用 X11 回退。需要重启。",
   "settings.general.row.wayland.tooltip": "在混合刷新率显示器的 Linux 系统上，原生 Wayland 可能更稳定。",

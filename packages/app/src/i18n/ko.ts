@@ -535,6 +535,8 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":

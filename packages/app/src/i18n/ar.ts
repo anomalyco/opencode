@@ -530,6 +530,8 @@ export const dict = {
   "settings.general.row.theme.description": "تخصيص سمة OpenCode.",
   "settings.general.row.font.title": "الخط",
   "settings.general.row.font.description": "تخصيص الخط الأحادي المستخدم في كتل التعليمات البرمجية",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
   "settings.general.row.wayland.title": "استخدام Wayland الأصلي",
   "settings.general.row.wayland.description": "تعطيل التراجع إلى X11 على Wayland. يتطلب إعادة التشغيل.",
   "settings.general.row.wayland.tooltip":
