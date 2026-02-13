@@ -535,22 +535,6 @@ export namespace Provider {
         },
       }
     },
-    openwebui: async () => {
-      const config = await Config.get()
-      const providerConfig = config.provider?.["openwebui"]
-      const baseURL = providerConfig?.options?.baseURL ?? Env.get("OPEN_WEBUI_BASE_URL")
-      if (!baseURL) return { autoload: false }
-
-      const normalizedBaseURL = baseURL.replace(/\/+$/, "")
-      const apiBaseURL = normalizedBaseURL.endsWith("/api") ? normalizedBaseURL : `${normalizedBaseURL}/api`
-
-      return {
-        autoload: true,
-        options: {
-          baseURL: apiBaseURL,
-        },
-      }
-    },
   }
 
   export const Model = z
