@@ -27,7 +27,7 @@ export function SessionPromptDock(props: {
   return (
     <div
       ref={props.setPromptDockRef}
-      class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+      class="shrink-0 w-full pb-4 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
     >
       <div
         classList={{
@@ -132,7 +132,12 @@ export function SessionPromptDock(props: {
                 expandLabel={props.t("session.todo.expand")}
               />
             </Show>
-            <div class="relative z-10 -mt-9">
+            <div
+              classList={{
+                "relative z-10": true,
+                "-mt-9": props.todos.length > 0,
+              }}
+            >
               <PromptInput
                 ref={props.inputRef}
                 newSessionWorktree={props.newSessionWorktree}

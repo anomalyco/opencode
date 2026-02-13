@@ -563,7 +563,6 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
-    promptHeight: 0,
   })
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
@@ -654,6 +653,7 @@ export default function Page() {
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
+  let dockHeight = 0
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
 
@@ -1446,12 +1446,12 @@ export default function Page() {
     ({ height }) => {
       const next = Math.ceil(height)
 
-      if (next === store.promptHeight) return
+      if (next === dockHeight) return
 
       const el = scroller
       const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
 
-      setStore("promptHeight", next)
+      dockHeight = next
 
       if (stick && el) {
         requestAnimationFrame(() => {
@@ -1569,7 +1569,6 @@ export default function Page() {
           }}
           style={{
             width: sessionPanelWidth(),
-            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
@@ -1581,7 +1580,7 @@ export default function Page() {
                     mobileFallback={reviewContent({
                       diffStyle: "unified",
                       classes: {
-                        root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                        root: "pb-8",
                         header: "px-4",
                         container: "px-4",
                       },

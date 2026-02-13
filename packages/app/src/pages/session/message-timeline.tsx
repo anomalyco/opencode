@@ -98,7 +98,7 @@ export function MessageTimeline(props: {
     >
       <div class="relative w-full h-full min-w-0">
         <div
-          class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
+          class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
             "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
             "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
@@ -262,7 +262,7 @@ export function MessageTimeline(props: {
           <div
             ref={props.setContentRef}
             role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
             classList={{
               "w-full": true,
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,

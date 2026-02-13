@@ -37,7 +37,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
   })
 
   return (
-    <div class="mb-3 bg-surface-raised-stronger-non-alpha shadow-xs-border relative z-0 rounded-[14px] overflow-clip">
+    <div class="bg-surface-inset-base border border-border-weak-base relative z-0 rounded-[14px] overflow-clip">
       <div
         class="px-3 py-2 flex items-center gap-2"
         role="button"
@@ -73,7 +73,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
       </div>
 
       <Show when={store.collapsed} fallback={<TodoList todos={props.todos} />}>
-        <div class="px-3 pb-9 text-12-regular text-text-base truncate">{preview()}</div>
+        <div class="px-3 pb-11 text-12-regular text-text-base truncate">{preview()}</div>
       </Show>
     </div>
   )
@@ -81,7 +81,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
 
 function TodoList(props: { todos: Todo[] }) {
   return (
-    <div class="px-3 pb-9 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
+    <div class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
       <For each={props.todos}>
         {(todo) => (
           <Checkbox
