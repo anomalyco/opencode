@@ -261,7 +261,7 @@ export function Autocomplete(props: {
 
             const isDir = item.endsWith("/")
             return {
-              display: Locale.truncateMiddle(filename, width),
+              display: Locale.truncatePath(filename, width),
               value: filename,
               isDirectory: isDir,
               path: item,

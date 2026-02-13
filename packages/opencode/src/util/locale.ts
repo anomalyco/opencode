@@ -74,6 +74,18 @@ export namespace Locale {
     return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
   }
 
+  export function truncatePath(filepath: string, maxLength: number = 35): string {
+    if (filepath.length <= maxLength) return filepath
+    const slash = filepath.lastIndexOf("/")
+    if (slash === -1) return truncateMiddle(filepath, maxLength)
+    const name = filepath.slice(slash + 1)
+    const dir = filepath.slice(0, slash)
+    const sep = " — "
+    const available = maxLength - name.length - sep.length
+    if (available <= 0) return truncate(name, maxLength)
+    return name + sep + truncate(dir, available)
+  }
+
   export function pluralize(count: number, singular: string, plural: string): string {
     const template = count === 1 ? singular : plural
     return template.replace("{}", count.toString())
