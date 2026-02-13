@@ -24,6 +24,7 @@ import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -252,7 +253,7 @@ export namespace Session {
     const base = Instance.project.vcs
       ? path.join(Instance.worktree, ".opencode", "plans")
       : path.join(Global.Path.data, "plans")
-    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
+    return Filesystem.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {

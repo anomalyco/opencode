@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -33,7 +34,7 @@ export const GrepTool = Tool.define("grep", {
     })
 
     let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    searchPath = path.isAbsolute(searchPath) ? Filesystem.normalize(searchPath) : Filesystem.resolve(Instance.directory, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()

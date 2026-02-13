@@ -16,9 +16,9 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
-import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Agent {
   export const Info = z
@@ -99,12 +99,12 @@ export namespace Agent {
             question: "allow",
             plan_exit: "allow",
             external_directory: {
-              [path.join(Global.Path.data, "plans", "*")]: "allow",
+              [Filesystem.join(Global.Path.data, "plans", "*")]: "allow",
             },
             edit: {
               "*": "deny",
-              [path.join(".opencode", "plans", "*.md")]: "allow",
-              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [Filesystem.join(".opencode", "plans", "*.md")]: "allow",
+              [Filesystem.relative(Instance.worktree, Filesystem.join(Global.Path.data, Filesystem.join("plans", "*.md")))]: "allow",
             },
           }),
           user,

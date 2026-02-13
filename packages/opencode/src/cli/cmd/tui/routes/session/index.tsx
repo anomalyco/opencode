@@ -1658,7 +1658,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const base = sync.data.path.directory
     if (!base) return undefined
 
-    const absolute = path.resolve(base, workdir)
+    const normalized = Filesystem.normalize(workdir)
+    const absolute = path.isAbsolute(normalized) ? normalized : Filesystem.resolve(base, normalized)
     if (absolute === base) return undefined
 
     const home = Global.Path.home
@@ -1713,7 +1714,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   })
 
   const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    const filePath = Filesystem.realpath(props.input.filePath ?? "")
     return props.metadata.diagnostics?.[filePath] ?? []
   })
 
@@ -1923,7 +1924,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const diffContent = createMemo(() => props.metadata.diff)
 
   const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    const filePath = Filesystem.realpath(props.input.filePath ?? "")
     const arr = props.metadata.diagnostics?.[filePath] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })
@@ -2116,9 +2117,9 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 function normalizePath(input?: string) {
   if (!input) return ""
   if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+    return Filesystem.relative(process.cwd(), input) || "."
   }
-  return input
+  return Filesystem.normalize(input)
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

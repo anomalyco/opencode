@@ -350,7 +350,8 @@ test("very long filenames", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      const longName = "a".repeat(200) + ".txt"
+      const length = process.platform === "win32" ? 250 - tmp.path.length : 200
+      const longName = "a".repeat(length) + ".txt"
       const longFile = `${tmp.path}/${longName}`
 
       await Bun.write(longFile, "long filename content")
@@ -385,6 +386,13 @@ test("hidden files", async () => {
 })
 
 test("nested symlinks", async () => {
+  if (process.platform === "win32") {
+    // Skip on Windows: Symlink creation requires elevated privileges, Developer Mode, or core.symlinks=true in Git, which aren't default.
+    // Git's handling of directory symlinks is inconsistent, often treating them as copies or failing to track them as special entries.
+    // This causes test failures or unreliable results, unlike on Unix-like systems.
+    return
+  }
+
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,

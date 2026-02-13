@@ -9,6 +9,7 @@ import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
+import { Filesystem } from "@/util/filesystem"
 
 async function getLastModel(sessionID: string) {
   for await (const item of MessageV2.stream(sessionID)) {
@@ -22,7 +23,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const plan = Filesystem.relative(Instance.worktree, Session.plan(session))
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
@@ -77,7 +78,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const plan = Filesystem.relative(Instance.worktree, Session.plan(session))
 
     const answers = await Question.ask({
       sessionID: ctx.sessionID,

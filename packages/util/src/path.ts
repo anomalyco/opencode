@@ -35,3 +35,11 @@ export function truncateMiddle(text: string, maxLength: number = 20) {
   const end = Math.floor(available / 2)
   return text.slice(0, start) + "…" + text.slice(-end)
 }
+
+/**
+ * Normalize a path to use forward slashes on all platforms.
+ * On Windows, also convert MSYS and Cygwin style paths to Windows drive letter paths.
+ */
+export function normalize(p: string): string {
+  return p.replace(/^\/(?:cygdrive\/)?([a-zA-Z])(\/|$)/, (_, d) => `${d.toUpperCase()}:/`).replace(/\\+/g, "/")
+}

@@ -161,7 +161,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Build per-file metadata for UI rendering (used for both permission and result)
     const files = fileChanges.map((change) => ({
       filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
+      relativePath: Filesystem.relative(Instance.worktree, change.movePath ?? change.filePath),
       type: change.type,
       diff: change.diff,
       before: change.oldContent,
@@ -172,7 +172,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }))
 
     // Check permissions if needed
-    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath))
+    const relativePaths = fileChanges.map((c) => Filesystem.relative(Instance.worktree, c.filePath))
     await ctx.ask({
       permission: "edit",
       patterns: relativePaths,
@@ -242,13 +242,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Generate output summary
     const summaryLines = fileChanges.map((change) => {
       if (change.type === "add") {
-        return `A ${path.relative(Instance.worktree, change.filePath)}`
+        return `A ${Filesystem.relative(Instance.worktree, change.filePath)}`
       }
       if (change.type === "delete") {
-        return `D ${path.relative(Instance.worktree, change.filePath)}`
+        return `D ${Filesystem.relative(Instance.worktree, change.filePath)}`
       }
       const target = change.movePath ?? change.filePath
-      return `M ${path.relative(Instance.worktree, target)}`
+      return `M ${Filesystem.relative(Instance.worktree, target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
@@ -257,14 +257,14 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     for (const change of fileChanges) {
       if (change.type === "delete") continue
       const target = change.movePath ?? change.filePath
-      const normalized = Filesystem.normalizePath(target)
+      const normalized = Filesystem.realpath(target)
       const issues = diagnostics[normalized] ?? []
       const errors = issues.filter((item) => item.severity === 1)
       if (errors.length > 0) {
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =
           errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-        output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+        output += `\n\nLSP errors detected in ${Filesystem.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
 

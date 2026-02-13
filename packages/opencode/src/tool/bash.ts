@@ -77,8 +77,13 @@ export const BashTool = Tool.define("bash", async () => {
     }),
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
+      const normalizedCwd = Filesystem.normalize(cwd)
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
+      }
+      // Validate working directory exists to prevent Bun spawn crashes on Windows
+      if (!(await Filesystem.isDir(normalizedCwd))) {
+        throw new Error(`Working directory does not exist or is not a directory: ${cwd}`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const tree = await parser().then((p) => p.parse(params.command))
@@ -86,7 +91,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const directories = new Set<string>()
-      if (!Instance.containsPath(cwd)) directories.add(cwd)
+      if (!Instance.containsPath(normalizedCwd)) directories.add(normalizedCwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -116,26 +121,12 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
-            log.info("resolved path", { arg, resolved })
-            if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
-              const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
-              if (!Instance.containsPath(normalized)) {
-                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
-                directories.add(dir)
-              }
-            }
-          }
+          const target = Filesystem.resolve(normalizedCwd, arg)
+          const dir = (await Filesystem.isDir(target)) ? target : Filesystem.dirname(target)
+          log.info("resolved path", { arg, dir, target })
+          if (!Filesystem.contains(Instance.directory, dir)) directories.add(dir)
         }
+      }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
@@ -145,7 +136,7 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (directories.size > 0) {
-        const globs = Array.from(directories).map((dir) => path.join(dir, "*"))
+        const globs = Array.from(directories).map((dir) => Filesystem.normalize(path.join(dir, "*")))
         await ctx.ask({
           permission: "external_directory",
           patterns: globs,
@@ -166,7 +157,7 @@ export const BashTool = Tool.define("bash", async () => {
       const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
       const proc = spawn(params.command, {
         shell,
-        cwd,
+        cwd: normalizedCwd,
         env: {
           ...process.env,
           ...shellEnv.env,

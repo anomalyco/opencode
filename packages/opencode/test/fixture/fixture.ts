@@ -3,6 +3,7 @@ import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
 import type { Config } from "../../src/config/config"
+import { Filesystem } from "../../src/util/filesystem"
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
 function sanitizePath(p: string): string {
@@ -19,8 +20,24 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
-    await $`git init`.cwd(dirpath).quiet()
-    await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
+    const init = await $`git init`.cwd(dirpath).nothrow().quiet()
+    if (init.exitCode !== 0) {
+      console.error("git init failed", {
+        dirpath,
+        exitCode: init.exitCode,
+        stdout: init.stdout.toString(),
+        stderr: init.stderr.toString(),
+      })
+    }
+    const commit = await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).nothrow().quiet()
+    if (commit.exitCode !== 0) {
+      console.error("git commit failed", {
+        dirpath,
+        exitCode: commit.exitCode,
+        stdout: commit.stdout.toString(),
+        stderr: commit.stderr.toString(),
+      })
+    }
   }
   if (options?.config) {
     await Bun.write(
@@ -32,7 +49,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
     )
   }
   const extra = await options?.init?.(dirpath)
-  const realpath = sanitizePath(await fs.realpath(dirpath))
+  const realpath = Filesystem.normalize(sanitizePath(await fs.realpath(dirpath)))
   const result = {
     [Symbol.asyncDispose]: async () => {
       await options?.dispose?.(dirpath)

@@ -10,6 +10,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -111,9 +112,13 @@ export namespace LSP {
           root: existing?.root ?? (async () => Instance.directory),
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
+            const normalizedRoot = Filesystem.normalize(root)
+            if (!(await Filesystem.isDir(normalizedRoot))) {
+              throw new Error(`Working directory does not exist or is not a directory: ${root}`)
+            }
             return {
               process: spawn(item.command[0], item.command.slice(1), {
-                cwd: root,
+                cwd: normalizedRoot,
                 env: {
                   ...process.env,
                   ...item.env,

@@ -687,8 +687,14 @@ test("resolves scoped npm plugins in config", async () => {
       const config = await Config.get()
       const pluginEntries = config.plugin ?? []
 
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+      // On Windows, import.meta.resolve() doesn't work with file:// URLs but works with regular paths
+      // On Linux, both file:// URLs and regular paths work
+      const resolveContext =
+        process.platform === "win32"
+          ? path.join(tmp.path, "opencode.json")
+          : pathToFileURL(path.join(tmp.path, "opencode.json")).href
+
+      const expected = import.meta.resolve("@scope/plugin", resolveContext)
 
       expect(pluginEntries.includes(expected)).toBe(true)
 

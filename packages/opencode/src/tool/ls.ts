@@ -5,6 +5,7 @@ import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -42,7 +43,7 @@ export const ListTool = Tool.define("list", {
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
   async execute(params, ctx) {
-    const searchPath = path.resolve(Instance.directory, params.path || ".")
+    const searchPath = Filesystem.resolve(Instance.directory, params.path || ".")
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     await ctx.ask({
@@ -66,7 +67,7 @@ export const ListTool = Tool.define("list", {
     const filesByDir = new Map<string, string[]>()
 
     for (const file of files) {
-      const dir = path.dirname(file)
+      const dir = Filesystem.dirname(file)
       const parts = dir === "." ? [] : dir.split("/")
 
       // Add all parent directories
@@ -90,7 +91,7 @@ export const ListTool = Tool.define("list", {
 
       const childIndent = "  ".repeat(depth + 1)
       const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
+        .filter((d) => Filesystem.dirname(d) === dirPath && d !== dirPath)
         .sort()
 
       // Render subdirectories first
@@ -110,7 +111,7 @@ export const ListTool = Tool.define("list", {
     const output = `${searchPath}/\n` + renderDir(".", 0)
 
     return {
-      title: path.relative(Instance.worktree, searchPath),
+      title: Filesystem.relative(Instance.worktree, searchPath),
       metadata: {
         count: files.length,
         truncated: files.length >= LIMIT,

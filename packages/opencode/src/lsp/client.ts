@@ -50,7 +50,7 @@ export namespace LSPClient {
 
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
+      const filePath = Filesystem.realpath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
         path: filePath,
         count: params.diagnostics.length,
@@ -208,7 +208,7 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        const normalizedPath = Filesystem.normalizePath(
+        const normalizedPath = Filesystem.realpath(
           path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
         )
         log.info("waiting for diagnostics", { path: normalizedPath })

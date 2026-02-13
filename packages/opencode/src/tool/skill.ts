@@ -6,6 +6,7 @@ import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { Filesystem } from "../util/filesystem"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const skills = await Skill.all()
@@ -73,7 +74,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {},
       })
 
-      const dir = path.dirname(skill.location)
+      const dir = Filesystem.dirname(skill.location)
       const base = pathToFileURL(dir).href
 
       const limit = 10
@@ -88,7 +89,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           if (file.includes("SKILL.md")) {
             continue
           }
-          arr.push(path.resolve(dir, file))
+          arr.push(Filesystem.resolve(dir, file))
           if (arr.length >= limit) {
             break
           }
