@@ -14,8 +14,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # TODO: Switch back to nix-community/bun2nix once PR #84 is merged
+    # PR: https://github.com/nix-community/bun2nix/pull/84
     bun2nix = {
-      url = "github:nix-community/bun2nix";
+      url = "github:b7r6/bun2nix/fix-tarball-url-parsing";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

@@ -530,68 +530,7 @@ export namespace Config {
     return uniqueSpecifiers.toReversed()
   }
 
-  export const McpLocal = z
-    .object({
-      type: z.literal("local").describe("Type of MCP server connection"),
-      command: z.string().array().describe("Command and arguments to run the MCP server"),
-      environment: z
-        .record(z.string(), z.string())
-        .optional()
-        .describe("Environment variables to set when running the MCP server"),
-      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
-      timeout: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
-    })
-    .strict()
-    .meta({
-      ref: "McpLocalConfig",
-    })
-
-  export const McpOAuth = z
-    .object({
-      clientId: z
-        .string()
-        .optional()
-        .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
-      clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
-      scope: z.string().optional().describe("OAuth scopes to request during authorization"),
-    })
-    .strict()
-    .meta({
-      ref: "McpOAuthConfig",
-    })
-  export type McpOAuth = z.infer<typeof McpOAuth>
-
-  export const McpRemote = z
-    .object({
-      type: z.literal("remote").describe("Type of MCP server connection"),
-      url: z.string().describe("URL of the remote MCP server"),
-      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
-      headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
-      oauth: z
-        .union([McpOAuth, z.literal(false)])
-        .optional()
-        .describe(
-          "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
-        ),
-      timeout: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
-    })
-    .strict()
-    .meta({
-      ref: "McpRemoteConfig",
-    })
-
-  export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
-  export type Mcp = z.infer<typeof Mcp>
+  // MCP config schemas removed - infinite retention build
 
   export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
     ref: "PermissionActionConfig",
@@ -1099,20 +1038,8 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(
-          z.string(),
-          z.union([
-            Mcp,
-            z
-              .object({
-                enabled: z.boolean(),
-              })
-              .strict(),
-          ]),
-        )
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
+      // MCP config removed - infinite retention build (but still accept for backwards compat)
+      mcp: z.any().optional(),
       formatter: z
         .union([
           z.literal(false),
@@ -1203,12 +1130,7 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
-          mcp_timeout: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+
         })
         .optional(),
     })

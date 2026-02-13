@@ -13,7 +13,7 @@ import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
-import { DialogMcp } from "@tui/component/dialog-mcp"
+
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogKeymap } from "@tui/component/dialog-keymap"
@@ -455,17 +455,7 @@ function App() {
         dialog.replace(() => <DialogAgent />)
       },
     },
-    {
-      title: "Toggle MCPs",
-      value: "mcp.list",
-      category: "Agent",
-      slash: {
-        name: "mcps",
-      },
-      onSelect: () => {
-        dialog.replace(() => <DialogMcp />)
-      },
-    },
+
     {
       title: "Agent cycle",
       value: "agent.cycle",

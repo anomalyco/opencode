@@ -11,15 +11,16 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1770895533,
-        "narHash": "sha256-v3QaK9ugy9bN9RXDnjw0i2OifKmz2NnKM82agtqm/UY=",
-        "owner": "nix-community",
+        "lastModified": 1770996220,
+        "narHash": "sha256-qlNbBxa36ugP6BT17y8CouUvx42+YnXrayJa9ealLTk=",
+        "owner": "b7r6",
         "repo": "bun2nix",
-        "rev": "c843f477b15f51151f8c6bcc886954699440a6e1",
+        "rev": "33afdf5e1960e572063189ccb88abe948f3ffe6f",
         "type": "github"
       },
       "original": {
-        "owner": "nix-community",
+        "owner": "b7r6",
+        "ref": "fix-tarball-url-parsing",
         "repo": "bun2nix",
         "type": "github"
       }

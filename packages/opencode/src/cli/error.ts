@@ -1,12 +1,9 @@
 import { ConfigMarkdown } from "@/config/markdown"
 import { Config } from "../config/config"
-import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
 
 export function FormatError(input: unknown) {
-  if (MCP.Failed.isInstance(input))
-    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [

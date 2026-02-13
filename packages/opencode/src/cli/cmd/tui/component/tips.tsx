@@ -89,8 +89,7 @@ const TIPS = [
   'Set {highlight}"keymap": "vim"{/highlight} in config for space-leader and hjkl navigation',
   'Set {highlight}"keymap": "emacs"{/highlight} in config for M-x commands and C-g cancel',
   "Set any keybind to {highlight}none{/highlight} to disable it completely",
-  "Configure local or remote MCP servers in the {highlight}mcp{/highlight} config section",
-  "OpenCode auto-handles OAuth for remote MCP servers requiring auth",
+
   "Add {highlight}.md{/highlight} files to {highlight}.opencode/command/{/highlight} to define reusable custom prompts",
   "Use {highlight}$ARGUMENTS{/highlight}, {highlight}$1{/highlight}, {highlight}$2{/highlight} in custom commands for dynamic input",
   "Use backticks in commands to inject shell output (e.g., {highlight}`git status`{/highlight})",
@@ -131,7 +130,7 @@ const TIPS = [
   "Set agent {highlight}temperature{/highlight} from 0.0 (focused) to 1.0 (creative)",
   "Configure {highlight}maxSteps{/highlight} to limit agentic iterations per request",
   'Set {highlight}"tools": {"bash": false}{/highlight} to disable specific tools',
-  'Set {highlight}"mcp_*": false{/highlight} to disable all tools from an MCP server',
+
   "Override global tool settings per agent configuration",
   'Set {highlight}"share": "auto"{/highlight} to automatically share all sessions',
   'Set {highlight}"share": "disabled"{/highlight} to prevent any session sharing',

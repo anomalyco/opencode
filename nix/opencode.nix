@@ -1,7 +1,6 @@
 {
   lib,
-  stdenvNoCC,
-  callPackage,
+  stdenv,
   bun,
   sysctl,
   makeBinaryWrapper,
@@ -10,28 +9,57 @@
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  node_modules ? callPackage ./node-modules.nix { },
+  bunDeps,
+  bun2nix',
 }:
-stdenvNoCC.mkDerivation (finalAttrs: {
+let
+  packageJson = lib.pipe ../packages/opencode/package.json [
+    builtins.readFile
+    builtins.fromJSON
+  ];
+in
+stdenv.mkDerivation (finalAttrs: {
   pname = "opencode";
-  inherit (node_modules) version src;
-  inherit node_modules;
+  version = packageJson.version;
+
+  src = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.intersection (lib.fileset.fromSource (lib.sources.cleanSource ../.)) (
+      lib.fileset.unions [
+        ../packages
+        ../bun.lock
+        ../package.json
+        ../patches
+        ../install # required by desktop build (cli.rs include_str!)
+      ]
+    );
+  };
 
   nativeBuildInputs = [
     bun
+    bun2nix'.hook
     installShellFiles
     makeBinaryWrapper
     models-dev
     writableTmpDirAsHomeHook
   ];
 
-  configurePhase = ''
-    runHook preConfigure
+  inherit bunDeps;
 
-    cp -R ${finalAttrs.node_modules}/. .
+  # Use hoisted linker for compatibility
+  bunInstallFlags =
+    if stdenv.hostPlatform.isDarwin then
+      [
+        "--linker=hoisted"
+        "--backend=copyfile"
+      ]
+    else
+      [ "--linker=hoisted" ];
 
-    runHook postConfigure
-  '';
+  # Don't run bun2nix's default build/check/install phases
+  dontUseBunBuild = true;
+  dontUseBunCheck = true;
+  dontUseBunInstall = true;
 
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
   env.OPENCODE_DISABLE_MODELS_FETCH = true;
@@ -60,15 +88,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           [
             ripgrep
           ]
-          # bun runs sysctl to detect if dunning on rosetta2
-          ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
+          # bun runs sysctl to detect if running on rosetta2
+          ++ lib.optional stdenv.hostPlatform.isDarwin sysctl
         )
       }
 
     runHook postInstall
   '';
 
-  postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
+  postInstall = lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
     # trick yargs into also generating zsh completions
     installShellCompletion --cmd opencode \
       --bash <($out/bin/opencode completion) \
@@ -80,7 +108,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
   doInstallCheck = true;
-  versionCheckKeepEnvironment = [ "HOME" "OPENCODE_DISABLE_MODELS_FETCH" ];
+  versionCheckKeepEnvironment = [
+    "HOME"
+    "OPENCODE_DISABLE_MODELS_FETCH"
+  ];
   versionCheckProgramArg = "--version";
 
   passthru = {
@@ -92,6 +123,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     homepage = "https://opencode.ai/";
     license = lib.licenses.mit;
     mainProgram = "opencode";
-    inherit (node_modules.meta) platforms;
+    platforms = [
+      "aarch64-linux"
+      "x86_64-linux"
+      "aarch64-darwin"
+      "x86_64-darwin"
+    ];
   };
 })

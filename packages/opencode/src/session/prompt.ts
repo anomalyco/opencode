@@ -23,7 +23,7 @@ import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
-import { MCP } from "../mcp"
+
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
@@ -815,99 +815,7 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
-      const execute = item.execute
-      if (!execute) continue
-
-      const transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
-      item.inputSchema = jsonSchema(transformed)
-      // Wrap execute to add plugin hooks and format output
-      item.execute = async (args, opts) => {
-        const ctx = context(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
-
-        await ctx.ask({
-          permission: key,
-          metadata: {},
-          patterns: ["*"],
-          always: ["*"],
-        })
-
-        const result = await execute(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            args,
-          },
-          result,
-        )
-
-        const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
-
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-            })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
-              attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
-                type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
-              })
-            }
-          }
-        }
-
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
-
-        return {
-          title: "",
-          metadata,
-          output: truncated.content,
-          attachments,
-          content: result.content, // directly return content to preserve ordering when outputting to model
-        }
-      }
-      tools[key] = item
-    }
+    // MCP tools removed - infinite retention build
 
     return tools
   }
@@ -971,78 +879,7 @@ export namespace SessionPrompt {
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
-          // before checking the protocol we check if this is an mcp resource because it needs special handling
-          if (part.source?.type === "resource") {
-            const { clientName, uri } = part.source
-            log.info("mcp resource", { clientName, uri, mime: part.mime })
-
-            const pieces: MessageV2.Part[] = [
-              {
-                id: Identifier.ascending("part"),
-                messageID: info.id,
-                sessionID: input.sessionID,
-                type: "text",
-                synthetic: true,
-                text: `Reading MCP resource: ${part.filename} (${uri})`,
-              },
-            ]
-
-            try {
-              const resourceContent = await MCP.readResource(clientName, uri)
-              if (!resourceContent) {
-                throw new Error(`Resource not found: ${clientName}/${uri}`)
-              }
-
-              // Handle different content types
-              const contents = Array.isArray(resourceContent.contents)
-                ? resourceContent.contents
-                : [resourceContent.contents]
-
-              for (const content of contents) {
-                if ("text" in content && content.text) {
-                  pieces.push({
-                    id: Identifier.ascending("part"),
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: content.text as string,
-                  })
-                } else if ("blob" in content && content.blob) {
-                  // Handle binary content if needed
-                  const mimeType = "mimeType" in content ? content.mimeType : part.mime
-                  pieces.push({
-                    id: Identifier.ascending("part"),
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `[Binary content: ${mimeType}]`,
-                  })
-                }
-              }
-
-              pieces.push({
-                ...part,
-                id: part.id ?? Identifier.ascending("part"),
-                messageID: info.id,
-                sessionID: input.sessionID,
-              })
-            } catch (error: unknown) {
-              log.error("failed to read MCP resource", { error, clientName, uri })
-              const message = error instanceof Error ? error.message : String(error)
-              pieces.push({
-                id: Identifier.ascending("part"),
-                messageID: info.id,
-                sessionID: input.sessionID,
-                type: "text",
-                synthetic: true,
-                text: `Failed to read MCP resource ${part.filename}: ${message}`,
-              })
-            }
-
-            return pieces
-          }
+          // MCP resource handling removed - infinite retention build
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
