@@ -39,15 +39,15 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-## 內建
+## 内建
 
 以下是 opencode 中可用的所有内置工具。
 
 ---
 
-### 巴什
+### bash
 
-在专案环境中执行shell命令。
+在项目环境中执行shell命令。
 
 ```json title="opencode.json" {4}
 {
@@ -62,9 +62,9 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 ---
 
-### 編輯
+### edit
 
-使用精確的字符串替換修改現有文件。
+使用精确的字符串替换修改现有文件。
 
 ```json title="opencode.json" {4}
 {
@@ -79,9 +79,9 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 ---
 
-### 寫
+### write
 
-建立新文件或覆盖現有文件。
+建立新文件或覆盖现有文件。
 
 ```json title="opencode.json" {4}
 {
@@ -100,9 +100,9 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 ---
 
-### 讀
+### read
 
-從程式碼庫中讀取文件內容。
+从代码库中读取文件内容。
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-该工具讀取文件并返回其內容。它支持讀取大文件的特定行范围。
+该工具读取文件并返回其内容。它支持读取大文件的特定行范围。
 
 ---
 
 ### grep
 
-使用正規表示式搜索文件內容。
+使用正规表示式搜索文件内容。
 
 ```json title="opencode.json" {4}
 {
@@ -130,11 +130,11 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-在您的程式碼庫中快速進行內容搜索。支持完整的正規表示式語法和文件模式过濾。
+在您的程式码库中快速进行内容搜索。支持完整的正规表示式语法和文件模式过滤。
 
 ---
 
-### 全域性
+### glob
 
 通过模式匹配查询文件。
 
@@ -147,13 +147,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-使用 `**/*.js` 或 `src/**/*.ts` 等全域性模式搜索档案。返回按时间排序的匹配档案路径修改。
+使用 `**/*.js` 或 `src/**/*.ts` 等全域性模式搜索文件。返回按时间排序的匹配文件路径修改。
 
 ---
 
-### 列表
+### list
 
-列出給定路徑中的文件和目录。
+列出给定路径中的文件和目录。
 
 ```json title="opencode.json" {4}
 {
@@ -164,7 +164,7 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-该工具列出目录內容。它接受全域性模式來过濾結果。
+该工具列出目录内容。它接受全域性模式来过滤结果。
 
 ---
 
@@ -191,9 +191,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 修補
+### patch
 
-对文件应用補丁。
+对文件应用补丁。
 
 ```json title="opencode.json" {4}
 {
@@ -204,7 +204,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 }
 ```
 
-该工具将補丁文件应用到您的程式碼庫。对于应用來自各種來源的差異和補丁很有帮助。
+该工具将补丁文件应用到您的程式码库。对于应用来自各种来源的差异和补丁很有帮助。
 
 :::note
 `patch`工具由`edit`许可权控制，该许可权主题所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
@@ -212,7 +212,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 技能
+### skill
 
 加载[skill](/docs/skills)（`SKILL.md` 档案）并在对话中返回其内容。
 
@@ -227,9 +227,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 待辦寫入
+### todowrite
 
-在編碼会话期間管理待辦事項列表。
+在编码会话期间管理待办事项列表。
 
 ```json title="opencode.json" {4}
 {
@@ -248,9 +248,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 託多雷德
+### todoread
 
-閱讀現有的待辦事項列表。
+阅读现有的待办事项列表。
 
 ```json title="opencode.json" {4}
 {
@@ -269,9 +269,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 網頁抓取
+### webfetch
 
-获取網頁內容。
+获取网页内容。
 
 ```json title="opencode.json" {4}
 {
@@ -286,9 +286,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 網路搜索
+### websearch
 
-在網路上搜索資訊。
+在网络上搜索资料。
 
 :::note
 仅当使用 opencode 提供或 `OPENCODE_ENABLE_EXA` 程序环境变量设置为任何真值（例如 `true` 或 `1`）时，此工具才可用。
@@ -320,9 +320,9 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ---
 
-### 問題
+### question
 
-在执行过程中詢問用户問題。
+在执行过程中询问用户问题。
 
 ```json title="opencode.json" {4}
 {
@@ -336,15 +336,15 @@ OPENCODE_ENABLE_EXA=1 opencode
 该工具允许 LLM 在任务期间询问用户问题。它适用于：
 
 - 收集用户偏好或要求
-- 澄清不明確的指令
-- 就實施选择做出決策
+- 澄清不明确的指令
+- 就实施选择做出决策
 - 提供选择方向
 
-每个問題都包含標題、問題文字和選項列表。用户可以從提供的選項中進行选择或輸入自定義答案。当存在多个問題時，用户可以在提交所有答案之前在这些問題之间导航。
+每个问题都包含标题、问题文字和选项列表。用户可以从提供的选项中进行选择或输入自定义答案。当存在多个问题时，用户可以在提交所有答案之前在这些问题之间导航。
 
 ---
 
-## 定製工具
+## 定制工具
 
 自定义工具可以让您定义LLM可以调用自己的函式。这些是在您的配置文件中定义的并且可以执行任何代码。
 
@@ -360,7 +360,7 @@ MCP（模型上下文协议）服务器允许您集成外部工具和服务。�
 
 ---
 
-## 内部結構
+## 内部结构
 
 Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
 
@@ -368,7 +368,7 @@ Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.c
 
 ### 忽略模式
 
-要包含通常会被忽略的文件，请在专案根目录中建立 `.ignore` 文件。该文件可以明确允许某些路径。
+要包含通常会被忽略的文件，请在项目根目录中建立 `.ignore` 文件。该文件可以明确允许某些路径。
 
 ```text title=".ignore"
 !node_modules/
