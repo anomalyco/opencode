@@ -624,20 +624,24 @@ export const SessionReview = (props: SessionReviewProps) => {
                             <Match when={isImage() && !imageSrc()}>
                               <div data-slot="session-review-image-container">
                                 <span data-slot="session-review-image-placeholder">
-                                  {imageStatus() === "loading" ? "Loading..." : "Image"}
+                                  {imageStatus() === "loading"
+                                    ? i18n.t("ui.sessionReview.image.loading")
+                                    : i18n.t("ui.sessionReview.image.placeholder")}
                                 </span>
                               </div>
                             </Match>
                             <Match when={!isImage() && tooLarge()}>
                               <div data-slot="session-review-large-diff">
-                                <div data-slot="session-review-large-diff-title">Diff too large to render</div>
+                                <div data-slot="session-review-large-diff-title">
+                                  {i18n.t("ui.sessionReview.largeDiff.title")}
+                                </div>
                                 <div data-slot="session-review-large-diff-meta">
                                   Limit: {MAX_DIFF_LINES.toLocaleString()} lines / {formatBytes(MAX_DIFF_BYTES)}.
                                   Current: {formatBytes(Math.max(beforeText().length, afterText().length))}.
                                 </div>
                                 <div data-slot="session-review-large-diff-actions">
                                   <Button size="normal" variant="secondary" onClick={() => setForce(true)}>
-                                    Render anyway
+                                    {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
                                   </Button>
                                 </div>
                               </div>
