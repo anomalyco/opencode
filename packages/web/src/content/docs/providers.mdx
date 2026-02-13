@@ -215,10 +215,34 @@ To use Amazon Bedrock with OpenCode:
    - `region` - AWS region (e.g., `us-east-1`, `eu-west-1`)
    - `profile` - AWS named profile from `~/.aws/credentials`
    - `endpoint` - Custom endpoint URL for VPC endpoints (alias for generic `baseURL` option)
+   - `awsAuthRefresh` - Command to run when AWS credentials expire (e.g., `aws sso login --profile myprofile`)
 
    :::tip
    Configuration file options take precedence over environment variables.
    :::
+
+   #### Advanced: Automatic Credential Refresh
+
+   When AWS SSO tokens expire, OpenCode can automatically run `aws sso login` and retry the request.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "myprofile",
+           "awsAuthRefresh": "aws sso login --profile myprofile"
+         }
+       }
+     }
+   }
+   ```
+
+   This works with browser-based SSO flows - the command output is shown so you can complete authentication.
+
+   The refresh command must start with `aws` or be an absolute path. Includes timeout (2 min) and cooldown (1 min) to prevent issues.
 
    ***
 

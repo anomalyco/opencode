@@ -291,6 +291,9 @@ export namespace Provider {
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
         return { autoload: false }
 
+      // Get awsAuthRefresh command from config
+      const awsAuthRefresh = providerConfig?.options?.awsAuthRefresh as string | undefined
+
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
       }
@@ -298,10 +301,15 @@ export namespace Provider {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
+        const { wrapCredentialProviderWithRefresh } = await import("./aws-refresh")
+
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
-        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
+        const baseProvider = fromNodeProviderChain(credentialProviderOptions)
+
+        // Wrap credential provider with auto-refresh if configured
+        providerOptions.credentialProvider = wrapCredentialProviderWithRefresh(baseProvider, awsAuthRefresh)
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)

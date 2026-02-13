@@ -445,3 +445,38 @@ describe("Bedrock cross-region prefix detection", () => {
     expect(hasPrefix).toBe(false)
   })
 })
+
+test("Bedrock: awsAuthRefresh configuration is accepted in config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+                profile: "myprofile",
+                awsAuthRefresh: "aws sso login --profile myprofile",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "myprofile")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
+      // The provider should load successfully with awsAuthRefresh configured
+      // (the actual refresh functionality is tested when credentials expire)
+    },
+  })
+})

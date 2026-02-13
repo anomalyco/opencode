@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-sso-profile",
+        "awsAuthRefresh": "aws sso login --profile my-sso-profile"
+      }
+    }
+  },
+  "model": "amazon-bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
+}
