@@ -38,6 +38,7 @@ Usage notes:
     - If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m "message" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead.
     - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+  - IMPORTANT: On Windows, the bash tool uses Git Bash. Always use /dev/null for output redirection (e.g., `command 2>/dev/null`), NOT the Windows `nul` device. Using `> nul` or `2>nul` will create a literal file named "nul" instead of discarding output.
   - AVOID using `cd <directory> && <command>`. Use the `workdir` parameter to change directories instead.
     <good-example>
     Use workdir="/foo/bar" with command: pytest tests

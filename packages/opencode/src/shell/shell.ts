@@ -64,4 +64,29 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  const UNIX_SHELLS = new Set(["bash", "sh", "zsh", "fish", "nu"])
+
+  export function isUnixLike(shell: string): boolean {
+    const base = path.basename(shell).toLowerCase().replace(/\.exe$/, "")
+    return UNIX_SHELLS.has(base)
+  }
+
+  /**
+   * On Windows, when using Git Bash the AI model may generate Windows-style
+   * `> nul` / `2>nul` redirections.  Git Bash interprets these literally and
+   * creates a file called "nul" instead of discarding output.
+   *
+   * This helper rewrites null-device redirections so they match the shell
+   * that will actually execute the command.
+   */
+  export function sanitizeNullRedirect(command: string, shell: string): string {
+    if (process.platform !== "win32") return command
+    if (isUnixLike(shell)) {
+      // Git Bash / Unix shell: replace Windows NUL with /dev/null
+      return command.replace(/(\d?>)\s*(?:nul|NUL)\b/g, "$1/dev/null")
+    }
+    // cmd.exe / PowerShell: replace /dev/null with NUL
+    return command.replace(/(\d?>)\s*\/dev\/null\b/g, "$1NUL")
+  }
 }
