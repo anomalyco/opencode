@@ -308,6 +308,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
       }
 
+      // Skip x-initiator override when using @ai-sdk/github-copilot - it has its own
+      // fetch wrapper that sets x-initiator based on message content, and overriding
+      // it here causes "invalid initiator" validation errors from Copilot API
+      if (incoming.model.api.npm === "@ai-sdk/github-copilot") return
+
       const session = await sdk.session
         .get({
           path: {
