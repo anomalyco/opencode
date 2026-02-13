@@ -45,6 +45,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
   divider?: boolean
   add?: ListAddProps
+  groupHeader?: (group: { category: string; items: T[] }) => JSX.Element
 }
 
 export interface ListRef {
@@ -206,7 +207,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     )
   }
 
-  function GroupHeader(groupProps: { category: string }): JSX.Element {
+  function GroupHeader(groupProps: { group: { category: string; items: T[] } }): JSX.Element {
     const [stuck, setStuck] = createSignal(false)
     const [header, setHeader] = createSignal<HTMLDivElement | undefined>(undefined)
 
@@ -228,7 +229,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     return (
       <div data-slot="list-header" data-stuck={stuck()} ref={setHeader}>
-        {groupProps.category}
+        {props.groupHeader?.(groupProps.group) ?? groupProps.group.category}
       </div>
     )
   }
@@ -323,7 +324,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               return (
                 <div data-slot="list-group">
                   <Show when={group.category}>
-                    <GroupHeader category={group.category} />
+                    <GroupHeader group={group} />
                   </Show>
                   <div data-slot="list-items">
                     <For each={group.items}>
