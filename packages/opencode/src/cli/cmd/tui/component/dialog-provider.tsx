@@ -125,37 +125,63 @@ function SwitchAccountDialog(props: SwitchAccountDialogProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
-  const { theme } = useTheme()
+  const toast = useToast()
+  const [accounts, setAccounts] = createSignal<
+    Array<{
+      id: string
+      type: string
+      disabled: boolean
+    }>
+  >([])
+  const [activeAccount, setActiveAccount] = createSignal<string | undefined>(undefined)
 
-  const accounts = createMemo(() => {
-    const provider = sync.data.provider.find((p) => p.id === props.providerID)
-    if (!provider) return []
-    return Object.entries(provider.models).map(([modelId, model]) => ({
-      id: modelId,
-      name: model.name ?? modelId,
-    }))
-  })
+  onMount(() => {
+    sdk.client.auth
+      .list()
+      .then((result) => {
+        const provider = result.data?.[props.providerID]
+        if (!provider) {
+          setAccounts([])
+          setActiveAccount(undefined)
+          return
+        }
 
-  const activeAccount = createMemo(() => {
-    const current = sync.data.config.model
-    if (current && current.providerID === props.providerID) {
-      return current.id
-    }
-    return sync.data.provider_default[props.providerID]
+        setActiveAccount(provider.activeAccount)
+        setAccounts(
+          Object.entries(provider.accounts ?? {}).map(([id, info]) => ({
+            id,
+            type: info.type,
+            disabled: (info as { disabled?: boolean }).disabled === true,
+          })),
+        )
+      })
+      .catch(toast.error)
   })
 
   return (
     <DialogSelect
       title={`Switch ${props.providerName} account`}
       options={accounts().map((account) => ({
-        title: account.name,
+        title: account.id,
         value: account.id,
-        description: account.id === activeAccount() ? "Active" : undefined,
+        description: account.id === activeAccount() ? "Active" : account.type,
+        footer: account.disabled ? "Disabled" : undefined,
+        disabled: account.disabled,
       }))}
-      onSelect={async (option) => {
-        await sdk.client.instance.dispose()
-        await sync.bootstrap()
-        dialog.clear()
+      current={activeAccount()}
+      onSelect={(option) => {
+        sdk.client.auth
+          .use(
+            {
+              providerID: props.providerID,
+              account: option.value,
+            },
+            { throwOnError: true },
+          )
+          .then(() => sdk.client.instance.dispose())
+          .then(() => sync.bootstrap())
+          .then(() => dialog.clear())
+          .catch(toast.error)
       }}
     />
   )
