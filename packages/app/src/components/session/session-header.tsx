@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -24,6 +24,164 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { showToast } from "@opencode-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
+
+const OPEN_APPS = [
+  "vscode",
+  "cursor",
+  "zed",
+  "textmate",
+  "antigravity",
+  "finder",
+  "terminal",
+  "iterm2",
+  "ghostty",
+  "xcode",
+  "android-studio",
+  "powershell",
+  "sublime-text",
+] as const
+
+type OpenApp = (typeof OPEN_APPS)[number]
+type OS = "macos" | "windows" | "linux" | "unknown"
+
+const MAC_APPS = [
+  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
+  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
+  { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
+  { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+  { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
+  { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
+  { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
+  { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
+  { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
+  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+] as const
+
+const WINDOWS_APPS = [
+  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
+  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+] as const
+
+const LINUX_APPS = [
+  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+] as const
+
+type OpenOption = (typeof MAC_APPS)[number] | (typeof WINDOWS_APPS)[number] | (typeof LINUX_APPS)[number]
+type OpenIcon = OpenApp | "file-explorer"
+const OPEN_ICON_BASE = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
+
+const openIconSize = (id: OpenIcon) => (OPEN_ICON_BASE.has(id) ? "size-4" : "size-[19px]")
+
+const detectOS = (platform: ReturnType<typeof usePlatform>): OS => {
+  if (platform.platform === "desktop" && platform.os) return platform.os
+  if (typeof navigator !== "object") return "unknown"
+  const value = navigator.platform || navigator.userAgent
+  if (/Mac/i.test(value)) return "macos"
+  if (/Win/i.test(value)) return "windows"
+  if (/Linux/i.test(value)) return "linux"
+  return "unknown"
+}
+
+const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown) => {
+  showToast({
+    variant: "error",
+    title: language.t("common.requestFailed"),
+    description: err instanceof Error ? err.message : String(err),
+  })
+}
+
+function useSessionShare(args: {
+  globalSDK: ReturnType<typeof useGlobalSDK>
+  currentSession: () =>
+    | {
+        id: string
+        share?: {
+          url?: string
+        }
+      }
+    | undefined
+  projectDirectory: () => string
+  platform: ReturnType<typeof usePlatform>
+}) {
+  const [state, setState] = createStore({
+    share: false,
+    unshare: false,
+    copied: false,
+    timer: undefined as number | undefined,
+  })
+  const shareUrl = createMemo(() => args.currentSession()?.share?.url)
+
+  createEffect(() => {
+    const url = shareUrl()
+    if (url) return
+    if (state.timer) window.clearTimeout(state.timer)
+    setState({ copied: false, timer: undefined })
+  })
+
+  onCleanup(() => {
+    if (state.timer) window.clearTimeout(state.timer)
+  })
+
+  const shareSession = () => {
+    const session = args.currentSession()
+    if (!session || state.share) return
+    setState("share", true)
+    args.globalSDK.client.session
+      .share({ sessionID: session.id, directory: args.projectDirectory() })
+      .catch((error) => {
+        console.error("Failed to share session", error)
+      })
+      .finally(() => {
+        setState("share", false)
+      })
+  }
+
+  const unshareSession = () => {
+    const session = args.currentSession()
+    if (!session || state.unshare) return
+    setState("unshare", true)
+    args.globalSDK.client.session
+      .unshare({ sessionID: session.id, directory: args.projectDirectory() })
+      .catch((error) => {
+        console.error("Failed to unshare session", error)
+      })
+      .finally(() => {
+        setState("unshare", false)
+      })
+  }
+
+  const copyLink = (onError: (error: unknown) => void) => {
+    const url = shareUrl()
+    if (!url) return
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        if (state.timer) window.clearTimeout(state.timer)
+        setState("copied", true)
+        const timer = window.setTimeout(() => {
+          setState("copied", false)
+          setState("timer", undefined)
+        }, 3000)
+        setState("timer", timer)
+      })
+      .catch(onError)
+  }
+
+  const viewShare = () => {
+    const url = shareUrl()
+    if (!url) return
+    args.platform.openLink(url)
+  }
+
+  return { state, shareUrl, shareSession, unshareSession, copyLink, viewShare }
+}
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -53,62 +211,7 @@ export function SessionHeader() {
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
-
-  const OPEN_APPS = [
-    "vscode",
-    "cursor",
-    "zed",
-    "textmate",
-    "antigravity",
-    "finder",
-    "terminal",
-    "iterm2",
-    "ghostty",
-    "xcode",
-    "android-studio",
-    "powershell",
-    "sublime-text",
-  ] as const
-  type OpenApp = (typeof OPEN_APPS)[number]
-
-  const MAC_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-    { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-    { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-    { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-    { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-    { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-    { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-    { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const WINDOWS_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-    { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const LINUX_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const os = createMemo<"macos" | "windows" | "linux" | "unknown">(() => {
-    if (platform.platform === "desktop" && platform.os) return platform.os
-    if (typeof navigator !== "object") return "unknown"
-    const value = navigator.platform || navigator.userAgent
-    if (/Mac/i.test(value)) return "macos"
-    if (/Win/i.test(value)) return "windows"
-    if (/Linux/i.test(value)) return "linux"
-    return "unknown"
-  })
+  const os = createMemo(() => detectOS(platform))
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
 
@@ -154,10 +257,6 @@ export function SessionHeader() {
     ] as const
   })
 
-  type OpenIcon = OpenApp | "file-explorer"
-  const base = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
-  const size = (id: OpenIcon) => (base.has(id) ? "size-4" : "size-[19px]")
-
   const checksReady = createMemo(() => {
     if (platform.platform !== "desktop") return true
     if (!platform.checkAppExists) return true
@@ -186,13 +285,7 @@ export function SessionHeader() {
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
-    Promise.resolve(platform.openPath?.(directory, openWith)).catch((err: unknown) => {
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : String(err),
-      })
-    })
+    Promise.resolve(platform.openPath?.(directory, openWith)).catch((err: unknown) => showRequestError(language, err))
   }
 
   const copyPath = () => {
@@ -208,93 +301,24 @@ export function SessionHeader() {
           description: directory,
         })
       })
-      .catch((err: unknown) => {
-        showToast({
-          variant: "error",
-          title: language.t("common.requestFailed"),
-          description: err instanceof Error ? err.message : String(err),
-        })
-      })
+      .catch((err: unknown) => showRequestError(language, err))
   }
 
-  const [state, setState] = createStore({
-    share: false,
-    unshare: false,
-    copied: false,
-    timer: undefined as number | undefined,
-  })
-  const shareUrl = createMemo(() => currentSession()?.share?.url)
-
-  createEffect(() => {
-    const url = shareUrl()
-    if (url) return
-    if (state.timer) window.clearTimeout(state.timer)
-    setState({ copied: false, timer: undefined })
+  const share = useSessionShare({
+    globalSDK,
+    currentSession,
+    projectDirectory,
+    platform,
   })
 
-  onCleanup(() => {
-    if (state.timer) window.clearTimeout(state.timer)
-  })
-
-  function shareSession() {
-    const session = currentSession()
-    if (!session || state.share) return
-    setState("share", true)
-    globalSDK.client.session
-      .share({ sessionID: session.id, directory: projectDirectory() })
-      .catch((error) => {
-        console.error("Failed to share session", error)
-      })
-      .finally(() => {
-        setState("share", false)
-      })
-  }
-
-  function unshareSession() {
-    const session = currentSession()
-    if (!session || state.unshare) return
-    setState("unshare", true)
-    globalSDK.client.session
-      .unshare({ sessionID: session.id, directory: projectDirectory() })
-      .catch((error) => {
-        console.error("Failed to unshare session", error)
-      })
-      .finally(() => {
-        setState("unshare", false)
-      })
-  }
-
-  function copyLink() {
-    const url = shareUrl()
-    if (!url) return
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        if (state.timer) window.clearTimeout(state.timer)
-        setState("copied", true)
-        const timer = window.setTimeout(() => {
-          setState("copied", false)
-          setState("timer", undefined)
-        }, 3000)
-        setState("timer", timer)
-      })
-      .catch((error) => {
-        console.error("Failed to copy share link", error)
-      })
-  }
-
-  function viewShare() {
-    const url = shareUrl()
-    if (!url) return
-    platform.openLink(url)
-  }
-
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
+  const leftMount = createMemo(
+    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
+  )
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={leftMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <button
@@ -382,23 +406,25 @@ export function SessionHeader() {
                                     setPrefs("app", value as OpenApp)
                                   }}
                                 >
-                                  {options().map((o) => (
-                                    <DropdownMenu.RadioItem
-                                      value={o.id}
-                                      onSelect={() => {
-                                        setMenu("open", false)
-                                        openDir(o.id)
-                                      }}
-                                    >
-                                      <div class="flex size-5 shrink-0 items-center justify-center">
-                                        <AppIcon id={o.icon} class={size(o.icon)} />
-                                      </div>
-                                      <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                      <DropdownMenu.ItemIndicator>
-                                        <Icon name="check-small" size="small" class="text-icon-weak" />
-                                      </DropdownMenu.ItemIndicator>
-                                    </DropdownMenu.RadioItem>
-                                  ))}
+                                  <For each={options()}>
+                                    {(o) => (
+                                      <DropdownMenu.RadioItem
+                                        value={o.id}
+                                        onSelect={() => {
+                                          setMenu("open", false)
+                                          openDir(o.id)
+                                        }}
+                                      >
+                                        <div class="flex size-5 shrink-0 items-center justify-center">
+                                          <AppIcon id={o.icon} class={openIconSize(o.icon)} />
+                                        </div>
+                                        <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
+                                        <DropdownMenu.ItemIndicator>
+                                          <Icon name="check-small" size="small" class="text-icon-weak" />
+                                        </DropdownMenu.ItemIndicator>
+                                      </DropdownMenu.RadioItem>
+                                    )}
+                                  </For>
                                 </DropdownMenu.RadioGroup>
                               </DropdownMenu.Group>
                               <DropdownMenu.Separator />
@@ -428,7 +454,7 @@ export function SessionHeader() {
                   <Popover
                     title={language.t("session.share.popover.title")}
                     description={
-                      shareUrl()
+                      share.shareUrl()
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
@@ -441,24 +467,24 @@ export function SessionHeader() {
                       variant: "ghost",
                       class:
                         "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
-                      classList: { "rounded-r-none": shareUrl() !== undefined },
+                      classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
                     trigger={language.t("session.share.action.share")}
                   >
                     <div class="flex flex-col gap-2">
                       <Show
-                        when={shareUrl()}
+                        when={share.shareUrl()}
                         fallback={
                           <div class="flex">
                             <Button
                               size="large"
                               variant="primary"
                               class="w-1/2"
-                              onClick={shareSession}
-                              disabled={state.share}
+                              onClick={share.shareSession}
+                              disabled={share.state.share}
                             >
-                              {state.share
+                              {share.state.share
                                 ? language.t("session.share.action.publishing")
                                 : language.t("session.share.action.publish")}
                             </Button>
@@ -467,7 +493,7 @@ export function SessionHeader() {
                       >
                         <div class="flex flex-col gap-2">
                           <TextField
-                            value={shareUrl() ?? ""}
+                            value={share.shareUrl() ?? ""}
                             readOnly
                             copyable
                             copyKind="link"
@@ -479,10 +505,10 @@ export function SessionHeader() {
                               size="large"
                               variant="secondary"
                               class="w-full shadow-none border border-border-weak-base"
-                              onClick={unshareSession}
-                              disabled={state.unshare}
+                              onClick={share.unshareSession}
+                              disabled={share.state.unshare}
                             >
-                              {state.unshare
+                              {share.state.unshare
                                 ? language.t("session.share.action.unpublishing")
                                 : language.t("session.share.action.unpublish")}
                             </Button>
@@ -490,8 +516,8 @@ export function SessionHeader() {
                               size="large"
                               variant="primary"
                               class="w-full"
-                              onClick={viewShare}
-                              disabled={state.unshare}
+                              onClick={share.viewShare}
+                              disabled={share.state.unshare}
                             >
                               {language.t("session.share.action.view")}
                             </Button>
@@ -500,10 +526,10 @@ export function SessionHeader() {
                       </Show>
                     </div>
                   </Popover>
-                  <Show when={shareUrl()} fallback={<div aria-hidden="true" />}>
+                  <Show when={share.shareUrl()} fallback={<div aria-hidden="true" />}>
                     <Tooltip
                       value={
-                        state.copied
+                        share.state.copied
                           ? language.t("session.share.copy.copied")
                           : language.t("session.share.copy.copyLink")
                       }
@@ -511,13 +537,13 @@ export function SessionHeader() {
                       gutter={8}
                     >
                       <IconButton
-                        icon={state.copied ? "check" : "link"}
+                        icon={share.state.copied ? "check" : "link"}
                         variant="ghost"
                         class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
-                        onClick={copyLink}
-                        disabled={state.unshare}
+                        onClick={() => share.copyLink((error) => showRequestError(language, error))}
+                        disabled={share.state.unshare}
                         aria-label={
-                          state.copied
+                          share.state.copied
                             ? language.t("session.share.copy.copied")
                             : language.t("session.share.copy.copyLink")
                         }
@@ -526,7 +552,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
+              <div class="hidden lg:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
@@ -559,7 +585,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -589,7 +615,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind
                   title={language.t("command.fileTree.toggle")}
                   keybind={command.keybind("fileTree.toggle")}

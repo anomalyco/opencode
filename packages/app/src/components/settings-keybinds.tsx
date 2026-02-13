@@ -21,6 +21,9 @@ type KeybindMeta = {
   group: KeybindGroup
 }
 
+type KeybindMap = Record<string, string | undefined>
+type CommandContext = ReturnType<typeof useCommand>
+
 const GROUPS: KeybindGroup[] = ["General", "Session", "Navigation", "Model and agent", "Terminal", "Prompt"]
 
 type GroupKey =
@@ -107,6 +110,150 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
+function keybinds(value: unknown): KeybindMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return value as KeybindMap
+}
+
+function listFor(command: CommandContext, map: KeybindMap, palette: string) {
+  const out = new Map<string, KeybindMeta>()
+  out.set(PALETTE_ID, { title: palette, group: "General" })
+
+  for (const opt of command.catalog) {
+    if (opt.id.startsWith("suggested.")) continue
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+  }
+
+  for (const opt of command.options) {
+    if (opt.id.startsWith("suggested.")) continue
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+  }
+
+  for (const [id, value] of Object.entries(map)) {
+    if (typeof value !== "string") continue
+    if (out.has(id)) continue
+    out.set(id, { title: id, group: groupFor(id) })
+  }
+
+  return out
+}
+
+function groupedFor(list: Map<string, KeybindMeta>) {
+  const out = new Map<KeybindGroup, string[]>()
+  for (const group of GROUPS) out.set(group, [])
+
+  for (const [id, item] of list) {
+    const ids = out.get(item.group)
+    if (!ids) continue
+    ids.push(id)
+  }
+
+  for (const group of GROUPS) {
+    const ids = out.get(group)
+    if (!ids) continue
+    ids.sort((a, b) => (list.get(a)?.title ?? "").localeCompare(list.get(b)?.title ?? ""))
+  }
+
+  return out
+}
+
+function filteredFor(
+  query: string,
+  list: Map<string, KeybindMeta>,
+  grouped: Map<KeybindGroup, string[]>,
+  keybind: (id: string) => string,
+) {
+  const value = query.toLowerCase().trim()
+  if (!value) return grouped
+
+  const out = new Map<KeybindGroup, string[]>()
+  for (const group of GROUPS) out.set(group, [])
+
+  const items = Array.from(list.entries()).map(([id, meta]) => ({
+    id,
+    title: meta.title,
+    group: meta.group,
+    keybind: keybind(id),
+  }))
+
+  const results = fuzzysort.go(value, items, {
+    keys: ["title", "keybind"],
+    threshold: -10000,
+  })
+
+  for (const result of results) {
+    const ids = out.get(result.obj.group)
+    if (!ids) continue
+    ids.push(result.obj.id)
+  }
+
+  return out
+}
+
+function useKeyCapture(input: {
+  active: () => string | null
+  stop: () => void
+  set: (id: string, keybind: string) => void
+  used: () => Map<string, { id: string; title: string }[]>
+  language: ReturnType<typeof useLanguage>
+}) {
+  onMount(() => {
+    const handle = (event: KeyboardEvent) => {
+      const id = input.active()
+      if (!id) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+
+      if (event.key === "Escape") {
+        input.stop()
+        return
+      }
+
+      const clear =
+        (event.key === "Backspace" || event.key === "Delete") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey
+      if (clear) {
+        input.set(id, "none")
+        input.stop()
+        return
+      }
+
+      const next = recordKeybind(event)
+      if (!next) return
+
+      const conflicts = new Map<string, string>()
+      for (const sig of signatures(next)) {
+        for (const item of input.used().get(sig) ?? []) {
+          if (item.id === id) continue
+          conflicts.set(item.id, item.title)
+        }
+      }
+
+      if (conflicts.size > 0) {
+        showToast({
+          title: input.language.t("settings.shortcuts.conflict.title"),
+          description: input.language.t("settings.shortcuts.conflict.description", {
+            keybind: formatKeybind(next),
+            titles: [...conflicts.values()].join(", "),
+          }),
+        })
+        return
+      }
+
+      input.set(id, next)
+      input.stop()
+    }
+
+    document.addEventListener("keydown", handle, true)
+    onCleanup(() => document.removeEventListener("keydown", handle, true))
+  })
+}
+
 export const SettingsKeybinds: Component = () => {
   const command = useCommand()
   const language = useLanguage()
@@ -135,11 +282,9 @@ export const SettingsKeybinds: Component = () => {
     command.keybinds(false)
   }
 
-  const hasOverrides = createMemo(() => {
-    const keybinds = settings.current.keybinds as Record<string, string | undefined> | undefined
-    if (!keybinds) return false
-    return Object.values(keybinds).some((x) => typeof x === "string")
-  })
+  const map = createMemo(() => keybinds(settings.current.keybinds))
+
+  const hasOverrides = createMemo(() => Object.values(map()).some((x) => typeof x === "string"))
 
   const resetAll = () => {
     stop()
@@ -152,88 +297,15 @@ export const SettingsKeybinds: Component = () => {
 
   const list = createMemo(() => {
     language.locale()
-    const out = new Map<string, KeybindMeta>()
-    out.set(PALETTE_ID, { title: language.t("command.palette"), group: "General" })
-
-    for (const opt of command.catalog) {
-      if (opt.id.startsWith("suggested.")) continue
-      out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
-    }
-
-    for (const opt of command.options) {
-      if (opt.id.startsWith("suggested.")) continue
-      out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
-    }
-
-    const keybinds = settings.current.keybinds as Record<string, string | undefined> | undefined
-    if (keybinds) {
-      for (const [id, value] of Object.entries(keybinds)) {
-        if (typeof value !== "string") continue
-        if (out.has(id)) continue
-        out.set(id, { title: id, group: groupFor(id) })
-      }
-    }
-
-    return out
+    return listFor(command, map(), language.t("command.palette"))
   })
 
   const title = (id: string) => list().get(id)?.title ?? ""
 
-  const grouped = createMemo(() => {
-    const map = list()
-    const out = new Map<KeybindGroup, string[]>()
-
-    for (const group of GROUPS) out.set(group, [])
-
-    for (const [id, item] of map) {
-      const ids = out.get(item.group)
-      if (!ids) continue
-      ids.push(id)
-    }
-
-    for (const group of GROUPS) {
-      const ids = out.get(group)
-      if (!ids) continue
-
-      ids.sort((a, b) => {
-        const at = map.get(a)?.title ?? ""
-        const bt = map.get(b)?.title ?? ""
-        return at.localeCompare(bt)
-      })
-    }
-
-    return out
-  })
+  const grouped = createMemo(() => groupedFor(list()))
 
   const filtered = createMemo(() => {
-    const query = store.filter.toLowerCase().trim()
-    if (!query) return grouped()
-
-    const map = list()
-    const out = new Map<KeybindGroup, string[]>()
-
-    for (const group of GROUPS) out.set(group, [])
-
-    const items = Array.from(map.entries()).map(([id, meta]) => ({
-      id,
-      title: meta.title,
-      group: meta.group,
-      keybind: command.keybind(id) || "",
-    }))
-
-    const results = fuzzysort.go(query, items, {
-      keys: ["title", "keybind"],
-      threshold: -10000,
-    })
-
-    for (const result of results) {
-      const item = result.obj
-      const ids = out.get(item.group)
-      if (!ids) continue
-      ids.push(item.id)
-    }
-
-    return out
+    return filteredFor(store.filter, list(), grouped(), (id) => command.keybind(id) || "")
   })
 
   const hasResults = createMemo(() => {
@@ -282,69 +354,14 @@ export const SettingsKeybinds: Component = () => {
     return map
   })
 
-  const setKeybind = (id: string, keybind: string) => {
-    settings.keybinds.set(id, keybind)
-  }
+  const setKeybind = (id: string, keybind: string) => settings.keybinds.set(id, keybind)
 
-  onMount(() => {
-    const handle = (event: KeyboardEvent) => {
-      const id = store.active
-      if (!id) return
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-
-      if (event.key === "Escape") {
-        stop()
-        return
-      }
-
-      const clear =
-        (event.key === "Backspace" || event.key === "Delete") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey
-      if (clear) {
-        setKeybind(id, "none")
-        stop()
-        return
-      }
-
-      const next = recordKeybind(event)
-      if (!next) return
-
-      const map = used()
-      const conflicts = new Map<string, string>()
-
-      for (const sig of signatures(next)) {
-        const list = map.get(sig) ?? []
-        for (const item of list) {
-          if (item.id === id) continue
-          conflicts.set(item.id, item.title)
-        }
-      }
-
-      if (conflicts.size > 0) {
-        showToast({
-          title: language.t("settings.shortcuts.conflict.title"),
-          description: language.t("settings.shortcuts.conflict.description", {
-            keybind: formatKeybind(next),
-            titles: [...conflicts.values()].join(", "),
-          }),
-        })
-        return
-      }
-
-      setKeybind(id, next)
-      stop()
-    }
-
-    document.addEventListener("keydown", handle, true)
-    onCleanup(() => {
-      document.removeEventListener("keydown", handle, true)
-    })
+  useKeyCapture({
+    active: () => store.active,
+    stop,
+    set: setKeybind,
+    used,
+    language,
   })
 
   onCleanup(() => {

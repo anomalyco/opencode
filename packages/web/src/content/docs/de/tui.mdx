@@ -44,7 +44,7 @@ Der Dateiinhalt wird automatisch zur Unterhaltung hinzugefuegt.
 
 ---
 
-## Bash commands
+## Bash-Befehle
 
 Beginne eine Nachricht mit `!`, um einen Shell-Befehl auszufuehren.
 
@@ -56,7 +56,7 @@ Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
 
 ---
 
-## Commands
+## Befehle
 
 In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
 Zum Beispiel:
@@ -288,7 +288,7 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ---
 
-## Editor setup
+## Editor-Einrichtung
 
 Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
 
@@ -356,7 +356,7 @@ Some editors need command-line arguments to run in blocking mode. The `--wait` f
 
 ---
 
-## Configure
+## Konfiguration
 
 You can customize TUI behavior through your OpenCode config file.
 
@@ -372,20 +372,20 @@ You can customize TUI behavior through your OpenCode config file.
 }
 ```
 
-### Options
+### Optionen
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 
 ---
 
-## Customization
+## Anpassung
 
 You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
 
 ---
 
-#### Username display
+#### Benutzername-Anzeige
 
 Toggle whether your username appears in chat messages. Access this through:
 
