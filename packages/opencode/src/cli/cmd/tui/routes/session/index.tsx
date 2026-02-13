@@ -175,9 +175,9 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
-  const noTerminalPaddingX = createMemo(() => {
+  const noTerminalPaddingY = createMemo(() => {
     const tui = sync.data.config.tui
-    return tui?.no_terminal_padding_x ?? false
+    return tui?.no_terminal_padding_y ?? false
   })
 
   createEffect(async () => {
@@ -978,10 +978,10 @@ export function Session() {
       <box flexDirection="row">
         <box
           flexGrow={1}
-          paddingBottom={1}
-          paddingTop={1}
-          paddingLeft={noTerminalPaddingX() ? 0 : 2}
-          paddingRight={noTerminalPaddingX() ? 0 : 2}
+          paddingBottom={noTerminalPaddingY() ? 0 : 1}
+          paddingTop={noTerminalPaddingY() ? 0 : 1}
+          paddingLeft={2}
+          paddingRight={2}
           gap={1}
         >
           <Show when={session()}>

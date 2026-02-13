@@ -1693,9 +1693,9 @@ export type Config = {
      */
     diff_style?: "auto" | "stacked"
     /**
-     * Remove horizontal padding in the terminal interface
+     * Remove vertical padding in the terminal interface
      */
-    no_terminal_padding_x?: boolean
+    no_terminal_padding_y?: boolean
   }
   server?: ServerConfig
   /**
