@@ -687,21 +687,24 @@ export function SessionTurn(
                             </Switch>
                             <Switch>
                               <Match when={retry()}>
-                                <span data-slot="session-turn-retry-message">
-                                  {(() => {
-                                    const r = retry()
-                                    if (!r) return ""
-                                    const msg = unwrap(r.message)
-                                    return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
-                                  })()}
-                                </span>
-                                <span data-slot="session-turn-retry-seconds">
-                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
-                                  {store.retrySeconds > 0
-                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                                    : ""}
-                                </span>
-                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                                <div data-slot="session-turn-retry-message-row">
+                                  <span data-slot="session-turn-retry-message">
+                                    {(() => {
+                                      const r = retry()
+                                      if (!r) return ""
+                                      return unwrap(r.message)
+                                    })()}
+                                  </span>
+                                </div>
+                                <div data-slot="session-turn-retry-info-row">
+                                  <span data-slot="session-turn-retry-seconds">
+                                    {i18n.t("ui.sessionTurn.retry.retrying")}
+                                    {store.retrySeconds > 0
+                                      ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                                      : ""}
+                                  </span>
+                                  <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                                </div>
                               </Match>
                               <Match when={working()}>
                                 <span data-slot="session-turn-status-text">

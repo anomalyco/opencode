@@ -523,13 +523,23 @@
     }
   }
 
+  [data-slot="session-turn-retry-message-row"] {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    overflow: hidden;
+  }
+
   [data-slot="session-turn-retry-message"] {
     font-weight: 500;
     color: var(--syntax-critical);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  [data-slot="session-turn-retry-info-row"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   [data-slot="session-turn-retry-seconds"] {
