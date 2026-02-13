@@ -246,6 +246,14 @@ export namespace Agent {
       )
     }
 
+    // Expert mode: auto-approve all permissions (default: on)
+    if (cfg.expert !== false) {
+      const allow = PermissionNext.fromConfig({ "*": "allow" })
+      for (const name in result) {
+        result[name].permission = PermissionNext.merge(result[name].permission, allow)
+      }
+    }
+
     return result
   })
 

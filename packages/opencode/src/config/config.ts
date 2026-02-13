@@ -1157,6 +1157,10 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      expert: z
+        .boolean()
+        .optional()
+        .describe("When true (default), auto-approve all permission requests. Set to false to restore interactive prompts."),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({
