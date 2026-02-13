@@ -1178,8 +1178,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </div>
       </form>
       <Show when={store.mode === "normal"}>
-        <div class="-mt-4 bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
-          <div class="p-2 pt-6 flex items-center gap-1.5 min-w-0">
+        <div class="-mt-3.5 bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
+          <div class="px-2 pt-5.5 pb-2 flex items-center gap-1.5 min-w-0">
             <TooltipKeybind
               placement="top"
               gutter={4}
@@ -1193,6 +1193,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 onSelect={local.agent.set}
                 class="capitalize max-w-[160px]"
                 valueClass="truncate text-13-regular"
+                triggerStyle={{ height: "28px" }}
                 variant="ghost"
               />
             </TooltipKeybind>
@@ -1210,6 +1211,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     size="normal"
                     class="min-w-0 max-w-[320px] text-13-regular"
+                    style={{ height: "28px" }}
                     onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                   >
                     <Show when={local.model.current()?.provider?.id}>
@@ -1231,7 +1233,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               >
                 <ModelSelectorPopover
                   triggerAs={Button}
-                  triggerProps={{ variant: "ghost", size: "normal", class: "min-w-0 max-w-[320px] text-13-regular" }}
+                  triggerProps={{
+                    variant: "ghost",
+                    size: "normal",
+                    style: { height: "28px" },
+                    class: "min-w-0 max-w-[320px] text-13-regular",
+                  }}
                 >
                   <Show when={local.model.current()?.provider?.id}>
                     <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
@@ -1255,6 +1262,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                 class="capitalize max-w-[160px]"
                 valueClass="truncate text-13-regular"
+                triggerStyle={{ height: "28px" }}
                 variant="ghost"
               />
             </TooltipKeybind>
