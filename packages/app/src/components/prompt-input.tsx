@@ -38,7 +38,12 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
-import { navigatePromptHistory, prependHistoryEntry, promptLength } from "./prompt-input/history"
+import {
+  canNavigateHistoryAtCursor,
+  navigatePromptHistory,
+  prependHistoryEntry,
+  promptLength,
+} from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -473,10 +478,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         const prev = node.previousSibling
         const next = node.nextSibling
         const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
-        const nextIsBr = next?.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).tagName === "BR"
-        if (!prevIsBr && !nextIsBr) return false
-        if (nextIsBr && !prevIsBr && prev) return false
-        return true
+        return !!prevIsBr && !next
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return false
       const el = node as HTMLElement
@@ -495,6 +497,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (part.type === "file" || part.type === "agent") {
         editorRef.appendChild(createPill(part))
       }
+    }
+
+    const last = editorRef.lastChild
+    if (last?.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR") {
+      editorRef.appendChild(document.createTextNode("\u200B"))
     }
   }
 
@@ -729,7 +736,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }
         }
         if (last.nodeType !== Node.TEXT_NODE) {
-          range.setStartAfter(last)
+          const isBreak = last.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR"
+          const next = last.nextSibling
+          const emptyText = next?.nodeType === Node.TEXT_NODE && (next.textContent ?? "") === ""
+          if (isBreak && (!next || emptyText)) {
+            const placeholder = next && emptyText ? next : document.createTextNode("\u200B")
+            if (!next) last.parentNode?.insertBefore(placeholder, null)
+            placeholder.textContent = "\u200B"
+            range.setStart(placeholder, 0)
+          } else {
+            range.setStartAfter(last)
+          }
         }
       }
       range.collapse(true)
@@ -899,6 +916,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .current()
         .map((part) => ("content" in part ? part.content : ""))
         .join("")
+      const direction = event.key === "ArrowUp" ? "up" : "down"
+      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition)) return
       const isEmpty = textContent.trim() === "" || textLength <= 1
       const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
@@ -907,7 +926,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
       const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
-      if (event.key === "ArrowUp") {
+      if (direction === "up") {
         if (!allowUp) return
         if (navigateHistory("up")) {
           event.preventDefault()
