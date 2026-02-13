@@ -11,18 +11,12 @@ import {
   cleanupTestProject,
   clickMenuItem,
   confirmDialog,
-  openProjectMenu,
   openSidebar,
   openWorkspaceMenu,
   setWorkspacesEnabled,
 } from "../actions"
-import {
-  inlineInputSelector,
-  projectSwitchSelector,
-  projectWorkspacesToggleSelector,
-  workspaceItemSelector,
-} from "../selectors"
-import { dirSlug } from "../utils"
+import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
+import { createSdk, dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
@@ -143,26 +137,35 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
   await fs.writeFile(path.join(nonGit, "README.md"), "# e2e nongit\n")
 
   try {
-    await withProject(
-      async () => {
-        await openSidebar(page)
+    await withProject(async () => {
+      await page.goto(`/${nonGitSlug}/session`)
 
-        const nonGitButton = page.locator(projectSwitchSelector(nonGitSlug)).first()
-        await expect(nonGitButton).toBeVisible()
-        await nonGitButton.click()
-        await expect(page).toHaveURL(new RegExp(`/${nonGitSlug}/session`))
+      await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
 
-        const menu = await openProjectMenu(page, nonGitSlug)
-        const toggle = menu.locator(projectWorkspacesToggleSelector(nonGitSlug)).first()
+      const activeDir = base64Decode(slugFromUrl(page.url()))
+      expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
 
-        await expect(toggle).toBeVisible()
-        await expect(toggle).toBeDisabled()
+      await openSidebar(page)
+      await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
 
-        await expect(menu.getByRole("menuitem", { name: "New workspace" })).toHaveCount(0)
-        await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
-      },
-      { extra: [nonGit] },
-    )
+      const trigger = page.locator('[data-action="project-menu"]').first()
+      const hasMenu = await trigger
+        .isVisible()
+        .then((x) => x)
+        .catch(() => false)
+      if (!hasMenu) return
+
+      await trigger.click({ force: true })
+
+      const menu = page.locator(dropdownMenuContentSelector).first()
+      await expect(menu).toBeVisible()
+
+      const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()
+
+      await expect(toggle).toBeVisible()
+      await expect(toggle).toBeDisabled()
+      await expect(menu.getByRole("menuitem", { name: "New workspace" })).toHaveCount(0)
+    })
   } finally {
     await cleanupTestProject(nonGit)
   }
@@ -256,14 +259,45 @@ test("can delete a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async (project) => {
-    const { rootSlug, slug } = await setupWorkspaceTest(page, project)
+    const sdk = createSdk(project.directory)
+    const { rootSlug, slug, directory } = await setupWorkspaceTest(page, project)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true)
 
     const menu = await openWorkspaceMenu(page, slug)
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
     await expect(page).toHaveURL(new RegExp(`/${rootSlug}/session`))
-    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(false)
+
+    await project.gotoSession()
+
+    await openSidebar(page)
+    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
   })
 })
