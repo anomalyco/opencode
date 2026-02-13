@@ -293,7 +293,8 @@
 }
 
 [data-slot="collapsible-content"]:has([data-component="edit-content"]),
-[data-slot="collapsible-content"]:has([data-component="write-content"]) {
+[data-slot="collapsible-content"]:has([data-component="write-content"]),
+[data-slot="collapsible-content"]:has([data-component="apply-patch-files"]) {
   border: 1px solid var(--border-weak-base);
   border-radius: 6px;
   background: transparent;
@@ -905,18 +906,13 @@
 [data-component="apply-patch-file"] {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-weaker-base);
-
-  &:first-child {
-    border-top: 1px solid var(--border-weaker-base);
-  }
 
   [data-slot="apply-patch-file-header"] {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background-color: var(--surface-inset-base);
+    background-color: transparent;
   }
 
   [data-slot="apply-patch-file-action"] {
@@ -958,7 +954,12 @@
   }
 }
 
+[data-component="apply-patch-file"] + [data-component="apply-patch-file"] {
+  border-top: 1px solid var(--border-weaker-base);
+}
+
 [data-component="apply-patch-file-diff"] {
+  border-top: 1px solid var(--border-weaker-base);
   max-height: 420px;
   overflow-y: auto;
   scrollbar-width: none;
