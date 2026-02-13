@@ -112,6 +112,7 @@ export namespace Pty {
     cwd: z.string().optional(),
     title: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    agent: z.string().optional(),
   })
 
   export type CreateInput = z.infer<typeof CreateInput>
@@ -180,7 +181,7 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const shellEnv = await Plugin.trigger("shell.env", { cwd, agent: input.agent }, { env: {} })
     const env = {
       ...process.env,
       ...input.env,

@@ -165,7 +165,7 @@ export const BashTool = Tool.define("bash", async () => {
 
       const shellEnv = await Plugin.trigger(
         "shell.env",
-        { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
+        { cwd, sessionID: ctx.sessionID, callID: ctx.callID, agent: ctx.agent },
         { env: {} },
       )
       const proc = spawn(params.command, {

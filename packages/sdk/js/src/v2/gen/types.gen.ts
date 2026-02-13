@@ -2538,6 +2538,7 @@ export type PtyCreateData = {
     env?: {
       [key: string]: string
     }
+    agent?: string
   }
   path?: never
   query?: {

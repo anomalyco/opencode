@@ -409,6 +409,7 @@ export namespace SessionPrompt {
             tool: "task",
             sessionID,
             callID: part.id,
+            agent: lastUser.agent,
           },
           { args: taskArgs },
         )
@@ -458,6 +459,7 @@ export namespace SessionPrompt {
             sessionID,
             callID: part.id,
             args: taskArgs,
+            agent: lastUser.agent,
           },
           result,
         )
@@ -795,6 +797,7 @@ export namespace SessionPrompt {
               tool: item.id,
               sessionID: ctx.sessionID,
               callID: ctx.callID,
+              agent: ctx.agent,
             },
             {
               args,
@@ -817,6 +820,7 @@ export namespace SessionPrompt {
               sessionID: ctx.sessionID,
               callID: ctx.callID,
               args,
+              agent: ctx.agent,
             },
             output,
           )
@@ -841,6 +845,7 @@ export namespace SessionPrompt {
             tool: key,
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
+            agent: ctx.agent,
           },
           {
             args,
@@ -863,6 +868,7 @@ export namespace SessionPrompt {
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
             args,
+            agent: ctx.agent,
           },
           result,
         )
@@ -1620,7 +1626,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const cwd = Instance.directory
     const shellEnv = await Plugin.trigger(
       "shell.env",
-      { cwd, sessionID: input.sessionID, callID: part.callID },
+      { cwd, sessionID: input.sessionID, callID: part.callID, agent: input.agent },
       { env: {} },
     )
     const proc = spawn(shell, args, {
