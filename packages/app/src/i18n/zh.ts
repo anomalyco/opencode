@@ -601,8 +601,7 @@ export const dict = {
   "settings.general.section.sounds": "音效",
   "settings.general.section.feed": "动态",
   "settings.general.section.display": "显示",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "桌面",
 
   "settings.general.desktop.dynamicSort.title": "动态侧边栏排序",
   "settings.general.desktop.dynamicSort.description": "将最近活跃的项目移至顶部",

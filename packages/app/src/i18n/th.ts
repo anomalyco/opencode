@@ -600,8 +600,7 @@ export const dict = {
   "settings.general.section.sounds": "เสียงเอฟเฟกต์",
   "settings.general.section.feed": "ฟีด",
   "settings.general.section.display": "การแสดงผล",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "เดสก์ท็อป",
 
   "settings.general.desktop.dynamicSort.title": "การจัดเรียงแถบด้านข้างแบบไดนามิก",
   "settings.general.desktop.dynamicSort.description": "ย้ายโปรเจกต์ที่ใช้งานล่าสุดไปด้านบน",

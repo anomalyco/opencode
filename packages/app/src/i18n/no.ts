@@ -608,8 +608,7 @@ export const dict = {
   "settings.general.section.sounds": "Lydeffekter",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skjerm",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "Skrivebord",
 
   "settings.general.desktop.dynamicSort.title": "Dynamisk sidefeltssortering",
   "settings.general.desktop.dynamicSort.description": "Flytt nylig aktive prosjekter til toppen",

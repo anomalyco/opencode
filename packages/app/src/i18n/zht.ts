@@ -595,8 +595,7 @@ export const dict = {
   "settings.general.section.sounds": "音效",
   "settings.general.section.feed": "資訊流",
   "settings.general.section.display": "顯示",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "桌面",
 
   "settings.general.desktop.dynamicSort.title": "動態側邊欄排序",
   "settings.general.desktop.dynamicSort.description": "將最近活躍的專案移至頂部",

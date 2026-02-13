@@ -541,7 +541,6 @@ export const dict = {
   "settings.general.section.sounds": "Efeitos sonoros",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Tela",
-  "settings.general.section.sounds": "Sound effects",
   "settings.general.section.desktop": "Desktop",
 
   "settings.general.desktop.dynamicSort.title": "Ordenação dinâmica da barra lateral",

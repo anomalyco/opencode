@@ -540,8 +540,7 @@ export const dict = {
   "settings.general.section.sounds": "효과음",
   "settings.general.section.feed": "피드",
   "settings.general.section.display": "디스플레이",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "데스크톱",
 
   "settings.general.desktop.dynamicSort.title": "사이드바 동적 정렬",
   "settings.general.desktop.dynamicSort.description": "최근 활성 프로젝트를 상단으로 이동",

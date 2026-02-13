@@ -539,8 +539,7 @@ export const dict = {
   "settings.general.section.sounds": "効果音",
   "settings.general.section.feed": "フィード",
   "settings.general.section.display": "ディスプレイ",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "デスクトップ",
 
   "settings.general.desktop.dynamicSort.title": "サイドバーの動的ソート",
   "settings.general.desktop.dynamicSort.description": "最近アクティブなプロジェクトを上部に移動",

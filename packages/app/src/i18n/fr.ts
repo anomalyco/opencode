@@ -547,8 +547,7 @@ export const dict = {
   "settings.general.section.sounds": "Effets sonores",
   "settings.general.section.feed": "Flux",
   "settings.general.section.display": "Affichage",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "Bureau",
 
   "settings.general.desktop.dynamicSort.title": "Tri dynamique de la barre latérale",
   "settings.general.desktop.dynamicSort.description": "Déplacer les projets récemment actifs vers le haut",

@@ -535,8 +535,7 @@ export const dict = {
   "settings.general.section.sounds": "المؤثرات الصوتية",
   "settings.general.section.feed": "الخلاصة",
   "settings.general.section.display": "شاشة العرض",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "سطح المكتب",
 
   "settings.general.desktop.dynamicSort.title": "ترتيب ديناميكي للشريط الجانبي",
   "settings.general.desktop.dynamicSort.description": "نقل المشاريع النشطة مؤخراً إلى الأعلى",

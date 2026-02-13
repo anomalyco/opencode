@@ -606,8 +606,7 @@ export const dict = {
   "settings.general.section.sounds": "Звуковые эффекты",
   "settings.general.section.feed": "Лента",
   "settings.general.section.display": "Дисплей",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "Рабочий стол",
 
   "settings.general.desktop.dynamicSort.title": "Динамическая сортировка боковой панели",
   "settings.general.desktop.dynamicSort.description": "Перемещать недавно активные проекты наверх",

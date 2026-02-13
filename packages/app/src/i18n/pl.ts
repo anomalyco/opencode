@@ -540,8 +540,7 @@ export const dict = {
   "settings.general.section.sounds": "Efekty dźwiękowe",
   "settings.general.section.feed": "Kanał",
   "settings.general.section.display": "Ekran",
-  "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.desktop": "Desktop",
+  "settings.general.section.desktop": "Pulpit",
 
   "settings.general.desktop.dynamicSort.title": "Dynamiczne sortowanie paska bocznego",
   "settings.general.desktop.dynamicSort.description": "Przenieś ostatnio aktywne projekty na górę",
