@@ -66,6 +66,17 @@ export function Header() {
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
 
+  const siblings = createMemo(() => {
+    const parentID = session()?.parentID
+    if (!parentID) return []
+    return sync.data.session
+      .filter((x) => x.parentID === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+
+  const currentIndex = createMemo(() => siblings().findIndex((x) => x.id === session()?.id))
+  const total = createMemo(() => siblings().length)
+
   return (
     <box flexShrink={0}>
       <box
@@ -84,7 +95,10 @@ export function Header() {
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
                 <text fg={theme.text}>
-                  <b>Subagent session</b>
+                  <b>Subagent session</b>{" "}
+                  <span style={{ fg: theme.textMuted }}>
+                    {currentIndex() + 1} / {total()}
+                  </span>
                 </text>
                 <ContextInfo context={context} cost={cost} />
               </box>
