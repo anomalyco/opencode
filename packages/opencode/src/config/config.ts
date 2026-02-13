@@ -866,11 +866,7 @@ export namespace Config {
       input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
       input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
       input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
-      input_delete_to_line_start: z
-        .string()
-        .optional()
-        .default("ctrl+u,super+backspace")
-        .describe("Delete to start of line in input"),
+      input_delete_to_line_start: z.string().optional().default("ctrl+u,super+backspace").describe("Delete to start of line in input"),
       input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
       input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
       input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
