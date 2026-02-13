@@ -85,7 +85,7 @@ function visible(part: PartType) {
   return false
 }
 
-function AssistantMessageItem(props: { message: AssistantMessage; showAssistantCopyPartID?: string }) {
+function AssistantMessageItem(props: { message: AssistantMessage; showAssistantCopyPartID?: string | null }) {
   const data = useData()
   const emptyParts: PartType[] = []
   const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
@@ -206,6 +206,12 @@ export function SessionTurn(
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+
+  const assistantCopyPartID = createMemo(() => {
+    if (!isLastUserMessage()) return null
+    if (status().type !== "idle") return null
+    return showAssistantCopyPartID() ?? null
+  })
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
@@ -250,7 +256,7 @@ export function SessionTurn(
                       {(assistantMessage) => (
                         <AssistantMessageItem
                           message={assistantMessage}
-                          showAssistantCopyPartID={showAssistantCopyPartID()}
+                          showAssistantCopyPartID={assistantCopyPartID()}
                         />
                       )}
                     </For>

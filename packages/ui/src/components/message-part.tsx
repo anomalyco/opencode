@@ -91,7 +91,7 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
-  showAssistantCopyPartID?: string
+  showAssistantCopyPartID?: string | null
 }
 
 export interface MessagePartProps {
@@ -99,7 +99,7 @@ export interface MessagePartProps {
   message: MessageType
   hideDetails?: boolean
   defaultOpen?: boolean
-  showAssistantCopyPartID?: string
+  showAssistantCopyPartID?: string | null
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -354,7 +354,7 @@ export function Message(props: MessageProps) {
 export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
-  showAssistantCopyPartID?: string
+  showAssistantCopyPartID?: string | null
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -849,7 +849,8 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
-    if (props.showAssistantCopyPartID) return props.showAssistantCopyPartID === part.id
+    if (props.showAssistantCopyPartID === null) return false
+    if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part.id
     return isLastTextPart()
   })
   const [copied, setCopied] = createSignal(false)
