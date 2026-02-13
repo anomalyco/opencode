@@ -10,8 +10,11 @@ export interface NotificationSettings {
 }
 
 export interface SoundSettings {
+  agentEnabled: boolean
   agent: string
+  permissionsEnabled: boolean
   permissions: string
+  errorsEnabled: boolean
   errors: string
 }
 
@@ -57,8 +60,11 @@ const defaultSettings: Settings = {
     errors: false,
   },
   sounds: {
+    agentEnabled: true,
     agent: "staplebops-01",
+    permissionsEnabled: true,
     permissions: "staplebops-02",
+    errorsEnabled: true,
     errors: "nope-03",
   },
 }
@@ -85,6 +91,10 @@ export function monoFontFamily(font: string | undefined) {
   return monoFonts[font ?? defaultSettings.appearance.font] ?? monoFonts[defaultSettings.appearance.font]
 }
 
+function withFallback<T>(read: () => T | undefined, fallback: T) {
+  return createMemo(() => read() ?? fallback)
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
@@ -101,27 +111,27 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return store
       },
       general: {
-        autoSave: createMemo(() => store.general?.autoSave ?? defaultSettings.general.autoSave),
+        autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
         },
-        releaseNotes: createMemo(() => store.general?.releaseNotes ?? defaultSettings.general.releaseNotes),
+        releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
       },
       updates: {
-        startup: createMemo(() => store.updates?.startup ?? defaultSettings.updates.startup),
+        startup: withFallback(() => store.updates?.startup, defaultSettings.updates.startup),
         setStartup(value: boolean) {
           setStore("updates", "startup", value)
         },
       },
       appearance: {
-        fontSize: createMemo(() => store.appearance?.fontSize ?? defaultSettings.appearance.fontSize),
+        fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
         },
-        font: createMemo(() => store.appearance?.font ?? defaultSettings.appearance.font),
+        font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
         },
@@ -132,42 +142,62 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("keybinds", action, keybind)
         },
         reset(action: string) {
-          setStore("keybinds", action, undefined!)
+          setStore("keybinds", (current) => {
+            if (!Object.prototype.hasOwnProperty.call(current, action)) return current
+            const next = { ...current }
+            delete next[action]
+            return next
+          })
         },
         resetAll() {
           setStore("keybinds", reconcile({}))
         },
       },
       permissions: {
-        autoApprove: createMemo(() => store.permissions?.autoApprove ?? defaultSettings.permissions.autoApprove),
+        autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
         setAutoApprove(value: boolean) {
           setStore("permissions", "autoApprove", value)
         },
       },
       notifications: {
-        agent: createMemo(() => store.notifications?.agent ?? defaultSettings.notifications.agent),
+        agent: withFallback(() => store.notifications?.agent, defaultSettings.notifications.agent),
         setAgent(value: boolean) {
           setStore("notifications", "agent", value)
         },
-        permissions: createMemo(() => store.notifications?.permissions ?? defaultSettings.notifications.permissions),
+        permissions: withFallback(() => store.notifications?.permissions, defaultSettings.notifications.permissions),
         setPermissions(value: boolean) {
           setStore("notifications", "permissions", value)
         },
-        errors: createMemo(() => store.notifications?.errors ?? defaultSettings.notifications.errors),
+        errors: withFallback(() => store.notifications?.errors, defaultSettings.notifications.errors),
         setErrors(value: boolean) {
           setStore("notifications", "errors", value)
         },
       },
       sounds: {
-        agent: createMemo(() => store.sounds?.agent ?? defaultSettings.sounds.agent),
+        agentEnabled: withFallback(() => store.sounds?.agentEnabled, defaultSettings.sounds.agentEnabled),
+        setAgentEnabled(value: boolean) {
+          setStore("sounds", "agentEnabled", value)
+        },
+        agent: withFallback(() => store.sounds?.agent, defaultSettings.sounds.agent),
         setAgent(value: string) {
           setStore("sounds", "agent", value)
         },
-        permissions: createMemo(() => store.sounds?.permissions ?? defaultSettings.sounds.permissions),
+        permissionsEnabled: withFallback(
+          () => store.sounds?.permissionsEnabled,
+          defaultSettings.sounds.permissionsEnabled,
+        ),
+        setPermissionsEnabled(value: boolean) {
+          setStore("sounds", "permissionsEnabled", value)
+        },
+        permissions: withFallback(() => store.sounds?.permissions, defaultSettings.sounds.permissions),
         setPermissions(value: string) {
           setStore("sounds", "permissions", value)
         },
-        errors: createMemo(() => store.sounds?.errors ?? defaultSettings.sounds.errors),
+        errorsEnabled: withFallback(() => store.sounds?.errorsEnabled, defaultSettings.sounds.errorsEnabled),
+        setErrorsEnabled(value: boolean) {
+          setStore("sounds", "errorsEnabled", value)
+        },
+        errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
         },

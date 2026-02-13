@@ -160,14 +160,33 @@ export const PtyRoutes = lazy(() =>
         })()
         let handler: ReturnType<typeof Pty.connect>
         if (!Pty.get(id)) throw new Error("Session not found")
+
+        type Socket = {
+          readyState: number
+          send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+          close: (code?: number, reason?: string) => void
+        }
+
+        const isSocket = (value: unknown): value is Socket => {
+          if (!value || typeof value !== "object") return false
+          if (!("readyState" in value)) return false
+          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
+          if (!("close" in value) || typeof (value as { close?: unknown }).close !== "function") return false
+          return typeof (value as { readyState?: unknown }).readyState === "number"
+        }
+
         return {
           onOpen(_event, ws) {
-            handler = Pty.connect(id, ws, cursor)
+            const socket = isSocket(ws.raw) ? ws.raw : ws
+            handler = Pty.connect(id, socket, cursor)
           },
           onMessage(event) {
             handler?.onMessage(String(event.data))
           },
           onClose() {
+            handler?.onClose()
+          },
+          onError() {
             handler?.onClose()
           },
         }
