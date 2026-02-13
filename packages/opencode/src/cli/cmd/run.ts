@@ -18,6 +18,7 @@ import { ListTool } from "../../tool/ls"
 import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
+import { HashlineTool } from "../../tool/hashline"
 import { WriteTool } from "../../tool/write"
 import { CodeSearchTool } from "../../tool/codesearch"
 import { WebSearchTool } from "../../tool/websearch"
@@ -147,6 +148,18 @@ function edit(info: ToolProps<typeof EditTool>) {
     {
       icon: "←",
       title: `Edit ${title}`,
+    },
+    diff,
+  )
+}
+
+function hashline(info: ToolProps<typeof HashlineTool>) {
+  const title = normalizePath(info.input.filePath)
+  const diff = info.metadata.diff
+  block(
+    {
+      icon: "←",
+      title: `Hashline ${title}`,
     },
     diff,
   )
@@ -398,6 +411,7 @@ export const RunCommand = cmd({
         if (part.tool === "write") return write(props<typeof WriteTool>(part))
         if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
         if (part.tool === "edit") return edit(props<typeof EditTool>(part))
+        if (part.tool === "hashline") return hashline(props<typeof HashlineTool>(part))
         if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
         if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
         if (part.tool === "task") return task(props<typeof TaskTool>(part))

@@ -51,6 +51,8 @@ export namespace Flag {
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("OPENCODE_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("OPENCODE_EXPERIMENTAL_MARKDOWN")
+  export declare const OPENCODE_EXPERIMENTAL_HASHLINE: boolean
+  export declare const OPENCODE_EXPERIMENTAL_EDIT: boolean
   export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
 
@@ -101,6 +103,27 @@ Object.defineProperty(Flag, "OPENCODE_CLIENT", {
 Object.defineProperty(Flag, "OPENCODE_CONFIG_CONTENT", {
   get() {
     return process.env["OPENCODE_CONFIG_CONTENT"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_EXPERIMENTAL_HASHLINE
+// This must be evaluated at access time, not module load time,
+// because external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_HASHLINE", {
+  get() {
+    return truthy("OPENCODE_EXPERIMENTAL_HASHLINE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_EXPERIMENTAL_EDIT
+// Umbrella flag that enables hashline edit mode when OPENCODE_EXPERIMENTAL is set
+Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_EDIT", {
+  get() {
+    return Flag.OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EDIT")
   },
   enumerable: true,
   configurable: false,

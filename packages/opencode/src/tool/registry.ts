@@ -27,6 +27,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { HashlineTool } from "./hashline"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -103,6 +104,7 @@ export namespace ToolRegistry {
       GlobTool,
       GrepTool,
       EditTool,
+      HashlineTool,
       WriteTool,
       TaskTool,
       WebFetchTool,
@@ -142,8 +144,14 @@ export namespace ToolRegistry {
           // use apply tool in same format as codex
           const usePatch =
             model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+          const useHashline = Flag.OPENCODE_EXPERIMENTAL_HASHLINE || Flag.OPENCODE_EXPERIMENTAL_EDIT
           if (t.id === "apply_patch") return usePatch
-          if (t.id === "edit" || t.id === "write") return !usePatch
+          if (t.id === "edit") return !usePatch && !useHashline
+          if (t.id === "write") return !usePatch
+
+          if (t.id === "hashline") {
+            return useHashline
+          }
 
           return true
         })
