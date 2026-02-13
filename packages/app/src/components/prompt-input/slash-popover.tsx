@@ -73,6 +73,8 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     )
                   }
 
+                  if (item.type === "model") return null
+
                   const isDirectory = item.path.endsWith("/")
                   const directory = isDirectory ? item.path : getDirectory(item.path)
                   const filename = isDirectory ? "" : getFilename(item.path)
