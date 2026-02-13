@@ -13,6 +13,8 @@ import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
 
+let unsub: (() => void) | undefined
+
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
@@ -25,7 +27,8 @@ export async function InstanceBootstrap() {
   Snapshot.init()
   Truncate.init()
 
-  Bus.subscribe(Command.Event.Executed, async (payload) => {
+  unsub?.()
+  unsub = Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
       await Project.setInitialized(Instance.project.id)
     }
