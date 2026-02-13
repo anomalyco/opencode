@@ -55,10 +55,6 @@ function safeJson(value: unknown): string {
 function formatInitError(error: InitError, t: Translator): string {
   const data = error.data
   switch (error.name) {
-    case "MCPFailed": {
-      const name = typeof data.name === "string" ? data.name : ""
-      return t("error.chain.mcpFailed", { name })
-    }
     case "ProviderAuthError": {
       const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
       const message = typeof data.message === "string" ? data.message : safeJson(data.message)

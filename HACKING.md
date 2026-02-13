@@ -76,12 +76,6 @@ opencode debug scrap     # List all known projects
 opencode debug wait      # Block forever (for attaching debuggers)
 ```
 
-### MCP OAuth Debugging
-
-```bash
-opencode mcp debug <server-name>   # Debug OAuth flow for an MCP server
-```
-
 ---
 
 ## Log Files

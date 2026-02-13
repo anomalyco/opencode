@@ -84,6 +84,7 @@ Carefully read the issue and think hard about a plan to solve it before coding.
 - If a patch is not applied correctly, attempt to reapply it.
 - Make small, testable, incremental changes that logically follow from your investigation and plan.
 - Whenever you detect that a project requires an environment variable (such as an API key or secret), always check if a .env file exists in the project root. If it does not exist, automatically create a .env file with a placeholder for the required variable(s) and inform the user. Do this proactively, without waiting for the user to request it.
+- NEVER truncate or limit tool output with `| head`, `| tail`, `| head -n`, `| tail -n`, or similar constructs. Full output is always preferable - the system handles large outputs automatically via truncation files. Truncating output yourself destroys information and sabotages your ability to complete tasks correctly.
 
 ## 7. Debugging
 - Make code changes only if you have high confidence they can solve the problem

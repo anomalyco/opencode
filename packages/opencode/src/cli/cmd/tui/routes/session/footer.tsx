@@ -13,15 +13,18 @@ import { useKeybind } from "../../context/keybind"
 
 type Sample = { time: number; bytes: number }
 
+// State machine types
+type FSMState = "idle" | "think" | "stream" | "tool" | "wait" | "stall" | "retry"
+type StateTransition = { from: FSMState; to: FSMState; time: number; tool?: string }
+
 // Stall timeout options in milliseconds
 const STALL_TIMEOUTS = [
+  { label: "1s", ms: 1_000 },
   { label: "5s", ms: 5_000 },
-  { label: "10s", ms: 10_000 },
   { label: "30s", ms: 30_000 },
-  { label: "60s", ms: 60_000 },
-  { label: "5m", ms: 5 * 60_000 },
+  { label: "1m", ms: 60_000 },
+  { label: "10m", ms: 10 * 60_000 },
   { label: "30m", ms: 30 * 60_000 },
-  { label: "1h", ms: 60 * 60_000 },
 ] as const
 
 function formatBytes(bytes: number): string {
@@ -55,12 +58,44 @@ function formatCountdown(ms: number): string {
   return `${m}m`
 }
 
+// Format cost compactly
+function formatCost(dollars: number): string {
+  if (dollars < 0.01) return `$${(dollars * 100).toFixed(1)}c`
+  if (dollars < 1) return `$${dollars.toFixed(2)}`
+  return `$${dollars.toFixed(2)}`
+}
+
+// Format cost rate (per minute)
+function formatCostRate(dollarsPerMin: number): string {
+  if (dollarsPerMin < 0.001) return "$0/m"
+  if (dollarsPerMin < 0.01) return `$${(dollarsPerMin * 100).toFixed(1)}c/m`
+  return `$${dollarsPerMin.toFixed(2)}/m`
+}
+
+// State symbols for FSM display - squarish/blocky for legibility
+const STATE_SYMBOLS: Record<FSMState, string> = {
+  idle: "■",
+  think: "◧",
+  stream: "▤",
+  tool: "▣",
+  wait: "□",
+  stall: "▨",
+  retry: "↻",
+}
+
+// Extract argv[0] from bash command
+function argv0(cmd: string): string {
+  const trimmed = cmd.trim()
+  const match = trimmed.match(/^(?:cd\s+[^\s;]+\s*(?:&&|;)\s*)?(\S+)/)
+  return match?.[1] ?? trimmed.split(/\s/)[0] ?? "cmd"
+}
+
 // Throughput trend indicator using unicode blocks
 function rateTrend(samples: Sample[], windowMs: number, buckets: number): string {
   const now = Date.now()
   const bucketSize = windowMs / buckets
   const counts: number[] = new Array(buckets).fill(0)
-  
+
   for (const s of samples) {
     const age = now - s.time
     if (age > windowMs) continue
@@ -69,13 +104,15 @@ function rateTrend(samples: Sample[], windowMs: number, buckets: number): string
       counts[buckets - 1 - bucket] += s.bytes // reverse so newest is rightmost
     }
   }
-  
+
   const max = Math.max(...counts, 1)
   const blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
-  return counts.map(c => {
-    const level = Math.floor((c / max) * 7)
-    return blocks[level]
-  }).join("")
+  return counts
+    .map((c) => {
+      const level = Math.floor((c / max) * 7)
+      return blocks[level]
+    })
+    .join("")
 }
 
 type ActivityType = "idle" | "text" | "reasoning" | "tool" | "waiting"
@@ -97,7 +134,7 @@ export function Footer() {
   const directory = useDirectory()
   const connected = useConnected()
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : ""))
-  
+
   // Model info for reasoning detection
   const isReasoningModel = createMemo(() => local.model.parsed().reasoning)
 
@@ -111,22 +148,48 @@ export function Footer() {
   let totalBytesRaw = 0
   let startTimeRaw: number | undefined
   let busyRaw = false
-  
+
   // Activity tracking
   let activityRaw: ActivityType = "idle"
   let activityStartRaw: number | undefined
   let lastToolRaw: string | undefined
+  let lastToolArgsRaw: string | undefined // For argv[0]
   let lastActivityRaw: ActivityType = "idle"
   let lastByteTimeRaw: number | undefined
-  
+
+  // FSM state machine tracking
+  let fsmStateRaw: FSMState = "idle"
+  let fsmTransitionsRaw: StateTransition[] = []
+  let fsmDepthRaw = 0 // Agentic loop depth (tool call nesting)
+  let fsmLoopCountRaw = 0 // Number of tool→wait→tool cycles
+  let fsmToolCountRaw = 0 // Total tool calls this turn
+  let fsmLastToolStartRaw: number | undefined
+
+  // Cost tracking
+  let sessionCostRaw = 0
+  let lastTurnCostRaw = 0
+  let turnStartTimeRaw: number | undefined
+
+  // Time spent in each state (for histogram)
+  let stateTimeRaw: Record<FSMState, number> = {
+    idle: 0,
+    think: 0,
+    stream: 0,
+    tool: 0,
+    wait: 0,
+    stall: 0,
+    retry: 0,
+  }
+  let lastStateChangeRaw: number | undefined
+
   // Retry tracking
   let retryRaw: { message: string; next: number } | undefined
   let retryCountRaw = 0
-  
+
   // Auto-recovery tracking
   let recoveryTriggeredRaw = false
   let recoveryCountRaw = 0
-  
+
   // Last user message for re-issue
   let lastUserMessageRaw: { text: string; parts: any[] } | undefined
 
@@ -136,6 +199,7 @@ export function Footer() {
     activity: "idle" as ActivityType,
     activityDuration: 0,
     activeTool: undefined as string | undefined,
+    activeToolDisplay: undefined as string | undefined, // argv[0] for bash
     lastActivity: "idle" as ActivityType,
     lastTool: undefined as string | undefined,
     totalBytes: 0,
@@ -156,6 +220,19 @@ export function Footer() {
     timeoutMs: 30_000,
     recoveryCountdown: 0, // ms until auto-recovery
     recoveryCount: 0,
+    // FSM state machine
+    fsmState: "idle" as FSMState,
+    fsmTrail: [] as { state: FSMState; symbol: string; tool?: string }[],
+    fsmDepth: 0,
+    fsmLoops: 0,
+    fsmToolCount: 0,
+    fsmToolDuration: 0,
+    // Cost tracking
+    sessionCost: 0,
+    turnCost: 0,
+    costRate: 0, // $/min
+    // State time distribution (for histogram)
+    stateTime: { idle: 0, think: 0, stream: 0, tool: 0, wait: 0, stall: 0, retry: 0 } as Record<FSMState, number>,
   })
 
   function computeThroughput(windowMs: number): number {
@@ -174,13 +251,13 @@ export function Footer() {
     if (recoveryTriggeredRaw) return
     recoveryTriggeredRaw = true
     recoveryCountRaw++
-    
+
     const sessionID = currentSessionID()
     if (!sessionID) return
-    
+
     // Abort current request
     await sdk.client.session.abort({ sessionID }).catch(() => {})
-    
+
     // Find last user message
     const messages = sync.data.message[sessionID] ?? []
     const lastUserMsg = messages.findLast((m) => m.role === "user")
@@ -188,7 +265,7 @@ export function Footer() {
       recoveryTriggeredRaw = false
       return
     }
-    
+
     // Get parts from last user message
     const parts = sync.data.part[lastUserMsg.id] ?? []
     const textPart = parts.find((p) => p.type === "text" && !p.synthetic)
@@ -196,44 +273,49 @@ export function Footer() {
       recoveryTriggeredRaw = false
       return
     }
-    
+
     // Revert to before last user message, then re-issue
-    await sdk.client.session.revert({
-      sessionID,
-      messageID: lastUserMsg.id,
-    }).catch(() => {})
-    
+    await sdk.client.session
+      .revert({
+        sessionID,
+        messageID: lastUserMsg.id,
+      })
+      .catch(() => {})
+
     // Get current model
     const model = local.model.current()
     if (!model) {
       recoveryTriggeredRaw = false
       return
     }
-    
-    // Re-issue the prompt
-    const nonTextParts = parts.filter((p) => p.type !== "text")
-    await sdk.client.session.prompt({
-      sessionID,
-      providerID: model.providerID,
-      modelID: model.modelID,
-      agent: local.agent.current().name,
-      model: {
-        providerID: model.providerID,
-        modelID: model.modelID,
-      },
-      parts: [
-        {
-          id: `part_${Date.now()}`,
-          type: "text",
-          text: textPart.text,
+
+    // Re-issue the prompt - only include valid input part types
+    const validInputTypes = ["file", "agent", "subtask"] as const
+    const nonTextParts = parts.filter((p): p is (typeof parts)[number] & { type: "file" | "agent" | "subtask" } =>
+      validInputTypes.includes(p.type as (typeof validInputTypes)[number]),
+    )
+    await sdk.client.session
+      .prompt({
+        sessionID,
+        agent: local.agent.current().name,
+        model: {
+          providerID: model.providerID,
+          modelID: model.modelID,
         },
-        ...nonTextParts.map((p, i) => ({
-          id: `part_${Date.now()}_${i}`,
-          ...p,
-        })),
-      ],
-    }).catch(() => {})
-    
+        parts: [
+          {
+            id: `part_${Date.now()}`,
+            type: "text",
+            text: textPart.text,
+          },
+          ...nonTextParts.map((p, i) => ({
+            ...p,
+            id: `part_${Date.now()}_${i}`,
+          })),
+        ],
+      })
+      .catch(() => {})
+
     // Reset state - will be set fresh on next busy event
     recoveryTriggeredRaw = false
   }
@@ -250,13 +332,13 @@ export function Footer() {
     const r30 = computeThroughput(30_000)
     const r60 = computeThroughput(60_000)
     const trend = rateTrend(samplesRaw, 10_000, 10)
-    
-    const silenceDuration = lastByteTimeRaw ? now - lastByteTimeRaw : (startTimeRaw ? now - startTimeRaw : 0)
-    
+
+    const silenceDuration = lastByteTimeRaw ? now - lastByteTimeRaw : startTimeRaw ? now - startTimeRaw : 0
+
     const isToolRunning = activityRaw === "tool"
     const isRetrying = !!retryRaw
     const stalled = busyRaw && !isToolRunning && !isRetrying && silenceDuration > 2000 && r1 < 10
-    
+
     let stallReason = ""
     if (stalled) {
       const reasoning = isReasoningModel()
@@ -284,11 +366,38 @@ export function Footer() {
     let recoveryCountdown = 0
     if (busyRaw && !isToolRunning && silenceDuration > 2000) {
       recoveryCountdown = Math.max(0, timeout.ms - silenceDuration)
-      
+
       // Trigger recovery if countdown reached zero
       if (recoveryCountdown <= 0 && !recoveryTriggeredRaw) {
         triggerRecovery()
       }
+    }
+
+    // Update FSM state based on current activity
+    if (stalled && fsmStateRaw !== "stall") {
+      transitionFSM("stall")
+    } else if (retryRaw && fsmStateRaw !== "retry") {
+      transitionFSM("retry")
+    }
+
+    // Build FSM trail (last 8 transitions)
+    const trail = fsmTransitionsRaw.slice(-8).map((t) => ({
+      state: t.to,
+      symbol: STATE_SYMBOLS[t.to],
+      tool: t.tool,
+    }))
+
+    // Calculate cost rate ($ per minute)
+    const turnElapsed = turnStartTimeRaw ? now - turnStartTimeRaw : 0
+    const costRate = turnElapsed > 10000 ? (lastTurnCostRaw / turnElapsed) * 60000 : 0
+
+    // Calculate current tool duration
+    const toolDuration = fsmLastToolStartRaw && activityRaw === "tool" ? now - fsmLastToolStartRaw : 0
+
+    // Get display name for active tool (argv[0] for bash)
+    let activeToolDisplay = lastToolRaw
+    if (lastToolRaw === "bash" && lastToolArgsRaw) {
+      activeToolDisplay = argv0(lastToolArgsRaw)
     }
 
     setTelemetry({
@@ -296,6 +405,7 @@ export function Footer() {
       activity: activityRaw,
       activityDuration,
       activeTool: activityRaw === "tool" ? lastToolRaw : undefined,
+      activeToolDisplay: activityRaw === "tool" ? activeToolDisplay : undefined,
       lastActivity: lastActivityRaw,
       lastTool: lastToolRaw,
       totalBytes: totalBytesRaw,
@@ -315,27 +425,76 @@ export function Footer() {
       timeoutMs: timeout.ms,
       recoveryCountdown,
       recoveryCount: recoveryCountRaw,
+      // FSM state machine
+      fsmState: fsmStateRaw,
+      fsmTrail: trail,
+      fsmDepth: fsmDepthRaw,
+      fsmLoops: fsmLoopCountRaw,
+      fsmToolCount: fsmToolCountRaw,
+      fsmToolDuration: toolDuration,
+      // Cost tracking
+      sessionCost: sessionCostRaw,
+      turnCost: lastTurnCostRaw,
+      costRate,
+      // State time distribution
+      stateTime: { ...stateTimeRaw },
     })
   }
 
-  function setActivity(type: ActivityType, tool?: string) {
+  function setActivity(type: ActivityType, tool?: string, toolArgs?: string) {
     if (activityRaw !== type || (type === "tool" && tool !== lastToolRaw)) {
       lastActivityRaw = activityRaw
       activityRaw = type
       activityStartRaw = Date.now()
       if (tool) lastToolRaw = tool
+      if (toolArgs !== undefined) lastToolArgsRaw = toolArgs
     }
+  }
+
+  // Transition FSM state with tracking
+  function transitionFSM(to: FSMState, tool?: string) {
+    const now = Date.now()
+    const from = fsmStateRaw
+
+    // Track time in previous state
+    if (lastStateChangeRaw !== undefined) {
+      stateTimeRaw[from] += now - lastStateChangeRaw
+    }
+    lastStateChangeRaw = now
+
+    // Record transition
+    if (from !== to || (to === "tool" && tool)) {
+      fsmTransitionsRaw.push({ from, to, time: now, tool })
+      // Keep last 20 transitions
+      if (fsmTransitionsRaw.length > 20) fsmTransitionsRaw.shift()
+    }
+
+    // Track loops: tool→wait→tool pattern
+    if (to === "tool" && from === "wait") {
+      fsmLoopCountRaw++
+    }
+
+    // Track depth: entering tool increments, leaving decrements
+    if (to === "tool") {
+      fsmDepthRaw++
+      fsmToolCountRaw++
+      fsmLastToolStartRaw = now
+    } else if (from === "tool") {
+      fsmDepthRaw = Math.max(0, fsmDepthRaw - 1)
+    }
+
+    fsmStateRaw = to
   }
 
   // Tab to cycle FREE mode timeout
   useKeyboard((evt) => {
     if (!keybind.match("stall_timeout_cycle", evt)) return
     if (route.data.type !== "session") return
-    
+
     const current = getTimeoutIndex()
     const next = (current + 1) % STALL_TIMEOUTS.length
     setTimeoutIndex(next)
-    
+
     // Force refresh to show new timeout immediately
     refreshTelemetry()
   })
@@ -347,10 +506,15 @@ export function Footer() {
 
     if (part.type === "tool") {
       if (part.state.status === "running") {
-        setActivity("tool", part.tool)
+        // Extract command args for bash tools
+        const toolArgs =
+          part.tool === "bash" && part.state.input?.command ? String(part.state.input.command) : undefined
+        setActivity("tool", part.tool, toolArgs)
+        transitionFSM("tool", part.tool === "bash" && toolArgs ? argv0(toolArgs) : part.tool)
       } else if (part.state.status === "completed" || part.state.status === "error") {
         if (lastToolRaw === part.tool) {
           setActivity("waiting")
+          transitionFSM("wait")
         }
       }
     }
@@ -363,6 +527,12 @@ export function Footer() {
       samplesRaw.push({ time: now, bytes })
       lastByteTimeRaw = now
       setActivity(part.type as ActivityType)
+      // Transition FSM
+      if (part.type === "reasoning") {
+        transitionFSM("think")
+      } else {
+        transitionFSM("stream")
+      }
     }
   })
 
@@ -373,13 +543,25 @@ export function Footer() {
     if (status.type === "busy") {
       if (!busyRaw) {
         startTimeRaw = Date.now()
+        turnStartTimeRaw = Date.now()
         totalBytesRaw = 0
         samplesRaw = []
         lastToolRaw = undefined
+        lastToolArgsRaw = undefined
         lastByteTimeRaw = undefined
         retryCountRaw = 0
         recoveryTriggeredRaw = false
+        // Reset FSM for new turn
+        fsmTransitionsRaw = []
+        fsmDepthRaw = 0
+        fsmLoopCountRaw = 0
+        fsmToolCountRaw = 0
+        fsmLastToolStartRaw = undefined
+        lastTurnCostRaw = 0
+        stateTimeRaw = { idle: 0, think: 0, stream: 0, tool: 0, wait: 0, stall: 0, retry: 0 }
+        lastStateChangeRaw = Date.now()
         setActivity("waiting")
+        transitionFSM("wait")
       }
       busyRaw = true
       retryRaw = undefined
@@ -387,12 +569,29 @@ export function Footer() {
       busyRaw = false
       retryRaw = undefined
       setActivity("idle")
+      transitionFSM("idle")
     } else if (status.type === "retry") {
       retryRaw = { message: status.message, next: status.next }
       retryCountRaw++
       setActivity("waiting")
+      transitionFSM("retry")
     }
   })
+
+  // Track costs from assistant messages
+  sdk.event.on("message.updated", (evt) => {
+    const msg = evt.properties.info
+    if (msg.sessionID !== currentSessionID()) return
+    if (msg.role === "assistant") {
+      lastTurnCostRaw = msg.cost
+      sessionCostRaw = messages()
+        .filter((m) => m.role === "assistant")
+        .reduce((sum, m) => sum + m.cost, 0)
+    }
+  })
+
+  // Get messages for cost calculation
+  const messages = createMemo(() => sync.data.message[currentSessionID()] ?? [])
 
   onMount(() => {
     const timer = setInterval(() => refreshTelemetry(), 200)
@@ -422,32 +621,57 @@ export function Footer() {
     onCleanup(() => timeouts.forEach(clearTimeout))
   })
 
-  const activityDisplay = createMemo(() => {
-    const act = telemetry.activity
-    const tool = telemetry.activeTool
+  // FSM state colors
+  const fsmColor = (state: FSMState) => {
+    switch (state) {
+      case "idle":
+        return theme.textMuted
+      case "think":
+        return theme.info
+      case "stream":
+        return theme.success
+      case "tool":
+        return theme.primary
+      case "wait":
+        return theme.textMuted
+      case "stall":
+        return theme.error
+      case "retry":
+        return theme.warning
+    }
+  }
+
+  // Current state display
+  const currentStateDisplay = createMemo(() => {
+    const state = telemetry.fsmState
+    const symbol = STATE_SYMBOLS[state]
+    const tool = telemetry.activeToolDisplay
     const dur = formatElapsed(telemetry.activityDuration)
-    
-    if (act === "tool" && tool) {
-      return { label: tool, duration: dur, color: theme.text }
+
+    if (state === "tool" && tool) {
+      return { symbol, label: tool, duration: dur, color: theme.primary }
     }
-    if (act === "text") {
-      return { label: "streaming", duration: dur, color: theme.success }
+    if (state === "stream") {
+      return { symbol, label: "stream", duration: dur, color: theme.success }
     }
-    if (act === "reasoning") {
-      return { label: "thinking", duration: dur, color: theme.info }
+    if (state === "think") {
+      return { symbol, label: "think", duration: dur, color: theme.info }
     }
-    if (act === "waiting") {
-      return { label: "waiting", duration: dur, color: theme.textMuted }
+    if (state === "stall") {
+      return { symbol: "⚠", label: telemetry.stallReason || "stall", duration: dur, color: theme.error }
     }
-    return { label: "", duration: "", color: theme.textMuted }
+    if (state === "retry") {
+      return { symbol: "⟳", label: "retry", duration: dur, color: theme.warning }
+    }
+    if (state === "wait") {
+      return { symbol, label: "wait", duration: dur, color: theme.textMuted }
+    }
+    return { symbol, label: "idle", duration: "", color: theme.textMuted }
   })
 
-  const silenceColor = createMemo(() => {
-    const ms = telemetry.silenceDuration
-    if (ms < 2000) return theme.success
-    if (ms < 5000) return theme.warning
-    if (ms < 10000) return theme.error
-    return theme.error
+  // Build trail string from transitions - spaced out for legibility
+  const trailDisplay = createMemo(() => {
+    return telemetry.fsmTrail.map((t) => t.symbol).join(" ")
   })
 
   // Show recovery countdown when stalled
@@ -456,93 +680,77 @@ export function Footer() {
   })
 
   return (
-    <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
+    <box flexDirection="row" justifyContent="space-between" gap={2} flexShrink={0}>
       <Show
         when={telemetry.busy}
         fallback={
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.textMuted}>{directory()}</text>
-            <text fg={theme.textMuted}>
-              FREE:{telemetry.timeoutLabel}
-            </text>
+          <box flexDirection="row" gap={3}>
+            <text fg={theme.textMuted}>{STATE_SYMBOLS.idle} idle</text>
+            <text fg={theme.text}>{directory().split("/").at(-1)}</text>
+            <Show when={telemetry.sessionCost > 0}>
+              <text fg={theme.textMuted}>session {formatCost(telemetry.sessionCost)}</text>
+            </Show>
+            <text fg={theme.textMuted}>FREE {telemetry.timeoutLabel}</text>
           </box>
         }
       >
-        <box flexDirection="row" gap={1} flexShrink={1} overflow="hidden">
-          {/* Total elapsed */}
-          <text fg={theme.textMuted}>
-            {formatElapsed(telemetry.elapsed)}
+        <box flexDirection="row" gap={2} flexShrink={1} overflow="hidden">
+          {/* State symbol + current state */}
+          <text fg={currentStateDisplay().color}>
+            {currentStateDisplay().symbol} {currentStateDisplay().label}
           </text>
-          
-          {/* Current activity + duration */}
-          <Show when={activityDisplay().label}>
-            <text fg={activityDisplay().color}>
-              {activityDisplay().label}
-            </text>
-            <text fg={theme.textMuted}>
-              {activityDisplay().duration}
-            </text>
+          <text fg={theme.textMuted}>{currentStateDisplay().duration}</text>
+          {/* Separator */}
+          <text fg={theme.textMuted}>│</text>
+          {/* FSM trail */}
+          <Show when={trailDisplay().length > 1}>
+            <text fg={theme.textMuted}>{trailDisplay()}</text>
           </Show>
-          
-          {/* Total bytes */}
-          <text fg={theme.textMuted}>
-            {formatBytes(telemetry.totalBytes)}
-          </text>
-          
-          {/* Throughput sparkline */}
-          <text fg={silenceColor()}>
-            {telemetry.trend}
-          </text>
-          
-          {/* Current rate */}
-          <text fg={silenceColor()}>
-            {formatRate(telemetry.r1)}/s
-          </text>
-          
-          {/* Silence duration */}
-          <Show when={telemetry.silenceDuration > 2000 && !telemetry.retry && telemetry.activity !== "tool"}>
-            <text fg={theme.warning}>
-              silent {formatElapsed(telemetry.silenceDuration)}
-            </text>
+          {/* Separator */}
+          <text fg={theme.textMuted}>│</text>
+          {/* Depth/loops indicator */}
+          <Show when={telemetry.fsmToolCount > 0}>
+            <text fg={theme.text}>depth {telemetry.fsmDepth}</text>
+            <text fg={theme.primary}>tools {telemetry.fsmToolCount}</text>
+            <Show when={telemetry.fsmLoops > 0}>
+              <text fg={theme.warning}>loops {telemetry.fsmLoops}</text>
+            </Show>
           </Show>
-          
+          {/* Separator */}
+          <text fg={theme.textMuted}>│</text>
+          {/* Throughput */}
+          <text fg={theme.success}>{telemetry.trend}</text>
+          <text fg={theme.text}>{formatRate(telemetry.r1)}/s</text>
+          {/* Separator */}
+          <text fg={theme.textMuted}>│</text>
+          {/* Cost */}
+          <Show when={telemetry.turnCost > 0}>
+            <text fg={theme.warning}>turn {formatCost(telemetry.turnCost)}</text>
+          </Show>
+          <Show when={telemetry.costRate > 0.001}>
+            <text fg={theme.textMuted}>{formatCostRate(telemetry.costRate)}</text>
+          </Show>
           {/* Retry indicator */}
           <Show when={telemetry.retry}>
+            <text fg={theme.textMuted}>│</text>
             <text fg={theme.warning}>
-              {telemetry.retry!.message} ({telemetry.retry!.countdown}s)
+              retry {telemetry.retry!.countdown}s
+              <Show when={telemetry.retryCount > 1}>
+                <span style={{ fg: theme.error }}> ×{telemetry.retryCount}</span>
+              </Show>
             </text>
-            <Show when={telemetry.retryCount > 1}>
-              <text fg={theme.error}>
-                x{telemetry.retryCount}
-              </text>
-            </Show>
           </Show>
-          
-          {/* Stall indicator with recovery countdown */}
-          <Show when={telemetry.stalled && !telemetry.retry}>
-            <text fg={telemetry.stallReason === "thinking" ? theme.info : theme.error}>
-              {telemetry.stallReason.toUpperCase()}
-            </text>
-            <Show when={telemetry.lastTool && telemetry.lastActivity === "tool"}>
-              <text fg={theme.textMuted}>
-                after {telemetry.lastTool}
-              </text>
-            </Show>
-          </Show>
-          
-          {/* Recovery countdown - FREE mode */}
+          {/* FREE countdown */}
           <Show when={showRecoveryCountdown()}>
-            <text fg={theme.warning}>
-              FREE:{formatCountdown(telemetry.recoveryCountdown)}
-            </text>
+            <text fg={theme.textMuted}>│</text>
+            <text fg={theme.warning}>FREE {formatCountdown(telemetry.recoveryCountdown)}</text>
           </Show>
-          
-          {/* Recovery count if we've auto-recovered */}
           <Show when={telemetry.recoveryCount > 0}>
-            <text fg={theme.info}>
-              retried:{telemetry.recoveryCount}
-            </text>
+            <text fg={theme.info}>↺{telemetry.recoveryCount}</text>
           </Show>
+          {/* Separator + Elapsed time */}
+          <text fg={theme.textMuted}>│</text>
+          <text fg={theme.text}>{formatElapsed(telemetry.elapsed)}</text>
         </box>
       </Show>
       <box gap={2} flexDirection="row" flexShrink={0}>

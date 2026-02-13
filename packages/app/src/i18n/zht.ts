@@ -15,7 +15,6 @@ export const dict = {
   "command.category.context": "上下文",
   "command.category.terminal": "終端機",
   "command.category.model": "模型",
-  "command.category.mcp": "MCP",
   "command.category.agent": "代理程式",
   "command.category.permissions": "權限",
   "command.category.workspace": "工作區",
@@ -65,8 +64,6 @@ export const dict = {
   "command.message.next.description": "跳到下一則使用者訊息",
   "command.model.choose": "選擇模型",
   "command.model.choose.description": "選擇不同的模型",
-  "command.mcp.toggle": "切換 MCP",
-  "command.mcp.toggle.description": "切換 MCP",
   "command.agent.cycle": "循環代理程式",
   "command.agent.cycle.description": "切換到下一個代理程式",
   "command.agent.cycle.reverse": "反向循環代理程式",
@@ -260,7 +257,6 @@ export const dict = {
   "prompt.dropzone.file.label": "拖放以 @提及檔案",
   "prompt.slash.badge.custom": "自訂",
   "prompt.slash.badge.skill": "技能",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "作用中",
   "prompt.context.includeActiveFile": "包含作用中檔案",
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",
@@ -281,17 +277,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "傳送提示失敗",
   "prompt.toast.promptSendFailed.description": "無法取得工作階段",
 
-  "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "已啟用 {{enabled}} / {{total}}",
-  "dialog.mcp.empty": "未設定 MCP",
 
   "dialog.lsp.empty": "已從檔案類型自動偵測到 LSPs",
   "dialog.plugins.empty": "在 opencode.json 中設定的外掛程式",
 
-  "mcp.status.connected": "已連線",
-  "mcp.status.failed": "失敗",
-  "mcp.status.needs_auth": "需要授權",
-  "mcp.status.disabled": "已停用",
 
   "dialog.fork.empty": "沒有可用於分支的訊息",
 
@@ -452,7 +441,6 @@ export const dict = {
   "error.chain.didYouMean": "你是不是想輸入: {{suggestions}}",
   "error.chain.modelNotFound": "找不到模型: {{provider}}/{{model}}",
   "error.chain.checkConfig": "請檢查你的設定 (opencode.json) 中的 provider/model 名稱",
-  "error.chain.mcpFailed": 'MCP 伺服器 "{{name}}" 啟動失敗。注意: OpenCode 暫不支援 MCP 認證。',
   "error.chain.providerAuthFailed": "提供者認證失敗 ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": '無法初始化提供者 "{{provider}}"。請檢查憑證和設定。',
   "error.chain.configJsonInvalid": "設定檔 {{path}} 不是有效的 JSON(C)",
@@ -514,7 +502,6 @@ export const dict = {
   "status.popover.trigger": "狀態",
   "status.popover.ariaLabel": "伺服器設定",
   "status.popover.tab.servers": "伺服器",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "外掛程式",
   "status.popover.action.manageServers": "管理伺服器",
@@ -712,8 +699,6 @@ export const dict = {
   "settings.agents.description": "代理程式設定將在此處可設定。",
   "settings.commands.title": "命令",
   "settings.commands.description": "命令設定將在此處可設定。",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP 設定將在此處可設定。",
 
   "settings.permissions.title": "權限",
   "settings.permissions.description": "控制伺服器預設可以使用哪些工具。",

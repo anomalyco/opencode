@@ -14,7 +14,6 @@ export const dict = {
   "command.category.context": "Kontekst",
   "command.category.terminal": "Terminal",
   "command.category.model": "Modell",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Tillatelser",
   "command.category.workspace": "Arbeidsområde",
@@ -64,8 +63,6 @@ export const dict = {
   "command.message.next.description": "Gå til neste brukermelding",
   "command.model.choose": "Velg modell",
   "command.model.choose.description": "Velg en annen modell",
-  "command.mcp.toggle": "Veksle MCP-er",
-  "command.mcp.toggle.description": "Veksle MCP-er",
   "command.agent.cycle": "Bytt agent",
   "command.agent.cycle.description": "Bytt til neste agent",
   "command.agent.cycle.reverse": "Bytt agent bakover",
@@ -263,7 +260,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Slipp for å @nevne fil",
   "prompt.slash.badge.custom": "egendefinert",
   "prompt.slash.badge.skill": "skill",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -284,17 +280,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Kunne ikke sende forespørsel",
   "prompt.toast.promptSendFailed.description": "Kunne ikke hente økt",
 
-  "dialog.mcp.title": "MCP-er",
-  "dialog.mcp.description": "{{enabled}} av {{total}} aktivert",
-  "dialog.mcp.empty": "Ingen MCP-er konfigurert",
 
   "dialog.lsp.empty": "LSP-er automatisk oppdaget fra filtyper",
   "dialog.plugins.empty": "Plugins konfigurert i opencode.json",
 
-  "mcp.status.connected": "tilkoblet",
-  "mcp.status.failed": "mislyktes",
-  "mcp.status.needs_auth": "trenger autentisering",
-  "mcp.status.disabled": "deaktivert",
 
   "dialog.fork.empty": "Ingen meldinger å forgrene fra",
 
@@ -458,7 +447,6 @@ export const dict = {
   "error.chain.didYouMean": "Mente du: {{suggestions}}",
   "error.chain.modelNotFound": "Modell ikke funnet: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Sjekk leverandør-/modellnavnene i konfigurasjonen din (opencode.json)",
-  "error.chain.mcpFailed": 'MCP-server "{{name}}" mislyktes. Merk at OpenCode ikke støtter MCP-autentisering ennå.',
   "error.chain.providerAuthFailed": "Leverandørautentisering mislyktes ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Kunne ikke initialisere leverandør "{{provider}}". Sjekk legitimasjon og konfigurasjon.',
@@ -523,7 +511,6 @@ export const dict = {
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Serverkonfigurasjoner",
   "status.popover.tab.servers": "Servere",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
@@ -727,8 +714,6 @@ export const dict = {
   "settings.agents.description": "Agentinnstillinger vil kunne konfigureres her.",
   "settings.commands.title": "Kommandoer",
   "settings.commands.description": "Kommandoinnstillinger vil kunne konfigureres her.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP-innstillinger vil kunne konfigureres her.",
 
   "settings.permissions.title": "Tillatelser",
   "settings.permissions.description": "Kontroller hvilke verktøy serveren kan bruke som standard.",

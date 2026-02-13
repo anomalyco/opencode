@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "บริบท",
   "command.category.terminal": "เทอร์มินัล",
   "command.category.model": "โมเดล",
-  "command.category.mcp": "MCP",
   "command.category.agent": "เอเจนต์",
   "command.category.permissions": "สิทธิ์",
   "command.category.workspace": "พื้นที่ทำงาน",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "ไปที่ข้อความผู้ใช้ถัดไป",
   "command.model.choose": "เลือกโมเดล",
   "command.model.choose.description": "เลือกโมเดลอื่น",
-  "command.mcp.toggle": "สลับ MCPs",
-  "command.mcp.toggle.description": "สลับ MCPs",
   "command.agent.cycle": "เปลี่ยนเอเจนต์",
   "command.agent.cycle.description": "สลับไปยังเอเจนต์ถัดไป",
   "command.agent.cycle.reverse": "เปลี่ยนเอเจนต์ย้อนกลับ",
@@ -260,7 +257,6 @@ export const dict = {
   "prompt.dropzone.file.label": "วางเพื่อ @กล่าวถึงไฟล์",
   "prompt.slash.badge.custom": "กำหนดเอง",
   "prompt.slash.badge.skill": "ทักษะ",
-  "prompt.slash.badge.mcp": "MCP",
   "prompt.context.active": "ใช้งานอยู่",
   "prompt.context.includeActiveFile": "รวมไฟล์ที่ใช้งานอยู่",
   "prompt.context.removeActiveFile": "เอาไฟล์ที่ใช้งานอยู่ออกจากบริบท",
@@ -281,17 +277,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "ไม่สามารถส่งพร้อมท์",
   "prompt.toast.promptSendFailed.description": "ไม่สามารถดึงเซสชันได้",
 
-  "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} จาก {{total}} ที่เปิดใช้งาน",
-  "dialog.mcp.empty": "ไม่มี MCP ที่กำหนดค่า",
 
   "dialog.lsp.empty": "LSPs ตรวจจับอัตโนมัติจากประเภทไฟล์",
   "dialog.plugins.empty": "ปลั๊กอินที่กำหนดค่าใน opencode.json",
 
-  "mcp.status.connected": "เชื่อมต่อแล้ว",
-  "mcp.status.failed": "ล้มเหลว",
-  "mcp.status.needs_auth": "ต้องการการตรวจสอบสิทธิ์",
-  "mcp.status.disabled": "ปิดใช้งาน",
 
   "dialog.fork.empty": "ไม่มีข้อความให้แตกแขนง",
 
@@ -454,7 +443,6 @@ export const dict = {
   "error.chain.didYouMean": "คุณหมายถึง: {{suggestions}}",
   "error.chain.modelNotFound": "ไม่พบโมเดล: {{provider}}/{{model}}",
   "error.chain.checkConfig": "ตรวจสอบการกำหนดค่าของคุณ (opencode.json) ชื่อผู้ให้บริการ/โมเดล",
-  "error.chain.mcpFailed": 'เซิร์ฟเวอร์ MCP "{{name}}" ล้มเหลว โปรดทราบว่า OpenCode ยังไม่รองรับการตรวจสอบสิทธิ์ MCP',
   "error.chain.providerAuthFailed": "การตรวจสอบสิทธิ์ผู้ให้บริการล้มเหลว ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": 'ไม่สามารถเริ่มต้นผู้ให้บริการ "{{provider}}" ตรวจสอบข้อมูลรับรองและการกำหนดค่า',
   "error.chain.configJsonInvalid": "ไฟล์กำหนดค่าที่ {{path}} ไม่ใช่ JSON(C) ที่ถูกต้อง",
@@ -518,7 +506,6 @@ export const dict = {
   "status.popover.trigger": "สถานะ",
   "status.popover.ariaLabel": "การกำหนดค่าเซิร์ฟเวอร์",
   "status.popover.tab.servers": "เซิร์ฟเวอร์",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "ปลั๊กอิน",
   "status.popover.action.manageServers": "จัดการเซิร์ฟเวอร์",
@@ -718,8 +705,6 @@ export const dict = {
   "settings.agents.description": "การตั้งค่าเอเจนต์จะสามารถกำหนดค่าได้ที่นี่",
   "settings.commands.title": "คำสั่ง",
   "settings.commands.description": "การตั้งค่าคำสั่งจะสามารถกำหนดค่าได้ที่นี่",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "การตั้งค่า MCP จะสามารถกำหนดค่าได้ที่นี่",
 
   "settings.permissions.title": "สิทธิ์",
   "settings.permissions.description": "ควบคุมเครื่องมือที่เซิร์ฟเวอร์สามารถใช้โดยค่าเริ่มต้น",

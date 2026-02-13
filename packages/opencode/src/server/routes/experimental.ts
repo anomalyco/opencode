@@ -183,6 +183,5 @@ export const ExperimentalRoutes = lazy(() =>
         await Worktree.reset(body)
         return c.json(true)
       },
-    )
-    // MCP resources endpoint removed - infinite retention build
+    ),
 )

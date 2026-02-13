@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "Kontekst",
   "command.category.terminal": "Terminal",
   "command.category.model": "Model",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Tilladelser",
   "command.category.workspace": "Arbejdsområde",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "Gå til den næste brugerbesked",
   "command.model.choose": "Vælg model",
   "command.model.choose.description": "Vælg en anden model",
-  "command.mcp.toggle": "Skift MCP'er",
-  "command.mcp.toggle.description": "Skift MCP'er",
   "command.agent.cycle": "Skift agent",
   "command.agent.cycle.description": "Skift til næste agent",
   "command.agent.cycle.reverse": "Skift agent baglæns",
@@ -259,7 +256,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Slip for at @nævne fil",
   "prompt.slash.badge.custom": "brugerdefineret",
   "prompt.slash.badge.skill": "skill",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -280,17 +276,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Kunne ikke sende forespørgsel",
   "prompt.toast.promptSendFailed.description": "Kunne ikke hente session",
 
-  "dialog.mcp.title": "MCP'er",
-  "dialog.mcp.description": "{{enabled}} af {{total}} aktiveret",
-  "dialog.mcp.empty": "Ingen MCP'er konfigureret",
 
   "dialog.lsp.empty": "LSP'er registreret automatisk fra filtyper",
   "dialog.plugins.empty": "Plugins konfigureret i opencode.json",
 
-  "mcp.status.connected": "forbundet",
-  "mcp.status.failed": "mislykkedes",
-  "mcp.status.needs_auth": "kræver godkendelse",
-  "mcp.status.disabled": "deaktiveret",
 
   "dialog.fork.empty": "Ingen beskeder at forgrene fra",
 
@@ -454,7 +443,6 @@ export const dict = {
   "error.chain.didYouMean": "Mente du: {{suggestions}}",
   "error.chain.modelNotFound": "Model ikke fundet: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Tjek dine konfigurations (opencode.json) udbyder/modelnavne",
-  "error.chain.mcpFailed": 'MCP-server "{{name}}" fejlede. Bemærk, OpenCode understøtter ikke MCP-godkendelse endnu.',
   "error.chain.providerAuthFailed": "Udbydergodkendelse mislykkedes ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Kunne ikke initialisere udbyder "{{provider}}". Tjek legitimationsoplysninger og konfiguration.',
@@ -517,7 +505,6 @@ export const dict = {
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Serverkonfigurationer",
   "status.popover.tab.servers": "Servere",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
@@ -719,8 +706,6 @@ export const dict = {
   "settings.agents.description": "Agentindstillinger vil kunne konfigureres her.",
   "settings.commands.title": "Kommandoer",
   "settings.commands.description": "Kommandoindstillinger vil kunne konfigureres her.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP-indstillinger vil kunne konfigureres her.",
 
   "settings.permissions.title": "Tilladelser",
   "settings.permissions.description": "Styr hvilke værktøjer serveren kan bruge som standard.",

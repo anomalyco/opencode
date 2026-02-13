@@ -74,8 +74,8 @@ export namespace Agent {
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
-      build: {
-        name: "build",
+      armed: {
+        name: "armed",
         description: "The default agent. Executes tools based on configured permissions.",
         options: {},
         permission: PermissionNext.merge(
@@ -89,9 +89,9 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
-      plan: {
-        name: "plan",
-        description: "Plan mode. Disallows all edit tools.",
+      locked: {
+        name: "locked",
+        description: "Locked mode. Disallows all edit tools.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -266,7 +266,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "armed"), "desc"]),
     )
   }
 

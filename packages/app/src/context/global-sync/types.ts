@@ -4,7 +4,6 @@ import type {
   Config,
   FileDiff,
   LspStatus,
-  McpStatus,
   Message,
   Part,
   Path,
@@ -57,9 +56,6 @@ export type State = {
   }
   question: {
     [sessionID: string]: QuestionRequest[]
-  }
-  mcp: {
-    [name: string]: McpStatus
   }
   lsp: LspStatus[]
   vcs: VcsInfo | undefined

@@ -3,56 +3,159 @@ import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
-import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
-import { Global } from "@/global"
+import type { AssistantMessage, Part, ToolPart, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { Installation } from "@/installation"
-import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
+import { useLocal } from "../../context/local"
 import { TodoItem } from "../../component/todo-item"
-import {
-  calculateSessionMetrics,
-  formatMs,
-  formatTokenRate,
-  formatPercent,
-} from "../../util/cic"
+import { calculateSessionMetrics, formatMs, formatTokenRate, formatPercent, getMessageStats } from "../../util/cic"
+
+type ActivityItem = {
+  id: string
+  type: "tool" | "text" | "reasoning"
+  label: string
+  duration: number | null
+  status: "running" | "completed" | "error" | "pending"
+  time: number
+  outcome: string
+}
+
+// Fixed-width sparkline from array of values
+function sparkline(values: number[], width: number): string {
+  const blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+  if (values.length === 0) return blocks[0].repeat(width)
+  const padded = values.length >= width ? values.slice(-width) : [...Array(width - values.length).fill(0), ...values]
+  const max = Math.max(...padded, 0.001)
+  return padded.map((v) => blocks[Math.min(7, Math.floor((v / max) * 7))]).join("")
+}
+
+// Format large numbers compactly
+function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
+}
+
+// Right-pad string to fixed width (right-align)
+function rpad(s: string, w: number): string {
+  return s.length >= w ? s.slice(0, w) : " ".repeat(w - s.length) + s
+}
+
+// Left-pad string to fixed width (left-align)
+function lpad(s: string, w: number): string {
+  return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length)
+}
+
+// Extract argv[0] from a command string
+function argv0(cmd: string): string {
+  const trimmed = cmd.trim()
+  // Handle common shell patterns like "cd dir && cmd" or just get first word
+  const match = trimmed.match(/^(?:cd\s+[^\s;]+\s*(?:&&|;)\s*)?(\S+)/)
+  return match?.[1] ?? trimmed.split(/\s/)[0] ?? "cmd"
+}
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const local = useLocal()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
-  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
+  // Build activity log from all parts across all messages - NO FILTERING, full transparency
+  const activity = createMemo((): ActivityItem[] => {
+    const items: ActivityItem[] = []
+    const msgs = messages()
+
+    for (const msg of msgs) {
+      if (msg.role !== "assistant") continue
+      const parts = sync.data.part[msg.id] ?? []
+
+      for (const part of parts) {
+        if (part.type === "tool") {
+          const p = part as ToolPart
+          const state = p.state
+          let duration: number | null = null
+          let status: ActivityItem["status"] = "pending"
+          let time = 0
+          let outcome = ""
+
+          // Get the actual command for bash tools (argv[0])
+          let label = p.tool
+          if (p.tool === "bash" && state.input && typeof state.input.command === "string") {
+            label = argv0(state.input.command)
+          }
+
+          if (state.status === "running") {
+            status = "running"
+            time = state.time.start
+            duration = Date.now() - state.time.start
+            outcome = "..."
+          } else if (state.status === "completed") {
+            status = "completed"
+            time = state.time.start
+            duration = state.time.end - state.time.start
+            const meta = state.metadata ?? {}
+            if (meta.files !== undefined) {
+              outcome = `${meta.files}f`
+            } else if (meta.lines !== undefined) {
+              outcome = `${meta.lines}ln`
+            } else if (meta.matches !== undefined) {
+              outcome = `${meta.matches}m`
+            } else if (typeof meta.bytes === "number") {
+              outcome = meta.bytes < 1024 ? `${meta.bytes}B` : `${(meta.bytes / 1024).toFixed(1)}K`
+            }
+          } else if (state.status === "error") {
+            status = "error"
+            time = state.time?.start ?? 0
+            duration = state.time?.end ? state.time.end - state.time.start : null
+            outcome = "err"
+          }
+
+          items.push({ id: p.id, type: "tool", label, duration, status, time, outcome })
+        } else if (part.type === "reasoning") {
+          const p = part as ReasoningPart
+          const duration = p.time.end ? p.time.end - p.time.start : Date.now() - p.time.start
+          const chars = p.text?.length ?? 0
+          items.push({
+            id: p.id,
+            type: "reasoning",
+            label: "think",
+            duration,
+            status: p.time.end ? "completed" : "running",
+            time: p.time.start,
+            outcome: chars > 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}c`,
+          })
+        } else if (part.type === "text") {
+          const p = part as TextPart
+          if (p.synthetic || p.ignored) continue
+          const duration = p.time?.end && p.time?.start ? p.time.end - p.time.start : null
+          const chars = p.text?.length ?? 0
+          items.push({
+            id: p.id,
+            type: "text",
+            label: "text",
+            duration,
+            status: p.time?.end ? "completed" : "running",
+            time: p.time?.start ?? 0,
+            outcome: chars > 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}c`,
+          })
+        }
+      }
+    }
+    // Sort by time descending - show ALL items, no limit
+    return items.sort((a, b) => b.time - a.time)
+  })
+
   const [expanded, setExpanded] = createStore({
-    cic: true,
-    mcp: true,
-    diff: true,
     todo: true,
     lsp: true,
   })
 
-  // Sort MCP servers alphabetically for consistent display order
-  const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
-
-  // Count connected and error MCP servers for collapsed header display
-  const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
-  const errorMcpCount = createMemo(
-    () =>
-      mcpEntries().filter(
-        ([_, item]) =>
-          item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
-      ).length,
-  )
-
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(total)
   })
 
   const context = createMemo(() => {
@@ -68,6 +171,70 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   })
 
   const cic = createMemo(() => calculateSessionMetrics(messages(), sync.data.part))
+
+  // Per-message metrics for sparklines
+  const messageMetrics = createMemo(() => {
+    const msgs = messages().filter((m): m is AssistantMessage => m.role === "assistant")
+    return msgs.map((msg) => {
+      const parts = sync.data.part[msg.id] ?? []
+      const stats = getMessageStats(msg, parts)
+      return {
+        ttft: stats.ttft ?? 0,
+        tokensPerSec: stats.tokensPerSec ?? 0,
+        cacheHit: stats.cacheHitRate ?? 0,
+        output: msg.tokens.output + msg.tokens.reasoning,
+      }
+    })
+  })
+
+  // Tool stats
+  const toolStats = createMemo(() => {
+    const items = activity()
+    const tools = items.filter((i) => i.type === "tool")
+    const completed = tools.filter((t) => t.status === "completed")
+    const errors = tools.filter((t) => t.status === "error")
+    const running = tools.filter((t) => t.status === "running")
+    const avgDuration =
+      completed.length > 0 ? completed.reduce((s, t) => s + (t.duration ?? 0), 0) / completed.length : 0
+    return {
+      total: tools.length,
+      completed: completed.length,
+      errors: errors.length,
+      running: running.length,
+      avgDuration,
+    }
+  })
+
+  // State histogram - time/count breakdown by activity type
+  const stateHistogram = createMemo(() => {
+    const items = activity()
+    const toolTime = items.filter((i) => i.type === "tool").reduce((s, i) => s + (i.duration ?? 0), 0)
+    const textTime = items.filter((i) => i.type === "text").reduce((s, i) => s + (i.duration ?? 0), 0)
+    const thinkTime = items.filter((i) => i.type === "reasoning").reduce((s, i) => s + (i.duration ?? 0), 0)
+    const totalTime = toolTime + textTime + thinkTime
+    if (totalTime === 0) return null
+
+    const toolPct = Math.round((toolTime / totalTime) * 100)
+    const textPct = Math.round((textTime / totalTime) * 100)
+    const thinkPct = Math.round((thinkTime / totalTime) * 100)
+
+    // Build histogram bar (10 chars wide)
+    const barWidth = 20
+    const toolChars = Math.round((toolTime / totalTime) * barWidth)
+    const textChars = Math.round((textTime / totalTime) * barWidth)
+    const thinkChars = barWidth - toolChars - textChars
+    const bar = "▓".repeat(toolChars) + "░".repeat(textChars) + "·".repeat(Math.max(0, thinkChars))
+
+    return {
+      bar,
+      toolPct,
+      textPct,
+      thinkPct,
+      toolCount: items.filter((i) => i.type === "tool").length,
+      textCount: items.filter((i) => i.type === "text").length,
+      thinkCount: items.filter((i) => i.type === "reasoning").length,
+    }
+  })
 
   const directory = useDirectory()
   const kv = useKV()
@@ -99,115 +266,181 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
             </box>
+            {/* WEAPON HEADER */}
             <box>
-              <text fg={theme.text}>
-                <b>Context</b>
+              <text fg={theme.textMuted}>
+                {"// WEAPON // "}
+                <span style={{ fg: theme.text }}>
+                  <b>{local.agent.current().name.toUpperCase()}</b>
+                </span>
+                {" //"}
               </text>
-              <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
-              <text fg={theme.textMuted}>{cost()} spent</text>
+              <text fg={theme.textMuted}>
+                {"// MODEL // "}
+                <span style={{ fg: theme.text }}>{local.model.parsed().model.split("/").pop()?.toUpperCase()}</span>
+                {" //"}
+              </text>
             </box>
+            {/* CONTEXT METRICS */}
+            <box>
+              <text fg={theme.textMuted}>
+                {"// CTX // "}
+                <span style={{ fg: theme.text }}>{compact(cic().inputTokens + cic().cacheRead)}</span>
+                {" IN // "}
+                <span style={{ fg: theme.text }}>{compact(cic().outputTokens + cic().reasoningTokens)}</span>
+                {" OUT //"}
+              </text>
+              <text fg={theme.textMuted}>
+                {"// LIMIT // "}
+                <span style={{ fg: theme.text }}>{context()?.percentage ?? 0}%</span>
+                {" // COST // "}
+                <span style={{ fg: theme.warning }}>{cost()}</span>
+                {" //"}
+              </text>
+            </box>
+            {/* PERFORMANCE SPARKLINES */}
             <Show when={cic().messageCount > 0}>
               <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => setExpanded("cic", !expanded.cic)}
-                >
-                  <text fg={theme.text}>{expanded.cic ? "▼" : "▶"}</text>
-                  <text fg={theme.text}>
-                    <b>CIC</b>
-                    <Show when={!expanded.cic}>
-                      <span style={{ fg: theme.textMuted }}>
-                        {" "}
-                        ({formatTokenRate(cic().tokensPerSec)})
-                      </span>
-                    </Show>
+                <box flexDirection="row">
+                  <text fg={theme.textMuted} width={5}>
+                    TTFT
+                  </text>
+                  <text fg={theme.info}>
+                    {sparkline(
+                      messageMetrics().map((m) => m.ttft),
+                      20,
+                    )}
+                  </text>
+                  <text fg={theme.text}>{rpad(formatMs(cic().ttft).toUpperCase(), 6)}</text>
+                </box>
+                <box flexDirection="row">
+                  <text fg={theme.textMuted} width={5}>
+                    TK/S
+                  </text>
+                  <text fg={theme.success}>
+                    {sparkline(
+                      messageMetrics().map((m) => m.tokensPerSec),
+                      20,
+                    )}
+                  </text>
+                  <text fg={theme.text}>{rpad(formatTokenRate(cic().tokensPerSec).toUpperCase(), 6)}</text>
+                </box>
+                <box flexDirection="row">
+                  <text fg={theme.textMuted} width={5}>
+                    CACHE
+                  </text>
+                  <text fg={(cic().cacheHitRate ?? 0) > 50 ? theme.success : theme.warning}>
+                    {sparkline(
+                      messageMetrics().map((m) => m.cacheHit),
+                      20,
+                    )}
+                  </text>
+                  <text fg={(cic().cacheHitRate ?? 0) > 50 ? theme.success : theme.text}>
+                    {rpad(formatPercent(cic().cacheHitRate).toUpperCase(), 6)}
                   </text>
                 </box>
-                <Show when={expanded.cic}>
-                  <box paddingLeft={2}>
-                    <text fg={theme.textMuted}>
-                      <span style={{ fg: theme.text }}>Last:</span>{" "}
-                      TTFT {formatMs(cic().ttft)}{" "}
-                      · {formatMs(cic().duration)}{" "}
-                      · {formatTokenRate(cic().tokensPerSec)}
-                    </text>
-                    <Show when={cic().messageCount > 1}>
-                      <text fg={theme.textMuted}>
-                        <span style={{ fg: theme.text }}>Avg:</span>{" "}
-                        TTFT {formatMs(cic().avgTTFT)}{" "}
-                        · {formatTokenRate(cic().avgTokensPerSec)}{" "}
-                        · p95 {formatMs(cic().p95Duration)}
-                      </text>
-                    </Show>
-                    <text fg={theme.textMuted}>
-                      <span style={{ fg: theme.text }}>Eff:</span>{" "}
-                      Cache {formatPercent(cic().cacheHitRate)}
-                    </text>
-                  </box>
+                <box flexDirection="row">
+                  <text fg={theme.textMuted} width={5}>
+                    OUT
+                  </text>
+                  <text fg={theme.primary}>
+                    {sparkline(
+                      messageMetrics().map((m) => m.output),
+                      20,
+                    )}
+                  </text>
+                  <text fg={theme.text}>{rpad(compact(cic().outputTokens + cic().reasoningTokens), 6)}</text>
+                </box>
+                <Show when={cic().messageCount > 1}>
+                  <text fg={theme.textMuted}>
+                    {"// AVG // "}
+                    <span style={{ fg: theme.text }}>{formatTokenRate(cic().avgTokensPerSec).toUpperCase()}</span>
+                    {" // P95 // "}
+                    <span style={{ fg: theme.text }}>{formatMs(cic().p95Duration).toUpperCase()}</span>
+                    {" //"}
+                  </text>
                 </Show>
               </box>
             </Show>
-            <Show when={mcpEntries().length > 0}>
+            {/* STATE HISTOGRAM */}
+            <Show when={stateHistogram()}>
               <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => mcpEntries().length > 2 && setExpanded("mcp", !expanded.mcp)}
-                >
-                  <Show when={mcpEntries().length > 2}>
-                    <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
+                <text fg={theme.primary}>{stateHistogram()!.bar}</text>
+                <text fg={theme.textMuted}>
+                  {"// "}
+                  <span style={{ fg: theme.primary }}>TOOL {stateHistogram()!.toolPct}%</span>
+                  {" // "}
+                  <span style={{ fg: theme.success }}>TEXT {stateHistogram()!.textPct}%</span>
+                  <Show when={stateHistogram()!.thinkPct > 0}>
+                    {" // "}
+                    <span style={{ fg: theme.info }}>THINK {stateHistogram()!.thinkPct}%</span>
                   </Show>
-                  <text fg={theme.text}>
-                    <b>MCP</b>
-                    <Show when={!expanded.mcp}>
-                      <span style={{ fg: theme.textMuted }}>
-                        {" "}
-                        ({connectedMcpCount()} active
-                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} error${errorMcpCount() > 1 ? "s" : ""}` : ""})
-                      </span>
-                    </Show>
-                  </text>
-                </box>
-                <Show when={mcpEntries().length <= 2 || expanded.mcp}>
-                  <For each={mcpEntries()}>
-                    {([key, item]) => (
-                      <box flexDirection="row" gap={1}>
-                        <text
-                          flexShrink={0}
-                          style={{
-                            fg: (
-                              {
-                                connected: theme.success,
-                                failed: theme.error,
-                                disabled: theme.textMuted,
-                                needs_auth: theme.warning,
-                                needs_client_registration: theme.error,
-                              } as Record<string, typeof theme.success>
-                            )[item.status],
-                          }}
-                        >
-                          •
-                        </text>
-                        <text fg={theme.text} wrapMode="word">
-                          {key}{" "}
-                          <span style={{ fg: theme.textMuted }}>
-                            <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
-                              <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled</Match>
-                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
-                              <Match when={(item.status as string) === "needs_client_registration"}>
-                                Needs client ID
-                              </Match>
-                            </Switch>
-                          </span>
-                        </text>
-                      </box>
-                    )}
-                  </For>
+                  {" //"}
+                </text>
+                <text fg={theme.textMuted}>
+                  {"// "}
+                  {stateHistogram()!.toolCount}T {" // "} {stateHistogram()!.textCount}S
+                  <Show when={stateHistogram()!.thinkCount > 0}>
+                    {" // "}
+                    {stateHistogram()!.thinkCount}K
+                  </Show>
+                  {" //"}
+                </text>
+              </box>
+            </Show>
+            {/* TOOLS SUMMARY */}
+            <Show when={toolStats().total > 0}>
+              <text fg={theme.textMuted}>
+                {"// TOOLS // "}
+                <span style={{ fg: theme.success }}>{toolStats().completed} OK</span>
+                <Show when={toolStats().running > 0}>
+                  {" // "}
+                  <span style={{ fg: theme.warning }}>{toolStats().running} RUN</span>
                 </Show>
+                <Show when={toolStats().errors > 0}>
+                  {" // "}
+                  <span style={{ fg: theme.error }}>{toolStats().errors} ERR</span>
+                </Show>
+                {" // ~"}
+                {formatMs(toolStats().avgDuration).toUpperCase()}
+                {" //"}
+              </text>
+            </Show>
+            {/* ACTIVITY LOG */}
+            <Show when={activity().length > 0}>
+              <box>
+                <For each={activity()}>
+                  {(item) => {
+                    const icons = {
+                      tool: { running: "▣", completed: "■", error: "▨", pending: "□" },
+                      reasoning: { running: "◧", completed: "◧", error: "▨", pending: "◧" },
+                      text: { running: "▤", completed: "▤", error: "▨", pending: "▤" },
+                    }
+                    const icon = icons[item.type][item.status]
+                    const color =
+                      item.status === "running"
+                        ? theme.warning
+                        : item.status === "error"
+                          ? theme.error
+                          : item.status === "completed"
+                            ? theme.success
+                            : theme.textMuted
+                    const labelText = lpad(item.label.toUpperCase(), 10)
+                    const outcomeText = rpad(item.outcome.toUpperCase() || "", 6)
+                    const durText =
+                      item.duration && item.duration > 0 ? rpad(formatMs(item.duration).toUpperCase(), 5) : rpad("", 5)
+                    return (
+                      <text>
+                        <span style={{ fg: color }}>{icon}</span>
+                        <span style={{ fg: item.status === "running" ? theme.text : theme.textMuted }}>
+                          {labelText}
+                        </span>{" "}
+                        <span style={{ fg: theme.textMuted }}>{outcomeText}</span>
+                        <span style={{ fg: color }}>{durText}</span>
+                      </text>
+                    )
+                  }}
+                </For>
               </box>
             </Show>
             <box>
@@ -219,23 +452,24 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={sync.data.lsp.length > 2}>
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
                 </Show>
-                <text fg={theme.text}>
-                  <b>LSP</b>
+                <text fg={theme.textMuted}>
+                  {"// "}
+                  <span style={{ fg: theme.text }}>
+                    <b>LSP</b>
+                  </span>
+                  {" //"}
                 </text>
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
                   <text fg={theme.textMuted}>
-                    {sync.data.config.lsp === false
-                      ? "LSPs have been disabled in settings"
-                      : "LSPs will activate as files are read"}
+                    {sync.data.config.lsp === false ? "DISABLED IN SETTINGS" : "ACTIVATES ON FILE READ"}
                   </text>
                 </Show>
                 <For each={sync.data.lsp}>
                   {(item) => (
-                    <box flexDirection="row" gap={1}>
-                      <text
-                        flexShrink={0}
+                    <text fg={theme.textMuted}>
+                      <span
                         style={{
                           fg: {
                             connected: theme.success,
@@ -243,12 +477,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           }[item.status],
                         }}
                       >
-                        •
-                      </text>
-                      <text fg={theme.textMuted}>
-                        {item.id} {item.root}
-                      </text>
-                    </box>
+                        {item.status === "connected" ? "■" : "▨"}
+                      </span>{" "}
+                      {item.id.toUpperCase()}
+                    </text>
                   )}
                 </For>
               </Show>
@@ -263,49 +495,16 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <Show when={todo().length > 2}>
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
                   </Show>
-                  <text fg={theme.text}>
-                    <b>Todo</b>
+                  <text fg={theme.textMuted}>
+                    {"// "}
+                    <span style={{ fg: theme.text }}>
+                      <b>TODO</b>
+                    </span>
+                    {" //"}
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
                   <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
-                </Show>
-              </box>
-            </Show>
-            <Show when={diff().length > 0}>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
-                >
-                  <Show when={diff().length > 2}>
-                    <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>Modified Files</b>
-                  </text>
-                </box>
-                <Show when={diff().length <= 2 || expanded.diff}>
-                  <For each={diff() || []}>
-                    {(item) => {
-                      return (
-                        <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="none">
-                            {item.file}
-                          </text>
-                          <box flexDirection="row" gap={1} flexShrink={0}>
-                            <Show when={item.additions}>
-                              <text fg={theme.diffAdded}>+{item.additions}</text>
-                            </Show>
-                            <Show when={item.deletions}>
-                              <text fg={theme.diffRemoved}>-{item.deletions}</text>
-                            </Show>
-                          </box>
-                        </box>
-                      )
-                    }}
-                  </For>
                 </Show>
               </box>
             </Show>
@@ -324,38 +523,37 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               gap={1}
             >
               <text flexShrink={0} fg={theme.text}>
-                ⬖
+                <b>GETTING STARTED</b>
               </text>
-              <box flexGrow={1} gap={1}>
-                <box flexDirection="row" justifyContent="space-between">
-                  <text fg={theme.text}>
-                    <b>Getting started</b>
-                  </text>
-                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
-                    ✕
-                  </text>
-                </box>
-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
-                <text fg={theme.textMuted}>
-                  Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
-                </text>
-                <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text fg={theme.text}>Connect provider</text>
-                  <text fg={theme.textMuted}>/connect</text>
-                </box>
+              <box>
+                <text fg={theme.textMuted}>TYPE /CONNECT TO CONNECT TO A PROVIDER</text>
               </box>
             </box>
           </Show>
-          <text>
-            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
-            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+          <Show when={cic().inputTokens + cic().outputTokens > 0}>
+            <text fg={theme.textMuted}>
+              {"// TRAINING // DATA // "}
+              <span style={{ fg: theme.warning }}>
+                {(((cic().inputTokens + cic().outputTokens + cic().cacheRead) * 4) / 1024 / 1024).toFixed(2)}MB
+              </span>
+              {" //"}
+            </text>
+          </Show>
+          <text fg={theme.textMuted}>
+            {"// CWD // "}
+            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)?.toUpperCase()}</span>
+            {" //"}
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            {"// "}
+            <span style={{ fg: theme.success }}>ONLINE</span>
+            {" // "}
             <span style={{ fg: theme.text }}>
-              <b>Code</b>
-            </span>{" "}
+              <b>OPENCODE</b>
+            </span>
+            {" // "}
             <span>{Installation.VERSION}</span>
+            {" //"}
           </text>
         </box>
       </box>

@@ -135,8 +135,8 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
 type HexColor = `#${string}`
 type RefName = string
 type Variant = {
-  dark: HexColor | RefName
-  light: HexColor | RefName
+  dark?: HexColor | RefName
+  light?: HexColor | RefName
 }
 type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
@@ -217,7 +217,10 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     if (typeof c === "number") {
       return ansiToRgba(c)
     }
-    return resolveColor(c[mode])
+    // Variant object - use requested mode, fall back to other mode if not defined
+    const value = c[mode] ?? c[mode === "dark" ? "light" : "dark"]
+    if (!value) throw new Error(`Variant has neither dark nor light value`)
+    return resolveColor(value)
   }
 
   const resolved = Object.fromEntries(
@@ -453,7 +456,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
   const transparent = RGBA.fromInts(0, 0, 0, 0)
-  const isDark = mode == "dark"
+  const isDark = mode === "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]

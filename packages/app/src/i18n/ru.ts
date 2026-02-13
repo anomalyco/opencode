@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "Контекст",
   "command.category.terminal": "Терминал",
   "command.category.model": "Модель",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Агент",
   "command.category.permissions": "Разрешения",
   "command.category.workspace": "Рабочее пространство",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "Перейти к следующему сообщению пользователя",
   "command.model.choose": "Выбрать модель",
   "command.model.choose.description": "Выбрать другую модель",
-  "command.mcp.toggle": "Переключить MCP",
-  "command.mcp.toggle.description": "Переключить MCP",
   "command.agent.cycle": "Цикл агентов",
   "command.agent.cycle.description": "Переключиться к следующему агенту",
   "command.agent.cycle.reverse": "Цикл агентов назад",
@@ -260,7 +257,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Отпустите для @упоминания файла",
   "prompt.slash.badge.custom": "своё",
   "prompt.slash.badge.skill": "навык",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "активно",
   "prompt.context.includeActiveFile": "Включить активный файл",
   "prompt.context.removeActiveFile": "Удалить активный файл из контекста",
@@ -281,17 +277,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Не удалось отправить запрос",
   "prompt.toast.promptSendFailed.description": "Не удалось получить сессию",
 
-  "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} из {{total}} включено",
-  "dialog.mcp.empty": "MCP не настроены",
 
   "dialog.lsp.empty": "LSP автоматически обнаружены по типам файлов",
   "dialog.plugins.empty": "Плагины настроены в opencode.json",
 
-  "mcp.status.connected": "подключено",
-  "mcp.status.failed": "ошибка",
-  "mcp.status.needs_auth": "требуется авторизация",
-  "mcp.status.disabled": "отключено",
 
   "dialog.fork.empty": "Нет сообщений для ответвления",
 
@@ -456,8 +445,6 @@ export const dict = {
   "error.chain.didYouMean": "Возможно, вы имели в виду: {{suggestions}}",
   "error.chain.modelNotFound": "Модель не найдена: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Проверьте названия провайдера/модели в конфиге (opencode.json)",
-  "error.chain.mcpFailed":
-    'MCP сервер "{{name}}" завершился с ошибкой. Обратите внимание, что OpenCode пока не поддерживает MCP авторизацию.',
   "error.chain.providerAuthFailed": "Ошибка аутентификации провайдера ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Не удалось инициализировать провайдера "{{provider}}". Проверьте учётные данные и конфигурацию.',
@@ -521,7 +508,6 @@ export const dict = {
   "status.popover.trigger": "Статус",
   "status.popover.ariaLabel": "Настройки серверов",
   "status.popover.tab.servers": "Серверы",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Плагины",
   "status.popover.action.manageServers": "Управлять серверами",
@@ -726,8 +712,6 @@ export const dict = {
   "settings.agents.description": "Настройки агентов будут доступны здесь.",
   "settings.commands.title": "Команды",
   "settings.commands.description": "Настройки команд будут доступны здесь.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "Настройки MCP будут доступны здесь.",
 
   "settings.permissions.title": "Разрешения",
   "settings.permissions.description": "Контролируйте какие инструменты сервер может использовать по умолчанию.",

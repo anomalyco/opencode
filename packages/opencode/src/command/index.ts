@@ -95,7 +95,6 @@ export namespace Command {
         hints: hints(command.template),
       }
     }
-    // MCP prompts removed - infinite retention build
 
     // Add skills as invokable commands
     for (const skill of await Skill.all()) {

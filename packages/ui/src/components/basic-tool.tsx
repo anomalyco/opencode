@@ -114,5 +114,5 @@ export function BasicTool(props: BasicToolProps) {
 }
 
 export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+  return <BasicTool icon="tool" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
 }

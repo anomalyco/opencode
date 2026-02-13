@@ -8,7 +8,7 @@ import type {
   AppLogErrors,
   AppLogResponses,
   AppSkillsResponses,
-  Auth as Auth3,
+  Auth as Auth2,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
@@ -24,7 +24,6 @@ import type {
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
-  ExperimentalResourceListResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -42,21 +41,6 @@ import type {
   GlobalHealthResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
-  McpAddErrors,
-  McpAddResponses,
-  McpAuthAuthenticateErrors,
-  McpAuthAuthenticateResponses,
-  McpAuthCallbackErrors,
-  McpAuthCallbackResponses,
-  McpAuthRemoveErrors,
-  McpAuthRemoveResponses,
-  McpAuthStartErrors,
-  McpAuthStartResponses,
-  McpConnectResponses,
-  McpDisconnectResponses,
-  McpLocalConfig,
-  McpRemoteConfig,
-  McpStatusResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -328,7 +312,7 @@ export class Auth extends HeyApiClient {
   public set<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
-      auth?: Auth3
+      auth?: Auth2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -895,34 +879,6 @@ export class Worktree extends HeyApiClient {
         ...params.headers,
       },
     })
-  }
-}
-
-export class Resource extends HeyApiClient {
-  /**
-   * Get MCP resources
-   *
-   * Get all available MCP resources from connected servers. Optionally filter by name.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
-      url: "/experimental/resource",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Experimental extends HeyApiClient {
-  private _resource?: Resource
-  get resource(): Resource {
-    return (this._resource ??= new Resource({ client: this.client }))
   }
 }
 
@@ -2345,256 +2301,6 @@ export class File extends HeyApiClient {
   }
 }
 
-export class Auth2 extends HeyApiClient {
-  /**
-   * Remove MCP OAuth
-   *
-   * Remove OAuth credentials for an MCP server
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<McpAuthRemoveResponses, McpAuthRemoveErrors, ThrowOnError>({
-      url: "/mcp/{name}/auth",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Start MCP OAuth
-   *
-   * Start OAuth authentication flow for a Model Context Protocol (MCP) server.
-   */
-  public start<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpAuthStartResponses, McpAuthStartErrors, ThrowOnError>({
-      url: "/mcp/{name}/auth",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Complete MCP OAuth
-   *
-   * Complete OAuth authentication for a Model Context Protocol (MCP) server using the authorization code.
-   */
-  public callback<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-      code?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "code" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpAuthCallbackResponses, McpAuthCallbackErrors, ThrowOnError>({
-      url: "/mcp/{name}/auth/callback",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Authenticate MCP OAuth
-   *
-   * Start OAuth flow and wait for callback (opens browser)
-   */
-  public authenticate<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpAuthAuthenticateResponses, McpAuthAuthenticateErrors, ThrowOnError>(
-      {
-        url: "/mcp/{name}/auth/authenticate",
-        ...options,
-        ...params,
-      },
-    )
-  }
-}
-
-export class Mcp extends HeyApiClient {
-  /**
-   * Get MCP status
-   *
-   * Get the status of all Model Context Protocol (MCP) servers.
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<McpStatusResponses, unknown, ThrowOnError>({
-      url: "/mcp",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Add MCP server
-   *
-   * Dynamically add a new Model Context Protocol (MCP) server to the system.
-   */
-  public add<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      name?: string
-      config?: McpLocalConfig | McpRemoteConfig
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "name" },
-            { in: "body", key: "config" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpAddResponses, McpAddErrors, ThrowOnError>({
-      url: "/mcp",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Connect an MCP server
-   */
-  public connect<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpConnectResponses, unknown, ThrowOnError>({
-      url: "/mcp/{name}/connect",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Disconnect an MCP server
-   */
-  public disconnect<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<McpDisconnectResponses, unknown, ThrowOnError>({
-      url: "/mcp/{name}/disconnect",
-      ...options,
-      ...params,
-    })
-  }
-
-  private _auth?: Auth2
-  get auth(): Auth2 {
-    return (this._auth ??= new Auth2({ client: this.client }))
-  }
-}
-
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3226,11 +2932,6 @@ export class OpencodeClient extends HeyApiClient {
     return (this._worktree ??= new Worktree({ client: this.client }))
   }
 
-  private _experimental?: Experimental
-  get experimental(): Experimental {
-    return (this._experimental ??= new Experimental({ client: this.client }))
-  }
-
   private _session?: Session
   get session(): Session {
     return (this._session ??= new Session({ client: this.client }))
@@ -3264,11 +2965,6 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
-  }
-
-  private _mcp?: Mcp
-  get mcp(): Mcp {
-    return (this._mcp ??= new Mcp({ client: this.client }))
   }
 
   private _tui?: Tui

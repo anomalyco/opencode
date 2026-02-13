@@ -263,7 +263,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       }
     default:
       return {
-        icon: "mcp",
+        icon: "tool",
         title: tool,
       }
   }

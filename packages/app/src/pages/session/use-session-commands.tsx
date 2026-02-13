@@ -13,7 +13,6 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
@@ -65,7 +64,6 @@ export const useSessionCommands = (input: SessionCommandContext) => {
   const viewCommand = withCategory(input.language.t("command.category.view"))
   const terminalCommand = withCategory(input.language.t("command.category.terminal"))
   const modelCommand = withCategory(input.language.t("command.category.model"))
-  const mcpCommand = withCategory(input.language.t("command.category.mcp"))
   const agentCommand = withCategory(input.language.t("command.category.agent"))
   const permissionsCommand = withCategory(input.language.t("command.category.permissions"))
 
@@ -210,14 +208,6 @@ export const useSessionCommands = (input: SessionCommandContext) => {
       keybind: "mod+'",
       slash: "model",
       onSelect: () => input.dialog.show(() => <DialogSelectModel />),
-    }),
-    mcpCommand({
-      id: "mcp.toggle",
-      title: input.language.t("command.mcp.toggle"),
-      description: input.language.t("command.mcp.toggle.description"),
-      keybind: "mod+;",
-      slash: "mcp",
-      onSelect: () => input.dialog.show(() => <DialogSelectMcp />),
     }),
     agentCommand({
       id: "agent.cycle",

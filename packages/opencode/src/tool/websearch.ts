@@ -11,7 +11,7 @@ const API_CONFIG = {
   DEFAULT_NUM_RESULTS: 8,
 } as const
 
-interface McpSearchRequest {
+interface ExaSearchRequest {
   jsonrpc: string
   id: number
   method: string
@@ -27,7 +27,7 @@ interface McpSearchRequest {
   }
 }
 
-interface McpSearchResponse {
+interface ExaSearchResponse {
   jsonrpc: string
   result: {
     content: Array<{
@@ -76,7 +76,7 @@ export const WebSearchTool = Tool.define("websearch", async () => {
         },
       })
 
-      const searchRequest: McpSearchRequest = {
+      const searchRequest: ExaSearchRequest = {
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
@@ -120,7 +120,7 @@ export const WebSearchTool = Tool.define("websearch", async () => {
         const lines = responseText.split("\n")
         for (const line of lines) {
           if (line.startsWith("data: ")) {
-            const data: McpSearchResponse = JSON.parse(line.substring(6))
+            const data: ExaSearchResponse = JSON.parse(line.substring(6))
             if (data.result && data.result.content && data.result.content.length > 0) {
               return {
                 output: data.result.content[0].text,

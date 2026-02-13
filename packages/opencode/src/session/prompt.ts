@@ -815,8 +815,6 @@ export namespace SessionPrompt {
       })
     }
 
-    // MCP tools removed - infinite retention build
-
     return tools
   }
 
@@ -879,7 +877,6 @@ export namespace SessionPrompt {
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
-          // MCP resource handling removed - infinite retention build
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
@@ -1284,7 +1281,7 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 - Include only your recommended approach, not all alternatives
 - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 - Include the paths of critical files to be modified
-- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+- Include a verification section describing how to test the changes end-to-end (run the code, run tests)
 
 ### Phase 5: Call plan_exit tool
 At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.

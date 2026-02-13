@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "Contexto",
   "command.category.terminal": "Terminal",
   "command.category.model": "Modelo",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Agente",
   "command.category.permissions": "Permisos",
   "command.category.workspace": "Espacio de trabajo",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "Ir al siguiente mensaje de usuario",
   "command.model.choose": "Elegir modelo",
   "command.model.choose.description": "Seleccionar un modelo diferente",
-  "command.mcp.toggle": "Alternar MCPs",
-  "command.mcp.toggle.description": "Alternar MCPs",
   "command.agent.cycle": "Alternar agente",
   "command.agent.cycle.description": "Cambiar al siguiente agente",
   "command.agent.cycle.reverse": "Alternar agente hacia atrás",
@@ -260,7 +257,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Suelta para @mencionar archivo",
   "prompt.slash.badge.custom": "personalizado",
   "prompt.slash.badge.skill": "skill",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "activo",
   "prompt.context.includeActiveFile": "Incluir archivo activo",
   "prompt.context.removeActiveFile": "Eliminar archivo activo del contexto",
@@ -281,17 +277,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Fallo al enviar prompt",
   "prompt.toast.promptSendFailed.description": "No se pudo recuperar la sesión",
 
-  "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} de {{total}} habilitados",
-  "dialog.mcp.empty": "No hay MCPs configurados",
 
   "dialog.lsp.empty": "LSPs detectados automáticamente por tipo de archivo",
   "dialog.plugins.empty": "Plugins configurados en opencode.json",
 
-  "mcp.status.connected": "conectado",
-  "mcp.status.failed": "fallido",
-  "mcp.status.needs_auth": "necesita auth",
-  "mcp.status.disabled": "deshabilitado",
 
   "dialog.fork.empty": "No hay mensajes desde donde bifurcar",
 
@@ -457,7 +446,6 @@ export const dict = {
   "error.chain.didYouMean": "¿Quisiste decir: {{suggestions}}",
   "error.chain.modelNotFound": "Modelo no encontrado: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Comprueba los nombres de proveedor/modelo en tu configuración (opencode.json)",
-  "error.chain.mcpFailed": 'El servidor MCP "{{name}}" falló. Nota, OpenCode no soporta autenticación MCP todavía.',
   "error.chain.providerAuthFailed": "Autenticación de proveedor fallida ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Fallo al inicializar proveedor "{{provider}}". Comprueba credenciales y configuración.',
@@ -523,7 +511,6 @@ export const dict = {
   "status.popover.trigger": "Estado",
   "status.popover.ariaLabel": "Configuraciones del servidor",
   "status.popover.tab.servers": "Servidores",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrar servidores",
@@ -730,8 +717,6 @@ export const dict = {
   "settings.agents.description": "La configuración de agentes estará disponible aquí.",
   "settings.commands.title": "Comandos",
   "settings.commands.description": "La configuración de comandos estará disponible aquí.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "La configuración de MCP estará disponible aquí.",
 
   "settings.permissions.title": "Permisos",
   "settings.permissions.description": "Controla qué herramientas puede usar el servidor por defecto.",

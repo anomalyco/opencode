@@ -15,7 +15,6 @@ export const dict = {
   "command.category.context": "上下文",
   "command.category.terminal": "终端",
   "command.category.model": "模型",
-  "command.category.mcp": "MCP",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
   "command.category.workspace": "工作区",
@@ -82,8 +81,6 @@ export const dict = {
   "command.model.choose": "选择模型",
   "command.model.choose.description": "选择不同的模型",
 
-  "command.mcp.toggle": "切换 MCPs",
-  "command.mcp.toggle.description": "切换 MCPs",
 
   "command.agent.cycle": "切换智能体",
   "command.agent.cycle.description": "切换到下一个智能体",
@@ -279,7 +276,6 @@ export const dict = {
   "prompt.dropzone.file.label": "拖放以 @提及文件",
   "prompt.slash.badge.custom": "自定义",
   "prompt.slash.badge.skill": "技能",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "当前",
   "prompt.context.includeActiveFile": "包含当前文件",
   "prompt.context.removeActiveFile": "从上下文移除活动文件",
@@ -299,18 +295,11 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "发送提示失败",
   "prompt.toast.promptSendFailed.description": "无法获取会话",
 
-  "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
-  "dialog.mcp.empty": "未配置 MCPs",
 
   "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
 
   "dialog.plugins.empty": "在 opencode.json 中配置的插件",
 
-  "mcp.status.connected": "已连接",
-  "mcp.status.failed": "失败",
-  "mcp.status.needs_auth": "需要授权",
-  "mcp.status.disabled": "已禁用",
 
   "dialog.fork.empty": "没有可用于分叉的消息",
 
@@ -457,7 +446,6 @@ export const dict = {
   "error.chain.didYouMean": "你是不是想输入：{{suggestions}}",
   "error.chain.modelNotFound": "未找到模型：{{provider}}/{{model}}",
   "error.chain.checkConfig": "请检查你的配置 (opencode.json) 中的 provider/model 名称",
-  "error.chain.mcpFailed": 'MCP 服务器 "{{name}}" 启动失败。注意: OpenCode 暂不支持 MCP 认证。',
   "error.chain.providerAuthFailed": "提供商认证失败（{{provider}}）：{{message}}",
   "error.chain.providerInitFailed": '无法初始化提供商 "{{provider}}"。请检查凭据和配置。',
   "error.chain.configJsonInvalid": "配置文件 {{path}} 不是有效的 JSON(C)",
@@ -515,7 +503,6 @@ export const dict = {
   "status.popover.trigger": "状态",
   "status.popover.ariaLabel": "服务器配置",
   "status.popover.tab.servers": "服务器",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "插件",
   "status.popover.action.manageServers": "管理服务器",
@@ -718,8 +705,6 @@ export const dict = {
   "settings.commands.title": "命令",
   "settings.commands.description": "命令设置将在此处可配置。",
 
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP 设置将在此处可配置。",
 
   "settings.permissions.title": "权限",
   "settings.permissions.description": "控制服务器默认可以使用哪些工具。",

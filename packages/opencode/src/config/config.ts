@@ -235,7 +235,7 @@ export namespace Config {
     // Apply keymap preset, then user keybinds override
     const baseKeybinds = Info.shape.keybinds.parse({})
     const keymapPreset = result.keymap ? Keymap.get(result.keymap) : {}
-    result.keybinds = { ...baseKeybinds, ...keymapPreset, ...result.keybinds }
+    result.keybinds = { ...baseKeybinds, ...keymapPreset, ...result.keybinds } as Keybinds
 
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
@@ -529,8 +529,6 @@ export namespace Config {
 
     return uniqueSpecifiers.toReversed()
   }
-
-  // MCP config schemas removed - infinite retention build
 
   export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
     ref: "PermissionActionConfig",
@@ -865,6 +863,7 @@ export namespace Config {
     .meta({
       ref: "KeybindsConfig",
     })
+  export type Keybinds = z.infer<typeof Keybinds>
 
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
@@ -1038,8 +1037,6 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      // MCP config removed - infinite retention build (but still accept for backwards compat)
-      mcp: z.any().optional(),
       formatter: z
         .union([
           z.literal(false),
@@ -1108,7 +1105,10 @@ export namespace Config {
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
-          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: false, infinite retention)"),
+          prune: z
+            .boolean()
+            .optional()
+            .describe("Enable pruning of old tool outputs (default: false, infinite retention)"),
           reserved: z
             .number()
             .int()
@@ -1130,7 +1130,6 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
-
         })
         .optional(),
     })

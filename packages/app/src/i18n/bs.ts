@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "Kontekst",
   "command.category.terminal": "Terminal",
   "command.category.model": "Model",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Dozvole",
   "command.category.workspace": "Radni prostor",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "Idi na sljedeću korisničku poruku",
   "command.model.choose": "Odaberi model",
   "command.model.choose.description": "Odaberi drugi model",
-  "command.mcp.toggle": "Prikaži/sakrij MCP-ove",
-  "command.mcp.toggle.description": "Prikaži/sakrij MCP-ove",
   "command.agent.cycle": "Promijeni agenta",
   "command.agent.cycle.description": "Prebaci na sljedećeg agenta",
   "command.agent.cycle.reverse": "Promijeni agenta unazad",
@@ -261,7 +258,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Spusti za @spominjanje datoteke",
   "prompt.slash.badge.custom": "prilagođeno",
   "prompt.slash.badge.skill": "skill",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktivno",
   "prompt.context.includeActiveFile": "Uključi aktivnu datoteku",
   "prompt.context.removeActiveFile": "Ukloni aktivnu datoteku iz konteksta",
@@ -282,17 +278,10 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Neuspješno slanje upita",
   "prompt.toast.promptSendFailed.description": "Nije moguće dohvatiti sesiju",
 
-  "dialog.mcp.title": "MCP-ovi",
-  "dialog.mcp.description": "{{enabled}} od {{total}} omogućeno",
-  "dialog.mcp.empty": "Nema konfigurisnih MCP-ova",
 
   "dialog.lsp.empty": "LSP-ovi se automatski otkrivaju prema tipu datoteke",
   "dialog.plugins.empty": "Plugini su konfigurisani u opencode.json",
 
-  "mcp.status.connected": "povezano",
-  "mcp.status.failed": "neuspjelo",
-  "mcp.status.needs_auth": "potrebna autentifikacija",
-  "mcp.status.disabled": "onemogućeno",
 
   "dialog.fork.empty": "Nema poruka za fork",
 
@@ -457,7 +446,6 @@ export const dict = {
   "error.chain.didYouMean": "Da li si mislio: {{suggestions}}",
   "error.chain.modelNotFound": "Model nije pronađen: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Provjeri konfiguraciju (opencode.json) provider/model names",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" nije uspio. Napomena: OpenCode još ne podržava MCP autentifikaciju.',
   "error.chain.providerAuthFailed": "Autentifikacija provajdera nije uspjela ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Neuspjelo inicijalizovanje provajdera "{{provider}}". Provjeri kredencijale i konfiguraciju.',
@@ -522,7 +510,6 @@ export const dict = {
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Konfiguracije servera",
   "status.popover.tab.servers": "Serveri",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugini",
   "status.popover.action.manageServers": "Upravljaj serverima",
@@ -724,8 +711,6 @@ export const dict = {
   "settings.agents.description": "Postavke agenata će se ovdje moći podešavati.",
   "settings.commands.title": "Komande",
   "settings.commands.description": "Postavke komandi će se ovdje moći podešavati.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP postavke će se ovdje moći podešavati.",
 
   "settings.permissions.title": "Dozvole",
   "settings.permissions.description": "Kontroliši koje alate server smije koristiti po defaultu.",

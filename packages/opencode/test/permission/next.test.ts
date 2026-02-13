@@ -289,8 +289,8 @@ test("evaluate - wildcard permission with specific pattern", () => {
 })
 
 test("evaluate - glob permission pattern", () => {
-  const result = PermissionNext.evaluate("mcp_server_tool", "anything", [
-    { permission: "mcp_*", pattern: "*", action: "allow" },
+  const result = PermissionNext.evaluate("custom_server_tool", "anything", [
+    { permission: "custom_*", pattern: "*", action: "allow" },
   ])
   expect(result.action).toBe("allow")
 })
@@ -312,10 +312,10 @@ test("evaluate - wildcard permission does not match when specific exists", () =>
 })
 
 test("evaluate - multiple matching permission patterns combine rules", () => {
-  const result = PermissionNext.evaluate("mcp_dangerous", "anything", [
+  const result = PermissionNext.evaluate("custom_dangerous", "anything", [
     { permission: "*", pattern: "*", action: "ask" },
-    { permission: "mcp_*", pattern: "*", action: "allow" },
-    { permission: "mcp_dangerous", pattern: "*", action: "deny" },
+    { permission: "custom_*", pattern: "*", action: "allow" },
+    { permission: "custom_dangerous", pattern: "*", action: "deny" },
   ])
   expect(result.action).toBe("deny")
 })

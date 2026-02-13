@@ -11,7 +11,6 @@ export const dict = {
   "command.category.context": "Context",
   "command.category.terminal": "Terminal",
   "command.category.model": "Model",
-  "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Permissions",
   "command.category.workspace": "Workspace",
@@ -61,8 +60,6 @@ export const dict = {
   "command.message.next.description": "Go to the next user message",
   "command.model.choose": "Choose model",
   "command.model.choose.description": "Select a different model",
-  "command.mcp.toggle": "Toggle MCPs",
-  "command.mcp.toggle.description": "Toggle MCPs",
   "command.agent.cycle": "Cycle agent",
   "command.agent.cycle.description": "Switch to the next agent",
   "command.agent.cycle.reverse": "Cycle agent backwards",
@@ -260,7 +257,6 @@ export const dict = {
   "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
   "prompt.slash.badge.skill": "skill",
-  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "active",
   "prompt.context.includeActiveFile": "Include active file",
   "prompt.context.removeActiveFile": "Remove active file from context",
@@ -281,17 +277,8 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
   "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
 
-  "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
-  "dialog.mcp.empty": "No MCPs configured",
-
   "dialog.lsp.empty": "LSPs auto-detected from file types",
   "dialog.plugins.empty": "Plugins configured in opencode.json",
-
-  "mcp.status.connected": "connected",
-  "mcp.status.failed": "failed",
-  "mcp.status.needs_auth": "needs auth",
-  "mcp.status.disabled": "disabled",
 
   "dialog.fork.empty": "No messages to fork from",
 
@@ -455,7 +442,6 @@ export const dict = {
   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Check your config (opencode.json) provider/model names",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, OpenCode does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
@@ -520,7 +506,6 @@ export const dict = {
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
   "status.popover.tab.servers": "Servers",
-  "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
@@ -724,8 +709,6 @@ export const dict = {
   "settings.agents.description": "Agent settings will be configurable here.",
   "settings.commands.title": "Commands",
   "settings.commands.description": "Command settings will be configurable here.",
-  "settings.mcp.title": "MCP",
-  "settings.mcp.description": "MCP settings will be configurable here.",
 
   "settings.permissions.title": "Permissions",
   "settings.permissions.description": "Control what tools the server can use by default.",

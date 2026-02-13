@@ -294,9 +294,6 @@ export function Autocomplete(props: {
     },
   )
 
-  // MCP resources removed - infinite retention build
-  const mcpResources = createMemo(() => [] as AutocompleteOption[])
-
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
@@ -354,7 +351,7 @@ export function Autocomplete(props: {
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || [])] : [...commandsValue]
 
     const searchValue = search()
 

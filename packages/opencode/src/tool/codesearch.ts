@@ -10,7 +10,7 @@ const API_CONFIG = {
   },
 } as const
 
-interface McpCodeRequest {
+interface ExaCodeRequest {
   jsonrpc: string
   id: number
   method: string
@@ -23,7 +23,7 @@ interface McpCodeRequest {
   }
 }
 
-interface McpCodeResponse {
+interface ExaCodeResponse {
   jsonrpc: string
   result: {
     content: Array<{
@@ -61,7 +61,7 @@ export const CodeSearchTool = Tool.define("codesearch", {
       },
     })
 
-    const codeRequest: McpCodeRequest = {
+    const codeRequest: ExaCodeRequest = {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
@@ -102,7 +102,7 @@ export const CodeSearchTool = Tool.define("codesearch", {
       const lines = responseText.split("\n")
       for (const line of lines) {
         if (line.startsWith("data: ")) {
-          const data: McpCodeResponse = JSON.parse(line.substring(6))
+          const data: ExaCodeResponse = JSON.parse(line.substring(6))
           if (data.result && data.result.content && data.result.content.length > 0) {
             return {
               output: data.result.content[0].text,
