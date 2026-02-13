@@ -59,12 +59,11 @@ export namespace Log {
     if (options.level) level = options.level
     // NOTE: No cleanup or truncation - infinite retention, operator handles storage
     if (options.print) return
-    logpath = path.join(
-      Global.Path.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-    )
+    // Always use timestamped log files - no overwriting, infinite retention
+    const timestamp = new Date().toISOString().split(".")[0].replace(/:/g, "")
+    const prefix = options.dev ? "dev-" : ""
+    logpath = path.join(Global.Path.log, `${prefix}${timestamp}.log`)
     const logfile = Bun.file(logpath)
-    // Append mode - don't truncate
     const writer = logfile.writer()
     write = async (msg: any) => {
       const num = writer.write(msg)
