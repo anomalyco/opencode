@@ -136,7 +136,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     lineHoverHighlight: "both",
     disableBackground: false,
     expansionLineCount: 20,
-    hunkSeparators: "line-info-basic",
+    hunkSeparators: "line-info",
     lineDiffType: style === "split" ? "word-alt" : "none",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,

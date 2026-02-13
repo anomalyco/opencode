@@ -130,6 +130,63 @@ export namespace Server {
           }),
         )
         .route("/global", GlobalRoutes())
+        .get(
+          "/auth",
+          describeRoute({
+            summary: "List all auth accounts",
+            description: "Get all providers and their accounts",
+            operationId: "auth.list",
+            responses: {
+              200: {
+                description: "All auth accounts",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.record(
+                        z.string(),
+                        z.object({
+                          accounts: z.record(z.string(), Auth.Info),
+                          activeAccount: z.string().optional(),
+                        }),
+                      ),
+                    ),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            return c.json(await Auth.all())
+          },
+        )
+        .get(
+          "/auth/:providerID",
+          describeRoute({
+            summary: "Get provider accounts",
+            description: "Get all accounts for a specific provider",
+            operationId: "auth.getAccounts",
+            responses: {
+              200: {
+                description: "Provider accounts",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.record(z.string(), Auth.Info)),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            return c.json(await Auth.getAccounts(providerID))
+          },
+        )
         .put(
           "/auth/:providerID",
           describeRoute({
@@ -189,6 +246,43 @@ export namespace Server {
           async (c) => {
             const providerID = c.req.valid("param").providerID
             await Auth.remove(providerID)
+            return c.json(true)
+          },
+        )
+        .post(
+          "/auth/:providerID/use",
+          describeRoute({
+            summary: "Switch active account",
+            description: "Switch the active account for a provider",
+            operationId: "auth.use",
+            responses: {
+              200: {
+                description: "Successfully switched account",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          validator(
+            "json",
+            z.object({
+              account: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            const { account } = c.req.valid("json")
+            await Auth.use(providerID, account)
             return c.json(true)
           },
         )

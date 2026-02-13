@@ -1471,9 +1471,14 @@ test("project config overrides remote well-known config", async () => {
   Auth.all = mock(() =>
     Promise.resolve({
       "https://example.com": {
-        type: "wellknown" as const,
-        key: "TEST_TOKEN",
-        token: "test-token",
+        accounts: {
+          default: {
+            type: "wellknown" as const,
+            key: "TEST_TOKEN",
+            token: "test-token",
+          },
+        },
+        activeAccount: "default",
       },
     }),
   )

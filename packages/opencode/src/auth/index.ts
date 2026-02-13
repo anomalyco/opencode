@@ -114,7 +114,7 @@ export namespace Auth {
   /**
    * Get all accounts for a provider.
    */
-  export async function getAccounts(providerID: string): Promise<Record<string, Info>> {
+  export async function getAccounts(providerID: string): Promise<Record<string, Info & { disabled?: boolean }>> {
     const store = await load()
     const provider = store[providerID]
     return provider?.accounts ?? {}

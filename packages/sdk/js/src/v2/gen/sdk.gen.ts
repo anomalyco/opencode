@@ -9,10 +9,14 @@ import type {
   AppLogResponses,
   AppSkillsResponses,
   Auth as Auth3,
+  AuthGetAccountsResponses,
+  AuthListResponses,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthUseErrors,
+  AuthUseResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -302,6 +306,15 @@ export class Global extends HeyApiClient {
 
 export class Auth extends HeyApiClient {
   /**
+   * List all auth accounts
+   *
+   * Get all providers and their accounts
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthListResponses, unknown, ThrowOnError>({ url: "/auth", ...options })
+  }
+
+  /**
    * Remove auth credentials
    *
    * Remove authentication credentials
@@ -314,6 +327,25 @@ export class Auth extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
     return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get provider accounts
+   *
+   * Get all accounts for a specific provider
+   */
+  public getAccounts<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).get<AuthGetAccountsResponses, unknown, ThrowOnError>({
       url: "/auth/{providerID}",
       ...options,
       ...params,
@@ -345,6 +377,41 @@ export class Auth extends HeyApiClient {
     )
     return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
       url: "/auth/{providerID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Switch active account
+   *
+   * Switch the active account for a provider
+   */
+  public use<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      account?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "body", key: "account" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AuthUseResponses, AuthUseErrors, ThrowOnError>({
+      url: "/auth/{providerID}/use",
       ...options,
       ...params,
       headers: {

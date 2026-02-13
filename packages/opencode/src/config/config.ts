@@ -76,9 +76,12 @@ export namespace Config {
     // 6) Inline config (OPENCODE_CONFIG_CONTENT)
     // Managed config directory is enterprise-only and always overrides everything above.
     let result: Info = {}
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
+    for (const [key, providerData] of Object.entries(auth)) {
+      const activeAccountId = providerData.activeAccount
+      if (!activeAccountId || !providerData.accounts[activeAccountId]) continue
+      const account = providerData.accounts[activeAccountId]
+      if (account.type === "wellknown") {
+        process.env[account.key] = account.token
         log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
         const response = await fetch(`${key}/.well-known/opencode`)
         if (!response.ok) {

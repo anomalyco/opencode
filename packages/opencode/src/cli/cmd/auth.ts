@@ -188,7 +188,7 @@ export const AuthListCommand = cmd({
       const name = database[providerID]?.name || providerID
       
       // Show provider name
-      prompts.log.info(`${UI.Style.TEXT_BOLD}${name}`)
+      prompts.log.info(`${UI.Style.TEXT_NORMAL_BOLD}${name}`)
       
       // Show all accounts for this provider
       if (providerData.accounts) {

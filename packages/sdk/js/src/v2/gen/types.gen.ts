@@ -1430,7 +1430,7 @@ export type PermissionConfig =
   | PermissionActionConfig
 
 export type AgentConfig = {
-  model?: string
+  model?: Model
   /**
    * Default model variant for this agent (applies only when using the agent's configured model).
    */
@@ -1472,6 +1472,7 @@ export type AgentConfig = {
   permission?: PermissionConfig
   [key: string]:
     | unknown
+    | Model
     | string
     | number
     | {
@@ -1702,7 +1703,7 @@ export type Config = {
       template: string
       description?: string
       agent?: string
-      model?: string
+      model?: Model
       subtask?: boolean
     }
   }
@@ -1744,14 +1745,8 @@ export type Config = {
    * When set, ONLY these providers will be enabled. All other providers will be ignored
    */
   enabled_providers?: Array<string>
-  /**
-   * Model to use in the format of provider/model, eg anthropic/claude-2
-   */
-  model?: string
-  /**
-   * Small model to use for tasks like title generation in the format of provider/model
-   */
-  small_model?: string
+  model?: Model
+  small_model?: Model
   /**
    * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
    */
@@ -1786,6 +1781,12 @@ export type Config = {
    */
   provider?: {
     [key: string]: ProviderConfig
+  }
+  /**
+   * Account to use per provider. Use provider ID as key and account name as value (e.g., { "openai": "work", "anthropic": "personal" })
+   */
+  auth?: {
+    [key: string]: string
   }
   /**
    * MCP (Model Context Protocol) server configurations
@@ -1898,11 +1899,13 @@ export type OAuth = {
   expires: number
   accountId?: string
   enterpriseUrl?: string
+  email?: string
 }
 
 export type ApiAuth = {
   type: "api"
   key: string
+  email?: string
 }
 
 export type WellKnownAuth = {
@@ -2329,6 +2332,29 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
+export type AuthListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth"
+}
+
+export type AuthListResponses = {
+  /**
+   * All auth accounts
+   */
+  200: {
+    [key: string]: {
+      accounts: {
+        [key: string]: Auth
+      }
+      activeAccount?: string
+    }
+  }
+}
+
+export type AuthListResponse = AuthListResponses[keyof AuthListResponses]
+
 export type AuthRemoveData = {
   body?: never
   path: {
@@ -2356,6 +2382,26 @@ export type AuthRemoveResponses = {
 
 export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
 
+export type AuthGetAccountsData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}"
+}
+
+export type AuthGetAccountsResponses = {
+  /**
+   * Provider accounts
+   */
+  200: {
+    [key: string]: Auth
+  }
+}
+
+export type AuthGetAccountsResponse = AuthGetAccountsResponses[keyof AuthGetAccountsResponses]
+
 export type AuthSetData = {
   body?: Auth
   path: {
@@ -2382,6 +2428,35 @@ export type AuthSetResponses = {
 }
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
+export type AuthUseData = {
+  body?: {
+    account: string
+  }
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}/use"
+}
+
+export type AuthUseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUseError = AuthUseErrors[keyof AuthUseErrors]
+
+export type AuthUseResponses = {
+  /**
+   * Successfully switched account
+   */
+  200: boolean
+}
+
+export type AuthUseResponse = AuthUseResponses[keyof AuthUseResponses]
 
 export type ProjectListData = {
   body?: never

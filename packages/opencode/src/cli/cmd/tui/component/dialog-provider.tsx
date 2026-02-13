@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { Provider } from "@/provider/provider"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -40,6 +41,29 @@ export function createDialogProviderOptions() {
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
+          const connected = sync.data.provider_next.connected ?? []
+          const isConnected = connected.includes(provider.id)
+
+          if (isConnected) {
+            const action = await new Promise<string>((resolve) => {
+              dialog.replace(() => (
+                <DialogSelect
+                  title={provider.name}
+                  options={[
+                    { title: "Switch account", value: "switch" },
+                    { title: "Add another account", value: "add" },
+                  ]}
+                  onSelect={(opt) => resolve(opt.value)}
+                />
+              ))
+            })
+
+            if (action === "switch") {
+              await dialog.replace(() => <SwitchAccountDialog providerID={provider.id} providerName={provider.name} />)
+              return
+            }
+          }
+
           const methods = sync.data.provider_auth[provider.id] ?? [
             {
               type: "api",
@@ -90,6 +114,51 @@ export function createDialogProviderOptions() {
     )
   })
   return options
+}
+
+interface SwitchAccountDialogProps {
+  providerID: string
+  providerName: string
+}
+
+function SwitchAccountDialog(props: SwitchAccountDialogProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  const accounts = createMemo(() => {
+    const provider = sync.data.provider.find((p) => p.id === props.providerID)
+    if (!provider) return []
+    return Object.entries(provider.models).map(([modelId, model]) => ({
+      id: modelId,
+      name: model.name ?? modelId,
+    }))
+  })
+
+  const activeAccount = createMemo(() => {
+    const current = sync.data.config.model
+    if (current && current.providerID === props.providerID) {
+      return current.id
+    }
+    return sync.data.provider_default[props.providerID]
+  })
+
+  return (
+    <DialogSelect
+      title={`Switch ${props.providerName} account`}
+      options={accounts().map((account) => ({
+        title: account.name,
+        value: account.id,
+        description: account.id === activeAccount() ? "Active" : undefined,
+      }))}
+      onSelect={async (option) => {
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.clear()
+      }}
+    />
+  )
 }
 
 export function DialogProvider() {

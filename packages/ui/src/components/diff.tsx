@@ -1,9 +1,8 @@
 import { checksum } from "@opencode-ai/util/encode"
-import { FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
+import { FileDiff, type SelectedLineRange } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
-import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 
 type SelectionSide = "additions" | "deletions"
@@ -53,7 +52,6 @@ function findSide(node: Node | null): SelectionSide | undefined {
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
   let observer: MutationObserver | undefined
-  let sharedVirtualizer: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
   let dragFrame: number | undefined
@@ -93,16 +91,6 @@ export function Diff<T>(props: DiffProps<T>) {
   let instance: FileDiff<T> | undefined
   const [current, setCurrent] = createSignal<FileDiff<T> | undefined>(undefined)
   const [rendered, setRendered] = createSignal(0)
-
-  const getVirtualizer = () => {
-    if (sharedVirtualizer) return sharedVirtualizer.virtualizer
-
-    const result = acquireVirtualizer(container)
-    if (!result) return
-
-    sharedVirtualizer = result
-    return result.virtualizer
-  }
 
   const getRoot = () => {
     const host = container.querySelector("diffs-container")
@@ -529,15 +517,12 @@ export function Diff<T>(props: DiffProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = getWorkerPool(props.diffStyle)
-    const virtualizer = getVirtualizer()
     const annotations = local.annotations
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
 
     instance?.cleanUp()
-    instance = virtualizer
-      ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
-      : new FileDiff<T>(opts, workerPool)
+    instance = new FileDiff<T>(opts, workerPool)
     setCurrent(instance)
 
     container.innerHTML = ""
@@ -624,8 +609,6 @@ export function Diff<T>(props: DiffProps<T>) {
 
     instance?.cleanUp()
     setCurrent(undefined)
-    sharedVirtualizer?.release()
-    sharedVirtualizer = undefined
   })
 
   return <div data-component="diff" style={styleVariables} ref={container} />

@@ -848,12 +848,16 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    for (const [providerID, providerData] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
+      const accounts = providerData.accounts
+      const activeAccountId = providerData.activeAccount
+      if (!activeAccountId || !accounts[activeAccountId]) continue
+      const account = accounts[activeAccountId]
+      if (account.type === "api") {
         mergeProvider(providerID, {
           source: "api",
-          key: provider.key,
+          key: account.key,
         })
       }
     }
@@ -1241,7 +1245,14 @@ export namespace Provider {
     }
   }
 
-  export function parseModel(model: string) {
+  export function parseModel(model: string | { providerID: string; id: string }) {
+    if (typeof model !== "string") {
+      return {
+        providerID: model.providerID,
+        modelID: model.id,
+      }
+    }
+
     const [providerID, ...rest] = model.split("/")
     return {
       providerID: providerID,

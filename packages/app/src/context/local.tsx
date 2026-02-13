@@ -90,9 +90,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const resolveConfigured = () => {
-        if (!sync.data.config.model) return
-        const [providerID, modelID] = sync.data.config.model.split("/")
-        const key = { providerID, modelID }
+        const configured = sync.data.config.model
+        if (!configured) return
+        const key = { providerID: configured.providerID, modelID: configured.id }
         if (isModelValid(key)) return key
       }
 
