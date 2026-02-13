@@ -552,10 +552,20 @@ export function convertToKiroPayload(
     userInputMessage.userInputMessageContext = userInputMessageContext
   }
 
-  // Validate and fix history: if last assistant has toolUses but the current message
-  // doesn't have corresponding tool results, remove the toolUses to avoid
-  // "Improperly formed request" error from Kiro API.
-  // This can happen when user cancels a tool call.
+  // Validate entire history: every assistant toolUses must have matching toolResults
+  // in the next user message. After compaction/pruning, these pairs can become mismatched
+  // causing "Improperly formed request" error from Kiro API.
+  for (let i = 0; i < history.length - 1; i++) {
+    const item = history[i]
+    if (!item.assistantResponseMessage?.toolUses?.length) continue
+    const next = history[i + 1]
+    const results = next?.userInputMessage?.userInputMessageContext?.toolResults ?? []
+    if (results.length === 0) {
+      delete item.assistantResponseMessage.toolUses
+    }
+  }
+
+  // Also validate last history item against current message's toolResults
   const lastHistoryItem = history[history.length - 1]
   if (
     lastHistoryItem?.assistantResponseMessage?.toolUses &&
