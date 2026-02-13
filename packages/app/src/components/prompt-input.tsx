@@ -32,7 +32,6 @@ import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
-import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -1189,7 +1188,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
             />
             <div class="flex items-center gap-1 mr-1">
-              <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
                   <Button

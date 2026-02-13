@@ -8,6 +8,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -214,7 +215,8 @@ export function MessageTimeline(props: {
                 </div>
                 <Show when={props.sessionID}>
                   {(id) => (
-                    <div class="shrink-0 flex items-center">
+                    <div class="shrink-0 flex items-center gap-3">
+                      <SessionContextUsage placement="bottom" />
                       <DropdownMenu open={props.titleState.menuOpen} onOpenChange={props.onTitleMenuOpen}>
                         <Tooltip value={props.t("common.moreOptions")} placement="top">
                           <DropdownMenu.Trigger
