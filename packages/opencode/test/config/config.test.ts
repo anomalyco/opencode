@@ -1800,3 +1800,68 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     }
   })
 })
+
+// OPENCODE_CONFIG_CONTENT should support {env:} and {file:} token substitution
+// just like file-based config sources do.
+describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
+  test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+    const originalTestVar = process.env["TEST_CONFIG_VAR"]
+    process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "{env:TEST_CONFIG_VAR}",
+    })
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.theme).toBe("test_api_key_12345")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+      if (originalTestVar !== undefined) {
+        process.env["TEST_CONFIG_VAR"] = originalTestVar
+      } else {
+        delete process.env["TEST_CONFIG_VAR"]
+      }
+    }
+  })
+
+  test("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "api_key.txt"), "secret_key_from_file")
+          process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            theme: "{file:./api_key.txt}",
+          })
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.theme).toBe("secret_key_from_file")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
+})
