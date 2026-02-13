@@ -6,12 +6,60 @@ import { Worktree } from "../../worktree"
 import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
+import { HotReload } from "../../project/hotreload"
+import { Flag } from "../../flag/flag"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
+    .post(
+      "/hotreload",
+      describeRoute({
+        summary: "Apply hot reload",
+        description:
+          "Trigger an in-place reload of cached config/skills/agents/commands for the current instance. This is experimental and session-aware.",
+        operationId: "experimental.hotreload.apply",
+        responses: {
+          200: {
+            description: "Hot reload scheduled",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      ok: z.boolean(),
+                      enabled: z.boolean(),
+                      queued: z.boolean().optional(),
+                      sessions: z.number().optional(),
+                      wait: z.number().optional(),
+                    })
+                    .meta({ ref: "ExperimentalHotReloadResult" }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z
+          .object({
+            file: z.string().optional(),
+            event: z.enum(["add", "change", "unlink"]).optional(),
+          })
+          .optional(),
+      ),
+      async (c) => {
+        if (!Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD) {
+          return c.json({ ok: false, enabled: false }, 400)
+        }
+        const body = c.req.valid("json")
+        return c.json(HotReload.request(body ?? undefined))
+      },
+    )
     .get(
       "/tool/ids",
       describeRoute({

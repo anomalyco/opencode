@@ -109,7 +109,7 @@ export namespace HotReload {
 
   const state = Instance.state(
     () => {
-      if (!Flag.OPENCODE_HOT_RELOAD) return {}
+      if (!Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD) return {}
 
       const debounce = Flag.OPENCODE_HOT_RELOAD_DEBOUNCE_MS ?? 700
       const cooldown = Flag.OPENCODE_HOT_RELOAD_COOLDOWN_MS ?? 1500
@@ -134,12 +134,17 @@ export namespace HotReload {
         await Command.reset()
       }
 
-      const flush = (reason: "timer" | "session") => {
+      const schedule = () => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => flush("timer"), debounce)
+      }
+
+      const flush = (reason: "timer" | "session" | "api") => {
         timer = undefined
-        if (busy) return
+        if (busy) return { ok: true, queued, sessions: active() }
 
         const hit = latest
-        if (!hit) return
+        if (!hit) return { ok: true, queued, sessions: active() }
 
         const sessions = active()
         if (sessions > 0) {
@@ -151,14 +156,14 @@ export namespace HotReload {
             })
           }
           queued = true
-          return
+          return { ok: true, queued: true, sessions }
         }
 
         const now = Date.now()
         const wait = cooldown - (now - last)
         if (wait > 0) {
           timer = setTimeout(() => flush(reason), wait)
-          return
+          return { ok: true, queued: false, sessions, wait }
         }
 
         busy = true
@@ -182,21 +187,26 @@ export namespace HotReload {
             if (timer) clearTimeout(timer)
             timer = setTimeout(() => flush("timer"), debounce)
           })
+        return { ok: true, queued: false, sessions }
       }
 
-      const schedule = () => {
-        if (timer) clearTimeout(timer)
-        timer = setTimeout(() => flush("timer"), debounce)
+      const request = (hit: { file: string; event: "add" | "change" | "unlink" }, mode: "file" | "api") => {
+        latest = hit
+        if (mode === "api") return flush("api")
+        schedule()
+        return { ok: true, queued, sessions: active() }
       }
 
       const unsubFile = Bus.subscribe(FileWatcher.Event.Updated, (event) => {
         const rel = classify(Instance.directory, event.properties.file)
         if (!rel) return
-        latest = {
-          file: rel,
-          event: event.properties.event,
-        }
-        schedule()
+        void request(
+          {
+            file: rel,
+            event: event.properties.event,
+          },
+          "file",
+        )
       })
 
       const unsubSession = Bus.subscribe(SessionStatus.Event.Status, () => {
@@ -209,6 +219,7 @@ export namespace HotReload {
       return {
         unsubFile,
         unsubSession,
+        request,
         clear() {
           if (!timer) return
           clearTimeout(timer)
@@ -225,5 +236,17 @@ export namespace HotReload {
 
   export function init() {
     state()
+  }
+
+  export function request(input?: { file?: string; event?: "add" | "change" | "unlink" }) {
+    const entry = state()
+    const req = "request" in entry ? entry.request : undefined
+    if (!req) {
+      return { ok: false, enabled: false }
+    }
+    const file = input?.file?.trim() || "api"
+    const event = input?.event || "change"
+    const result = req({ file, event }, "api")
+    return { ...result, enabled: true }
   }
 }
