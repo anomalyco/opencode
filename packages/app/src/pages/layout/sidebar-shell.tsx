@@ -34,6 +34,7 @@ export const SidebarContent = (props: {
   renderPanel: () => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => sidebarExpanded(props.mobile, props.opened()))
+  const placement = () => (props.mobile ? "bottom" : "right")
 
   return (
     <div class="flex h-full w-full overflow-hidden">
@@ -55,7 +56,7 @@ export const SidebarContent = (props: {
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
               <Tooltip
-                placement={props.mobile ? "bottom" : "right"}
+                placement={placement()}
                 value={
                   <div class="flex items-center gap-2">
                     <span>{props.openProjectLabel}</span>
@@ -78,11 +79,7 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-          <TooltipKeybind
-            placement={props.mobile ? "bottom" : "right"}
-            title={props.settingsLabel()}
-            keybind={props.settingsKeybind() ?? ""}
-          >
+          <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"
               variant="ghost"
@@ -91,7 +88,7 @@ export const SidebarContent = (props: {
               aria-label={props.settingsLabel()}
             />
           </TooltipKeybind>
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.helpLabel()}>
+          <Tooltip placement={placement()} value={props.helpLabel()}>
             <IconButton
               icon="help"
               variant="ghost"

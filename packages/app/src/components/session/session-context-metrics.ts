@@ -34,8 +34,6 @@ type Metrics = {
   context: Context | undefined
 }
 
-const cache = new WeakMap<Message[], WeakMap<Provider[], Metrics>>()
-
 const tokenTotal = (msg: AssistantMessage) => {
   return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
 }
@@ -49,7 +47,7 @@ const lastAssistantWithTokens = (messages: Message[]) => {
   }
 }
 
-const build = (messages: Message[], providers: Provider[]): Metrics => {
+const build = (messages: Message[] = [], providers: Provider[] = []): Metrics => {
   const totalCost = messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
   const message = lastAssistantWithTokens(messages)
   if (!message) return { totalCost, context: undefined }
@@ -79,16 +77,6 @@ const build = (messages: Message[], providers: Provider[]): Metrics => {
   }
 }
 
-export function getSessionContextMetrics(messages: Message[], providers: Provider[]) {
-  const byProvider = cache.get(messages)
-  if (byProvider) {
-    const hit = byProvider.get(providers)
-    if (hit) return hit
-  }
-
-  const value = build(messages, providers)
-  const next = byProvider ?? new WeakMap<Provider[], Metrics>()
-  next.set(providers, value)
-  if (!byProvider) cache.set(messages, next)
-  return value
+export function getSessionContextMetrics(messages: Message[] = [], providers: Provider[] = []) {
+  return build(messages, providers)
 }

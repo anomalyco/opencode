@@ -1,0 +1,684 @@
+---
+title: الإعدادات
+description: استخدام ملف إعدادات OpenCode بصيغة JSON.
+---
+
+يمكنك ضبط OpenCode باستخدام ملف إعدادات بصيغة JSON.
+
+---
+
+## التنسيق
+
+يدعم OpenCode تنسيقي **JSON** و**JSONC** (JSON مع تعليقات).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // إعدادات السمة
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## المواقع
+
+يمكنك وضع ملف الإعدادات في عدة مواقع مختلفة، ولكل موقع
+ترتيب أولوية مختلف.
+
+:::note
+تُدمَج ملفات الإعدادات **معًا** ولا تُستبدَل.
+:::
+
+تُدمَج ملفات الإعدادات معًا ولا تُستبدَل. يتم جمع الإعدادات من مواقع الإعدادات التالية. تتجاوز الإعدادات اللاحقة الإعدادات السابقة فقط عند تعارض المفاتيح. أما الإعدادات غير المتعارضة فتبقى محفوظة من جميع الملفات.
+
+على سبيل المثال، إذا كان الإعداد العام يضبط `theme: "opencode"` و`autoupdate: true`، وكان إعداد المشروع يضبط `model: "anthropic/claude-sonnet-4-5"`، فستتضمن الإعدادات النهائية الخيارات الثلاثة جميعها.
+
+---
+
+### ترتيب الأولوية
+
+تُحمَّل مصادر الإعدادات بهذا الترتيب (المصادر اللاحقة تتجاوز السابقة):
+
+1. **الإعدادات البعيدة** (من `.well-known/opencode`) - الإعدادات الافتراضية على مستوى المؤسسة
+2. **الإعدادات العامة** (`~/.config/opencode/opencode.json`) - تفضيلات المستخدم
+3. **إعدادات مخصصة** (`OPENCODE_CONFIG` env var) - تجاوزات مخصصة
+4. **إعدادات المشروع** (`opencode.json` داخل المشروع) - إعدادات خاصة بالمشروع
+5. **أدلة `.opencode`** - الوكلاء، الأوامر، الإضافات
+6. **إعدادات ضمنية** (`OPENCODE_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
+
+هذا يعني أن إعدادات المشروع يمكنها تجاوز الإعدادات العامة، وأن الإعدادات العامة يمكنها تجاوز الإعدادات الافتراضية البعيدة على مستوى المؤسسة.
+
+:::note
+يستخدم الدليلان `.opencode` و`~/.config/opencode` **أسماء جمع** للأدلة الفرعية: `agents/` و`commands/` و`modes/` و`plugins/` و`skills/` و`tools/` و`themes/`. كما تُدعَم أسماء المفرد (مثل `agent/`) للتوافق مع الإصدارات السابقة.
+:::
+
+---
+
+### عن بُعد
+
+يمكن للمؤسسات توفير إعدادات افتراضية عبر نقطة النهاية `.well-known/opencode`. يتم جلب ذلك تلقائيًا عندما تقوم بالمصادقة مع مزوّد يدعم هذه الميزة.
+
+تُحمَّل الإعدادات البعيدة أولًا لتكون طبقة الأساس. ويمكن لجميع مصادر الإعدادات الأخرى (العامة، وإعدادات المشروع) تجاوز هذه القيم الافتراضية.
+
+على سبيل المثال، إذا كانت مؤسستك توفر خوادم MCP معطّلة افتراضيًا:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+يمكنك تفعيل خوادم محددة في إعداداتك المحلية:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### عام
+
+ضع إعدادات OpenCode العامة في `~/.config/opencode/opencode.json`. استخدم الإعدادات العامة للتفضيلات على مستوى المستخدم مثل السمات، والمزوّدين، أو اختصارات المفاتيح.
+
+تتجاوز الإعدادات العامة القيم الافتراضية البعيدة الخاصة بالمؤسسة.
+
+---
+
+### لكل مشروع
+
+أضف `opencode.json` في جذر مشروعك. تمتلك إعدادات المشروع أعلى أولوية بين ملفات الإعدادات القياسية، إذ تتجاوز الإعدادات العامة والبعيدة معًا.
+
+:::tip
+ضع إعدادات المشروع الخاصة في جذر مشروعك.
+:::
+
+عند تشغيل OpenCode، يبحث عن ملف إعدادات في الدليل الحالي أو يصعد حتى أقرب دليل Git.
+
+ومن الآمن أيضًا تضمينه في Git، كما يستخدم نفس المخطط الخاص بالإعدادات العامة.
+
+---
+
+### مسار مخصص
+
+حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG`.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+تُحمَّل الإعدادات المخصصة بين الإعدادات العامة وإعدادات المشروع ضمن ترتيب الأولوية.
+
+---
+
+### دليل مخصص
+
+حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG_DIR`.
+سيتم البحث داخل هذا الدليل عن الوكلاء والأوامر والأوضاع والإضافات تمامًا مثل
+الدليل القياسي `.opencode`، ويجب أن يتبع نفس البنية.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+يُحمَّل الدليل المخصص بعد الإعدادات العامة وأدلة `.opencode`، لذلك **يمكنه تجاوز** إعداداتها.
+
+---
+
+## المخطط
+
+يحتوي ملف الإعدادات على مخطط مُعرَّف في [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+يفترض أن يتمكن محررك من التحقق والإكمال التلقائي اعتمادًا على هذا المخطط.
+
+---
+
+### TUI
+
+يمكنك ضبط الإعدادات الخاصة بـ TUI عبر الخيار `tui`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+الخيارات المتاحة:
+
+- `scroll_acceleration.enabled` - تفعيل تسارع التمرير بأسلوب macOS. **له أولوية على `scroll_speed`.**
+- `scroll_speed` - مُضاعِف سرعة تمرير مخصص (الافتراضي: `3`، الحد الأدنى: `1`). يتم تجاهله إذا كان `scroll_acceleration.enabled` مساويًا لـ `true`.
+- `diff_style` - التحكم في عرض `diff`. القيمة `"auto"` تتكيف مع عرض terminal، و`"stacked"` تعرض عمودًا واحدًا دائمًا.
+
+[تعرف على المزيد حول استخدام TUI هنا](/docs/tui).
+
+---
+
+### الخادم
+
+يمكنك ضبط إعدادات الخادم لأوامر `opencode serve` و`opencode web` عبر الخيار `server`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+الخيارات المتاحة:
+
+- `port` - المنفذ الذي سيتم الاستماع عليه.
+- `hostname` - اسم المضيف الذي سيتم الاستماع عليه. عند تفعيل `mdns` وعدم ضبط اسم مضيف، تكون القيمة الافتراضية `0.0.0.0`.
+- `mdns` - تفعيل اكتشاف الخدمة عبر mDNS. يتيح ذلك للأجهزة الأخرى على الشبكة اكتشاف خادم OpenCode.
+- `mdnsDomain` - اسم نطاق مخصص لخدمة mDNS. القيمة الافتراضية هي `opencode.local`. مفيد لتشغيل عدة نُسخ على نفس الشبكة.
+- `cors` - أصول إضافية مسموح بها لـ CORS عند استخدام خادم HTTP من عميل يعتمد على المتصفح. يجب أن تكون القيم أصولًا كاملة (البروتوكول + المضيف + منفذ اختياري)، مثل `https://app.example.com`.
+
+[تعرف على المزيد حول الخادم هنا](/docs/server).
+
+---
+
+### الأدوات
+
+يمكنك إدارة الأدوات التي يمكن لـ LLM استخدامها عبر الخيار `tools`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[تعرف على المزيد حول الأدوات هنا](/docs/tools).
+
+---
+
+### النماذج
+
+يمكنك ضبط المزوّدين والنماذج التي تريد استخدامها في إعدادات OpenCode عبر الخيارات `provider` و`model` و`small_model`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+يضبط الخيار `small_model` نموذجًا منفصلًا للمهام الخفيفة مثل توليد العناوين. افتراضيًا يحاول OpenCode استخدام نموذج أقل تكلفة إذا كان متاحًا لدى مزوّدك، وإلا فسيعود إلى النموذج الرئيسي.
+
+قد تتضمن خيارات المزوّد `timeout` و`setCacheKey`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - مهلة الطلب بالميلي ثانية (الافتراضي: 300000). اضبطه إلى `false` لتعطيله.
+- `setCacheKey` - يضمن تعيين مفتاح التخزين المؤقت دائمًا للمزوّد المحدد.
+
+يمكنك أيضًا ضبط [النماذج المحلية](/docs/models#local). [تعرف على المزيد](/docs/models).
+
+---
+
+#### خيارات خاصة بالمزوّد
+
+يدعم بعض المزوّدين خيارات إعداد إضافية تتجاوز الإعدادات العامة مثل `timeout` و`apiKey`.
+
+##### Amazon Bedrock
+
+يدعم Amazon Bedrock إعدادات خاصة بـ AWS:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - منطقة AWS لـ Bedrock (الافتراضي: متغير البيئة `AWS_REGION` أو `us-east-1`)
+- `profile` - ملف تعريف AWS المُسمّى من `~/.aws/credentials` (الافتراضي: متغير البيئة `AWS_PROFILE`)
+- `endpoint` - عنوان URL لنقطة نهاية مخصصة لنقاط نهاية VPC. هذا اسم بديل للخيار العام `baseURL` باستخدام مصطلحات AWS. إذا تم تحديدهما معًا، تكون أولوية `endpoint` أعلى.
+
+:::note
+لرموز Bearer (`AWS_BEARER_TOKEN_BEDROCK` أو `/connect`) أولوية أعلى من المصادقة القائمة على ملف التعريف. راجع [أولوية المصادقة](/docs/providers#authentication-precedence) للتفاصيل.
+:::
+
+[تعرف على المزيد حول إعداد Amazon Bedrock](/docs/providers#amazon-bedrock).
+
+---
+
+### السمات
+
+يمكنك ضبط السمة التي تريد استخدامها في إعدادات OpenCode عبر الخيار `theme`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[تعرف على المزيد هنا](/docs/themes).
+
+---
+
+### الوكلاء
+
+يمكنك ضبط وكلاء متخصصين لمهام محددة عبر الخيار `agent`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // تعطيل أدوات تعديل الملفات لوكيل المراجعة فقط
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/opencode/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](/docs/agents).
+
+---
+
+### الوكيل الافتراضي
+
+يمكنك تعيين الوكيل الافتراضي باستخدام الخيار `default_agent`. يحدد ذلك أي وكيل سيتم استخدامه عندما لا يتم تحديد وكيل صراحةً.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود OpenCode إلى `"build"` مع تحذير.
+
+ينطبق هذا الإعداد على جميع الواجهات: TUI وCLI (`opencode run`) وتطبيق سطح المكتب وGitHub Action.
+
+---
+
+### المشاركة
+
+يمكنك ضبط ميزة [share](/docs/share) عبر الخيار `share`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+يقبل هذا الإعداد القيم التالية:
+
+- `"manual"` - السماح بالمشاركة اليدوية عبر الأوامر (الافتراضي)
+- `"auto"` - مشاركة المحادثات الجديدة تلقائيًا
+- `"disabled"` - تعطيل المشاركة بالكامل
+
+افتراضيًا تكون المشاركة في الوضع اليدوي، حيث تحتاج إلى مشاركة المحادثات صراحةً باستخدام الأمر `/share`.
+
+---
+
+### الأوامر
+
+يمكنك ضبط أوامر مخصصة للمهام المتكررة عبر الخيار `command`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/opencode/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](/docs/commands).
+
+---
+
+### اختصارات المفاتيح
+
+يمكنك تخصيص اختصارات المفاتيح عبر الخيار `keybinds`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[تعرف على المزيد هنا](/docs/keybinds).
+
+---
+
+### التحديث التلقائي
+
+سيقوم OpenCode بتنزيل أي تحديثات جديدة تلقائيًا عند بدء التشغيل. يمكنك تعطيل ذلك عبر الخيار `autoupdate`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+إذا لم تكن تريد التحديثات لكنك تريد الإشعار عند توفر نسخة جديدة، فاضبط `autoupdate` على `"notify"`.
+لاحظ أن هذا يعمل فقط إذا لم يتم تثبيته عبر مدير حزم مثل Homebrew.
+
+---
+
+### المنسّقات
+
+يمكنك ضبط منسّقات الشفرة عبر الخيار `formatter`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[تعرف على المزيد حول المنسّقات هنا](/docs/formatters).
+
+---
+
+### الأذونات
+
+افتراضيًا يسمح opencode **بجميع العمليات** دون الحاجة إلى موافقة صريحة. يمكنك تغيير ذلك عبر الخيار `permission`.
+
+على سبيل المثال، لضمان أن أداتي `edit` و`bash` تتطلبان موافقة المستخدم:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[تعرف على المزيد حول الأذونات هنا](/docs/permissions).
+
+---
+
+### ضغط السياق
+
+يمكنك التحكم في سلوك ضغط السياق عبر الخيار `compaction`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - ضغط الجلسة تلقائيًا عند امتلاء السياق (الافتراضي: `true`).
+- `prune` - إزالة مخرجات الأدوات القديمة لتوفير الرموز (tokens) (الافتراضي: `true`).
+
+---
+
+### المراقِب
+
+يمكنك ضبط أنماط التجاهل لمراقِب الملفات عبر الخيار `watcher`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+تتبع الأنماط صياغة `glob`. استخدم ذلك لاستبعاد الأدلة المزدحمة من مراقبة الملفات.
+
+---
+
+### خوادم MCP
+
+يمكنك ضبط خوادم MCP التي تريد استخدامها عبر الخيار `mcp`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[تعرف على المزيد هنا](/docs/mcp-servers).
+
+---
+
+### الإضافات
+
+[الإضافات](/docs/plugins) توسّع OpenCode بأدوات وخُطافات وتكاملات مخصصة.
+
+ضع ملفات الإضافات في `.opencode/plugins/` أو `~/.config/opencode/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[تعرف على المزيد هنا](/docs/plugins).
+
+---
+
+### التعليمات
+
+يمكنك ضبط التعليمات الخاصة بالنموذج الذي تستخدمه عبر الخيار `instructions`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+يقبل هذا مصفوفة من المسارات وأنماط `glob` لملفات التعليمات. [تعرف على المزيد
+حول القواعد هنا](/docs/rules).
+
+---
+
+### المزوّدون المعطّلون
+
+يمكنك تعطيل المزوّدين الذين يتم تحميلهم تلقائيًا عبر الخيار `disabled_providers`. هذا مفيد عندما تريد منع تحميل مزوّدين معينين حتى لو كانت بيانات الاعتماد الخاصة بهم متاحة.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+الخيار `disabled_providers` له أولوية على `enabled_providers`.
+:::
+
+يقبل الخيار `disabled_providers` مصفوفة من معرفات المزوّدين. عند تعطيل مزوّد:
+
+- لن يتم تحميله حتى لو كانت متغيرات البيئة مضبوطة.
+- لن يتم تحميله حتى لو كانت مفاتيح API مضبوطة عبر الأمر `/connect`.
+- لن تظهر نماذج هذا المزوّد في قائمة اختيار النموذج.
+
+---
+
+### المزوّدون المفعّلون
+
+يمكنك تحديد قائمة سماح للمزوّدين عبر الخيار `enabled_providers`. عند ضبطه، سيتم تفعيل المزوّدين المحددين فقط وسيتم تجاهل البقية.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+هذا مفيد عندما تريد تقييد OpenCode لاستخدام مزوّدين محددين بدلًا من تعطيلهم واحدًا تلو الآخر.
+
+:::note
+الخيار `disabled_providers` له أولوية على `enabled_providers`.
+:::
+
+إذا ظهر مزوّد ضمن كل من `enabled_providers` و`disabled_providers`، تكون أولوية `disabled_providers` أعلى للتوافق مع الإصدارات السابقة.
+
+---
+
+### تجريبي
+
+يحتوي المفتاح `experimental` على خيارات قيد التطوير النشط.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+الخيارات التجريبية غير مستقرة. قد تتغير أو تُزال دون إشعار.
+:::
+
+---
+
+## المتغيرات
+
+يمكنك استخدام استبدال المتغيرات في ملفات الإعدادات للإشارة إلى متغيرات البيئة ومحتويات الملفات.
+
+---
+
+### متغيرات البيئة
+
+استخدم `{env:VARIABLE_NAME}` لاستبدال متغيرات البيئة:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+إذا لم يكن متغير البيئة مضبوطًا، فسيتم استبداله بسلسلة فارغة.
+
+---
+
+### الملفات
+
+استخدم `{file:path/to/file}` لاستبدال محتويات ملف:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+يمكن أن تكون مسارات الملفات:
+
+- نسبية إلى دليل ملف الإعدادات
+- أو مسارات مطلقة تبدأ بـ `/` أو `~`
+
+يُفيد ذلك في:
+
+- الاحتفاظ بالبيانات الحساسة مثل مفاتيح API في ملفات منفصلة.
+- تضمين ملفات تعليمات كبيرة دون تشويش ملف الإعدادات.
+- مشاركة مقتطفات إعدادات مشتركة عبر عدة ملفات إعدادات.

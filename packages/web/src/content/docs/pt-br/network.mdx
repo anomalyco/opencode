@@ -1,0 +1,57 @@
+---
+title: Rede
+description: Configure proxies e certificados personalizados.
+---
+
+O opencode suporta variáveis de ambiente de proxy padrão e certificados personalizados para ambientes de rede corporativa.
+
+---
+
+## Proxy
+
+O opencode respeita variáveis de ambiente de proxy padrão.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+O TUI se comunica com um servidor HTTP local. Você deve ignorar o proxy para essa conexão para evitar loops de roteamento.
+:::
+
+Você pode configurar a porta e o nome do host do servidor usando [flags da CLI](/docs/cli#run).
+
+---
+
+### Autenticação
+
+Se o seu proxy requer autenticação básica, inclua as credenciais na URL.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Evite codificar senhas. Use variáveis de ambiente ou armazenamento seguro de credenciais.
+:::
+
+Para proxies que requerem autenticação avançada como NTLM ou Kerberos, considere usar um LLM Gateway que suporte seu método de autenticação.
+
+---
+
+## Certificados personalizados
+
+Se sua empresa usa CAs personalizadas para conexões HTTPS, configure o opencode para confiá-las.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+Isso funciona tanto para conexões de proxy quanto para acesso direto à API.

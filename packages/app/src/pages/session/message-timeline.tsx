@@ -9,6 +9,37 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 
+const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
+  const current = target instanceof Element ? target : undefined
+  const nested = current?.closest("[data-scrollable]")
+  if (!nested || nested === root) return root
+  if (!(nested instanceof HTMLElement)) return root
+  return nested
+}
+
+const markBoundaryGesture = (input: {
+  root: HTMLDivElement
+  target: EventTarget | null
+  delta: number
+  onMarkScrollGesture: (target?: EventTarget | null) => void
+}) => {
+  const target = boundaryTarget(input.root, input.target)
+  if (target === input.root) {
+    input.onMarkScrollGesture(input.root)
+    return
+  }
+  if (
+    shouldMarkBoundaryGesture({
+      delta: input.delta,
+      scrollTop: target.scrollTop,
+      scrollHeight: target.scrollHeight,
+      clientHeight: target.clientHeight,
+    })
+  ) {
+    input.onMarkScrollGesture(input.root)
+  }
+}
+
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
@@ -86,35 +117,13 @@ export function MessageTimeline(props: {
           ref={props.setScrollRef}
           onWheel={(e) => {
             const root = e.currentTarget
-            const target = e.target instanceof Element ? e.target : undefined
-            const nested = target?.closest("[data-scrollable]")
-            if (!nested || nested === root) {
-              props.onMarkScrollGesture(root)
-              return
-            }
-
-            if (!(nested instanceof HTMLElement)) {
-              props.onMarkScrollGesture(root)
-              return
-            }
-
             const delta = normalizeWheelDelta({
               deltaY: e.deltaY,
               deltaMode: e.deltaMode,
               rootHeight: root.clientHeight,
             })
             if (!delta) return
-
-            if (
-              shouldMarkBoundaryGesture({
-                delta,
-                scrollTop: nested.scrollTop,
-                scrollHeight: nested.scrollHeight,
-                clientHeight: nested.clientHeight,
-              })
-            ) {
-              props.onMarkScrollGesture(root)
-            }
+            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
           }}
           onTouchStart={(e) => {
             touchGesture = e.touches[0]?.clientY
@@ -129,28 +138,7 @@ export function MessageTimeline(props: {
             if (!delta) return
 
             const root = e.currentTarget
-            const target = e.target instanceof Element ? e.target : undefined
-            const nested = target?.closest("[data-scrollable]")
-            if (!nested || nested === root) {
-              props.onMarkScrollGesture(root)
-              return
-            }
-
-            if (!(nested instanceof HTMLElement)) {
-              props.onMarkScrollGesture(root)
-              return
-            }
-
-            if (
-              shouldMarkBoundaryGesture({
-                delta,
-                scrollTop: nested.scrollTop,
-                scrollHeight: nested.scrollHeight,
-                clientHeight: nested.clientHeight,
-              })
-            ) {
-              props.onMarkScrollGesture(root)
-            }
+            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
           }}
           onTouchEnd={() => {
             touchGesture = undefined
@@ -179,7 +167,7 @@ export function MessageTimeline(props: {
                 "sticky top-0 z-30 bg-background-stronger": true,
                 "w-full": true,
                 "px-4 md:px-6": true,
-                "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
+                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}
             >
               <div class="h-10 w-full flex items-center justify-between gap-2">
@@ -278,7 +266,7 @@ export function MessageTimeline(props: {
             class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
             classList={{
               "w-full": true,
-              "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
+              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               "mt-0.5": props.centered,
               "mt-0": !props.centered,
             }}
@@ -321,7 +309,7 @@ export function MessageTimeline(props: {
                     }}
                     classList={{
                       "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 3xl:max-w-[1200px]": props.centered,
+                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
                   >
                     <SessionTurn

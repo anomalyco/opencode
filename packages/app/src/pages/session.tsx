@@ -41,7 +41,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
+import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -234,7 +234,7 @@ export default function Page() {
     })
   }
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = createMediaQuery("(min-width: 1024px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -397,6 +397,19 @@ export default function Page() {
       })
   }
 
+  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
+    if (params.id !== sessionID) return
+    if (parentID) {
+      navigate(`/${params.dir}/session/${parentID}`)
+      return
+    }
+    if (nextSessionID) {
+      navigate(`/${params.dir}/session/${nextSessionID}`)
+      return
+    }
+    navigate(`/${params.dir}/session`)
+  }
+
   async function archiveSession(sessionID: string) {
     const session = sync.session.get(sessionID)
     if (!session) return
@@ -414,17 +427,7 @@ export default function Page() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-
-        if (params.id !== sessionID) return
-        if (session.parentID) {
-          navigate(`/${params.dir}/session/${session.parentID}`)
-          return
-        }
-        if (nextSession) {
-          navigate(`/${params.dir}/session/${nextSession.id}`)
-          return
-        }
-        navigate(`/${params.dir}/session`)
+        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
       })
       .catch((err) => {
         showToast({
@@ -490,16 +493,7 @@ export default function Page() {
       }),
     )
 
-    if (params.id !== sessionID) return true
-    if (session.parentID) {
-      navigate(`/${params.dir}/session/${session.parentID}`)
-      return true
-    }
-    if (nextSession) {
-      navigate(`/${params.dir}/session/${nextSession.id}`)
-      return true
-    }
-    navigate(`/${params.dir}/session`)
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
     return true
   }
 
@@ -594,7 +588,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    if (project && sdk.directory !== project.worktree) return sdk.directory
     return "main"
   })
 
@@ -847,11 +841,9 @@ export default function Page() {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const currentTabs = tabs().all()
-      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
-      const toIndex = currentTabs?.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== undefined) {
-        tabs().move(draggable.id.toString(), toIndex)
-      }
+      const toIndex = getTabReorderIndex(currentTabs, draggable.id.toString(), droppable.id.toString())
+      if (toIndex === undefined) return
+      tabs().move(draggable.id.toString(), toIndex)
     }
   }
 
@@ -920,6 +912,8 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const focusInput = () => inputRef?.focus()
+
   useSessionCommands({
     command,
     dialog,
@@ -946,6 +940,7 @@ export default function Page() {
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
+    focusInput,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -1028,10 +1023,31 @@ export default function Page() {
         </Show>
       </Match>
       <Match when={true}>
-        <div class={input.emptyClass}>
-          <Mark class="w-14 opacity-10" />
-          <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
-        </div>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={
+            store.changes === "turn" ? (
+              emptyTurn()
+            ) : (
+              <div class={input.emptyClass}>
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+              </div>
+            )
+          }
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
       </Match>
     </Switch>
   )
@@ -1043,7 +1059,7 @@ export default function Page() {
           diffStyle: layout.review.diffStyle(),
           onDiffStyleChange: layout.review.setDiffStyle,
           loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6",
+          emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
         })}
       </div>
     </div>
@@ -1513,15 +1529,18 @@ export default function Page() {
   createEffect(() => {
     if (!file.ready()) return
     setSessionHandoff(sessionKey(), {
-      files: Object.fromEntries(
-        tabs()
-          .all()
-          .flatMap((tab) => {
-            const path = file.pathFromTab(tab)
-            if (!path) return []
-            return [[path, file.selectedLines(path) ?? null] as const]
-          }),
-      ),
+      files: tabs()
+        .all()
+        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
+          const path = file.pathFromTab(tab)
+          if (!path) return acc
+          const selected = file.selectedLines(path)
+          acc[path] =
+            selected && typeof selected === "object" && "start" in selected && "end" in selected
+              ? (selected as SelectedLineRange)
+              : null
+          return acc
+        }, {}),
     })
   })
 
@@ -1535,9 +1554,16 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+      <div
+        class="flex-1 min-h-0 flex"
+        classList={{
+          "flex-col": !isDesktop(),
+          "flex-row": isDesktop(),
+        }}
+      >
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
+          mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
@@ -1572,7 +1598,7 @@ export default function Page() {
                         container: "px-4",
                       },
                       loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
+                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
@@ -1650,7 +1676,7 @@ export default function Page() {
 
                     const target = value === "main" ? sync.project?.worktree : value
                     if (!target) return
-                    if (target === sync.data.path.directory) return
+                    if (target === sdk.directory) return
                     layout.projects.open(target)
                     navigate(`/${base64Encode(target)}/session`)
                   }}
@@ -1686,7 +1712,7 @@ export default function Page() {
               direction="horizontal"
               size={layout.session.width()}
               min={450}
-              max={window.innerWidth * 0.45}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
               onResize={layout.session.resize}
               onResizeStart={() => setSessionResizing(true)}
               onResizeEnd={() => setSessionResizing(false)}
@@ -1704,7 +1730,6 @@ export default function Page() {
           dialog={dialog}
           file={file}
           comments={comments}
-          sync={sync}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
@@ -1716,10 +1741,12 @@ export default function Page() {
           openTab={openTab}
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
-          messages={messages as () => unknown[]}
-          visibleUserMessages={visibleUserMessages as () => unknown[]}
-          view={view}
-          info={info as () => unknown}
+          vm={{
+            messages,
+            visibleUserMessages,
+            view,
+            info,
+          }}
           handoffFiles={() => handoff.session.get(sessionKey())?.files}
           codeComponent={codeComponent}
           addCommentToContext={addCommentToContext}
@@ -1738,7 +1765,7 @@ export default function Page() {
       </div>
 
       <TerminalPanel
-        open={isDesktop() && view().terminal.opened()}
+        open={view().terminal.opened()}
         animations={settings.appearance.animations()}
         height={layout.terminal.height()}
         resize={layout.terminal.resize}

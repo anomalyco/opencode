@@ -1,7 +1,12 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 
-export const workspaceKey = (directory: string) => directory.replace(/[\\/]+$/, "")
+export const workspaceKey = (directory: string) => {
+  const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)
+  if (drive) return `${drive[1]}${directory.includes("\\") ? "\\" : "/"}`
+  if (/^[\\/]+$/.test(directory)) return directory.includes("\\") ? "\\" : "/"
+  return directory.replace(/[\\/]+$/, "")
+}
 
 export function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
@@ -21,7 +26,7 @@ export const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
-  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).toSorted(sortSessions(now))
+  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
 
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()

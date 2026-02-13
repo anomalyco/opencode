@@ -1,0 +1,385 @@
+---
+title: Плагины
+description: Напишите свои собственные плагины для расширения opencode.
+---
+
+Плагины позволяют расширять opencode, подключаясь к различным событиям и настраивая поведение. Вы можете создавать плагины для добавления новых функций, интеграции с внешними сервисами или изменения поведения opencode по умолчанию.
+
+Для примера ознакомьтесь с [plugins](/docs/ecosystem#plugins), созданными сообществом.
+
+---
+
+## Используйте плагин
+
+Есть два способа загрузки плагинов.
+
+---
+
+### Из локальных файлов
+
+Поместите файлы JavaScript или TypeScript в каталог плагина.
+
+- `.opencode/plugins/` – плагины уровня проекта.
+- `~/.config/opencode/plugins/` — глобальные плагины
+
+Файлы в этих каталогах автоматически загружаются при запуске.
+
+---
+
+### Из npm
+
+Укажите пакеты npm в файле конфигурации.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Поддерживаются как обычные, так и ограниченные пакеты npm.
+
+Просмотрите доступные плагины в папке [ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### Как устанавливаются плагины
+
+**Плагины npm** устанавливаются автоматически с помощью Bun при запуске. Пакеты и их зависимости кэшируются в `~/.cache/opencode/node_modules/`.
+
+**Локальные плагины** загружаются непосредственно из каталога плагинов. Чтобы использовать внешние пакеты, вы должны создать `package.json` в своем каталоге конфигурации (см. [Зависимости](#dependencies)) или опубликовать плагин в npm и [добавить его в свой config](/docs/config#plugins).
+
+---
+
+### Порядок загрузки
+
+Плагины загружаются из всех источников, и все хуки запускаются последовательно. Порядок загрузки следующий:
+
+1. Глобальная конфигурация (`~/.config/opencode/opencode.json`)
+2. Конфигурация проекта (`opencode.json`)
+3. Глобальный каталог плагинов (`~/.config/opencode/plugins/`)
+4. Каталог плагинов проекта (`.opencode/plugins/`)
+
+Дубликаты пакетов npm с тем же именем и версией загружаются один раз. Однако локальный плагин и плагин npm со схожими именами загружаются отдельно.
+
+---
+
+## Создать плагин
+
+Плагин — это **модуль JavaScript/TypeScript**, который экспортирует один или несколько плагинов.
+функции. Каждая функция получает объект контекста и возвращает объект перехватчика.
+
+---
+
+### Зависимости
+
+Локальные плагины и специальные инструменты могут использовать внешние пакеты npm. Добавьте `package.json` в каталог конфигурации с необходимыми вам зависимостями.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+opencode запускает `bun install` при запуске для их установки. Затем ваши плагины и инструменты смогут импортировать их.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Базовая структура
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+Функция плагина получает:
+
+- `project`: Текущая информация о проекте.
+- `directory`: текущий рабочий каталог.
+- `worktree`: путь к рабочему дереву git.
+- `client`: клиент SDK с открытым кодом для взаимодействия с ИИ.
+- `$`: [Bun shell API](https://bun.com/docs/runtime/shell) для выполнения команд.
+
+---
+
+### Поддержка TypeScript
+
+Для плагинов TypeScript вы можете импортировать типы из пакета плагина:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### События
+
+Плагины могут подписываться на события, как показано ниже в разделе «Примеры». Вот список различных доступных событий.
+
+#### Командные события
+
+- `command.executed`
+
+#### События файла
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### События установки
+
+- `installation.updated`
+
+#### События LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### События сообщений
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### События разрешения
+
+- `permission.asked`
+- `permission.replied`
+
+#### События сервера
+
+- `server.connected`
+
+#### События сессии
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### События
+
+- `todo.updated`
+
+#### События shell
+
+- `shell.env`
+
+#### События инструмента
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### Мероприятия TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Примеры
+
+Вот несколько примеров плагинов, которые вы можете использовать для расширения opencode.
+
+---
+
+### Отправлять уведомления
+
+Отправляйте уведомления при возникновении определенных событий:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Мы используем `osascript` для запуска AppleScript на macOS. Здесь мы используем его для отправки уведомлений.
+
+:::note
+Если вы используете настольное приложение opencode, оно может автоматически отправлять системные уведомления, когда ответ готов или когда возникает ошибка сеанса.
+:::
+
+---
+
+### Защита .env
+
+Запретите открытому коду читать файлы `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Внедрение переменных среды
+
+Внедряйте переменные среды во все shell-процессы выполнения (инструменты искусственного интеллекта и пользовательские terminal):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Пользовательские инструменты
+
+Плагины также могут добавлять в opencode собственные инструменты:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Помощник `tool` создает собственный инструмент, который может вызывать opencode. Он принимает функцию схемы Zod и возвращает определение инструмента:
+
+- `description`: Что делает инструмент
+- `args`: схема Zod для аргументов инструмента.
+- `execute`: функция, которая запускается при вызове инструмента.
+
+Ваши пользовательские инструменты будут доступны для открытия кода наряду со встроенными инструментами.
+
+---
+
+### Ведение журнала
+
+Используйте `client.app.log()` вместо `console.log` для структурированного ведения журнала:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Уровни: `debug`, `info`, `warn`, `error`. Подробности см. в документации SDK](https://opencode.ai/docs/sdk).
+
+---
+
+### Хуки сжатия
+
+Настройте контекст, включаемый при сжатии сеанса:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+Хук `experimental.session.compacting` срабатывает до того, как LLM сгенерирует сводку для продолжения. Используйте его для внедрения контекста, специфичного для домена, который будет пропущен при запросе на сжатие по умолчанию.
+
+Вы также можете полностью заменить запрос на уплотнение, установив `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Если установлен `output.prompt`, он полностью заменяет приглашение на сжатие по умолчанию. Массив `output.context` в этом случае игнорируется.
