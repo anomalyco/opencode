@@ -928,6 +928,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    no_terminal_padding_x: z.boolean().optional().describe("Remove horizontal padding in the terminal interface"),
   })
 
   export const Server = z
