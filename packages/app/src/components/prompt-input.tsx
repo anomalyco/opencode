@@ -1210,12 +1210,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     as="div"
                     variant="ghost"
                     size="normal"
-                    class="min-w-0 max-w-[320px] text-13-regular"
+                    class="min-w-0 max-w-[320px] text-13-regular group"
                     style={{ height: "28px" }}
                     onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                   >
                     <Show when={local.model.current()?.provider?.id}>
-                      <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                      <ProviderIcon
+                        id={local.model.current()!.provider.id as IconName}
+                        class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                        style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                      />
                     </Show>
                     <span class="truncate">
                       {local.model.current()?.name ?? language.t("dialog.model.select.title")}
@@ -1237,11 +1241,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant: "ghost",
                     size: "normal",
                     style: { height: "28px" },
-                    class: "min-w-0 max-w-[320px] text-13-regular",
+                    class: "min-w-0 max-w-[320px] text-13-regular group",
                   }}
                 >
                   <Show when={local.model.current()?.provider?.id}>
-                    <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                    <ProviderIcon
+                      id={local.model.current()!.provider.id as IconName}
+                      class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                      style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                    />
                   </Show>
                   <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
                   <Icon name="chevron-down" size="small" class="shrink-0" />
