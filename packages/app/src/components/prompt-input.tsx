@@ -1062,14 +1062,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-3 pt-2 pb-0 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 px-3 pt-2 pb-0 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {placeholder()}
             </div>
           </Show>
