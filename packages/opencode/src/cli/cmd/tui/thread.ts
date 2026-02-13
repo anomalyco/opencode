@@ -37,7 +37,16 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 
 function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
+    on: (handler) => {
+      const unsub1 = client.on<Event>("event", handler)
+      const unsub2 = client.on<{ directory?: string; payload: Event }>("global.event", (event) => {
+        handler(event.payload)
+      })
+      return () => {
+        unsub1()
+        unsub2()
+      }
+    },
   }
 }
 

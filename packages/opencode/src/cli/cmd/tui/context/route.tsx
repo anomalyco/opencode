@@ -10,6 +10,7 @@ export type HomeRoute = {
 export type SessionRoute = {
   type: "session"
   sessionID: string
+  directory?: string
   initialPrompt?: PromptInfo
 }
 

@@ -1,6 +1,6 @@
 import path from "path"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, createSignal, Match, onMount, Show, Switch } from "solid-js"
+import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
@@ -35,11 +35,8 @@ export function Home() {
     return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
   })
 
-  const [worktree, setWorktreeRaw] = createSignal(kv.get("worktree_selection", "main") as string)
-  const setWorktree = (value: string) => {
-    setWorktreeRaw(value)
-    kv.set("worktree_selection", value)
-  }
+  const worktree = () => kv.get("worktree_selection", "main") as string
+  const setWorktree = (value: string) => kv.set("worktree_selection", value)
   const isGit = createMemo(() => !!sync.data.vcs)
   const worktreeLabel = createMemo(() => {
     const value = worktree()

@@ -447,13 +447,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
+        async sync(sessionID: string, directory?: string) {
           if (fullSyncedSessions.has(sessionID)) return
+          const client = directory ? sdk.createClient(directory) : sdk.client
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
+            client.session.get({ sessionID }, { throwOnError: true }),
+            client.session.messages({ sessionID, limit: 100 }),
+            client.session.todo({ sessionID }),
+            client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {

@@ -541,6 +541,7 @@ export function Prompt(props: PromptProps) {
     }
     const worktreeSelection = !props.sessionID ? (props.worktree ?? "main") : "main"
     let client = sdk.client
+    let directory: string | undefined
     if (!props.sessionID && worktreeSelection !== "main") {
       if (worktreeSelection === "create") {
         const created = await sdk.client.worktree.create({}).then((x) => x.data).catch(() => undefined)
@@ -548,10 +549,12 @@ export function Prompt(props: PromptProps) {
           toast.show({ variant: "error", message: "Failed to create workspace" })
           return
         }
-        client = sdk.createClient(created.directory)
+        directory = created.directory
+        client = sdk.createClient(directory)
         toast.show({ variant: "info", message: `Creating workspace ${created.name}...`, duration: 3000 })
       } else {
-        client = sdk.createClient(worktreeSelection)
+        directory = worktreeSelection
+        client = sdk.createClient(directory)
       }
       props.onWorktreeChange?.("main")
     }
@@ -670,6 +673,7 @@ export function Prompt(props: PromptProps) {
         route.navigate({
           type: "session",
           sessionID,
+          directory,
         })
       }, 50)
     input.clear()
