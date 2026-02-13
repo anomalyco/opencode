@@ -73,16 +73,18 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         }}
       >
         <span class="text-14-regular text-text-strong cursor-default">{summary()}</span>
-        <div class="ml-1 flex-1 min-w-0">
-          <Show when={store.collapsed && preview()}>
-            <div class="text-14-regular text-text-base truncate cursor-default">
-              <Show when={active()?.status === "in_progress"} fallback={preview()}>
-                <TextShimmer text={preview()} />
-              </Show>
-            </div>
-          </Show>
-        </div>
-        <div class="ml-1">
+        <Show when={store.collapsed}>
+          <div class="ml-1 flex-1 min-w-0">
+            <Show when={preview()}>
+              <div class="text-14-regular text-text-base truncate cursor-default">
+                <Show when={active()?.status === "in_progress"} fallback={preview()}>
+                  <TextShimmer text={preview()} />
+                </Show>
+              </div>
+            </Show>
+          </div>
+        </Show>
+        <div classList={{ "ml-auto": !store.collapsed, "ml-1": store.collapsed }}>
           <IconButton
             icon="chevron-down"
             size="normal"
@@ -121,7 +123,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
     if (scrolling()) return
     if (!scrollRef || scrollRef.offsetParent === null) return
 
-    const el = scrollRef.querySelector('[data-in-progress="true"]')
+    const el = scrollRef.querySelector("[data-in-progress]")
     if (!(el instanceof HTMLElement)) return
 
     const topFade = 16
@@ -144,7 +146,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
 
   createEffect(
     on([() => props.open, inProgress], () => {
-      if (!props.open) return
+      if (!props.open || inProgress() < 0) return
       requestAnimationFrame(ensure)
     }),
   )
@@ -159,11 +161,16 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
       <div
         class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
         ref={scrollRef}
+        style={{ "overflow-anchor": "none" }}
         onScroll={(e) => {
           setStuck(e.currentTarget.scrollTop > 0)
           setScrolling(true)
           if (timer) window.clearTimeout(timer)
-          timer = window.setTimeout(() => setScrolling(false), 250)
+          timer = window.setTimeout(() => {
+            setScrolling(false)
+            if (inProgress() < 0) return
+            requestAnimationFrame(ensure)
+          }, 250)
         }}
       >
         <For each={props.todos}>
@@ -172,7 +179,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
               readOnly
               checked={todo.status === "completed"}
               indeterminate={todo.status === "in_progress"}
-              data-in-progress={todo.status === "in_progress"}
+              data-in-progress={todo.status === "in_progress" ? "" : undefined}
               icon={dot(todo.status)}
             >
               <span
