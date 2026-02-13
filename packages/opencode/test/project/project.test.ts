@@ -8,54 +8,45 @@ import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 
-const bunModule = await import("bun")
+const gitModule = await import("../../src/util/git")
+const originalGit = gitModule.git
+
 type Mode = "none" | "rev-list-fail" | "top-fail" | "common-dir-fail"
 let mode: Mode = "none"
 
-function render(parts: TemplateStringsArray, vals: unknown[]) {
-  return parts.reduce((acc, part, i) => `${acc}${part}${i < vals.length ? String(vals[i]) : ""}`, "")
-}
-
-function fakeShell(output: { exitCode: number; stdout: string; stderr: string }) {
-  const result = {
-    exitCode: output.exitCode,
-    stdout: Buffer.from(output.stdout),
-    stderr: Buffer.from(output.stderr),
-    text: async () => output.stdout,
-  }
-  const shell = {
-    quiet: () => shell,
-    nothrow: () => shell,
-    cwd: () => shell,
-    env: () => shell,
-    text: async () => output.stdout,
-    then: (onfulfilled: (value: typeof result) => unknown, onrejected?: (reason: unknown) => unknown) =>
-      Promise.resolve(result).then(onfulfilled, onrejected),
-    catch: (onrejected: (reason: unknown) => unknown) => Promise.resolve(result).catch(onrejected),
-    finally: (onfinally: (() => void) | undefined | null) => Promise.resolve(result).finally(onfinally),
-  }
-  return shell
-}
-
-mock.module("bun", () => ({
-  ...bunModule,
-  $: (parts: TemplateStringsArray, ...vals: unknown[]) => {
-    const cmd = render(parts, vals).replaceAll(",", " ").replace(/\s+/g, " ").trim()
+mock.module("../../src/util/git", () => ({
+  git: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
+    const cmd = ["git", ...args].join(" ")
     if (
       mode === "rev-list-fail" &&
       cmd.includes("git rev-list") &&
       cmd.includes("--max-parents=0") &&
       cmd.includes("--all")
     ) {
-      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
     }
     if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
-      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
     }
     if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
-      return fakeShell({ exitCode: 128, stdout: "", stderr: "fatal" })
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
     }
-    return (bunModule.$ as any)(parts, ...vals)
+    return originalGit(args, opts)
   },
 }))
 
