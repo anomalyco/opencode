@@ -8458,6 +8458,29 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.opencode.hotreload.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "opencode.hotreload.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string",
+                "enum": ["add", "change", "unlink"]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.opencode.hotreload.applied": {
         "type": "object",
         "properties": {
@@ -8608,6 +8631,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.opencode.hotreload.changed"
           },
           {
             "$ref": "#/components/schemas/Event.opencode.hotreload.applied"
