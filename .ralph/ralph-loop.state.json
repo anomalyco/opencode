@@ -1,6 +1,6 @@
 {
   "active": true,
-  "iteration": 1,
+  "iteration": 2,
   "minIterations": 1,
   "maxIterations": 50,
   "completionPromise": "COMPLETE",
