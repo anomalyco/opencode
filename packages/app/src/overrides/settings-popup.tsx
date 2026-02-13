@@ -20,11 +20,10 @@ export function SettingsPopup() {
   const terminal = useTerminal()
   const project = createMemo(() => getFilename(decode64(params.dir) ?? params.dir))
   const [email, setEmail] = createSignal("")
-  const [listed, setListed] = createSignal(false)
   const dev = createMemo(() => {
     if (typeof window !== "object") return ""
     if (!window.location?.hostname) return ""
-    return `http://${window.location.hostname}:3000`
+    return `http://${window.location.hostname}/preview`
   })
   const [config, { refetch }] = createResource(
     () => sdk.directory,
@@ -115,7 +114,6 @@ export function SettingsPopup() {
 
   const runList = () => {
     runAccess({ action: "list" })
-    setListed(true)
   }
 
   const runAuth = () => {
@@ -141,11 +139,6 @@ export function SettingsPopup() {
       gutter={6}
       placement="bottom-end"
       class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
-      onOpenChange={(next) => {
-        if (!next) return
-        if (listed()) return
-        runList()
-      }}
       triggerAs={Button}
       triggerProps={{
         variant: "secondary",
