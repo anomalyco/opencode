@@ -11,6 +11,7 @@
     "dev:web": "bun --cwd packages/app dev",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
+    "postinstall": "bun2nix -o nix/bun.nix",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
@@ -67,6 +68,7 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "bun2nix": "2.0.8",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",

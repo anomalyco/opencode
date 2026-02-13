@@ -5,6 +5,62 @@ description: Customize your keybinds.
 
 OpenCode has a list of keybinds that you can customize through the OpenCode config.
 
+---
+
+## Keymaps
+
+OpenCode includes built-in keymap presets for different editing styles. Use the `/keymap` command to explore them, or set one in your config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keymap": "vim"
+}
+```
+
+### Available keymaps
+
+| Keymap    | Leader   | Description                                                     |
+| --------- | -------- | --------------------------------------------------------------- |
+| `default` | `ctrl+x` | Standard keybindings, works well in most terminals              |
+| `emacs`   | `ctrl+x` | Emacs-style: `M-x` commands, `C-g` cancel, familiar navigation  |
+| `vim`     | `space`  | Vim-style: space leader, `hjkl` navigation, `u`/`C-r` undo/redo |
+
+### Emacs keymap highlights
+
+| Keybind        | Action                             |
+| -------------- | ---------------------------------- |
+| `M-x` (alt+x)  | Command palette                    |
+| `C-x b`        | List sessions (like switch buffer) |
+| `C-x C-f`      | New session (like find-file)       |
+| `C-g`          | Cancel/interrupt                   |
+| `C-v` / `M-v`  | Page down/up                       |
+| `C-/` or `C-_` | Undo                               |
+| `C-p` / `C-n`  | Line up/down                       |
+
+### Vim keymap highlights
+
+| Keybind       | Action                  |
+| ------------- | ----------------------- |
+| `space`       | Leader key              |
+| `<space>:`    | Command palette         |
+| `<space>b`    | List sessions (buffers) |
+| `<space>n`    | New session             |
+| `C-u` / `C-d` | Half-page up/down       |
+| `C-b` / `C-f` | Full page up/down       |
+| `u` / `C-r`   | Undo/redo               |
+| `G`           | Go to end               |
+| `<space>m`    | Switch model            |
+| `<space>a`    | Switch agent            |
+
+Your custom `keybinds` settings override the keymap preset, so you can use a keymap as a base and customize individual bindings.
+
+---
+
+## All keybinds
+
+Here's the full list of default keybinds:
+
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",

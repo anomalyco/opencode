@@ -11,8 +11,6 @@ export namespace Truncate {
   export const MAX_BYTES = 50 * 1024
   export const DIR = path.join(Global.Path.data, "tool-output")
   export const GLOB = path.join(DIR, "*")
-  const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
-  const HOUR_MS = 60 * 60 * 1000
 
   export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
 
@@ -23,22 +21,11 @@ export namespace Truncate {
   }
 
   export function init() {
-    Scheduler.register({
-      id: "tool.truncation.cleanup",
-      interval: HOUR_MS,
-      run: cleanup,
-      scope: "global",
-    })
+    // NOTE: No scheduled cleanup - infinite retention, operator handles storage
   }
 
   export async function cleanup() {
-    const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - RETENTION_MS))
-    const glob = new Bun.Glob("tool_*")
-    const entries = await Array.fromAsync(glob.scan({ cwd: DIR, onlyFiles: true })).catch(() => [] as string[])
-    for (const entry of entries) {
-      if (Identifier.timestamp(entry) >= cutoff) continue
-      await fs.unlink(path.join(DIR, entry)).catch(() => {})
-    }
+    // NOTE: Disabled - infinite retention, operator handles storage via R2 or similar
   }
 
   function hasTaskTool(agent?: Agent.Info): boolean {
