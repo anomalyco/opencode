@@ -4,7 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: Mount Bun Cache
-      uses: useblacksmith/stickydisk@v1
+      uses: actions/cache@v4
       with:
         key: ${{ github.repository }}-bun-cache-${{ runner.os }}
         path: ~/.bun
