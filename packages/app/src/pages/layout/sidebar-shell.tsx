@@ -78,7 +78,7 @@ export const SidebarContent = (props: {
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>
         </div>
-        <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
+        <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"
