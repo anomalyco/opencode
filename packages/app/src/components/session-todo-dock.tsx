@@ -31,6 +31,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
     const active =
       props.todos.find((todo) => todo.status === "in_progress") ??
       props.todos.find((todo) => todo.status === "pending") ??
+      props.todos.filter((todo) => todo.status === "completed").at(-1) ??
       props.todos[0]
     if (!active) return ""
     return active.content
@@ -76,7 +77,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         <TodoList todos={props.todos} />
       </div>
 
-      <div hidden={!store.collapsed} class="px-3 pb-11 text-12-regular text-text-base truncate">
+      <div hidden={!store.collapsed} class="px-3 pb-11 text-14-regular text-text-base truncate">
         {preview()}
       </div>
     </div>
