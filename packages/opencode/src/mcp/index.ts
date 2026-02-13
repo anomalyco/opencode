@@ -209,6 +209,10 @@ export namespace MCP {
     },
   )
 
+  export async function reset() {
+    await state.reset()
+  }
+
   // Helper function to fetch prompts for a specific client
   async function fetchPromptsForClient(clientName: string, client: Client) {
     const prompts = await client.listPrompts().catch((e) => {

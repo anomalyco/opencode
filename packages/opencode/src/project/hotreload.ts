@@ -6,8 +6,11 @@ import { Command } from "@/command"
 import { Config } from "@/config/config"
 import { FileWatcher } from "@/file/watcher"
 import { Flag } from "@/flag/flag"
+import { MCP } from "@/mcp"
+import { Plugin } from "@/plugin"
 import { SessionStatus } from "@/session/status"
 import { Skill } from "@/skill"
+import { ToolRegistry } from "@/tool/registry"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import z from "zod"
@@ -135,6 +138,9 @@ export namespace HotReload {
 
       const reload = async () => {
         await Config.reset()
+        await Plugin.reset()
+        await MCP.reset()
+        await ToolRegistry.reset()
         await Skill.reset()
         await Agent.reset()
         await Command.reset()
