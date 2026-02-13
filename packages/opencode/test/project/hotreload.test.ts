@@ -30,6 +30,7 @@ test("ignores metadata, temp files, and unrelated files", () => {
 })
 
 test("matches darwin /private path aliases", () => {
+  if (process.platform !== "darwin") return
   const privateRoot = "/private/tmp/openwork-hotreload"
   expect(HotReload.classify(privateRoot, "/tmp/openwork-hotreload/.opencode/commands/fix.md")).toBe(
     ".opencode/commands/fix.md",
