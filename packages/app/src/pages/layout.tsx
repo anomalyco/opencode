@@ -1725,8 +1725,8 @@ export default function Layout(props: ParentProps) {
                       id={`project:${projectId()}`}
                       value={projectName}
                       onSave={(next) => renameProject(p(), next)}
-                      class="text-16-medium text-text-strong truncate"
-                      displayClass="text-16-medium text-text-strong truncate"
+                      class="text-14-medium text-text-strong truncate"
+                      displayClass="text-14-medium text-text-strong truncate"
                       stopPropagation
                     />
 
