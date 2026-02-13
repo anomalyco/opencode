@@ -11,6 +11,12 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import {
+  calculateSessionMetrics,
+  formatMs,
+  formatTokenRate,
+  formatPercent,
+} from "../../util/cic"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -21,6 +27,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const [expanded, setExpanded] = createStore({
+    cic: true,
     mcp: true,
     diff: true,
     todo: true,
@@ -60,6 +67,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }
   })
 
+  const cic = createMemo(() => calculateSessionMetrics(messages(), sync.data.part))
+
   const directory = useDirectory()
   const kv = useKV()
 
@@ -98,6 +107,48 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={cic().messageCount > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => setExpanded("cic", !expanded.cic)}
+                >
+                  <text fg={theme.text}>{expanded.cic ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>CIC</b>
+                    <Show when={!expanded.cic}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({formatTokenRate(cic().tokensPerSec)})
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.cic}>
+                  <box paddingLeft={2}>
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.text }}>Last:</span>{" "}
+                      TTFT {formatMs(cic().ttft)}{" "}
+                      · {formatMs(cic().duration)}{" "}
+                      · {formatTokenRate(cic().tokensPerSec)}
+                    </text>
+                    <Show when={cic().messageCount > 1}>
+                      <text fg={theme.textMuted}>
+                        <span style={{ fg: theme.text }}>Avg:</span>{" "}
+                        TTFT {formatMs(cic().avgTTFT)}{" "}
+                        · {formatTokenRate(cic().avgTokensPerSec)}{" "}
+                        · p95 {formatMs(cic().p95Duration)}
+                      </text>
+                    </Show>
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.text }}>Eff:</span>{" "}
+                      Cache {formatPercent(cic().cacheHitRate)}
+                    </text>
+                  </box>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
