@@ -957,7 +957,6 @@ export default function Page() {
       onSelect={(option) => option && setStore("changes", option)}
       variant="ghost"
       size="large"
-      triggerStyle={{ "font-size": "var(--font-size-large)" }}
     />
   )
 
