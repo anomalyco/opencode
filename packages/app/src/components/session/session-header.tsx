@@ -311,12 +311,14 @@ export function SessionHeader() {
     platform,
   })
 
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
+  const leftMount = createMemo(
+    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
+  )
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={leftMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <button
@@ -550,7 +552,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
+              <div class="hidden lg:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
@@ -583,7 +585,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -613,7 +615,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden lg:block shrink-0">
                 <TooltipKeybind
                   title={language.t("command.fileTree.toggle")}
                   keybind={command.keybind("fileTree.toggle")}
