@@ -13,6 +13,8 @@ export namespace Auth {
       expires: z.number(),
       accountId: z.string().optional(),
       enterpriseUrl: z.string().optional(),
+      clientId: z.string().optional(),
+      clientSecret: z.string().optional(),
     })
     .meta({ ref: "OAuth" })
 

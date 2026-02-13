@@ -301,9 +301,48 @@ export function DialogConnectProvider(props: { provider: string }) {
             validationState={formStore.error ? "invalid" : undefined}
             error={formStore.error}
           />
-          <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.submit")}
-          </Button>
+          <div class="flex gap-2">
+            <Button class="w-auto" type="submit" size="large" variant="primary">
+              {language.t("common.submit")}
+            </Button>
+            <Switch>
+              <Match when={provider().id === "google"}>
+                <Button
+                  class="w-auto"
+                  type="button"
+                  size="large"
+                  variant="secondary"
+                  onClick={async () => {
+                    setFormStore("error", undefined)
+                    try {
+                      const response = await fetch(
+                        `${globalSDK.url}/auth/google/browser`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                        },
+                      )
+                      const result = await response.json()
+                      if (result.success) {
+                        await complete()
+                      } else {
+                        setFormStore("error", result.error || "Authentication failed")
+                      }
+                    } catch (error) {
+                      setFormStore(
+                        "error",
+                        error instanceof Error ? error.message : "Authentication failed",
+                      )
+                    }
+                  }}
+                >
+                  Login with Browser
+                </Button>
+              </Match>
+            </Switch>
+          </div>
         </form>
       </div>
     )
