@@ -987,8 +987,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const variants = createMemo(() => ["default", ...local.model.variant.list()])
+
   return (
-    <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
+    <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1008,7 +1010,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
+          "bg-surface-raised-stronger-non-alpha shadow-xs-border relative z-10": true,
           "rounded-[12px] overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
@@ -1072,127 +1074,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between gap-2">
+        <div class="relative p-2 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0 flex-1">
-            <Switch>
-              <Match when={store.mode === "shell"}>
-                <div class="flex items-center gap-2 px-2 h-6">
-                  <Icon name="console" size="small" class="text-icon-primary" />
-                  <span class="text-12-regular text-text-primary">{language.t("prompt.mode.shell")}</span>
-                  <span class="text-12-regular text-text-weak">{language.t("prompt.mode.shell.exit")}</span>
-                </div>
-              </Match>
-              <Match when={store.mode === "normal"}>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={language.t("command.agent.cycle")}
-                  keybind={command.keybind("agent.cycle")}
-                >
-                  <Select
-                    options={agentNames()}
-                    current={local.agent.current()?.name ?? ""}
-                    onSelect={local.agent.set}
-                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-full" : "max-w-[120px]"}`}
-                    valueClass="truncate"
-                    variant="ghost"
-                  />
-                </TooltipKeybind>
-                <Show
-                  when={providers.paid().length > 0}
-                  fallback={
-                    <TooltipKeybind
-                      placement="top"
-                      gutter={8}
-                      title={language.t("command.model.choose")}
-                      keybind={command.keybind("model.choose")}
-                    >
-                      <Button
-                        as="div"
-                        variant="ghost"
-                        class="px-2 min-w-0 max-w-[240px]"
-                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
-                      >
-                        <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
-                        </Show>
-                        <span class="truncate">
-                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        </span>
-                        <Icon name="chevron-down" size="small" class="shrink-0" />
-                      </Button>
-                    </TooltipKeybind>
+            <Show when={store.mode === "shell"}>
+              <div class="flex items-center gap-2 px-2 h-6">
+                <Icon name="console" size="small" class="text-icon-primary" />
+                <span class="text-12-regular text-text-primary">{language.t("prompt.mode.shell")}</span>
+                <span class="text-12-regular text-text-weak">{language.t("prompt.mode.shell.exit")}</span>
+              </div>
+            </Show>
+            <Show when={store.mode === "normal" && permission.permissionsEnabled() && params.id}>
+              <TooltipKeybind
+                placement="top"
+                gutter={8}
+                title={language.t("command.permissions.autoaccept.enable")}
+                keybind={command.keybind("permissions.autoaccept")}
+              >
+                <Button
+                  variant="ghost"
+                  onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
+                  classList={{
+                    "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
+                    "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
+                    "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
+                  }}
+                  aria-label={
+                    permission.isAutoAccepting(params.id!, sdk.directory)
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
                   }
+                  aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
                 >
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={8}
-                    title={language.t("command.model.choose")}
-                    keybind={command.keybind("model.choose")}
-                  >
-                    <ModelSelectorPopover
-                      triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
-                    >
-                      <Show when={local.model.current()?.provider?.id}>
-                        <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
-                      </Show>
-                      <span class="truncate">
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                      </span>
-                      <Icon name="chevron-down" size="small" class="shrink-0" />
-                    </ModelSelectorPopover>
-                  </TooltipKeybind>
-                </Show>
-                <Show when={local.model.variant.list().length > 0}>
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={8}
-                    title={language.t("command.model.variant.cycle")}
-                    keybind={command.keybind("model.variant.cycle")}
-                  >
-                    <Button
-                      data-action="model-variant-cycle"
-                      variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
-                      onClick={() => local.model.variant.cycle()}
-                    >
-                      {local.model.variant.current() ?? language.t("common.default")}
-                    </Button>
-                  </TooltipKeybind>
-                </Show>
-                <Show when={permission.permissionsEnabled() && params.id}>
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={8}
-                    title={language.t("command.permissions.autoaccept.enable")}
-                    keybind={command.keybind("permissions.autoaccept")}
-                  >
-                    <Button
-                      variant="ghost"
-                      onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
-                      classList={{
-                        "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                        "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
-                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
-                      }}
-                      aria-label={
-                        permission.isAutoAccepting(params.id!, sdk.directory)
-                          ? language.t("command.permissions.autoaccept.disable")
-                          : language.t("command.permissions.autoaccept.enable")
-                      }
-                      aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
-                    >
-                      <Icon
-                        name="chevron-double-right"
-                        size="small"
-                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
-                      />
-                    </Button>
-                  </TooltipKeybind>
-                </Show>
-              </Match>
-            </Switch>
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
+                  />
+                </Button>
+              </TooltipKeybind>
+            </Show>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <input
@@ -1257,6 +1177,90 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </div>
       </form>
+      <Show when={store.mode === "normal"}>
+        <div class="-mt-4 bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
+          <div class="p-2 pt-6 flex items-center gap-1.5 min-w-0">
+            <TooltipKeybind
+              placement="top"
+              gutter={4}
+              title={language.t("command.agent.cycle")}
+              keybind={command.keybind("agent.cycle")}
+            >
+              <Select
+                size="normal"
+                options={agentNames()}
+                current={local.agent.current()?.name ?? ""}
+                onSelect={local.agent.set}
+                class="capitalize max-w-[160px]"
+                valueClass="truncate text-13-regular"
+                variant="ghost"
+              />
+            </TooltipKeybind>
+            <Show
+              when={providers.paid().length > 0}
+              fallback={
+                <TooltipKeybind
+                  placement="top"
+                  gutter={4}
+                  title={language.t("command.model.choose")}
+                  keybind={command.keybind("model.choose")}
+                >
+                  <Button
+                    as="div"
+                    variant="ghost"
+                    size="normal"
+                    class="min-w-0 max-w-[320px] text-13-regular"
+                    onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                  >
+                    <Show when={local.model.current()?.provider?.id}>
+                      <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                    </Show>
+                    <span class="truncate">
+                      {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                    </span>
+                    <Icon name="chevron-down" size="small" class="shrink-0" />
+                  </Button>
+                </TooltipKeybind>
+              }
+            >
+              <TooltipKeybind
+                placement="top"
+                gutter={4}
+                title={language.t("command.model.choose")}
+                keybind={command.keybind("model.choose")}
+              >
+                <ModelSelectorPopover
+                  triggerAs={Button}
+                  triggerProps={{ variant: "ghost", size: "normal", class: "min-w-0 max-w-[320px] text-13-regular" }}
+                >
+                  <Show when={local.model.current()?.provider?.id}>
+                    <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                  </Show>
+                  <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
+                  <Icon name="chevron-down" size="small" class="shrink-0" />
+                </ModelSelectorPopover>
+              </TooltipKeybind>
+            </Show>
+            <TooltipKeybind
+              placement="top"
+              gutter={4}
+              title={language.t("command.model.variant.cycle")}
+              keybind={command.keybind("model.variant.cycle")}
+            >
+              <Select
+                size="normal"
+                options={variants()}
+                current={local.model.variant.current() ?? "default"}
+                label={(x) => (x === "default" ? language.t("common.default") : x)}
+                onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                class="capitalize max-w-[160px]"
+                valueClass="truncate text-13-regular"
+                variant="ghost"
+              />
+            </TooltipKeybind>
+          </div>
+        </div>
+      </Show>
     </div>
   )
 }
