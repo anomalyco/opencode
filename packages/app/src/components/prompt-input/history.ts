@@ -4,6 +4,13 @@ const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 export const MAX_HISTORY = 100
 
+export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number) {
+  if (!text.includes("\n")) return true
+  const position = Math.max(0, Math.min(cursor, text.length))
+  if (direction === "up") return !text.slice(0, position).includes("\n")
+  return !text.slice(position).includes("\n")
+}
+
 export function clonePromptParts(prompt: Prompt): Prompt {
   return prompt.map((part) => {
     if (part.type === "text") return { ...part }

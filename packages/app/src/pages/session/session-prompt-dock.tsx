@@ -1,15 +1,14 @@
-import { For, Show, type ComponentProps } from "solid-js"
+import { For, Show } from "solid-js"
+import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
 
-const questionDockRequest = (value: unknown) => value as ComponentProps<typeof QuestionDock>["request"]
-
 export function SessionPromptDock(props: {
   centered: boolean
-  questionRequest: () => { questions: unknown[] } | undefined
+  questionRequest: () => QuestionRequest | undefined
   permissionRequest: () => { patterns: string[]; permission: string } | undefined
   blocked: boolean
   promptReady: boolean
@@ -48,7 +47,7 @@ export function SessionPromptDock(props: {
                     subtitle,
                   }}
                 />
-                <QuestionDock request={questionDockRequest(req)} />
+                <QuestionDock request={req} />
               </div>
             )
           }}

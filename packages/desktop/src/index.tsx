@@ -6,8 +6,8 @@ import {
   AppInterface,
   PlatformProvider,
   Platform,
-  DisplayBackend,
   useCommand,
+  handleNotificationClick,
 } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
@@ -29,7 +29,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands, InitStep, type WslConfig } from "./bindings"
+import { commands, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 import { createMenu } from "./menu"
 
@@ -336,10 +336,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
             void win.show().catch(() => undefined)
             void win.unminimize().catch(() => undefined)
             void win.setFocus().catch(() => undefined)
-            if (href) {
-              window.history.pushState(null, "", href)
-              window.dispatchEvent(new PopStateEvent("popstate"))
-            }
+            handleNotificationClick(href)
             notification.close()
           }
         })
@@ -487,11 +484,9 @@ type ServerReadyData = { url: string; password: string | null }
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
-
   if (serverData.state === "errored") throw serverData.error
 
   return (
-    // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
       when={serverData.state !== "pending" && serverData()}
       fallback={
