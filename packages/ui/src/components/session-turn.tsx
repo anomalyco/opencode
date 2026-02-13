@@ -1,10 +1,15 @@
-import { AssistantMessage, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
+import { useDiffComponent } from "../context/diff"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createMemo, For, ParentProps, Show } from "solid-js"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { createMemo, createSignal, For, ParentProps, Show } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { Message } from "./message-part"
 import { Card } from "./card"
+import { Collapsible } from "./collapsible"
+import { DiffChanges } from "./diff-changes"
 import { TextShimmer } from "./text-shimmer"
 import { createAutoScroll } from "../hooks"
 
@@ -106,10 +111,12 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
+  const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
@@ -156,6 +163,20 @@ export function SessionTurn(
     if (!msg) return emptyParts
     return list(data.store.part?.[msg.id], emptyParts)
   })
+
+  const diffs = createMemo(() => {
+    const files = message()?.summary?.diffs
+    if (!files?.length) return emptyDiffs
+
+    const seen = new Set<string>()
+    return files.filter((diff) => {
+      if (seen.has(diff.file)) return false
+      seen.add(diff.file)
+      return true
+    })
+  })
+  const edited = createMemo(() => diffs().length)
+  const [open, setOpen] = createSignal(false)
 
   const assistantMessages = createMemo(
     () => {
@@ -260,6 +281,53 @@ export function SessionTurn(
                         />
                       )}
                     </For>
+                  </div>
+                </Show>
+                <Show when={edited() > 0}>
+                  <div data-slot="session-turn-diffs">
+                    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                      <Collapsible.Trigger>
+                        <div data-component="session-turn-diffs-trigger">
+                          <span data-slot="session-turn-diffs-title">
+                            {edited() === 1 ? "Edited file" : "Edited files"} ({edited()})
+                          </span>
+                          <div data-slot="session-turn-diffs-meta">
+                            <DiffChanges changes={diffs()} variant="bars" />
+                            <Collapsible.Arrow />
+                          </div>
+                        </div>
+                      </Collapsible.Trigger>
+                      <Collapsible.Content>
+                        <Show when={open()}>
+                          <div data-component="session-turn-diffs-content">
+                            <For each={diffs()}>
+                              {(diff) => (
+                                <div data-component="session-turn-diff">
+                                  <div data-slot="session-turn-diff-header">
+                                    <span data-slot="session-turn-diff-path">
+                                      <Show when={diff.file.includes("/")}>
+                                        <span data-slot="session-turn-diff-directory">{getDirectory(diff.file)}</span>
+                                      </Show>
+                                      <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
+                                    </span>
+                                    <span data-slot="session-turn-diff-changes">
+                                      <DiffChanges changes={diff} />
+                                    </span>
+                                  </div>
+                                  <div data-slot="session-turn-diff-view">
+                                    <Dynamic
+                                      component={diffComponent}
+                                      before={{ name: diff.file, contents: diff.before }}
+                                      after={{ name: diff.file, contents: diff.after }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </Collapsible.Content>
+                    </Collapsible>
                   </div>
                 </Show>
                 <Show when={error()}>
