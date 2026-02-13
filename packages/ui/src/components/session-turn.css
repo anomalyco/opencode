@@ -526,13 +526,15 @@
   [data-slot="session-turn-retry-message-row"] {
     min-width: 0;
     display: flex;
-    flex-wrap: wrap;
     overflow: hidden;
   }
 
   [data-slot="session-turn-retry-message"] {
     font-weight: 500;
     color: var(--syntax-critical);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-turn-retry-info-row"] {
