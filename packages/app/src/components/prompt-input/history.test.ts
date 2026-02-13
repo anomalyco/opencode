@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
-import { clonePromptParts, navigatePromptHistory, prependHistoryEntry, promptLength } from "./history"
+import {
+  canNavigateHistoryAtCursor,
+  clonePromptParts,
+  navigatePromptHistory,
+  prependHistoryEntry,
+  promptLength,
+} from "./history"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -65,5 +71,21 @@ describe("prompt-input history", () => {
     copy[1].selection!.startLine = 9
     if (original[1]?.type !== "file") throw new Error("expected file")
     expect(original[1].selection?.startLine).toBe(1)
+  })
+
+  test("canNavigateHistoryAtCursor only allows multiline boundaries", () => {
+    const value = "a\nb\nc"
+
+    expect(canNavigateHistoryAtCursor("up", value, 0)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", value, 0)).toBe(false)
+
+    expect(canNavigateHistoryAtCursor("up", value, 2)).toBe(false)
+    expect(canNavigateHistoryAtCursor("down", value, 2)).toBe(false)
+
+    expect(canNavigateHistoryAtCursor("up", value, 5)).toBe(false)
+    expect(canNavigateHistoryAtCursor("down", value, 5)).toBe(true)
+
+    expect(canNavigateHistoryAtCursor("up", "abc", 1)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 1)).toBe(true)
   })
 })

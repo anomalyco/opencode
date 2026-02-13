@@ -4,6 +4,7 @@ import { AppBaseProviders, AppInterface } from "@/app"
 import { Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
@@ -68,11 +69,7 @@ const notify: Platform["notify"] = async (title, description, href) => {
   })
 
   notification.onclick = () => {
-    window.focus()
-    if (href) {
-      window.history.pushState(null, "", href)
-      window.dispatchEvent(new PopStateEvent("popstate"))
-    }
+    handleNotificationClick(href)
     notification.close()
   }
 }

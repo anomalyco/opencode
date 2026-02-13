@@ -1,7 +1,14 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  useCommand,
+  handleNotificationClick,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
@@ -329,10 +336,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
             void win.show().catch(() => undefined)
             void win.unminimize().catch(() => undefined)
             void win.setFocus().catch(() => undefined)
-            if (href) {
-              window.history.pushState(null, "", href)
-              window.dispatchEvent(new PopStateEvent("popstate"))
-            }
+            handleNotificationClick(href)
             notification.close()
           }
         })
