@@ -3800,8 +3800,7 @@
                                     "api": {
                                       "type": "string"
                                     }
-                                  },
-                                  "required": ["npm", "api"]
+                                  }
                                 },
                                 "variants": {
                                   "type": "object",
@@ -9405,8 +9404,7 @@
                     "api": {
                       "type": "string"
                     }
-                  },
-                  "required": ["npm", "api"]
+                  }
                 },
                 "variants": {
                   "description": "Variant-specific configuration",

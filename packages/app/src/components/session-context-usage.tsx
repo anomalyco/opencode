@@ -13,6 +13,17 @@ interface SessionContextUsageProps {
   variant?: "button" | "indicator"
 }
 
+function openSessionContext(args: {
+  view: ReturnType<ReturnType<typeof useLayout>["view"]>
+  layout: ReturnType<typeof useLayout>
+  tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
+}) {
+  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+  args.tabs.open("context")
+  args.tabs.setActive("context")
+}
+
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
   const params = useParams()
@@ -41,11 +52,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.open()
-    layout.fileTree.setTab("all")
-    tabs().open("context")
-    tabs().setActive("context")
+    openSessionContext({
+      view: view(),
+      layout,
+      tabs: tabs(),
+    })
   }
 
   const circle = () => (
