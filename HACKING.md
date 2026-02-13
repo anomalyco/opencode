@@ -82,7 +82,7 @@ opencode debug wait      # Block forever (for attaching debuggers)
 
 Location: `~/.local/share/opencode/log/`
 
-Files are timestamped (`2025-01-09T123456.log`). The 10 most recent are retained.
+**Infinite retention**: All log files are kept permanently with unique timestamps (e.g., `2026-02-13T153456.log`, `dev-2026-02-13T153456.log`). No automatic cleanup or truncation - operator handles storage management.
 
 ---
 
@@ -195,10 +195,14 @@ opencode session               # Session management
 ## Running from Source
 
 ```bash
-# Install dependencies
+# Install dependencies (use --ignore-scripts if bun2nix postinstall fails)
 bun install
+bun install --ignore-scripts  # workaround for bun2nix lockfile parsing issues
 
-# Run with browser conditions (required)
+# Run TUI
+bun run dev
+
+# Run with browser conditions (required for direct execution)
 bun run --conditions=browser ./packages/opencode/src/index.ts
 
 # Run tests
@@ -210,6 +214,29 @@ bun test test/tool/tool.test.ts
 # Typecheck
 bun run typecheck
 ```
+
+---
+
+## Nix Build
+
+```bash
+# Build and run
+nix run .#opencode
+
+# Build only
+nix build .#opencode
+
+# Enter dev shell
+nix develop
+
+# Update node_modules hash (after bun.lock changes)
+# 1. Build with fakeHash to get the real hash:
+nix build .#node_modules_updater
+# 2. Update nix/hashes.json with the hash from the error message
+# 3. Rebuild
+```
+
+**Note**: The nix build uses FOD (fixed-output derivation) for node_modules. After updating `bun.lock`, you must regenerate hashes for each platform.
 
 ---
 
@@ -298,6 +325,14 @@ opencode debug agent code --tool bash --params '{"command": "ls -la", "descripti
 - Drag and drop images into terminal to add to prompt
 - `/undo` and `/redo` - Revert/restore changes (multiple times)
 - `/share` - Create shareable link to conversation
+
+### FREE Mode Auto-Recovery
+
+The TUI includes automatic stall detection and recovery. If the model stops responding, the system will automatically retry with exponential backoff. The status bar shows `STALL` indicator when a stall is detected (but not during normal tool execution).
+
+### Custom Keybindings
+
+Keybindings can be customized in config. Use `opencode debug config` to see the current keymap, or check `packages/opencode/src/config/keymap.ts` for defaults.
 
 ---
 
