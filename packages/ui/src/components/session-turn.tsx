@@ -5,7 +5,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createMemo, For, ParentProps, Show } from "solid-js"
 import { Message } from "./message-part"
 import { Card } from "./card"
-import { Spinner } from "./spinner"
+import { TextShimmer } from "./text-shimmer"
 import { createAutoScroll } from "../hooks"
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -241,8 +241,7 @@ export function SessionTurn(
                 </div>
                 <Show when={working() && assistantVisible() === 0 && !error()}>
                   <div data-slot="session-turn-thinking">
-                    <span>Thinking</span>
-                    <Spinner style={{ width: "16px" }} />
+                    <TextShimmer text="Thinking" />
                   </div>
                 </Show>
                 <Show when={assistantMessages().length > 0}>

@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
-import { Icon, IconProps } from "./icon"
-import { Spinner } from "./spinner"
+import type { IconProps } from "./icon"
+import { TextShimmer } from "./text-shimmer"
 
 export type TriggerTitle = {
   title: string
@@ -62,13 +62,10 @@ export function BasicTool(props: BasicToolProps) {
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          {trigger().title}
+                          <Show when={pending()} fallback={trigger().title}>
+                            <TextShimmer text={trigger().title} />
+                          </Show>
                         </span>
-                        <Show when={pending()}>
-                          <span data-slot="basic-tool-tool-spinner">
-                            <Spinner style={{ width: "16px" }} />
-                          </span>
-                        </Show>
                         <Show when={!pending()}>
                           <Show when={trigger().subtitle}>
                             <span

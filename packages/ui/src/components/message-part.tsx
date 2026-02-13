@@ -47,7 +47,6 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
-import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
 
 interface Diagnostic {
@@ -429,11 +428,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
     props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
-  const details = createMemo(() => {
-    const items = summary()
-    if (items.length === 0) return ""
-    return `: ${items.join(", ")}`
-  })
+  const details = createMemo(() => summary().join(", "))
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
@@ -441,11 +436,22 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
         <div data-component="context-tool-group-trigger">
           <Show
             when={pending()}
-            fallback={<span data-slot="context-tool-group-title">Gathered context{details()}</span>}
+            fallback={
+              <span data-slot="context-tool-group-title">
+                <span data-slot="context-tool-group-label">Gathered context</span>
+                <Show when={details().length}>
+                  <span data-slot="context-tool-group-summary">{details()}</span>
+                </Show>
+              </span>
+            }
           >
             <span data-slot="context-tool-group-title">
-              <TextShimmer text="Gathering context" />
-              {details()}
+              <span data-slot="context-tool-group-label">
+                <TextShimmer text="Gathering context" />
+              </span>
+              <Show when={details().length}>
+                <span data-slot="context-tool-group-summary">{details()}</span>
+              </Show>
             </span>
           </Show>
           <Collapsible.Arrow />
@@ -464,12 +470,11 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
                       <div data-slot="basic-tool-tool-info">
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">{trigger.title}</span>
-                            <Show when={running}>
-                              <span data-slot="basic-tool-tool-spinner">
-                                <Spinner style={{ width: "16px" }} />
-                              </span>
-                            </Show>
+                            <span data-slot="basic-tool-tool-title">
+                              <Show when={running} fallback={trigger.title}>
+                                <TextShimmer text={trigger.title} />
+                              </Show>
+                            </span>
                             <Show when={!running && trigger.subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger.subtitle}</span>
                             </Show>
@@ -1035,12 +1040,11 @@ ToolRegistry.register({
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">{i18n.t("ui.tool.webfetch")}</span>
-              <Show when={pending()}>
-                <span data-slot="basic-tool-tool-spinner">
-                  <Spinner style={{ width: "16px" }} />
-                </span>
-              </Show>
+              <span data-slot="basic-tool-tool-title">
+                <Show when={pending()} fallback={i18n.t("ui.tool.webfetch")}>
+                  <TextShimmer text={i18n.t("ui.tool.webfetch")} />
+                </Show>
+              </span>
               <Show when={!pending() && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
@@ -1222,12 +1226,11 @@ ToolRegistry.register({
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
-                <Show when={pending()}>
-                  <span data-slot="message-part-title-spinner">
-                    <Spinner style={{ width: "16px" }} />
-                  </span>
-                </Show>
+                <span data-slot="message-part-title-text">
+                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
+                  </Show>
+                </span>
                 <Show when={!pending()}>
                   <span data-slot="message-part-title-filename">{filename()}</span>
                 </Show>
@@ -1283,12 +1286,11 @@ ToolRegistry.register({
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
-                <Show when={pending()}>
-                  <span data-slot="message-part-title-spinner">
-                    <Spinner style={{ width: "16px" }} />
-                  </span>
-                </Show>
+                <span data-slot="message-part-title-text">
+                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
+                  </Show>
+                </span>
                 <Show when={!pending()}>
                   <span data-slot="message-part-title-filename">{filename()}</span>
                 </Show>
