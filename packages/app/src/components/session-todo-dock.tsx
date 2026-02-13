@@ -37,7 +37,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
   })
 
   return (
-    <div class="bg-surface-inset-base border border-border-weak-base relative z-0 rounded-[14px] overflow-clip">
+    <div class="bg-surface-inset-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
       <div
         class="px-3 py-2 flex items-center gap-2"
         role="button"
