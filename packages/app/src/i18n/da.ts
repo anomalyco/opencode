@@ -683,6 +683,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Afspil lyd når agenten er færdig eller kræver opmærksomhed",
   "settings.general.sounds.permissions.title": "Tilladelser",
   "settings.general.sounds.permissions.description": "Afspil lyd når en tilladelse er påkrævet",
+  "settings.general.sounds.question.title": "Spørgsmål",
+  "settings.general.sounds.question.description": "Afspil lyd når agenten stiller et spørgsmål",
   "settings.general.sounds.errors.title": "Fejl",
   "settings.general.sounds.errors.description": "Afspil lyd når der opstår en fejl",
 

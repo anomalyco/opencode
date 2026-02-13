@@ -693,6 +693,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Reproducir sonido cuando el agente termine o necesite atención",
   "settings.general.sounds.permissions.title": "Permisos",
   "settings.general.sounds.permissions.description": "Reproducir sonido cuando se requiera un permiso",
+  "settings.general.sounds.question.title": "Preguntas",
+  "settings.general.sounds.question.description": "Reproducir sonido cuando el agente hace una pregunta",
   "settings.general.sounds.errors.title": "Errores",
   "settings.general.sounds.errors.description": "Reproducir sonido cuando ocurra un error",
 

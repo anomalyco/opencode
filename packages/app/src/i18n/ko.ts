@@ -616,6 +616,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "에이전트가 완료되거나 주의가 필요할 때 소리 재생",
   "settings.general.sounds.permissions.title": "권한",
   "settings.general.sounds.permissions.description": "권한이 필요할 때 소리 재생",
+  "settings.general.sounds.question.title": "질문",
+  "settings.general.sounds.question.description": "에이전트가 질문할 때 소리 재생",
   "settings.general.sounds.errors.title": "오류",
   "settings.general.sounds.errors.description": "오류가 발생했을 때 소리 재생",
   "settings.shortcuts.title": "키보드 단축키",

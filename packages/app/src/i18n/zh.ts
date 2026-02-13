@@ -679,6 +679,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "当智能体完成或需要注意时播放声音",
   "settings.general.sounds.permissions.title": "权限",
   "settings.general.sounds.permissions.description": "当需要权限时播放声音",
+  "settings.general.sounds.question.title": "问题",
+  "settings.general.sounds.question.description": "当智能体提出问题时播放声音",
   "settings.general.sounds.errors.title": "错误",
   "settings.general.sounds.errors.description": "发生错误时播放声音",
 

@@ -627,6 +627,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Jouer un son lorsque l'agent a terminé ou nécessite une attention",
   "settings.general.sounds.permissions.title": "Permissions",
   "settings.general.sounds.permissions.description": "Jouer un son lorsqu'une permission est requise",
+  "settings.general.sounds.question.title": "Questions",
+  "settings.general.sounds.question.description": "Jouer un son lorsque l'agent pose une question",
   "settings.general.sounds.errors.title": "Erreurs",
   "settings.general.sounds.errors.description": "Jouer un son lorsqu'une erreur se produit",
   "settings.shortcuts.title": "Raccourcis clavier",

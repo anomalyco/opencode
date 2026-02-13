@@ -690,6 +690,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Воспроизводить звук когда агент завершён или требует внимания",
   "settings.general.sounds.permissions.title": "Разрешения",
   "settings.general.sounds.permissions.description": "Воспроизводить звук когда требуется разрешение",
+  "settings.general.sounds.question.title": "Вопросы",
+  "settings.general.sounds.question.description": "Воспроизводить звук когда агент задаёт вопрос",
   "settings.general.sounds.errors.title": "Ошибки",
   "settings.general.sounds.errors.description": "Воспроизводить звук когда происходит ошибка",
 

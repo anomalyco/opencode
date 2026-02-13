@@ -397,6 +397,9 @@ export default function Layout(props: ParentProps) {
         }
 
         if (e.details.type === "question.asked") {
+          if (settings.sounds.questionEnabled()) {
+            playSound(soundSrc(settings.sounds.question()))
+          }
           if (settings.notifications.agent()) {
             void platform.notify(title, description, href)
           }

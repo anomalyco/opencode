@@ -16,6 +16,8 @@ export interface SoundSettings {
   permissions: string
   errorsEnabled: boolean
   errors: string
+  questionEnabled: boolean
+  question: string
 }
 
 export interface Settings {
@@ -66,6 +68,8 @@ const defaultSettings: Settings = {
     permissions: "staplebops-02",
     errorsEnabled: true,
     errors: "nope-03",
+    questionEnabled: true,
+    question: "yup-01",
   },
 }
 
@@ -200,6 +204,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+        questionEnabled: withFallback(() => store.sounds?.questionEnabled, defaultSettings.sounds.questionEnabled),
+        setQuestionEnabled(value: boolean) {
+          setStore("sounds", "questionEnabled", value)
+        },
+        question: withFallback(() => store.sounds?.question, defaultSettings.sounds.question),
+        setQuestion(value: string) {
+          setStore("sounds", "question", value)
         },
       },
     }

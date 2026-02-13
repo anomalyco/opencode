@@ -689,6 +689,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Play sound when the agent is complete or needs attention",
   "settings.general.sounds.permissions.title": "Permissions",
   "settings.general.sounds.permissions.description": "Play sound when a permission is required",
+  "settings.general.sounds.question.title": "Questions",
+  "settings.general.sounds.question.description": "Play sound when the agent asks a question",
   "settings.general.sounds.errors.title": "Errors",
   "settings.general.sounds.errors.description": "Play sound when an error occurs",
 

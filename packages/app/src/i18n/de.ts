@@ -628,6 +628,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Ton abspielen, wenn der Agent fertig ist oder Aufmerksamkeit benötigt",
   "settings.general.sounds.permissions.title": "Berechtigungen",
   "settings.general.sounds.permissions.description": "Ton abspielen, wenn eine Berechtigung erforderlich ist",
+  "settings.general.sounds.question.title": "Fragen",
+  "settings.general.sounds.question.description": "Ton abspielen, wenn der Agent eine Frage stellt",
   "settings.general.sounds.errors.title": "Fehler",
   "settings.general.sounds.errors.description": "Ton abspielen, wenn ein Fehler auftritt",
   "settings.shortcuts.title": "Tastenkombinationen",

@@ -618,6 +618,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Odtwórz dźwięk, gdy agent zakończy pracę lub wymaga uwagi",
   "settings.general.sounds.permissions.title": "Uprawnienia",
   "settings.general.sounds.permissions.description": "Odtwórz dźwięk, gdy wymagane jest uprawnienie",
+  "settings.general.sounds.question.title": "Pytania",
+  "settings.general.sounds.question.description": "Odtwórz dźwięk, gdy agent zadaje pytanie",
   "settings.general.sounds.errors.title": "Błędy",
   "settings.general.sounds.errors.description": "Odtwórz dźwięk, gdy wystąpi błąd",
   "settings.shortcuts.title": "Skróty klawiszowe",

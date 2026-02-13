@@ -619,6 +619,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Reproduzir som quando o agente estiver completo ou precisar de atenção",
   "settings.general.sounds.permissions.title": "Permissões",
   "settings.general.sounds.permissions.description": "Reproduzir som quando uma permissão for necessária",
+  "settings.general.sounds.question.title": "Perguntas",
+  "settings.general.sounds.question.description": "Reproduzir som quando o agente faz uma pergunta",
   "settings.general.sounds.errors.title": "Erros",
   "settings.general.sounds.errors.description": "Reproduzir som quando ocorrer um erro",
   "settings.shortcuts.title": "Atalhos de teclado",

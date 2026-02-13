@@ -688,6 +688,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Pusti zvuk kada agent završi ili zahtijeva pažnju",
   "settings.general.sounds.permissions.title": "Dozvole",
   "settings.general.sounds.permissions.description": "Pusti zvuk kada je potrebna dozvola",
+  "settings.general.sounds.question.title": "Pitanja",
+  "settings.general.sounds.question.description": "Pusti zvuk kada agent postavi pitanje",
   "settings.general.sounds.errors.title": "Greške",
   "settings.general.sounds.errors.description": "Pusti zvuk kada dođe do greške",
 

@@ -611,6 +611,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "تشغيل صوت عندما يكتمل الوكيل أو يحتاج إلى اهتمام",
   "settings.general.sounds.permissions.title": "أذونات",
   "settings.general.sounds.permissions.description": "تشغيل صوت عند الحاجة إلى إذن",
+  "settings.general.sounds.question.title": "أسئلة",
+  "settings.general.sounds.question.description": "تشغيل صوت عندما يطرح الوكيل سؤالاً",
   "settings.general.sounds.errors.title": "أخطاء",
   "settings.general.sounds.errors.description": "تشغيل صوت عند حدوث خطأ",
   "settings.shortcuts.title": "اختصارات لوحة المفاتيح",

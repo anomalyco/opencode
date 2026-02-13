@@ -616,6 +616,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "エージェントが完了したか、注意が必要な場合に音を再生します",
   "settings.general.sounds.permissions.title": "権限",
   "settings.general.sounds.permissions.description": "権限が必要な場合に音を再生します",
+  "settings.general.sounds.question.title": "質問",
+  "settings.general.sounds.question.description": "エージェントが質問したときに音を再生します",
   "settings.general.sounds.errors.title": "エラー",
   "settings.general.sounds.errors.description": "エラーが発生した場合に音を再生します",
   "settings.shortcuts.title": "キーボードショートカット",

@@ -347,6 +347,28 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.sounds.question.title")}
+          description={language.t("settings.general.sounds.question.description")}
+        >
+          <div class="flex items-center gap-2">
+            <div data-action="settings-sounds-question-enabled">
+              <Switch
+                checked={settings.sounds.questionEnabled()}
+                onChange={(checked) => settings.sounds.setQuestionEnabled(checked)}
+              />
+            </div>
+            <Select
+              disabled={!settings.sounds.questionEnabled()}
+              data-action="settings-sounds-question"
+              {...soundSelectProps(
+                () => settings.sounds.question(),
+                (id) => settings.sounds.setQuestion(id),
+              )}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >

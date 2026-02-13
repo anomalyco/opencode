@@ -682,6 +682,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "เล่นเสียงเมื่อเอเจนต์เสร็จสิ้นหรือต้องการความสนใจ",
   "settings.general.sounds.permissions.title": "สิทธิ์",
   "settings.general.sounds.permissions.description": "เล่นเสียงเมื่อต้องการสิทธิ์",
+  "settings.general.sounds.question.title": "คำถาม",
+  "settings.general.sounds.question.description": "เล่นเสียงเมื่อเอเจนต์ถามคำถาม",
   "settings.general.sounds.errors.title": "ข้อผิดพลาด",
   "settings.general.sounds.errors.description": "เล่นเสียงเมื่อเกิดข้อผิดพลาด",
 
