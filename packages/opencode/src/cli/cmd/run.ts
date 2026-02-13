@@ -541,9 +541,10 @@ export const RunCommand = cmd({
         }
       }
 
-      // Validate agent if specified
       const agent = await (async () => {
         if (!args.agent) return undefined
+        if (args.attach) return args.agent
+
         const entry = await Agent.get(args.agent)
         if (!entry) {
           UI.println(
