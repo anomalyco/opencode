@@ -51,7 +51,7 @@ export function Tips() {
 const TIPS = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands directly (e.g., {highlight}!ls -la{/highlight})",
-  "Press {highlight}Tab{/highlight} to cycle between Build and Plan agents",
+  "Press {highlight}F3{/highlight} to cycle between Build and Plan agents",
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
@@ -85,6 +85,9 @@ const TIPS = [
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
   "Configure {highlight}model{/highlight} in config to set your default model",
   "Override any keybind in config via the {highlight}keybinds{/highlight} section",
+  "Use {highlight}/keymap{/highlight} to explore Emacs and Vim keybinding presets",
+  'Set {highlight}"keymap": "vim"{/highlight} in config for space-leader and hjkl navigation',
+  'Set {highlight}"keymap": "emacs"{/highlight} in config for M-x commands and C-g cancel',
   "Set any keybind to {highlight}none{/highlight} to disable it completely",
   "Configure local or remote MCP servers in the {highlight}mcp{/highlight} config section",
   "OpenCode auto-handles OAuth for remote MCP servers requiring auth",
@@ -150,4 +153,5 @@ const TIPS = [
   "Use {highlight}/details{/highlight} to toggle tool execution details visibility",
   "Use {highlight}/rename{/highlight} to rename the current session",
   "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  "Press {highlight}Tab{/highlight} to cycle FREE mode timeout (5s-1h) for auto-recovery from stalls",
 ]

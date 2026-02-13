@@ -31,6 +31,7 @@ import { Event } from "../server/event"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
+import { Keymap } from "./keymap"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -231,7 +232,10 @@ export namespace Config {
       result.share = "auto"
     }
 
-    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
+    // Apply keymap preset, then user keybinds override
+    const baseKeybinds = Info.shape.keybinds.parse({})
+    const keymapPreset = result.keymap ? Keymap.get(result.keymap) : {}
+    result.keybinds = { ...baseKeybinds, ...keymapPreset, ...result.keybinds }
 
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
@@ -823,8 +827,9 @@ export namespace Config {
       model_cycle_favorite_reverse: z.string().optional().default("none").describe("Previous favorite model"),
       command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
-      agent_cycle: z.string().optional().default("tab").describe("Next agent"),
-      agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+      agent_cycle: z.string().optional().default("f3").describe("Next agent"),
+      agent_cycle_reverse: z.string().optional().default("shift+f3").describe("Previous agent"),
+      stall_timeout_cycle: z.string().optional().default("tab").describe("Cycle FREE mode stall timeout"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
@@ -1011,6 +1016,10 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
+      keymap: z
+        .enum(Keymap.Names)
+        .optional()
+        .describe("Keymap preset: 'default', 'emacs', or 'vim'. Sets base keybindings that can be overridden"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
@@ -1160,7 +1169,9 @@ export namespace Config {
       expert: z
         .boolean()
         .optional()
-        .describe("When true (default), auto-approve all permission requests. Set to false to restore interactive prompts."),
+        .describe(
+          "When true (default), auto-approve all permission requests. Set to false to restore interactive prompts.",
+        ),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({
