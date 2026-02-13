@@ -129,6 +129,7 @@ export type UserMessage = {
     diffs: Array<FileDiff>
   }
   agent: string
+  parentAgent?: string
   model: {
     providerID: string
     modelID: string
@@ -2539,6 +2540,7 @@ export type PtyCreateData = {
       [key: string]: string
     }
     agent?: string
+    parentAgent?: string
   }
   path?: never
   query?: {
@@ -3516,6 +3518,7 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
@@ -3704,6 +3707,7 @@ export type SessionPromptAsyncData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
@@ -3807,6 +3811,7 @@ export type SessionCommandResponse = SessionCommandResponses[keyof SessionComman
 export type SessionShellData = {
   body?: {
     agent: string
+    parentAgent?: string
     model?: {
       providerID: string
       modelID: string

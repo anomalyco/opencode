@@ -182,15 +182,15 @@ export interface Hooks {
     output: { parts: Part[] },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; callID: string; agent: string },
+    input: { tool: string; sessionID: string; callID: string; agent: string; parentAgent?: string },
     output: { args: any },
   ) => Promise<void>
   "shell.env"?: (
-    input: { cwd: string; sessionID?: string; callID?: string; agent?: string },
+    input: { cwd: string; sessionID?: string; callID?: string; agent?: string; parentAgent?: string },
     output: { env: Record<string, string> },
   ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any; agent: string },
+    input: { tool: string; sessionID: string; callID: string; args: any; agent: string; parentAgent?: string },
     output: {
       title: string
       output: string

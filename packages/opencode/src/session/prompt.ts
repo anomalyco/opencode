@@ -98,6 +98,7 @@ export namespace SessionPrompt {
       })
       .optional(),
     agent: z.string().optional(),
+    parentAgent: z.string().optional(),
     noReply: z.boolean().optional(),
     tools: z
       .record(z.string(), z.boolean())
@@ -410,6 +411,7 @@ export namespace SessionPrompt {
             sessionID,
             callID: part.id,
             agent: lastUser.agent,
+            parentAgent: lastUser.parentAgent,
           },
           { args: taskArgs },
         )
@@ -417,6 +419,7 @@ export namespace SessionPrompt {
         const taskAgent = await Agent.get(task.agent)
         const taskCtx: Tool.Context = {
           agent: task.agent,
+          parentAgent: lastUser.agent,
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
@@ -460,6 +463,7 @@ export namespace SessionPrompt {
             callID: part.id,
             args: taskArgs,
             agent: lastUser.agent,
+            parentAgent: lastUser.parentAgent,
           },
           result,
         )
@@ -609,6 +613,7 @@ export namespace SessionPrompt {
         processor,
         bypassAgentCheck,
         messages: msgs,
+        parentAgent: lastUser.parentAgent,
       })
 
       // Inject StructuredOutput tool if JSON schema mode enabled
@@ -741,6 +746,7 @@ export namespace SessionPrompt {
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
+    parentAgent?: string
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -752,6 +758,7 @@ export namespace SessionPrompt {
       callID: options.toolCallId,
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
+      parentAgent: input.parentAgent,
       messages: input.messages,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
@@ -798,6 +805,7 @@ export namespace SessionPrompt {
               sessionID: ctx.sessionID,
               callID: ctx.callID,
               agent: ctx.agent,
+              parentAgent: ctx.parentAgent,
             },
             {
               args,
@@ -821,6 +829,7 @@ export namespace SessionPrompt {
               callID: ctx.callID,
               args,
               agent: ctx.agent,
+              parentAgent: ctx.parentAgent,
             },
             output,
           )
@@ -846,6 +855,7 @@ export namespace SessionPrompt {
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
             agent: ctx.agent,
+            parentAgent: ctx.parentAgent,
           },
           {
             args,
@@ -869,6 +879,7 @@ export namespace SessionPrompt {
             callID: opts.toolCallId,
             args,
             agent: ctx.agent,
+            parentAgent: ctx.parentAgent,
           },
           result,
         )
@@ -976,6 +987,7 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       agent: agent.name,
+      parentAgent: input.parentAgent,
       model,
       system: input.system,
       format: input.format,
@@ -1467,6 +1479,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export const ShellInput = z.object({
     sessionID: Identifier.schema("session"),
     agent: z.string(),
+    parentAgent: z.string().optional(),
     model: z
       .object({
         providerID: z.string(),
@@ -1626,7 +1639,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const cwd = Instance.directory
     const shellEnv = await Plugin.trigger(
       "shell.env",
-      { cwd, sessionID: input.sessionID, callID: part.callID, agent: input.agent },
+      { cwd, sessionID: input.sessionID, callID: part.callID, agent: input.agent, parentAgent: input.parentAgent },
       { env: {} },
     )
     const proc = spawn(shell, args, {
