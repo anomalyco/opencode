@@ -14,6 +14,7 @@ const ctx = {
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
   ask: async () => {},
 }
@@ -73,6 +74,32 @@ describe("tool.read external_directory permission", () => {
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path))).toBe(true)
+      },
+    })
+  })
+
+  test("asks for directory-scoped external_directory permission when reading external directory", async () => {
+    await using outerTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "external", "a.txt"), "a")
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(outerTmp.path, "external") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "external", "*"))
       },
     })
   })
@@ -172,7 +199,9 @@ describe("tool.read truncation", () => {
   test("truncates large file by bytes and sets truncated metadata", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const base = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const target = 60 * 1024
+        const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
         await Bun.write(path.join(dir, "large.json"), content)
       },
     })
@@ -229,7 +258,7 @@ describe("tool.read truncation", () => {
   test("respects offset parameter", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const lines = Array.from({ length: 20 }, (_, i) => `line${i}`).join("\n")
+        const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
         await Bun.write(path.join(dir, "offset.txt"), lines)
       },
     })
@@ -242,6 +271,43 @@ describe("tool.read truncation", () => {
         expect(result.output).toContain("line14")
         expect(result.output).not.toContain("line0")
         expect(result.output).not.toContain("line15")
+      },
+    })
+  })
+
+  test("throws when offset is beyond end of file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
+        await Bun.write(path.join(dir, "short.txt"), lines)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(
+          read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: 4, limit: 5 }, ctx),
+        ).rejects.toThrow("Offset 4 is out of range for this file (3 lines)")
+      },
+    })
+  })
+
+  test("does not mark final directory page as truncated", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Promise.all(
+          Array.from({ length: 10 }, (_, i) => Bun.write(path.join(dir, "dir", `file-${i + 1}.txt`), `line${i}`)),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 6, limit: 5 }, ctx)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).not.toContain("Showing 5 of 10 entries")
       },
     })
   })
@@ -297,6 +363,58 @@ describe("tool.read truncation", () => {
         expect(result.attachments).toBeDefined()
         expect(result.attachments?.length).toBe(1)
         expect(result.attachments?.[0].type).toBe("file")
+      },
+    })
+  })
+
+  test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // FlatBuffers schema content
+        const fbsContent = `namespace MyGame;
+
+table Monster {
+  pos:Vec3;
+  name:string;
+  inventory:[ubyte];
+}
+
+root_type Monster;`
+        await Bun.write(path.join(dir, "schema.fbs"), fbsContent)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
+        // Should be read as text, not as image
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("namespace MyGame")
+        expect(result.output).toContain("table Monster")
+      },
+    })
+  })
+})
+
+describe("tool.read loaded instructions", () => {
+  test("loads AGENTS.md from parent directory and includes in metadata", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
+        await Bun.write(path.join(dir, "subdir", "nested", "test.txt"), "test content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
+        expect(result.output).toContain("test content")
+        expect(result.output).toContain("system-reminder")
+        expect(result.output).toContain("Test Instructions")
+        expect(result.metadata.loaded).toBeDefined()
+        expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
       },
     })
   })

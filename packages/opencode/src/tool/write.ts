@@ -6,6 +6,7 @@ import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -45,6 +46,10 @@ export const WriteTool = Tool.define("write", {
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
+    await Bus.publish(FileWatcher.Event.Updated, {
+      file: filepath,
+      event: exists ? "change" : "add",
+    })
     FileTime.read(ctx.sessionID, filepath)
 
     let output = "Wrote file successfully."
@@ -59,7 +64,7 @@ export const WriteTool = Tool.define("write", {
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       if (file === normalizedFilepath) {
-        output += `\n\nLSP errors detected in this file:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+        output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
         continue
       }
       if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue

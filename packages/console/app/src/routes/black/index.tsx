@@ -1,79 +1,113 @@
 import { A, useSearchParams } from "@solidjs/router"
 import { Title } from "@solidjs/meta"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { PlanIcon, plans } from "./common"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 
 export default function Black() {
   const [params] = useSearchParams()
+  const i18n = useI18n()
+  const language = useLanguage()
   const [selected, setSelected] = createSignal<string | null>((params.plan as string) || null)
+  const [mounted, setMounted] = createSignal(false)
   const selectedPlan = createMemo(() => plans.find((p) => p.id === selected()))
+
+  onMount(() => {
+    requestAnimationFrame(() => setMounted(true))
+  })
+
+  const transition = (action: () => void) => {
+    if (mounted() && "startViewTransition" in document) {
+      ;(document as any).startViewTransition(action)
+      return
+    }
+
+    action()
+  }
+
+  const select = (planId: string) => {
+    if (selected() === planId) {
+      return
+    }
+
+    transition(() => setSelected(planId))
+  }
+
+  const cancel = () => {
+    transition(() => setSelected(null))
+  }
 
   return (
     <>
-      <Title>opencode</Title>
+      <Title>{i18n.t("black.title")}</Title>
       <section data-slot="cta">
         <Switch>
           <Match when={!selected()}>
             <div data-slot="pricing">
               <For each={plans}>
                 {(plan) => (
-                  <button type="button" onClick={() => setSelected(plan.id)} data-slot="pricing-card">
+                  <button
+                    type="button"
+                    onClick={() => select(plan.id)}
+                    data-slot="pricing-card"
+                    style={{ "view-transition-name": `card-${plan.id}` }}
+                  >
                     <div data-slot="icon">
                       <PlanIcon plan={plan.id} />
                     </div>
                     <p data-slot="price">
-                      <span data-slot="amount">${plan.id}</span> <span data-slot="period">per month</span>
+                      <span data-slot="amount">${plan.id}</span>{" "}
+                      <span data-slot="period">{i18n.t("black.price.perMonth")}</span>
                       <Show when={plan.multiplier}>
-                        <span data-slot="multiplier">{plan.multiplier}</span>
+                        {(multiplier) => <span data-slot="multiplier">{i18n.t(multiplier())}</span>}
                       </Show>
                     </p>
                   </button>
                 )}
               </For>
             </div>
-            <p data-slot="fine-print">
-              Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
-            </p>
           </Match>
           <Match when={selectedPlan()}>
             {(plan) => (
               <div data-slot="selected-plan">
-                <div data-slot="selected-card">
+                <div data-slot="selected-card" style={{ "view-transition-name": `card-${plan().id}` }}>
                   <div data-slot="icon">
                     <PlanIcon plan={plan().id} />
                   </div>
                   <p data-slot="price">
                     <span data-slot="amount">${plan().id}</span>{" "}
-                    <span data-slot="period">per person billed monthly</span>
+                    <span data-slot="period">{i18n.t("black.price.perPersonBilledMonthly")}</span>
                     <Show when={plan().multiplier}>
-                      <span data-slot="multiplier">{plan().multiplier}</span>
+                      {(multiplier) => <span data-slot="multiplier">{i18n.t(multiplier())}</span>}
                     </Show>
                   </p>
-                  <ul data-slot="terms">
-                    <li>Your subscription will not start immediately</li>
-                    <li>You will be added to the waitlist and activated soon</li>
-                    <li>Your card will be only charged when your subscription is activated</li>
-                    <li>Usage limits apply, heavily automated use may reach limits sooner</li>
-                    <li>Subscriptions for individuals, contact Enterprise for teams</li>
-                    <li>Limits may be adjusted and plans may be discontinued in the future</li>
-                    <li>Cancel your subscription at anytime</li>
+                  <ul data-slot="terms" style={{ "view-transition-name": `terms-${plan().id}` }}>
+                    <li>{i18n.t("black.terms.1")}</li>
+                    <li>{i18n.t("black.terms.2")}</li>
+                    <li>{i18n.t("black.terms.3")}</li>
+                    <li>{i18n.t("black.terms.4")}</li>
+                    <li>{i18n.t("black.terms.5")}</li>
+                    <li>{i18n.t("black.terms.6")}</li>
+                    <li>{i18n.t("black.terms.7")}</li>
                   </ul>
-                  <div data-slot="actions">
-                    <button type="button" onClick={() => setSelected(null)} data-slot="cancel">
-                      Cancel
+                  <div data-slot="actions" style={{ "view-transition-name": `actions-${plan().id}` }}>
+                    <button type="button" onClick={() => cancel()} data-slot="cancel">
+                      {i18n.t("common.cancel")}
                     </button>
                     <a href={`/black/subscribe/${plan().id}`} data-slot="continue">
-                      Continue
+                      {i18n.t("black.action.continue")}
                     </a>
                   </div>
                 </div>
-                <p data-slot="fine-print">
-                  Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
-                </p>
               </div>
             )}
           </Match>
         </Switch>
+        <p data-slot="fine-print" style={{ "view-transition-name": "fine-print" }}>
+          {i18n.t("black.finePrint.beforeTerms")} ·{" "}
+          <A href={language.route("/legal/terms-of-service")}>{i18n.t("black.finePrint.terms")}</A>
+        </p>
       </section>
     </>
   )

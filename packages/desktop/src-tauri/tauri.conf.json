@@ -11,6 +11,12 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false
+      }
+    ],
     "withGlobalTauri": true,
     "security": {
       "csp": null
@@ -28,6 +34,13 @@
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
     "externalBin": ["sidecars/opencode-cli"],
+    "linux": {
+      "rpm": {
+        "compression": {
+          "type": "none"
+        }
+      }
+    },
     "macOS": {
       "entitlements": "./entitlements.plist"
     },
@@ -36,6 +49,13 @@
         "installerIcon": "icons/dev/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["opencode"]
       }
     }
   }

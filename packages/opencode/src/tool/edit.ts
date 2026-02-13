@@ -10,6 +10,7 @@ import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
@@ -37,7 +38,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     if (params.oldString === params.newString) {
-      throw new Error("oldString and newString must be different")
+      throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
@@ -48,6 +49,7 @@ export const EditTool = Tool.define("edit", {
     let contentNew = ""
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
+        const existed = await Bun.file(filePath).exists()
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
@@ -62,6 +64,10 @@ export const EditTool = Tool.define("edit", {
         await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
+        })
+        await Bus.publish(FileWatcher.Event.Updated, {
+          file: filePath,
+          event: existed ? "change" : "add",
         })
         FileTime.read(ctx.sessionID, filePath)
         return
@@ -91,6 +97,10 @@ export const EditTool = Tool.define("edit", {
       await file.write(contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
+      })
+      await Bus.publish(FileWatcher.Event.Updated, {
+        file: filePath,
+        event: "change",
       })
       contentNew = await file.text()
       diff = trimDiff(
@@ -129,7 +139,7 @@ export const EditTool = Tool.define("edit", {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      output += `\n\nLSP errors detected in this file:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+      output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
     }
 
     return {
@@ -607,7 +617,7 @@ export function trimDiff(diff: string): string {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
-    throw new Error("oldString and newString must be different")
+    throw new Error("No changes to apply: oldString and newString are identical.")
   }
 
   let notFound = true
@@ -637,9 +647,9 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
-    throw new Error("oldString not found in content")
+    throw new Error(
+      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+    )
   }
-  throw new Error(
-    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
-  )
+  throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
 }

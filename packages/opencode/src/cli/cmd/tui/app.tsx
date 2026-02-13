@@ -1,8 +1,10 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { Selection } from "@tui/util/selection"
+import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -104,13 +106,23 @@ export function tui(input: {
   args: Args
   directory?: string
   fetch?: typeof fetch
+  headers?: RequestInit["headers"]
   events?: EventSource
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
+    const unguard = win32InstallCtrlCGuard()
+    win32DisableProcessedInput()
+
     const mode = await getTerminalBackgroundColor()
+
+    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
+    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
+    win32DisableProcessedInput()
+
     const onExit = async () => {
+      unguard?.()
       await input.onExit?.()
       resolve()
     }
@@ -130,6 +142,7 @@ export function tui(input: {
                         url={input.url}
                         directory={input.directory}
                         fetch={input.fetch}
+                        headers={input.headers}
                         events={input.events}
                       >
                         <SyncProvider>
@@ -167,6 +180,8 @@ export function tui(input: {
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        autoFocus: false,
+        openConsoleOnError: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
@@ -196,18 +211,43 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
+  useKeyboard((evt) => {
+    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!renderer.getSelection()) return
+
+    // Windows Terminal-like behavior:
+    // - Ctrl+C copies and dismisses selection
+    // - Esc dismisses selection
+    // - Most other key input dismisses selection and is passed through
+    if (evt.ctrl && evt.name === "c") {
+      if (!Selection.copy(renderer, toast)) {
+        renderer.clearSelection()
+        return
+      }
+
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    if (evt.name === "escape") {
+      renderer.clearSelection()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    renderer.clearSelection()
+  })
+
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    const base64 = Buffer.from(text).toString("base64")
-    const osc52 = `\x1b]52;c;${base64}\x07`
-    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-    // @ts-expect-error writeOut is not in type definitions
-    renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
+
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
@@ -252,7 +292,8 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      if (args.sessionID) {
+      // Handle --session without --fork immediately (fork is handled in createEffect below)
+      if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
@@ -270,8 +311,34 @@ function App() {
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      route.navigate({ type: "session", sessionID: match })
+      if (args.fork) {
+        sdk.client.session.fork({ sessionID: match }).then((result) => {
+          if (result.data?.id) {
+            route.navigate({ type: "session", sessionID: result.data.id })
+          } else {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+          }
+        })
+      } else {
+        route.navigate({ type: "session", sessionID: match })
+      }
     }
+  })
+
+  // Handle --session with --fork: wait for sync to be fully complete before forking
+  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
+  // to avoid a race where reconcile overwrites the newly forked session)
+  let forked = false
+  createEffect(() => {
+    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    forked = true
+    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+      if (result.data?.id) {
+        route.navigate({ type: "session", sessionID: result.data.id })
+      } else {
+        toast.show({ message: "Failed to fork session", variant: "error" })
+      }
+    })
   })
 
   createEffect(
@@ -293,6 +360,10 @@ function App() {
       keybind: "session_list",
       category: "Session",
       suggested: sync.data.session.length > 0,
+      slash: {
+        name: "sessions",
+        aliases: ["resume", "continue"],
+      },
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
@@ -303,6 +374,10 @@ function App() {
       value: "session.new",
       keybind: "session_new",
       category: "Session",
+      slash: {
+        name: "new",
+        aliases: ["clear"],
+      },
       onSelect: () => {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
@@ -320,26 +395,29 @@ function App() {
       keybind: "model_list",
       suggested: true,
       category: "Agent",
+      slash: {
+        name: "models",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
       },
     },
     {
       title: "Model cycle",
-      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(1)
       },
     },
     {
       title: "Model cycle reverse",
-      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(-1)
       },
@@ -349,6 +427,7 @@ function App() {
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
@@ -358,6 +437,7 @@ function App() {
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },
@@ -367,6 +447,9 @@ function App() {
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
+      slash: {
+        name: "agents",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
       },
@@ -375,6 +458,9 @@ function App() {
       title: "Toggle MCPs",
       value: "mcp.list",
       category: "Agent",
+      slash: {
+        name: "mcps",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
@@ -384,7 +470,7 @@ function App() {
       value: "agent.cycle",
       keybind: "agent_cycle",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(1)
       },
@@ -394,6 +480,7 @@ function App() {
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.variant.cycle()
       },
@@ -403,7 +490,7 @@ function App() {
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(-1)
       },
@@ -412,6 +499,9 @@ function App() {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),
+      slash: {
+        name: "connect",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
       },
@@ -421,6 +511,9 @@ function App() {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
+      slash: {
+        name: "status",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
       },
@@ -430,6 +523,9 @@ function App() {
       title: "Switch theme",
       value: "theme.switch",
       keybind: "theme_list",
+      slash: {
+        name: "themes",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -447,6 +543,9 @@ function App() {
     {
       title: "Help",
       value: "help.show",
+      slash: {
+        name: "help",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
       },
@@ -462,17 +561,12 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
+      slash: {
+        name: "exit",
+        aliases: ["quit", "q"],
+      },
       onSelect: () => exit(),
       category: "System",
     },
@@ -513,6 +607,7 @@ function App() {
       value: "terminal.suspend",
       keybind: "terminal_suspend",
       category: "System",
+      hidden: true,
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
@@ -535,6 +630,25 @@ function App() {
           if (!next) renderer.setTerminalTitle("")
           return next
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
       },
     },
@@ -620,24 +734,15 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
-      onMouseUp={async () => {
-        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
-          return
-        }
-        const text = renderer.getSelection()?.getSelectedText()
-        if (text && text.length > 0) {
-          const base64 = Buffer.from(text).toString("base64")
-          const osc52 = `\x1b]52;c;${base64}\x07`
-          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-          /* @ts-expect-error */
-          renderer.writeOut(finalOsc52)
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
-        }
+      onMouseDown={(evt) => {
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (evt.button !== MouseButton.RIGHT) return
+
+        if (!Selection.copy(renderer, toast)) return
+        evt.preventDefault()
+        evt.stopPropagation()
       }}
+      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Switch>
         <Match when={route.data.type === "home"}>
@@ -663,7 +768,8 @@ function ErrorComponent(props: {
   const handleExit = async () => {
     renderer.setTerminalTitle("")
     renderer.destroy()
-    props.onExit()
+    win32FlushInputBuffer()
+    await props.onExit()
   }
 
   useKeyboard((evt) => {

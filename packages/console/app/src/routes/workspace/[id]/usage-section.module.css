@@ -42,7 +42,7 @@
       font-family: var(--font-mono);
 
       &[data-slot="usage-date"] {
-        color: var(--color-text);
+        color: var(--color-text-muted);
       }
 
       &[data-slot="usage-model"] {
@@ -53,8 +53,7 @@
       }
 
       &[data-slot="usage-cost"] {
-        color: var(--color-text);
-        font-weight: 500;
+        color: var(--color-text-muted);
       }
 
       [data-slot="tokens-with-breakdown"] {

@@ -176,7 +176,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -200,7 +200,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
@@ -342,6 +342,9 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            if (MessageV2.ContextOverflowError.isInstance(error)) {
+              // TODO: Handle context overflow error
+            }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++
@@ -360,6 +363,7 @@ export namespace SessionProcessor {
               sessionID: input.assistantMessage.sessionID,
               error: input.assistantMessage.error,
             })
+            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

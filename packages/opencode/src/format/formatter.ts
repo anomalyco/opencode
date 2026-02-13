@@ -226,7 +226,7 @@ export const rlang: Info = {
 }
 
 export const uvformat: Info = {
-  name: "uv format",
+  name: "uv",
   command: ["uv", "format", "--", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
@@ -337,23 +337,30 @@ export const rustfmt: Info = {
   command: ["rustfmt", "$FILE"],
   extensions: [".rs"],
   async enabled() {
-    if (!Bun.which("rustfmt")) return false
-    const configs = ["rustfmt.toml", ".rustfmt.toml"]
-    for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
-      if (found.length > 0) return true
+    return Bun.which("rustfmt") !== null
+  },
+}
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
     }
     return false
   },
 }
 
-export const cargofmt: Info = {
-  name: "cargofmt",
-  command: ["cargo", "fmt", "--", "$FILE"],
-  extensions: [".rs"],
+export const ormolu: Info = {
+  name: "ormolu",
+  command: ["ormolu", "-i", "$FILE"],
+  extensions: [".hs"],
   async enabled() {
-    if (!Bun.which("cargo")) return false
-    const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
-    return found.length > 0
+    return Bun.which("ormolu") !== null
   },
 }

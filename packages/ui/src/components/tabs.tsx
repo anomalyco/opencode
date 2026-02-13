@@ -1,9 +1,9 @@
 import { Tabs as Kobalte } from "@kobalte/core/tabs"
 import { Show, splitProps, type JSX } from "solid-js"
-import type { ComponentProps, ParentProps } from "solid-js"
+import type { ComponentProps, ParentProps, Component } from "solid-js"
 
 export interface TabsProps extends ComponentProps<typeof Kobalte> {
-  variant?: "normal" | "alt"
+  variant?: "normal" | "alt" | "pill" | "settings"
   orientation?: "horizontal" | "vertical"
 }
 export interface TabsListProps extends ComponentProps<typeof Kobalte.List> {}
@@ -75,7 +75,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       <Kobalte.Trigger
         {...rest}
         data-slot="tabs-trigger"
-        classList={{ "group/tab": true, [split.classes?.button ?? ""]: split.classes?.button }}
+        classList={{ [split.classes?.button ?? ""]: split.classes?.button }}
       >
         {split.children}
       </Kobalte.Trigger>
@@ -106,8 +106,13 @@ function TabsContent(props: ParentProps<TabsContentProps>) {
   )
 }
 
+const TabsSectionTitle: Component<ParentProps> = (props) => {
+  return <div data-slot="tabs-section-title">{props.children}</div>
+}
+
 export const Tabs = Object.assign(TabsRoot, {
   List: TabsList,
   Trigger: TabsTrigger,
   Content: TabsContent,
+  SectionTitle: TabsSectionTitle,
 })
