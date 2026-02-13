@@ -104,7 +104,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   let editorRef!: HTMLDivElement
-  let fileInputRef!: HTMLInputElement
+  let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
 
@@ -292,6 +292,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isFocused = createFocusSignal(() => editorRef)
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
+
+  const pick = () => fileInputRef?.click()
+
+  command.register("prompt-input", () => [
+    {
+      id: "file.attach",
+      title: language.t("prompt.action.attachFile"),
+      category: language.t("command.category.file"),
+      keybind: "mod+u",
+      disabled: store.mode !== "normal",
+      onSelect: pick,
+    },
+  ])
 
   const closePopover = () => setStore("popover", null)
 
@@ -828,6 +841,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
+      pick()
+      event.preventDefault()
+      return
+    }
+
     if (event.key === "Backspace") {
       const selection = window.getSelection()
       if (selection && selection.isCollapsed) {
@@ -1189,17 +1208,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
             <div class="flex items-center gap-1">
               <Show when={store.mode === "normal"}>
-                <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
+                <TooltipKeybind
+                  placement="top"
+                  title={language.t("prompt.action.attachFile")}
+                  keybind={command.keybind("file.attach")}
+                >
                   <Button
                     type="button"
                     variant="ghost"
                     class="size-8 p-0"
-                    onClick={() => fileInputRef.click()}
+                    onClick={pick}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
                     <Icon name="plus" class="size-4.5" />
                   </Button>
-                </Tooltip>
+                </TooltipKeybind>
               </Show>
             </div>
             <Tooltip
