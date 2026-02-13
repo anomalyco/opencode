@@ -1084,6 +1084,12 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
+      auth: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+          'Account to use per provider. Use provider ID as key and account name as value (e.g., { "openai": "work", "anthropic": "personal" })',
+        ),
       mcp: z
         .record(
           z.string(),

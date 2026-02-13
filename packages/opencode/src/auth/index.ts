@@ -52,20 +52,43 @@ export namespace Auth {
   /**
    * Get credential for a provider.
    * Uses activeAccount if set, otherwise returns first available.
-   * Supports environment variable overrides:
-   * - OPENCODE_ACCOUNT_<PROVIDER>: e.g., OPENCODE_ACCOUNT_OPENAI=work
-   * - OPENCODE_ACCOUNT: general override for any provider
+   * Precedence order:
+   * 1. Explicit account parameter (if provided)
+   * 2. Config project override (auth.account in opencode.json)
+   * 3. Environment variable overrides:
+   *    - OPENCODE_ACCOUNT_<PROVIDER>: e.g., OPENCODE_ACCOUNT_OPENAI=work
+   *    - OPENCODE_ACCOUNT: general override for any provider
+   * 4. Active account for the provider
+   * 5. First available non-disabled account
    */
-  export async function get(providerID: string): Promise<Info | undefined> {
+  export async function get(providerID: string, explicitAccount?: string): Promise<Info | undefined> {
     const store = await load()
     const provider = store[providerID]
-    
+
     if (!provider || !provider.accounts) return undefined
-    
-    // Check for environment variable overrides
+
+    // 1. Use explicit account if provided
+    if (explicitAccount && provider.accounts[explicitAccount] && !provider.accounts[explicitAccount].disabled) {
+      return provider.accounts[explicitAccount]
+    }
+
+    // 2. Check for config project override (lazy import to avoid circular dependency)
+    let configAccount: string | undefined
+    try {
+      const { Config } = await import("../config/config")
+      const config = await Config.get()
+      configAccount = config.auth?.[providerID]
+      if (configAccount && provider.accounts[configAccount] && !provider.accounts[configAccount].disabled) {
+        return provider.accounts[configAccount]
+      }
+    } catch {
+      // Config may not be available in all contexts
+    }
+
+    // 3. Check for environment variable overrides
     const envVarName = `OPENCODE_ACCOUNT_${providerID.toUpperCase()}`
     const envAccount = process.env[envVarName] || process.env["OPENCODE_ACCOUNT"]
-    
+
     if (envAccount) {
       // Use the specific account from env var
       const account = provider.accounts[envAccount]
@@ -74,17 +97,17 @@ export namespace Auth {
       }
       // If account not found or disabled, fall through to active account
     }
-    
-    // Use active account if set
+
+    // 4. Use active account if set
     if (provider.activeAccount && provider.accounts[provider.activeAccount]) {
       return provider.accounts[provider.activeAccount]
     }
-    
-    // Otherwise, find first non-disabled account
+
+    // 5. Otherwise, find first non-disabled account
     for (const [id, info] of Object.entries(provider.accounts)) {
       if (!info.disabled) return info
     }
-    
+
     return undefined
   }
 
@@ -111,11 +134,11 @@ export namespace Auth {
    */
   export async function add(providerID: string, info: Info): Promise<string> {
     const store = await load()
-    
+
     if (!store[providerID]) {
       store[providerID] = { accounts: {} }
     }
-    
+
     // Generate account ID from email if available, otherwise use timestamp
     let accountId = "default"
     if ("email" in info && info.email) {
@@ -126,14 +149,14 @@ export namespace Auth {
     } else {
       accountId = `key-${Date.now()}`
     }
-    
+
     store[providerID].accounts[accountId] = info
-    
+
     // If this is the first account, set as active
     if (!store[providerID].activeAccount) {
       store[providerID].activeAccount = accountId
     }
-    
+
     await save(store)
     return accountId
   }
@@ -166,9 +189,9 @@ export namespace Auth {
   export async function remove(providerID: string, account?: string) {
     const store = await load()
     const provider = store[providerID]
-    
+
     if (!provider) return
-    
+
     if (!account) {
       // Remove all accounts for this provider
       delete store[providerID]
@@ -176,14 +199,14 @@ export namespace Auth {
       delete store[providerID]
     } else {
       delete provider.accounts[account]
-      
+
       // If we removed the active account, switch to another
       if (provider.activeAccount === account) {
         const remaining = Object.keys(provider.accounts)
         provider.activeAccount = remaining[0] ?? undefined
       }
     }
-    
+
     await save(store)
   }
 
@@ -210,11 +233,11 @@ export namespace Auth {
   export async function use(providerID: string, account: string) {
     const store = await load()
     const provider = store[providerID]
-    
+
     if (!provider || !provider.accounts[account]) {
       throw new Error(`Account ${account} not found for provider ${providerID}`)
     }
-    
+
     provider.activeAccount = account
     await save(store)
   }
@@ -225,42 +248,42 @@ export namespace Auth {
   export async function setEnabled(providerID: string, account: string, enabled: boolean) {
     const store = await load()
     const provider = store[providerID]
-    
+
     if (!provider || !provider.accounts[account]) return
-    
+
     provider.accounts[account].disabled = !enabled
-    
+
     // If we disabled the active account, switch to another
     if (!enabled && provider.activeAccount === account) {
-      const remaining = Object.keys(provider.accounts).filter(a => !provider.accounts[a].disabled)
+      const remaining = Object.keys(provider.accounts).filter((a) => !provider.accounts[a].disabled)
       provider.activeAccount = remaining[0] ?? undefined
     }
-    
+
     await save(store)
   }
 
   /**
    * Get next available account (for auto-rotation on rate-limit).
    */
-  export async function getNextAccount(providerID: string): Promise<{ account: string, info: Info } | undefined> {
+  export async function getNextAccount(providerID: string): Promise<{ account: string; info: Info } | undefined> {
     const store = await load()
     const provider = store[providerID]
-    
+
     if (!provider || !provider.accounts) return undefined
-    
+
     const accounts = Object.entries(provider.accounts).filter(([_, info]) => !info.disabled)
-    
+
     if (accounts.length === 0) return undefined
-    
+
     // Simple round-robin: switch to next account
     const currentActive = provider.activeAccount
     const currentIndex = accounts.findIndex(([id]) => id === currentActive)
     const nextIndex = (currentIndex + 1) % accounts.length
-    
+
     const [account, info] = accounts[nextIndex]
     provider.activeAccount = account
     await save(store)
-    
+
     return { account, info }
   }
 
@@ -269,19 +292,21 @@ export namespace Auth {
    */
   export function isRateLimitError(error: unknown): boolean {
     if (!error) return false
-    
+
     const errorObj = error as any
     const status = errorObj?.status || errorObj?.statusCode
-    
+
     if (status === 429) return true
-    
+
     // Check for common rate-limit messages
     const message = errorObj?.message || String(error)
     const lowerMessage = message.toLowerCase()
-    return lowerMessage.includes("rate limit") || 
-           lowerMessage.includes("too many requests") ||
-           lowerMessage.includes("rate_limit") ||
-           lowerMessage.includes("429")
+    return (
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("too many requests") ||
+      lowerMessage.includes("rate_limit") ||
+      lowerMessage.includes("429")
+    )
   }
 
   /**
@@ -291,37 +316,37 @@ export namespace Auth {
   export async function withRetry<T>(
     providerID: string,
     fn: (info: Info) => Promise<T>,
-    maxRetries?: number
+    maxRetries?: number,
   ): Promise<T> {
     const max = maxRetries ?? 10
     let lastError: unknown
-    
+
     for (let i = 0; i < max; i++) {
       const info = await get(providerID)
       if (!info) {
         throw new Error(`No credentials found for provider ${providerID}`)
       }
-      
+
       try {
         return await fn(info)
       } catch (error) {
         lastError = error
-        
+
         if (!isRateLimitError(error)) {
           // Not a rate-limit error, throw immediately
           throw error
         }
-        
+
         // Rate-limit error - try next account
         console.log(`[auth] Rate limited on ${providerID}, switching account...`)
-        
+
         const next = await getNextAccount(providerID)
         if (!next) {
           throw new Error(`Rate limited and no more accounts available for ${providerID}`)
         }
       }
     }
-    
+
     throw lastError
   }
 
@@ -336,7 +361,7 @@ export namespace Auth {
         const info = value as unknown as Info
         store[providerID] = {
           accounts: { default: info },
-          activeAccount: "default"
+          activeAccount: "default",
         }
       }
     }
