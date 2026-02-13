@@ -1251,6 +1251,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const model = createMemo(() => {
+    if (props.message.providerID !== "mammouth-ai") return props.message.modelID
+    const parts = props.message.modelID.split("/")
+    return parts[parts.length - 1] || props.message.modelID
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1297,7 +1303,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>

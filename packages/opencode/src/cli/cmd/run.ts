@@ -60,6 +60,12 @@ function block(info: Inline, output?: string) {
   UI.empty()
 }
 
+function model(providerID: string, modelID: string) {
+  if (providerID !== "mammouth-ai") return modelID
+  const parts = modelID.split("/")
+  return parts[parts.length - 1] || modelID
+}
+
 function fallback(part: ToolPart) {
   const state = part.state
   const input = "input" in state ? state.input : undefined
@@ -414,7 +420,9 @@ export const RunCommand = cmd({
             toggles.get("start") !== true
           ) {
             UI.empty()
-            UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+            UI.println(
+              `> ${event.properties.info.agent} · ${model(event.properties.info.providerID, event.properties.info.modelID)}`,
+            )
             UI.empty()
             toggles.set("start", true)
           }
