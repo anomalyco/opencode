@@ -1,10 +1,10 @@
 ---
 title: "Agentferdigheter"
-description: "Definer gjenbrukbar atferd via SKILL.md-definisjoner"
+description: "Definer gjenbrukbar oppførsel via SKILL.md-definisjoner"
 ---
 
-Agentferdigheter lar opencode oppdage gjenbrukbare instruksjoner fra repo- eller hjemmekatalogen din.
-Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgjengelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
+Agentferdigheter lar OpenCode oppdage gjenbrukbare instruksjoner fra repo- eller hjemmekatalogen din.
+Ferdigheter lastes inn på forespørsel via det innebygde `skill`-verktøyet – agenter ser tilgjengelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
 
 ---
 
@@ -31,7 +31,7 @@ Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`
 
 ---
 
-## Skriv frontmaterie
+## Skriv frontmatter
 
 Hver `SKILL.md` må starte med YAML frontmatter.
 Bare disse feltene gjenkjennes:
@@ -42,7 +42,7 @@ Bare disse feltene gjenkjennes:
 - `compatibility` (valgfritt)
 - `metadata` (valgfritt, streng-til-streng kart)
 
-Ukjente frontmatter-felter ignoreres.
+Ukjente frontmatter-felt ignoreres.
 
 ---
 
@@ -51,10 +51,10 @@ Ukjente frontmatter-felter ignoreres.
 `name` må:
 
 - Bestå av 1–64 tegn
-- Vær alfanumerisk med små bokstaver med skilletegn med enkelt bindestrek
+- Vær alfanumerisk med små bokstaver, adskilt med enkel bindestrek
 - Ikke begynne eller slutte med `-`
 - Ikke inneholde påfølgende `--`
-- Match katalognavnet som inneholder `SKILL.md`
+- Samsvare med katalognavnet som inneholder `SKILL.md`
 
 Ekvivalent regulært uttrykk:
 
@@ -100,9 +100,9 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Gjenkjenne verktøybeskrivelsen
+## Forstå verktøybeskrivelsen
 
-opencode viser tilgjengelige ferdigheter i `skill` verktøybeskrivelsen.
+opencode viser tilgjengelige ferdigheter i `skill`-verktøybeskrivelsen.
 Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 
 ```xml
@@ -139,11 +139,11 @@ Kontroller hvilke ferdigheter agenter har tilgang til ved å bruke mønsterbaser
 }
 ```
 
-| Tillatelse | Atferd                                     |
-| ---------- | ------------------------------------------ |
-| `allow`    | Ferdigheter lastes umiddelbart             |
-| `deny`     | Ferdighet skjult for agent, tilgang avvist |
-| `ask`      | Bruker bedt om godkjenning før lasting     |
+| Tillatelse | Atferd                                      |
+| ---------- | ------------------------------------------- |
+| `allow`    | Ferdigheter lastes umiddelbart              |
+| `deny`     | Ferdighet skjult for agent, tilgang avvist  |
+| `ask`      | Bruker blir bedt om godkjenning før lasting |
 
 Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `internal-tools` osv.
 

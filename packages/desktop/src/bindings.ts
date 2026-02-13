@@ -23,6 +23,7 @@ export const commands = {
 /** Events */
 export const events = {
 	loadingWindowComplete: makeEvent<LoadingWindowComplete>("loading-window-complete"),
+	sqliteMigrationProgress: makeEvent<SqliteMigrationProgress>("sqlite-migration-progress"),
 };
 
 /* Types */
@@ -36,6 +37,8 @@ export type ServerReadyData = {
 		url: string,
 		password: string | null,
 	};
+
+export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" };
 
 export type WslConfig = {
 		enabled: boolean,
