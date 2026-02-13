@@ -1033,7 +1033,16 @@ export default function Layout(props: ParentProps) {
         id: `theme.set.${id}`,
         title: language.t("command.theme.set", { theme: definition.name ?? id }),
         category: language.t("command.category.theme"),
-        onSelect: () => theme.commitPreview(),
+        onSelect: () => {
+          const same = id === theme.themeId()
+          if (!same) theme.setTheme(id)
+          theme.cancelPreview()
+          if (same) return
+          showToast({
+            title: language.t("toast.theme.title"),
+            description: definition.name ?? id,
+          })
+        },
         onHighlight: () => {
           theme.previewTheme(id)
           return () => theme.cancelPreview()
@@ -1054,7 +1063,16 @@ export default function Layout(props: ParentProps) {
         id: `theme.scheme.${scheme}`,
         title: language.t("command.theme.scheme.set", { scheme: colorSchemeLabel(scheme) }),
         category: language.t("command.category.theme"),
-        onSelect: () => theme.commitPreview(),
+        onSelect: () => {
+          const same = scheme === theme.colorScheme()
+          if (!same) theme.setColorScheme(scheme)
+          theme.cancelPreview()
+          if (same) return
+          showToast({
+            title: language.t("toast.scheme.title"),
+            description: colorSchemeLabel(scheme),
+          })
+        },
         onHighlight: () => {
           theme.previewColorScheme(scheme)
           return () => theme.cancelPreview()
