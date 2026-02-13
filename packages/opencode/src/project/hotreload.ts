@@ -16,6 +16,13 @@ export namespace HotReload {
   const log = Log.create({ service: "project.hotreload" })
 
   export const Event = {
+    Changed: BusEvent.define(
+      "opencode.hotreload.changed",
+      z.object({
+        file: z.string(),
+        event: z.enum(["add", "change", "unlink"]),
+      }),
+    ),
     Applied: BusEvent.define(
       "opencode.hotreload.applied",
       z.object({
@@ -113,6 +120,7 @@ export namespace HotReload {
 
       const debounce = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_DEBOUNCE_MS ?? 700
       const cooldown = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_COOLDOWN_MS ?? 1500
+      const mode = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_MODE === "manual" ? "manual" : "auto"
       let timer: ReturnType<typeof setTimeout> | undefined
       let busy = false
       let last = 0
@@ -200,13 +208,15 @@ export namespace HotReload {
       const unsubFile = Bus.subscribe(FileWatcher.Event.Updated, (event) => {
         const rel = classify(Instance.directory, event.properties.file)
         if (!rel) return
-        void request(
-          {
-            file: rel,
-            event: event.properties.event,
-          },
-          "file",
-        )
+
+        const hit = {
+          file: rel,
+          event: event.properties.event,
+        } as const
+
+        void Bus.publish(Event.Changed, hit)
+        if (mode === "manual") return
+        void request(hit, "file")
       })
 
       const unsubSession = Bus.subscribe(SessionStatus.Event.Status, () => {
@@ -215,7 +225,7 @@ export namespace HotReload {
         timer = setTimeout(() => flush("session"), 0)
       })
 
-      log.info("hot reload enabled", { debounce, cooldown })
+      log.info("hot reload enabled", { debounce, cooldown, mode })
       return {
         unsubFile,
         unsubSession,
