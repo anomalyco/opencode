@@ -142,6 +142,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
+      if (result.info.role === "assistant" && result.info.error)
+        throw new Error(`Subagent error: ${result.info.error.data.message}`)
+
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const output = [
