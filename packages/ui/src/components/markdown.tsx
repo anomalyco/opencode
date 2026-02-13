@@ -50,10 +50,6 @@ type CopyLabels = {
 }
 
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
-const linkModifierAttribute = "data-link-modifier"
-
-let linkModifierInstalled = false
-let linkModifierOn = false
 
 function codeUrl(text: string) {
   const href = text.trim().replace(/[),.;!?]+$/, "")
@@ -64,34 +60,6 @@ function codeUrl(text: string) {
   } catch {
     return
   }
-}
-
-function setLinkModifier(next: boolean) {
-  if (linkModifierOn === next) return
-  linkModifierOn = next
-  if (next) {
-    document.documentElement.setAttribute(linkModifierAttribute, "true")
-    return
-  }
-  document.documentElement.removeAttribute(linkModifierAttribute)
-}
-
-function updateLinkModifier(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey">) {
-  setLinkModifier(event.metaKey || event.ctrlKey)
-}
-
-const handleModifierKeyDown = (event: KeyboardEvent) => updateLinkModifier(event)
-
-const handleModifierKeyUp = (event: KeyboardEvent) => updateLinkModifier(event)
-
-const handleModifierBlur = () => setLinkModifier(false)
-
-function ensureLinkModifier() {
-  if (linkModifierInstalled) return
-  linkModifierInstalled = true
-  document.addEventListener("keydown", handleModifierKeyDown, true)
-  document.addEventListener("keyup", handleModifierKeyUp, true)
-  window.addEventListener("blur", handleModifierBlur)
 }
 
 function createIcon(path: string, slot: string) {
@@ -159,31 +127,34 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
     for (const code of codeNodes) {
       const href = codeUrl(code.textContent ?? "")
+      const parentLink =
+        code.parentElement instanceof HTMLAnchorElement && code.parentElement.classList.contains("external-link")
+          ? code.parentElement
+          : null
+
       if (!href) {
-        code.removeAttribute("data-link-url")
+        if (parentLink) parentLink.replaceWith(code)
         continue
       }
-      code.setAttribute("data-link-url", href)
+
+      if (parentLink) {
+        parentLink.href = href
+        continue
+      }
+
+      const link = document.createElement("a")
+      link.href = href
+      link.className = "external-link"
+      link.target = "_blank"
+      link.rel = "noopener noreferrer"
+      code.parentNode?.replaceChild(link, code)
+      link.appendChild(code)
     }
   }
 
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
-
-    const codeEl = target.closest("code[data-link-url]")
-    if (codeEl instanceof HTMLElement) {
-      if (event.defaultPrevented) return
-      if (event.button !== 0) return
-      if (!event.metaKey && !event.ctrlKey) return
-      if (event.altKey || event.shiftKey) return
-      const href = codeEl.getAttribute("data-link-url")
-      if (!href) return
-      event.preventDefault()
-      event.stopPropagation()
-      window.open(href, "_blank", "noopener,noreferrer")
-      return
-    }
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
@@ -211,7 +182,6 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     if (button instanceof HTMLButtonElement) updateLabel(button)
   }
 
-  ensureLinkModifier()
   root.addEventListener("click", handleClick)
 
   return () => {

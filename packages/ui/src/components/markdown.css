@@ -210,8 +210,7 @@
   }
 }
 
-:root[data-link-modifier="true"] [data-component="markdown"] code[data-link-url]:hover {
+[data-component="markdown"] a.external-link:hover > code {
   text-decoration: underline;
   text-underline-offset: 2px;
-  cursor: pointer;
 }
