@@ -1,28 +1,28 @@
 ---
 title: Zen
-description: Lista selecionada de modelos fornecidos pela opencode.
+description: Lista selecionada de modelos fornecidos pelo opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equipe da opencode.
+O OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equipe do opencode.
 
 :::note
-OpenCode Zen está atualmente em beta.
+O OpenCode Zen está atualmente em beta.
 :::
 
-Zen funciona como qualquer outro provedor na opencode. Você faz login no OpenCode Zen e obtém sua chave de API. É **completamente opcional** e você não precisa usá-la para utilizar a opencode.
+O Zen funciona como qualquer outro provedor no opencode. Você faz login no OpenCode Zen e obtém sua chave de API. É **completamente opcional** e você não precisa usá-lo para utilizar o opencode.
 
 ---
 
 ## Contexto
 
-Existem um grande número de modelos disponíveis, mas apenas alguns desses modelos funcionam bem como agentes de codificação. Além disso, a maioria dos provedores é configurada de maneira muito diferente; portanto, você obtém desempenhos e qualidades muito diferentes.
+Existe um grande número de modelos disponíveis, mas apenas alguns desses modelos funcionam bem como agentes de codificação. Além disso, a maioria dos provedores é configurada de maneira muito diferente; portanto, você obtém desempenhos e qualidades muito diferentes.
 
 :::tip
-Testamos um grupo selecionado de modelos e provedores que funcionam bem com a opencode.
+Testamos um grupo selecionado de modelos e provedores que funcionam bem com o opencode.
 :::
 
 Portanto, se você estiver usando um modelo através de algo como OpenRouter, você nunca pode ter certeza se está obtendo a melhor versão do modelo que deseja.
@@ -33,17 +33,17 @@ Para resolver isso, fizemos algumas coisas:
 2. Trabalhamos com alguns provedores para garantir que esses modelos estivessem sendo servidos corretamente.
 3. Finalmente, realizamos benchmarks da combinação modelo/provedor e elaboramos uma lista que nos sentimos bem em recomendar.
 
-OpenCode Zen é um gateway de IA que lhe dá acesso a esses modelos.
+O OpenCode Zen é um gateway de IA que lhe dá acesso a esses modelos.
 
 ---
 
 ## Como funciona
 
-OpenCode Zen funciona como qualquer outro provedor na opencode.
+O OpenCode Zen funciona como qualquer outro provedor no opencode.
 
 1. Você faz login no **<a href={console}>OpenCode Zen</a>**, adiciona seus dados de cobrança e copia sua chave de API.
-2. Você executa o comando `/connect` na TUI, seleciona OpenCode Zen e cola sua chave de API.
-3. Execute `/models` na TUI para ver a lista de modelos que recomendamos.
+2. Você executa o comando `/connect` no TUI, seleciona OpenCode Zen e cola sua chave de API.
+3. Execute `/models` no TUI para ver a lista de modelos que recomendamos.
 
 Você é cobrado por solicitação e pode adicionar créditos à sua conta.
 
@@ -85,7 +85,7 @@ Você também pode acessar nossos modelos através dos seguintes endpoints da AP
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-O [id do modelo](/docs/config/#models) na sua configuração da opencode usa o formato `opencode/<model-id>`. Por exemplo, para GPT 5.2 Codex, você usaria `opencode/gpt-5.2-codex` na sua configuração.
+O [id do modelo](/docs/config/#models) na sua configuração do opencode usa o formato `opencode/<model-id>`. Por exemplo, para GPT 5.2 Codex, você usaria `opencode/gpt-5.2-codex` na sua configuração.
 
 ---
 
@@ -147,10 +147,10 @@ As taxas de cartão de crédito são repassadas ao custo (4,4% + $0,30 por trans
 
 Os modelos gratuitos:
 
-- GLM 4.7 Free está disponível na opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- Kimi K2.5 Free está disponível na opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- MiniMax M2.1 Free está disponível na opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- Big Pickle é um modelo oculto que está gratuito na opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- GLM 4.7 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- Kimi K2.5 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- MiniMax M2.1 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- Big Pickle é um modelo oculto que está gratuito no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
 
 <a href={email}>Entre em contato conosco</a> se você tiver alguma dúvida.
 
@@ -158,7 +158,7 @@ Os modelos gratuitos:
 
 ### Recarga automática
 
-Se seu saldo cair abaixo de $5, Zen recarregará automaticamente $20.
+Se seu saldo cair abaixo de $5, o Zen recarregará automaticamente $20.
 
 Você pode alterar o valor da recarga automática. Você também pode desativar a recarga automática completamente.
 
@@ -168,7 +168,7 @@ Você pode alterar o valor da recarga automática. Você também pode desativar 
 
 Você também pode definir um limite de uso mensal para todo o espaço de trabalho e para cada membro de sua equipe.
 
-Por exemplo, digamos que você defina um limite de uso mensal de $20, Zen não usará mais de $20 em um mês. Mas se você tiver a recarga automática ativada, Zen pode acabar cobrando mais de $20 se seu saldo cair abaixo de $5.
+Por exemplo, digamos que você defina um limite de uso mensal de $20, o Zen não usará mais de $20 em um mês. Mas se você tiver a recarga automática ativada, o Zen pode acabar cobrando mais de $20 se seu saldo cair abaixo de $5.
 
 ---
 
@@ -187,7 +187,7 @@ Todos os nossos modelos estão hospedados nos EUA. Nossos provedores seguem uma 
 
 ## Para Equipes
 
-Zen também funciona muito bem para equipes. Você pode convidar colegas de equipe, atribuir funções, selecionar os modelos que sua equipe usa e muito mais.
+O Zen também funciona muito bem para equipes. Você pode convidar colegas de equipe, atribuir funções, selecionar os modelos que sua equipe usa e muito mais.
 
 :::note
 Os espaços de trabalho estão atualmente gratuitos para equipes como parte do beta.
@@ -233,4 +233,4 @@ Criamos o OpenCode Zen para:
 1. **Benchmark** os melhores modelos/provedores para agentes de codificação.
 2. Ter acesso às opções de **mais alta qualidade** e não degradar o desempenho ou redirecionar para provedores mais baratos.
 3. Repassar quaisquer **reduções de preço** vendendo ao custo; assim, a única margem é para cobrir nossas taxas de processamento.
-4. Não ter **vinculação** permitindo que você o use com qualquer outro agente de codificação. E sempre permitir que você use qualquer outro provedor com a opencode também.
+4. Não ter **vinculação** permitindo que você o use com qualquer outro agente de codificação. E sempre permitir que você use qualquer outro provedor com o opencode também.

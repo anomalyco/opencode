@@ -7,7 +7,7 @@ opencode, GitHub iş akışınızla bütünleşir. Yorumunuzda `/opencode` veya 
 
 ---
 
-## Features
+## Özellikler
 
 - **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
 - **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin. Ve yeni bir şubede çalışacak ve tüm değişiklikleri içeren bir PR gönderecek.
@@ -27,7 +27,7 @@ Bu size GitHub uygulamasını yükleme, iş akışını oluşturma ve gizli dizi
 
 ---
 
-### Manual Setup
+### Manuel Kurulum
 
 Veya manuel olarak ayarlayabilirsiniz.
 
@@ -37,7 +37,7 @@ Veya manuel olarak ayarlayabilirsiniz.
 
 2. **İş akışını ekleyin**
 
-   Aşağıdaki iş akışı dosyasını deponuzdaki `.github/workflows/opencode.yml`'a ekleyin. `env`'de uygun `model` ve gerekli API anahtarlarını ayarladığınızdan emin olun.
+   Aşağıdaki iş akışı dosyasını deponuzdaki `.github/workflows/opencode.yml`'a ekleyin. `model`'de uygun `env` ve gerekli API anahtarlarını ayarladığınızdan emin olun.
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -101,11 +101,11 @@ Veya manuel olarak ayarlayabilirsiniz.
 
 ---
 
-## Supported Events
+## Desteklenen Olaylar
 
 opencode aşağıdaki GitHub olayları tarafından tetiklenebilir:
 
-| Event Type                    | Triggered By                                  | Details                                                                                                                                             |
+| Olay Tipi                     | Tetikleyen                                    | Detaylar                                                                                                                                            |
 | ----------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `issue_comment`               | Bir soruna veya halkla ilişkilere yorum yapın | Yorumunuzda `/opencode` veya `/oc`'den bahsedin. opencode bağlamı okur ve şubeler oluşturabilir, PR'leri açabilir veya yanıt verebilir.             |
 | `pull_request_review_comment` | PR'deki belirli kod satırlarına yorum yapın   | Kodu incelerken `/opencode` veya `/oc`'den bahsedin. opencode dosya yolunu, satır numaralarını ve fark içeriğini alır.                              |
@@ -114,7 +114,7 @@ opencode aşağıdaki GitHub olayları tarafından tetiklenebilir:
 | `schedule`                    | Cron tabanlı program                          | opencode'u bir programa göre çalıştırın. `prompt` girişi gerektirir. Çıktı, günlüklere ve PR'lere gider (yorum yapılacak bir sorun yoktur).         |
 | `workflow_dispatch`           | GitHub kullanıcı arayüzünden manuel tetikleme | Eylemler sekmesi aracılığıyla opencode'u isteğe bağlı olarak tetikleyin. `prompt` girişi gerektirir. Çıktı günlüklere ve PR'lere gider.             |
 
-### Schedule Example
+### Zamanlama Örneği
 
 Otomatik görevleri gerçekleştirmek için opencode'u bir zamanlamaya göre çalıştırın:
 
@@ -195,7 +195,7 @@ jobs:
 
 ---
 
-### Issues Triage Example
+### Sorun Önceliklendirme Örneği
 
 Yeni sorunları otomatik olarak önceliklendirin. Bu örnek, spam'i azaltmak için 30 günden eski hesapları filtreler:
 
@@ -269,11 +269,11 @@ Bu, projenizle ilgili spesifik inceleme kriterlerini, kodlama standartlarını v
 
 ---
 
-## Examples
+## Örnekler
 
 GitHub'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
-- **Explain an issue**
+- **Bir sorunu açıklama**
 
   Bu yorumu GitHub sayısına ekleyin.
 
@@ -283,7 +283,7 @@ GitHub'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
 
   opencode, tüm yorumlar da dahil olmak üzere ileti dizisinin tamamını okuyacak ve net bir açıklama ile yanıt verecektir.
 
-- **Fix an issue**
+- **Bir sorunu düzeltme**
 
   In a GitHub issue, say:
 
@@ -303,7 +303,7 @@ GitHub'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
 
   opencode istenen değişikliği uygulayacak ve aynı PR'ye uygulayacaktır.
 
-- **Review specific code lines**
+- **Belirli kod satırlarını inceleme**
 
   PR'nin "Dosyalar" sekmesindeki kod satırlarına doğrudan yorum bırakın. opencode, kesin yanıtlar sağlamak için dosyayı, satır numaralarını ve fark içeriğini otomatik olarak algılar.
 
@@ -312,10 +312,10 @@ GitHub'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   /oc add error handling here
   ```
 
-  When commenting on specific lines, opencode receives:
+  Belirli satırlara yorum yaparken opencode şunları alır:
   - İncelenmekte olan dosyanın tamamı
   - Belirli kod satırları
   - Çevreleyen fark bağlamı
-  - Line number information
+  - Satır numarası bilgisi
 
   Bu, dosya yollarını veya satır numaralarını manuel olarak belirtmeye gerek kalmadan daha hedefli isteklere olanak tanır.

@@ -3,7 +3,7 @@ title: Feilsøking
 description: Vanlige problemer og hvordan de kan løses.
 ---
 
-For å feilsøke problemer med opencode, start med å sjekke loggene og lokale data den lagrer på disken.
+For å feilsøke problemer med OpenCode, start med å sjekke loggene og lokale data den lagrer på disken.
 
 ---
 
@@ -22,7 +22,7 @@ Du kan angi loggnivået med kommandolinjealternativet `--log-level` for å få m
 
 ## Lagring
 
-opencode lagrer øktdata og andre applikasjonsdata på disken på:
+OpenCode lagrer øktdata og andre applikasjonsdata på disken på:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.local\share\opencode`
@@ -37,15 +37,15 @@ Denne katalogen inneholder:
 
 ---
 
-## Desktop-app
+## Skrivebordsapp
 
-opencode Desktop kjører en lokal opencode-server (`opencode-cli` sidevognen) i bakgrunnen. De fleste problemene er forårsaket av en plugin som fungerer dårlig, en ødelagt cache eller en dårlig serverinnstilling.
+OpenCode Desktop kjører en lokal OpenCode-server (`opencode-cli` sidevognen) i bakgrunnen. De fleste problemene er forårsaket av en plugin som fungerer dårlig, en ødelagt cache eller en dårlig serverinnstilling.
 
 ### Raske sjekker
 
 - Avslutt og start appen på nytt.
 - Hvis appen viser en feilskjerm, klikker du på **Start på nytt** og kopierer feildetaljene.
-- Bare macOS: `opencode`-meny -> **Last nettvisning på nytt** (hjelper hvis UI er tom/frosset).
+- Bare macOS: `OpenCode`-meny -> **Last nettvisning på nytt** (hjelper hvis UI er tom/frosset).
 
 ---
 
@@ -72,7 +72,7 @@ Hvis du har konfigurert plugins, deaktiver dem midlertidig ved å fjerne nøkkel
 
 #### Sjekk plugin-kataloger
 
-opencode kan også laste lokale plugins fra disken. Flytt disse midlertidig ut av veien (eller gi nytt navn til mappen) og start skrivebordsappen på nytt:
+OpenCode kan også laste lokale plugins fra disken. Flytt disse midlertidig ut av veien (eller gi nytt navn til mappen) og start skrivebordsappen på nytt:
 
 - **Globale plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,26 +86,26 @@ Hvis appen begynner å fungere igjen, aktiverer du plugins én om gangen for å 
 
 ### Tøm hurtigbufferen
 
-Hvis deaktivering av plugins ikke hjelper (eller en plugin-installasjon sitter fast), tøm hurtigbufferen slik at opencode kan gjenoppbygge den.
+Hvis deaktivering av plugins ikke hjelper (eller en plugin-installasjon sitter fast), tøm hurtigbufferen slik at OpenCode kan gjenoppbygge den.
 
-1. Avslutt opencode Desktop helt.
+1. Avslutt OpenCode Desktop helt.
 2. Slett hurtigbufferkatalogen:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> lim inn `~/.cache/opencode`
 - **Linux**: slett `~/.cache/opencode` (eller kjør `rm -rf ~/.cache/opencode`)
 - **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.cache\opencode`
 
-3. Start opencode Desktop på nytt.
+3. Start OpenCode Desktop på nytt.
 
 ---
 
 ### Løs problemer med servertilkobling
 
-opencode Desktop kan enten starte sin egen lokale server (standard) eller koble til en server URL du har konfigurert.
+OpenCode Desktop kan enten starte sin egen lokale server (standard) eller koble til en server URL du har konfigurert.
 
 Hvis du ser en **"Tilkobling mislyktes"**-dialogboks (eller appen kommer aldri forbi splash-skjermen), se etter en tilpasset server URL.
 
-#### Slett standardserveren for skrivebordet URL
+#### Slett skrivebordsappens standardserver-URL
 
 Fra startskjermen klikker du på servernavnet (med statusprikken) for å åpne servervelgeren. I delen **Standardserver** klikker du på **Slett**.
 
@@ -132,82 +132,34 @@ På Linux kan noen Wayland-oppsett forårsake tomme vinduer eller kompositorfeil
 
 ### Windows: WebView2 kjøretid
 
-På Windows krever opencode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åpnes i et tomt vindu eller ikke starter, installer/oppdater WebView2 og prøv igjen.
+På Windows krever OpenCode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åpnes i et tomt vindu eller ikke starter, installer/oppdater WebView2 og prøv igjen.
 
 ---
 
 ### Windows: Generelle ytelsesproblemer
 
-Hvis du opplever treg ytelse, problemer med filtilgang eller terminalproblemer på Windows, kan du prøve å bruke [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL gir et Linux-miljø som fungerer mer sømløst med funksjonene til opencode.
+Hvis du opplever treg ytelse, problemer med filtilgang eller terminalproblemer på Windows, kan du prøve å bruke [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL gir et Linux-miljø som fungerer mer sømløst med funksjonene til OpenCode.
 
 ---
 
 ### Varsler vises ikke
 
-opencode Desktop viser bare systemvarsler når:
+OpenCode Desktop viser bare systemvarsler når:
 
-- varsler er aktivert for opencode i OS-innstillingene dine, og
+- varsler er aktivert for OpenCode i OS-innstillingene dine, og
 - appvinduet er ikke fokusert.
 
 ---
 
 ### Tilbakestill skrivebordsapplagring (siste utvei)
 
-Hvis appen ikke starter og du ikke kan slette innstillingene fra UI, tilbakestill skrivebordsappens lagrede tilstand.
+Hvis appen ikke starter og du ikke kan slette innstillingene fra UI-et, tilbakestill skrivebordsappens lagrede tilstand.
 
-1. Avslutt opencode Desktop.
-2. Finn og slett disse filene (de finnes i opencode Desktop-appens datakatalog):
+1. Avslutt OpenCode Desktop.
+2. Finn og slett disse filene (de finnes i OpenCode Desktop-appens datakatalog):
 
 - `opencode.settings.dat` (stasjonær standardserver URL)
 - `opencode.global.dat` og `opencode.workspace.*.dat` (UI tilstand som nylige servere/prosjekter)
-
-Slik finner du katalogen raskt:
-
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (søk deretter etter filnavnene ovenfor)
-- **Linux**: søk under `~/.local/share` etter filnavnene ovenfor
-- **Windows**: Trykk `WIN+R` -> `%APPDATA%` (søk deretter etter filnavnene ovenfor)
-
----
-
-## Får hjelp
-
-Hvis du opplever problemer med opencode:
-
-1. **Rapporter problemer på GitHub**
-
-   Den beste måten å rapportere feil eller be om funksjoner på er gjennom vårt GitHub-lager:
-
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
-
-   Før du oppretter et nytt problem, søk i eksisterende problemer for å se om problemet ditt allerede er rapportert.
-
-2. **Bli med i vår Discord**
-
-   For sanntidshjelp og fellesskapsdiskusjon, bli med i vår Discord-server:
-
-   [**opencode.ai/discord**](https://opencode.ai/discord)
-
----
-
-## Vanlige problemer
-
-Her er noen vanlige problemer og hvordan du kan løse dem.
-
----
-
-### opencode vil ikke starte
-
-1. Sjekk loggene for feilmeldinger
-2. Prøv å kjøre med `--print-logs` for å se utdata i terminalen
-3. Sørg for at du har den nyeste versjonen med `opencode upgrade`
-
----
-
-### Autentiseringsproblemer
-
-1. Prøv å autentisere på nytt med kommandoen `/connect` i TUI
-2. Sjekk at API-nøklene dine er gyldige
-3. Sørg for at nettverket ditt tillater tilkoblinger til leverandørens API
 
 ---
 
@@ -217,42 +169,15 @@ Her er noen vanlige problemer og hvordan du kan løse dem.
 2. Kontroller at modellnavnet i konfigurasjonen er riktig
 3. Noen modeller kan kreve spesifikk tilgang eller abonnement
 
-Hvis du støter på `ProviderModelNotFoundError` er du mest sannsynlig feil
-refererer til en modell et sted.
+Hvis du støter på `ProviderModelNotFoundError` refererer du mest sannsynlig feil
+til en modell et sted.
 Modeller skal refereres slik: `<providerId>/<modelId>`
-
-Eksempler:
-
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
-
-For å finne ut hvilke modeller du har tilgang til, kjør `opencode models`
-
----
-
-### ProviderInitError
-
-Hvis du støter på en ProviderInitError, har du sannsynligvis en ugyldig eller ødelagt konfigurasjon.
-
-For å løse dette:
-
-1. Kontroller først at leverandøren din er riktig konfigurert ved å følge [leverandørveiledningen](/docs/providers)
-2. Hvis problemet vedvarer, prøv å tømme den lagrede konfigurasjonen:
-
-   ```bash
-   rm -rf ~/.local/share/opencode
-   ```
-
-   På Windows, trykk `WIN+R` og slett: `%USERPROFILE%\.local\share\opencode`
-
-3. Autentiser på nytt med leverandøren din ved å bruke kommandoen `/connect` i TUI.
 
 ---
 
 ### AI_APICallError og leverandørpakkeproblemer
 
-Hvis du støter på API-anropsfeil, kan dette skyldes utdaterte leverandørpakker. opencode installerer dynamisk leverandørpakker (OpenAI, Anthropic, Google, etc.) etter behov og cacher dem lokalt.
+Hvis du støter på API-anropsfeil, kan dette skyldes utdaterte provider-pakker. OpenCode installerer dynamisk provider-pakker (OpenAI, Anthropic, Google, etc.) etter behov og cacher dem lokalt.
 
 For å løse problemer med leverandørpakke:
 
@@ -264,15 +189,15 @@ For å løse problemer med leverandørpakke:
 
    På Windows, trykk `WIN+R` og slett: `%USERPROFILE%\.cache\opencode`
 
-2. Start opencode på nytt for å installere de nyeste leverandørpakkene på nytt
+2. Start OpenCode på nytt for å installere de nyeste provider-pakkene på nytt
 
-Dette vil tvinge opencode til å laste ned de nyeste versjonene av leverandørpakkene, som ofte løser kompatibilitetsproblemer med modellparametere og API-endringer.
+Dette vil tvinge OpenCode til å laste ned de nyeste versjonene av provider-pakkene, som ofte løser kompatibilitetsproblemer med modellparametere og API-endringer.
 
 ---
 
 ### Kopier/lim inn fungerer ikke på Linux
 
-Linux-brukere må ha ett av følgende utklippstavleverktøy installert for at kopier/lim inn-funksjonalitet skal fungere:
+Linux-brukere må ha ett av følgende utklippstavle-verktøy installert for at kopier/lim inn-funksjonalitet skal fungere:
 
 **For X11-systemer:**
 
@@ -288,7 +213,7 @@ apt install -y xsel
 apt install -y wl-clipboard
 ```
 
-**For hodeløse miljøer:**
+**For headless-miljøer:**
 
 ```bash
 apt install -y xvfb
@@ -297,4 +222,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode vil oppdage om du bruker Wayland og foretrekker `wl-clipboard`, ellers vil den prøve å finne utklippstavleverktøy i rekkefølgen: `xclip` og `xsel`.
+OpenCode vil oppdage om du bruker Wayland og foretrekker `wl-clipboard`, ellers vil den prøve å finne utklippstavle-verktøy i rekkefølgen: `xclip` og `xsel`.

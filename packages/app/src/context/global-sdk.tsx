@@ -12,21 +12,30 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const platform = usePlatform()
     const abort = new AbortController()
 
-    // Prefer the WebView fetch implementation for streaming responses.
-    // @tauri-apps/plugin-http 2.5.x has known issues with streaming/cancellation that can
-    // retain native resources in the Rust process.
+    const auth = (() => {
+      if (typeof window === "undefined") return
+      const password = window.__OPENCODE__?.serverPassword
+      if (!password) return
+      return {
+        Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+      }
+    })()
+
     const eventSdk = createOpencodeClient({
       baseUrl: server.url,
       signal: abort.signal,
+      headers: auth,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
     }>()
 
     type Queued = { directory: string; payload: Event }
+    const FLUSH_FRAME_MS = 16
+    const STREAM_YIELD_MS = 8
 
-    let queue: Array<Queued | undefined> = []
-    let buffer: Array<Queued | undefined> = []
+    let queue: Queued[] = []
+    let buffer: Queued[] = []
     const coalesced = new Map<string, number>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
@@ -55,7 +64,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       last = Date.now()
       batch(() => {
         for (const event of events) {
-          if (!event) continue
           emitter.emit(event.directory, event.payload)
         }
       })
@@ -66,8 +74,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const schedule = () => {
       if (timer) return
       const elapsed = Date.now() - last
-      timer = setTimeout(flush, Math.max(0, 16 - elapsed))
+      timer = setTimeout(flush, Math.max(0, FLUSH_FRAME_MS - elapsed))
     }
+
+    let streamErrorLogged = false
 
     void (async () => {
       const events = await eventSdk.global.event()
@@ -79,20 +89,25 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         if (k) {
           const i = coalesced.get(k)
           if (i !== undefined) {
-            queue[i] = undefined
+            queue[i] = { directory, payload }
+            continue
           }
           coalesced.set(k, queue.length)
         }
         queue.push({ directory, payload })
         schedule()
 
-        if (Date.now() - yielded < 8) continue
+        if (Date.now() - yielded < STREAM_YIELD_MS) continue
         yielded = Date.now()
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
     })()
       .finally(flush)
-      .catch(() => undefined)
+      .catch((error) => {
+        if (streamErrorLogged) return
+        streamErrorLogged = true
+        console.error("[global-sdk] event stream failed", error)
+      })
 
     onCleanup(() => {
       abort.abort()

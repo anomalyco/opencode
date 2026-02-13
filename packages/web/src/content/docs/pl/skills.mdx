@@ -1,6 +1,6 @@
 ---
-title: "Agent Skills"
-description: "Define reusable behavior via SKILL.md definitions"
+title: "Umiejętności Agenta"
+description: "Definiuj powtarzalne zachowania za pomocą definicji SKILL.md"
 ---
 
 Umiejętności agenta pozwalają opencode odkryć instrukcje wielokrotnego użytku z repozytorium lub katalogu domowego.
@@ -8,10 +8,10 @@ Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia
 
 ---
 
-## Place files
+## Lokalizacja plików
 
 Utwórz jeden folder na nazwę umiejętności i umieść w nim `SKILL.md`.
-opencode searches these locations:
+opencode przeszukuje te lokalizacje:
 
 - Project config: `.opencode/skills/<name>/SKILL.md`
 - Global config: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -22,7 +22,7 @@ opencode searches these locations:
 
 ---
 
-## Understand discovery
+## Zrozumienie wykrywania
 
 W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
 Ładuje po drodze dowolne pasujące `skills/*/SKILL.md` w `.opencode/` i dowolne pasujące `.claude/skills/*/SKILL.md` lub `.agents/skills/*/SKILL.md`.
@@ -31,32 +31,32 @@ W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego kata
 
 ---
 
-## Write frontmatter
+## Tworzenie frontmatter
 
 Każdy `SKILL.md` musi zaczynać się od treści YAML.
-Only these fields are recognized:
+Rozpoznawane są tylko te pola:
 
-- `name` (required)
-- `description` (required)
-- `license` (optional)
-- `compatibility` (optional)
-- `metadata` (optional, string-to-string map)
+- `name` (wymagane)
+- `description` (wymagane)
+- `license` (opcjonalnie)
+- `compatibility` (opcjonalnie)
+- `metadata` (opcjonalnie, mapa string-to-string)
 
-Unknown frontmatter fields are ignored.
+Nieznane pola frontmatter są ignorowane.
 
 ---
 
-## Validate names
+## Walidacja nazw
 
-`name` must:
+`name` musi:
 
-- Be 1–64 characters
+- Mieć od 1 do 64 znaków
 - Należy używać małych liter alfanumerycznych i oddzielać je pojedynczym łącznikiem
 - Nie zaczyna się ani nie kończy na `-`
-- Not contain consecutive `--`
+- Nie może zawierać następujących po sobie `--`
 - Dopasuj nazwę katalogu zawierającą `SKILL.md`
 
-Equivalent regex:
+Odpowiednik wyrażenia regularnego:
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -64,14 +64,14 @@ Equivalent regex:
 
 ---
 
-## Follow length rules
+## Zasady dotyczące długości
 
-`description` must be 1-1024 characters.
+`description` musi mieć od 1 do 1024 znaków.
 Zadbaj o to, aby agent mógł dokonać prawidłowego wyboru.
 
 ---
 
-## Skorzystaj z przykładu
+## Przykład użycia
 
 Utwórz `.opencode/skills/git-release/SKILL.md` w ten sposób:
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Recognize tool description
+## Opis narzędzia
 
 opencode wymienia dostępne umiejętności w opisie narzędzia `skill`.
 Każdy wpis zawiera nazwę i opis umiejętności:
@@ -122,9 +122,9 @@ skill({ name: "git-release" })
 
 ---
 
-## Skonfiguruj uprawnienia
+## Konfiguracja uprawnień
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Kontroluj, do których umiejętności agenci mogą uzyskać dostęp, używając uprawnień opartych na wzorcach w `opencode.json`:
 
 ```json
 {
@@ -149,7 +149,7 @@ Wzorce obsługują symbole wieloznaczne: `internal-*` odpowiada `internal-docs`,
 
 ---
 
-## Override per agent
+## Nadpisywanie dla agenta
 
 Nadaj konkretnym agentom inne uprawnienia niż globalne ustawienia domyślne.
 
@@ -181,11 +181,11 @@ permission:
 
 ---
 
-## Wyłącz narzędzie umiejętności
+## Wyłączanie narzędzia umiejętności
 
 Całkowicie wyłącz umiejętności agentów, którzy nie powinni ich używać:
 
-**Dla agentów celnych**:
+**Dla agentów niestandardowych** (w temacie agentów):
 
 ```yaml
 ---
@@ -212,11 +212,11 @@ Jeśli opcja jest wyłączona, sekcja `<available_skills>` jest całkowicie pomi
 
 ---
 
-## Troubleshoot loading
+## Rozwiązywanie problemów z ładowaniem
 
 Jeśli umiejętność nie pojawi się:
 
-1. Verify `SKILL.md` is spelled in all caps
+1. Sprawdź, czy `SKILL.md` jest napisane wielkimi literami
 2. Sprawdź, czy frontmatter zawiera `name` i `description`
-3. Ensure skill names are unique across all locations
+3. Upewnij się, że nazwy umiejętności są unikalne we wszystkich lokalizacjach
 4. Sprawdź uprawnienia — umiejętności z `deny` są ukryte przed agentami

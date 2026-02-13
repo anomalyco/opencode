@@ -1,6 +1,6 @@
 ---
-title: Rules
-description: Set custom instructions for opencode.
+title: 규칙
+description: OpenCode에 대한 사용자 정의 지침 설정.
 ---
 
 `AGENTS.md` 파일을 만들 수 있도록 opencode에 사용자 정의 지침을 제공 할 수 있습니다. Cursor의 규칙과 유사합니다. LLM의 컨텍스트에 포함된 지침을 통해 특정 프로젝트에 대한 행동을 사용자 정의합니다.
@@ -60,7 +60,7 @@ opencode는 또한 다수 위치에서 `AGENTS.md` 파일을 읽습니다. 그�
 
 프로젝트 별 규칙에 대한 프로젝트 루트에 `AGENTS.md`를 배치합니다. 이 디렉토리 또는 하위 디렉토리에서 작업 할 때만 적용됩니다.
 
-## 글로벌
+## 전역
 
 또한 `~/.config/opencode/AGENTS.md` 파일에서 글로벌 규칙을 가질 수 있습니다. 이 모든 opencode 세션에서 적용됩니다.
 
@@ -83,7 +83,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## 전신
+## 우선순위
 
 opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
 
@@ -123,13 +123,13 @@ opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
 
 ---
 
-## 외부 파일을 Referencing
+## 외부 파일 참조
 
 opencode가 `AGENTS.md`에 있는 자동적으로 파스 파일 참조를 하지 않는 동안, 당신은 두 가지 방법으로 유사한 기능을 달성할 수 있습니다:
 
 ## opencode.json 사용
 
-`opencode.json`의 `instructions` 필드를 사용하는 것이 좋습니다.
+`instructions`의 `opencode.json` 필드를 사용하는 것이 좋습니다.
 
 ```json title="opencode.json"
 {
@@ -138,7 +138,7 @@ opencode가 `AGENTS.md`에 있는 자동적으로 파스 파일 참조를 하지
 }
 ```
 
-## # AGENTS.md의 수동 지침
+### AGENTS.md의 수동 지침
 
 `AGENTS.md`에 명시된 지침을 제공함으로써 외부 파일을 읽을 수 있습니다. 여기에 실용적인 예:
 

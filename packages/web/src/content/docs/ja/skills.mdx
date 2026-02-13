@@ -1,52 +1,52 @@
 ---
-title: 「エージェントスキル」
-description: 「SKILL.md定義による再利用可能な動作の定義」
+title: エージェントスキル
+description: SKILL.md 定義による再利用可能な動作の定義
 ---
 
-エージェント スキルにより、OpenCode はリポジトリまたはホーム ディレクトリから再利用可能な命令を検出できます。
+エージェントスキルにより、OpenCode はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
 スキルはネイティブの `skill` ツールを介してオンデマンドでロードされます。エージェントは利用可能なスキルを確認し、必要に応じて完全なコンテンツをロードできます。
 
 ---
 
-## ファイルを配置する
+## ファイルの配置
 
 スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
 OpenCode は次の場所を検索します。
 
-- プロジェクト構成: `.opencode/skills/<name>/SKILL.md`
-- グローバル構成: `~/.config/opencode/skills/<name>/SKILL.md`
-- Project Claude互換: `.claude/skills/<name>/SKILL.md`
-- グローバルクロード互換: `~/.claude/skills/<name>/SKILL.md`
+- プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
+- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
+- グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
 - プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
 - グローバルエージェント互換: `~/.agents/skills/<name>/SKILL.md`
 
 ---
 
-## 発見を理解する
+## 検出の仕組み
 
-プロジェクトのローカル パスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
+プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
 途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
 
 グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
 
 ---
 
-## 前付を書く
+## フロントマターの記述
 
 各 `SKILL.md` は YAML フロントマターで始まる必要があります。
 次のフィールドのみが認識されます。
 
 - `name` (必須)
-- `name` (必須)
+- `description` (必須)
 - `license` (オプション)
-- `license` (オプション)
+- `compatibility` (オプション)
 - `metadata` (オプション、文字列間のマップ)
 
 不明なフロントマターフィールドは無視されます。
 
 ---
 
-## 名前を検証する
+## 名前の検証
 
 `name` は次のことを行う必要があります。
 
@@ -64,14 +64,14 @@ OpenCode は次の場所を検索します。
 
 ---
 
-## 長さのルールに従ってください
+## 長さのルール
 
 `description` は 1 ～ 1024 文字である必要があります。
 エージェントが正しく選択できるように、十分具体的な内容にしてください。
 
 ---
 
-## 例を使用する
+## 使用例
 
 次のように `.opencode/skills/git-release/SKILL.md` を作成します。
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## ツールの説明を認識する
+## ツールの説明認識
 
 OpenCode では、`skill` ツールの説明に利用可能なスキルがリストされています。
 各エントリにはスキル名と説明が含まれます。
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## 権限の構成
+## 権限の設定
 
 `opencode.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
 
@@ -139,7 +139,7 @@ skill({ name: "git-release" })
 }
 ```
 
-| 許可    | 行動                                                       |
+| 許可    | アクション                                                 |
 | ------- | ---------------------------------------------------------- |
 | `allow` | スキルはすぐにロードされます                               |
 | `deny`  | スキルはエージェントから隠蔽され、アクセスは拒否されました |
@@ -149,11 +149,11 @@ skill({ name: "git-release" })
 
 ---
 
-## エージェントごとに上書きする
+## エージェントごとの上書き
 
 特定のエージェントにグローバルのデフォルトとは異なる権限を与えます。
 
-**カスタム エージェントの場合** (エージェント フロントマター内):
+**カスタムエージェントの場合** (エージェントフロントマター内):
 
 ```yaml
 ---
@@ -181,11 +181,11 @@ permission:
 
 ---
 
-## スキルツールを無効にする
+## スキルツールの無効化
 
 スキルを使用すべきではないエージェントのスキルを完全に無効にします。
 
-**カスタム エージェントの場合**:
+**カスタムエージェントの場合**:
 
 ```yaml
 ---

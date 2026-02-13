@@ -22,10 +22,10 @@ Para usar OpenCode en su terminal, necesitará:
 1. Un emulador de terminal moderno como:
    - [WezTerm](https://wezterm.org), multiplataforma
    - [Alacritty](https://alacritty.org), multiplataforma
-   - [Fantasmal](https://ghostty.org), Linux y macOS
-   - [Gatito](https://sw.kovidgoyal.net/kitty/), Linux y macOS
+   - [Ghostty](https://ghostty.org), Linux y macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux y macOS
 
-2. API claves para los LLM proveedores que desea utilizar.
+2. Claves API para los LLM proveedores que desea utilizar.
 
 ---
 
@@ -79,7 +79,7 @@ También puedes instalarlo con los siguientes comandos:
   brew install anomalyco/tap/opencode
   ```
 
-  > Recomendamos utilizar el grifo OpenCode para las versiones más actualizadas. La fórmula oficial `brew install opencode` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
+  > Recomendamos utilizar el tap OpenCode para las versiones más actualizadas. La fórmula oficial `brew install opencode` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
 
 - **Usando Paru en Arch Linux**
 
@@ -90,7 +90,7 @@ También puedes instalarlo con los siguientes comandos:
 #### Windows
 
 :::tip[Recomendado: Usar WSL]
-Para obtener la mejor experiencia en Windows, recomendamos utilizar [Subsistema Windows para Linux (WSL)](/docs/windows-wsl). Proporciona un mejor rendimiento y compatibilidad total con las funciones de OpenCode.
+Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Proporciona un mejor rendimiento y compatibilidad total con las funciones de OpenCode.
 :::
 
 - **Usando Chocolatey**
@@ -129,13 +129,12 @@ También puede obtener el binario de [Versiones](https://github.com/anomalyco/op
 
 ---
 
-## Configurar
+## Configuración
 
 Con OpenCode puedes usar cualquier proveedor LLM configurando sus claves API.
 
 Si es nuevo en el uso de proveedores LLM, le recomendamos usar [OpenCode Zen](/docs/zen).
-Es una lista seleccionada de modelos que han sido probados y verificados por OpenCode
-equipo.
+Es una lista seleccionada de modelos que han sido probados y verificados por el equipo de OpenCode.
 
 1. Ejecute el comando `/connect` en TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
 
@@ -191,9 +190,9 @@ usado.
 
 ---
 
-## Uso
+## Usar
 
-Ahora está listo para usar OpenCode para trabajar en su proyecto. No dudes en preguntarlo
+Ahora está listo para usar OpenCode para trabajar en su proyecto. No dudes en preguntarle
 ¡cualquier cosa!
 
 Si es nuevo en el uso de un agente de codificación de IA, aquí hay algunos ejemplos que podrían
@@ -223,7 +222,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
 
 1. **Crea un plan**
 
-   OpenCode tiene un _modo Plan_ que desactiva su capacidad para realizar cambios y
+   OpenCode tiene un _Modo Plan_ que desactiva su capacidad para realizar cambios y
    en su lugar, sugiera _cómo_ implementará la función.
 
    Cambie a él usando la tecla **Tab**. Verás un indicador para esto en la esquina inferior derecha.
@@ -243,7 +242,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
    Quiere darle a OpenCode suficientes detalles para entender lo que quiere. ayuda
    hablar con él como si estuviera hablando con un desarrollador junior de su equipo.
 
-   :::consejo
+   :::tip
    Dale a OpenCode mucho contexto y ejemplos para ayudarlo a comprender lo que
    desear.
    :::
@@ -257,7 +256,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
    [Image #1] Take a look at this image and use it as a reference.
    ```
 
-   :::consejo
+   :::tip
    Arrastre y suelte imágenes en la terminal para agregarlas al mensaje.
    :::
 
@@ -266,7 +265,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
 
 3. **Crea la función**
 
-   Una vez que se sienta cómodo con el plan, vuelva al _modo de construcción_
+   Una vez que se sienta cómodo con el plan, vuelva al _Modo Build_
    presionando la tecla **Tab** nuevamente.
 
    ```bash frame="none"

@@ -1,42 +1,42 @@
 ---
-title: Enterprise
+title: Bedrift
 description: Sikker bruk av opencode i din organisasjon.
 ---
 
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-opencode Enterprise er for organisasjoner som ønsker å sikre at deres kode og data aldri forlater deres infrastruktur. Den kan gjøre dette ved å bruke en sentralisert konfigurasjon som integreres med din SSO og interne AI gateway.
+OpenCode Enterprise er for organisasjoner som ønsker å sikre at deres kode og data aldri forlater deres infrastruktur. Den kan gjøre dette ved å bruke en sentralisert konfigurasjon som integreres med din SSO og interne AI gateway.
 
 :::note
-opencode lagrer ingen av koden eller kontekstdataene dine.
+OpenCode lagrer ingen av koden eller kontekstdataene dine.
 :::
 
-For å komme i gang med opencode Enterprise:
+For å komme i gang med OpenCode Enterprise:
 
 1. Gjør en prøveversjon internt med teamet ditt.
 2. **<a href={email}>Kontakt oss</a>** for å diskutere priser og implementeringsalternativer.
 
 ---
 
-## Prøve
+## Prøveversjon
 
-opencode er åpen kildekode og lagrer ingen av koden eller kontekstdataene dine, så utviklerne dine kan ganske enkelt [komme i gang](/docs/) og utføre en prøveversjon.
+OpenCode er åpen kildekode og lagrer ingen av koden eller kontekstdataene dine, så utviklerne dine kan ganske enkelt [komme i gang](/docs/) og utføre en prøveversjon.
 
 ---
 
 ### Datahåndtering
 
-**opencode lagrer ikke koden eller kontekstdataene dine.** All behandling skjer lokalt eller gjennom direkte API-anrop til AI-leverandøren din.
+**OpenCode lagrer ikke koden eller kontekstdataene dine.** All behandling skjer lokalt eller gjennom direkte API-anrop til AI-leverandøren din.
 
 Dette betyr at så lenge du bruker en leverandør du stoler på, eller en intern
-AI gateway, kan du bruke opencode sikkert.
+AI gateway, kan du bruke OpenCode sikkert.
 
 Det eneste forbeholdet her er den valgfrie `/share`-funksjonen.
 
 ---
 
-#### Deler samtaler
+#### Deling av samtaler
 
 Hvis en bruker aktiverer funksjonen `/share`, sendes samtalen og dataene knyttet til den til tjenesten vi bruker til å være vert for disse delesidene på opencode.ai.
 
@@ -57,49 +57,49 @@ Vi anbefaler at du deaktiverer dette for prøveversjonen.
 
 ### Kodeeierskap
 
-**Du eier all kode produsert av opencode.** Det er ingen lisensieringsbegrensninger eller eierskapskrav.
+**Du eier all kode produsert av OpenCode.** Det er ingen lisensieringsbegrensninger eller eierskapskrav.
 
 ---
 
 ## Priser
 
-Vi bruker en per-sete-modell for opencode Enterprise. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For mer informasjon om priser og implementeringsalternativer, **<a href={email}>kontakt oss</a>**.
+Vi bruker en per-sete-modell for OpenCode Enterprise. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For mer informasjon om priser og implementeringsalternativer, **<a href={email}>kontakt oss</a>**.
 
 ---
 
 ## Implementering
 
-Når du har fullført prøveversjonen og du er klar til å bruke opencode på
+Når du har fullført prøveversjonen og du er klar til å bruke OpenCode på
 organisasjonen din, kan du **<a href={email}>kontakte oss</a>** for å diskutere
 prissetting og implementeringsalternativer.
 
 ---
 
-### Sentral konfig
+### Sentral konfigurasjon
 
-Vi kan sette opp opencode for å bruke en enkelt sentral konfigurasjon for hele organisasjonen din.
+Vi kan sette opp OpenCode for å bruke en enkelt sentral konfigurasjon for hele organisasjonen din.
 
 Denne sentraliserte konfigurasjonen kan integreres med SSO-leverandøren din og sikrer at alle brukere kun får tilgang til din interne AI-gateway.
 
 ---
 
-### SSO integrasjon
+### SSO-integrasjon
 
-Gjennom den sentrale konfigurasjonen kan opencode integreres med organisasjonens SSO-leverandør for autentisering.
+Gjennom den sentrale konfigurasjonen kan OpenCode integreres med organisasjonens SSO-leverandør for autentisering.
 
-Dette lar opencode få legitimasjon for din interne AI-gateway gjennom ditt eksisterende identitetsadministrasjonssystem.
+Dette lar OpenCode få legitimasjon for din interne AI-gateway gjennom ditt eksisterende identitetsadministrasjonssystem.
 
 ---
 
-### Intern AI gateway
+### Intern AI-gateway
 
-Med den sentrale konfigurasjonen kan opencode også konfigureres til kun å bruke din interne AI-gateway.
+Med den sentrale konfigurasjonen kan OpenCode også konfigureres til kun å bruke din interne AI-gateway.
 
 Du kan også deaktivere alle andre AI-leverandører, og sikre at alle forespørsler går gjennom organisasjonens godkjente infrastruktur.
 
 ---
 
-### Selvhosting
+### Egen hosting
 
 Selv om vi anbefaler å deaktivere delingssidene for å sikre at dataene dine aldri forsvinner
 organisasjonen din, kan vi også hjelpe deg med å være vert for dem på din infrastruktur.
@@ -108,42 +108,42 @@ Dette er nå på veikartet vårt. Hvis du er interessert, **<a href={email}>gi o
 
 ---
 
-## FAQ
+## Ofte stilte spørsmål (FAQ)
 
 <details>
-<summary>What is opencode Enterprise?</summary>
+<summary>Hva er OpenCode Enterprise?</summary>
 
-opencode Enterprise er for organisasjoner som ønsker å sikre at deres kode og data aldri forlater deres infrastruktur. Den kan gjøre dette ved å bruke en sentralisert konfigurasjon som integreres med din SSO og interne AI gateway.
+OpenCode Enterprise er for organisasjoner som ønsker å sikre at deres kode og data aldri forlater deres infrastruktur. Den kan gjøre dette ved å bruke en sentralisert konfigurasjon som integreres med din SSO og interne AI gateway.
 
 </details>
 
 <details>
-<summary>How do I get started with opencode Enterprise?</summary>
+<summary>Hvordan kommer jeg i gang med OpenCode Enterprise?</summary>
 
-Bare start med en intern prøveversjon med teamet ditt. opencode lagrer som standard ikke koden eller kontekstdataene dine, noe som gjør det enkelt å komme i gang.
+Bare sett i gang en intern prøveversjon med teamet ditt. OpenCode lagrer som standard ikke koden eller kontekstdataene dine, noe som gjør det enkelt å komme i gang.
 
 Så **<a href={email}>kontakt oss</a>** for å diskutere priser og implementeringsalternativer.
 
 </details>
 
 <details>
-<summary>How does enterprise pricing work?</summary>
+<summary>Hvordan fungerer bedriftsprising?</summary>
 
-Vi tilbyr bedriftspriser per sete. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For ytterligere detaljer, **<a href={email}>kontakt oss</a>** for et tilpasset tilbud basert på organisasjonens behov.
-
-</details>
-
-<details>
-<summary>Is my data secure with opencode Enterprise?</summary>
-
-Ja. opencode lagrer ikke koden eller kontekstdataene dine. All behandling skjer lokalt eller gjennom direkte API-anrop til AI-leverandøren din. Med sentral konfigurasjon og SSO-integrasjon forblir dataene dine sikre i organisasjonens infrastruktur.
+Vi tilbyr bedriftspriser per bruker. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For ytterligere detaljer, **<a href={email}>kontakt oss</a>** for et tilpasset tilbud basert på organisasjonens behov.
 
 </details>
 
 <details>
-<summary>Can we use our own private NPM registry?</summary>
+<summary>Er dataene mine trygge med OpenCode Enterprise?</summary>
 
-opencode støtter private npm-registre gjennom Buns opprinnelige `.npmrc`-filstøtte. Hvis organisasjonen din bruker et privat register, som JFrog Artifactory, Nexus eller lignende, sørg for at utviklerne er autentisert før du kjører opencode.
+Ja. OpenCode lagrer ikke koden eller kontekstdataene dine. All behandling skjer lokalt eller gjennom direkte API-anrop til AI-leverandøren din. Med sentral konfigurasjon og SSO-integrasjon forblir dataene dine sikre i organisasjonens infrastruktur.
+
+</details>
+
+<details>
+<summary>Kan vi bruke vårt eget private NPM-register?</summary>
+
+OpenCode støtter private npm-registre gjennom Bun sin innebygde støtte for .npmrc-filer. Hvis organisasjonen din bruker et privat register, som JFrog Artifactory, Nexus eller lignende, sørg for at utviklerne er autentisert før du kjører OpenCode.
 
 Slik setter du opp autentisering med ditt private register:
 
@@ -151,11 +151,11 @@ Slik setter du opp autentisering med ditt private register:
 npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
-Dette oppretter `~/.npmrc` med autentiseringsdetaljer. opencode vil automatisk
-plukke opp dette.
+Dette oppretter `~/.npmrc` med autentiseringsdetaljer. OpenCode vil automatisk
+oppdage dette.
 
 :::caution
-Du må være logget inn i det private registeret før du kjører opencode.
+Du må være logget inn i det private registeret før du kjører OpenCode.
 :::
 
 Alternativt kan du konfigurere en `.npmrc`-fil manuelt:
@@ -165,6 +165,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Utviklere må være logget på det private registeret før de kjører opencode for å sikre at pakker kan installeres fra bedriftsregisteret.
+Utviklere må være logget på det private registeret før de kjører OpenCode for å sikre at pakker kan installeres fra bedriftsregisteret.
 
 </details>
