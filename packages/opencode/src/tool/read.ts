@@ -9,10 +9,22 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
+import { Flag } from "../flag/flag"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
+const HASH_LEN = 2
+const HASH_MOD = 16 ** HASH_LEN
+const HASH_DICT = Array.from({ length: HASH_MOD }, (_, i) => i.toString(16).padStart(HASH_LEN, "0"))
+
+function hashline(idx: number, line: string) {
+  if (line.endsWith("\r")) {
+    line = line.slice(0, -1)
+  }
+  line = line.replace(/\s+/g, "")
+  return HASH_DICT[Bun.hash.xxHash32(line) % HASH_MOD]
+}
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -161,8 +173,11 @@ export const ReadTool = Tool.define("read", {
       bytes += size
     }
 
+    const useHashline = Flag.OPENCODE_EXPERIMENTAL_HASHLINE
     const content = raw.map((line, index) => {
-      return `${index + offset}: ${line}`
+      const lineNo = index + offset
+      if (!useHashline) return `${lineNo}: ${line}`
+      return `${lineNo}:${hashline(lineNo, line)}|${line}`
     })
     const preview = raw.slice(0, 20).join("\n")
 

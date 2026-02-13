@@ -212,6 +212,8 @@ describe("hashline tool replace operation", () => {
       directory: tmp.path,
       fn: async () => {
         const hashline = await HashlineTool.init()
+        const readTool = await (await import("../../src/tool/read")).ReadTool.init()
+        await readTool.execute({ filePath: path.join(tmp.path, "test.txt") }, ctx)
         const result = await hashline.execute(
           {
             filePath: path.join(tmp.path, "test.txt"),
@@ -239,6 +241,8 @@ describe("hashline tool replace operation", () => {
       directory: tmp.path,
       fn: async () => {
         const hashline = await HashlineTool.init()
+        const readTool = await (await import("../../src/tool/read")).ReadTool.init()
+        await readTool.execute({ filePath: path.join(tmp.path, "test.txt") }, ctx)
 
         await expect(
           hashline.execute(

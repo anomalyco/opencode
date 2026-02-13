@@ -123,7 +123,7 @@ Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_HASHLINE", {
 // Umbrella flag that enables hashline edit mode when OPENCODE_EXPERIMENTAL is set
 Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_EDIT", {
   get() {
-    return Flag.OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EDIT")
+    return truthy("OPENCODE_EXPERIMENTAL") || truthy("OPENCODE_EXPERIMENTAL_EDIT")
   },
   enumerable: true,
   configurable: false,

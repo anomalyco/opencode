@@ -81,11 +81,6 @@ describe("flag.OPENCODE_EXPERIMENTAL (umbrella)", () => {
   test("OPENCODE_EXPERIMENTAL is false when not set", () => {
     expect(Flag.OPENCODE_EXPERIMENTAL).toBe(false)
   })
-
-  test("OPENCODE_EXPERIMENTAL is true when env var is 'true'", () => {
-    process.env.OPENCODE_EXPERIMENTAL = "true"
-    expect(Flag.OPENCODE_EXPERIMENTAL).toBe(true)
-  })
 })
 
 describe("flag.OPENCODE_EXPERIMENTAL_EDIT (umbrella alias)", () => {

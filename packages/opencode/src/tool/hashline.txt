@@ -1,0 +1,12 @@
+Performs line-based edits using hashline anchors for integrity verification.
+
+Usage:
+- You must use your `Read` tool with hashline format first to get valid LINE:HASH references.
+- The tool uses LINE:HASH anchors to target lines, where HASH is a short hash of normalized line content.
+- If file content changed after reading, stale anchors are rejected with actionable remap diagnostics.
+- Operations:
+  - `set_line`: Replace one line at an anchor.
+  - `replace_lines`: Replace a line or range between anchors.
+  - `insert_after`: Insert text after an anchor line.
+  - `replace`: Substring replace without hashes.
+- Prefer editing existing files and preserve exact formatting/indentation.
