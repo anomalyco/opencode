@@ -127,7 +127,6 @@
   }
 
   [data-component="session-turn-diff"] {
-    background-color: var(--surface-inset-base);
     border: 1px solid var(--border-weaker-base);
     border-radius: var(--radius-md);
     overflow: clip;
@@ -164,6 +163,7 @@
   }
 
   [data-slot="session-turn-diff-view"] {
+    background-color: var(--surface-inset-base);
     width: 100%;
     min-width: 0;
   }
