@@ -1,7 +1,8 @@
+import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
-import { git, gitLines } from "../util/git"
+import { Flag } from "../flag/flag"
 import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
@@ -23,18 +24,19 @@ export namespace Snapshot {
   }
 
   export async function cleanup() {
-    if (Instance.project.vcs !== "git") return
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
-    const dir = gitdir()
+    const git = gitdir()
     const exists = await fs
-      .stat(dir)
+      .stat(git)
       .then(() => true)
       .catch(() => false)
     if (!exists) return
-    const result = await git(["--git-dir", dir, "--work-tree", Instance.worktree, "gc", `--prune=${prune}`], {
-      cwd: Instance.directory,
-    })
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
     if (result.exitCode !== 0) {
       log.warn("cleanup failed", {
         exitCode: result.exitCode,
@@ -47,22 +49,30 @@ export namespace Snapshot {
   }
 
   export async function track() {
-    if (Instance.project.vcs !== "git") return
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
-    const dir = gitdir()
-    if (await fs.mkdir(dir, { recursive: true })) {
-      await git(["init"], { cwd: Instance.directory, env: { GIT_DIR: dir, GIT_WORK_TREE: Instance.worktree } })
+    const git = gitdir()
+    if (await fs.mkdir(git, { recursive: true })) {
+      await $`git init`
+        .env({
+          ...process.env,
+          GIT_DIR: git,
+          GIT_WORK_TREE: Instance.worktree,
+        })
+        .quiet()
+        .nothrow()
       // Configure git to not convert line endings on Windows
-      await git(["--git-dir", dir, "config", "core.autocrlf", "false"], { cwd: Instance.directory })
+      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await git(["--git-dir", dir, "--work-tree", Instance.worktree, "add", "."], { cwd: Instance.directory })
-    const result = await git(["--git-dir", dir, "--work-tree", Instance.worktree, "write-tree"], {
-      cwd: Instance.directory,
-    })
-    const hash = await result.text()
-    log.info("tracking", { hash: hash.trim(), cwd: Instance.directory, git: dir })
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .text()
+    log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
   }
 
@@ -73,34 +83,21 @@ export namespace Snapshot {
   export type Patch = z.infer<typeof Patch>
 
   export async function patch(hash: string): Promise<Patch> {
-    const dir = gitdir()
-    await git(["--git-dir", dir, "--work-tree", Instance.worktree, "add", "."], { cwd: Instance.directory })
-    const result = await git(
-      [
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "core.quotepath=false",
-        "--git-dir",
-        dir,
-        "--work-tree",
-        Instance.worktree,
-        "diff",
-        "--no-ext-diff",
-        "--name-only",
-        hash,
-        "--",
-        ".",
-      ],
-      { cwd: Instance.directory },
-    )
+    const git = gitdir()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const result =
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
 
+    // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", { hash, exitCode: result.exitCode })
       return { hash, files: [] }
     }
 
-    const files = await result.text()
+    const files = result.text()
     return {
       hash,
       files: files
@@ -114,50 +111,42 @@ export namespace Snapshot {
 
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
-    const dir = gitdir()
-    const r1 = await git(["--git-dir", dir, "--work-tree", Instance.worktree, "read-tree", snapshot], {
-      cwd: Instance.worktree,
-    })
-    if (r1.exitCode !== 0) {
+    const git = gitdir()
+    const result =
+      await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
+
+    if (result.exitCode !== 0) {
       log.error("failed to restore snapshot", {
         snapshot,
-        exitCode: r1.exitCode,
-        stderr: r1.stderr.toString(),
-        stdout: r1.stdout.toString(),
-      })
-      return
-    }
-    const r2 = await git(["--git-dir", dir, "--work-tree", Instance.worktree, "checkout-index", "-a", "-f"], {
-      cwd: Instance.worktree,
-    })
-    if (r2.exitCode !== 0) {
-      log.error("failed to restore snapshot", {
-        snapshot,
-        exitCode: r2.exitCode,
-        stderr: r2.stderr.toString(),
-        stdout: r2.stdout.toString(),
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
       })
     }
   }
 
   export async function revert(patches: Patch[]) {
     const files = new Set<string>()
-    const dir = gitdir()
+    const git = gitdir()
     for (const item of patches) {
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
-        const result = await git(
-          ["--git-dir", dir, "--work-tree", Instance.worktree, "checkout", item.hash, "--", file],
-          { cwd: Instance.worktree },
-        )
+        const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
+          .quiet()
+          .cwd(Instance.worktree)
+          .nothrow()
         if (result.exitCode !== 0) {
           const relativePath = path.relative(Instance.worktree, file)
-          const checkTree = await git(
-            ["--git-dir", dir, "--work-tree", Instance.worktree, "ls-tree", item.hash, "--", relativePath],
-            { cwd: Instance.worktree },
-          )
-          if (checkTree.exitCode === 0 && (await checkTree.text()).trim()) {
+          const checkTree =
+            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
+              .quiet()
+              .cwd(Instance.worktree)
+              .nothrow()
+          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
             log.info("file existed in snapshot but checkout failed, keeping", {
               file,
             })
@@ -172,26 +161,13 @@ export namespace Snapshot {
   }
 
   export async function diff(hash: string) {
-    const dir = gitdir()
-    await git(["--git-dir", dir, "--work-tree", Instance.worktree, "add", "."], { cwd: Instance.directory })
-    const result = await git(
-      [
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "core.quotepath=false",
-        "--git-dir",
-        dir,
-        "--work-tree",
-        Instance.worktree,
-        "diff",
-        "--no-ext-diff",
-        hash,
-        "--",
-        ".",
-      ],
-      { cwd: Instance.worktree },
-    )
+    const git = gitdir()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const result =
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
 
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", {
@@ -203,7 +179,7 @@ export namespace Snapshot {
       return ""
     }
 
-    return (await result.text()).trim()
+    return result.text().trim()
   }
 
   export const FileDiff = z
@@ -220,32 +196,16 @@ export namespace Snapshot {
     })
   export type FileDiff = z.infer<typeof FileDiff>
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
-    const dir = gitdir()
+    const git = gitdir()
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
 
-    const statusResult = await git(
-      [
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "core.quotepath=false",
-        "--git-dir",
-        dir,
-        "--work-tree",
-        Instance.worktree,
-        "diff",
-        "--no-ext-diff",
-        "--name-status",
-        "--no-renames",
-        from,
-        to,
-        "--",
-        ".",
-      ],
-      { cwd: Instance.directory },
-    )
-    const statuses = await statusResult.text()
+    const statuses =
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+        .text()
 
     for (const line of statuses.trim().split("\n")) {
       if (!line) continue
@@ -255,60 +215,35 @@ export namespace Snapshot {
       status.set(file, kind)
     }
 
-    for await (const line of gitLines(
-      [
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "core.quotepath=false",
-        "--git-dir",
-        dir,
-        "--work-tree",
-        Instance.worktree,
-        "diff",
-        "--no-ext-diff",
-        "--no-renames",
-        "--numstat",
-        from,
-        to,
-        "--",
-        ".",
-      ],
-      { cwd: Instance.directory },
-    )) {
+    for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .lines()) {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
       const before = isBinaryFile
         ? ""
-        : await git(
-            [
-              "-c",
-              "core.autocrlf=false",
-              "--git-dir",
-              dir,
-              "--work-tree",
-              Instance.worktree,
-              "show",
-              `${from}:${file}`,
-            ],
-            { cwd: Instance.directory },
-          ).then((r) => r.text())
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
+            .quiet()
+            .nothrow()
+            .text()
       const after = isBinaryFile
         ? ""
-        : await git(
-            ["-c", "core.autocrlf=false", "--git-dir", dir, "--work-tree", Instance.worktree, "show", `${to}:${file}`],
-            { cwd: Instance.directory },
-          ).then((r) => r.text())
-      const added = isBinaryFile ? 0 : parseInt(additions!)
-      const deleted = isBinaryFile ? 0 : parseInt(deletions!)
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
+            .quiet()
+            .nothrow()
+            .text()
+      const added = isBinaryFile ? 0 : parseInt(additions)
+      const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
-        file: file!,
+        file,
         before,
         after,
         additions: Number.isFinite(added) ? added : 0,
         deletions: Number.isFinite(deleted) ? deleted : 0,
-        status: status.get(file!) ?? "modified",
+        status: status.get(file) ?? "modified",
       })
     }
     return result
