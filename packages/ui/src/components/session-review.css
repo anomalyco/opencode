@@ -166,6 +166,10 @@
     color: var(--icon-diff-delete-base);
   }
 
+  [data-slot="session-review-change"][data-type="modified"] {
+    color: var(--icon-diff-modified-base);
+  }
+
   [data-slot="session-review-file-container"] {
     padding: 0;
   }

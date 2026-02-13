@@ -60,9 +60,11 @@ jobs:
         run: |
           COMMENT=$(bun script/duplicate-pr.ts -f pr_info.txt "Check the attached file for PR details and search for duplicates")
 
-          gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
+          if [ "$COMMENT" != "No duplicate PRs found" ]; then
+            gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
 
           $COMMENT"
+          fi
 
   add-contributor-label:
     runs-on: ubuntu-latest

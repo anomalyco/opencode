@@ -1,0 +1,680 @@
+---
+title: Konfiguracja
+description: Ustawienia OpenCode w pliku JSON.
+---
+
+Możesz dostosować OpenCode za pomocą pliku konfiguracyjnego JSON.
+
+---
+
+## Format
+
+OpenCode obsługuje formaty **JSON** i **JSONC** (JSON z komentarzami).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## Lokalizacje
+
+Możesz umieścić swoją konfigurację w kilku różnych lokalizacjach, które mają ustaloną kolejność pierwszeństwa.
+
+:::note
+Pliki konfiguracyjne są **łączone**, a nie nadpisywane.
+:::
+
+Pliki konfiguracyjne są łączone ze sobą. Ustawienia z lokalizacji o wyższym priorytecie nadpisują ustawienia z lokalizacji o niższym priorytecie tylko w przypadku konfliktów kluczy. Ustawienia niekolidujące ze wszystkich źródeł są zachowywane.
+
+Na przykład, jeśli konfiguracja globalna ustawi `theme: "opencode"` i `autoupdate: true`, a konfiguracja projektu ustawi `model: "anthropic/claude-sonnet-4-5"`, ostateczna konfiguracja będzie zawierać wszystkie trzy ustawienia.
+
+---
+
+### Kolejność pierwszeństwa
+
+Źródła konfiguracji są ładowane w następującej kolejności (źródła występujące później mają pierwszeństwo):
+
+1. **Konfiguracja zdalna** (z `.well-known/opencode`) – ustawienia wymuszane przez organizację
+2. **Konfiguracja globalna** (`~/.config/opencode/opencode.json`) – preferencje użytkownika
+3. **Konfiguracja niestandardowa** (zmienna `OPENCODE_CONFIG`) — jawne nadpisanie
+4. **Konfiguracja projektu** (`opencode.json` w projekcie) - ustawienia specyficzne dla projektu
+5. **Katalogi `.opencode`** - agenci, polecenia, umiejętności
+6. **Konfiguracja wbudowana** (zmienna `OPENCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
+
+Oznacza to, że konfiguracje projektu mogą nadpisywać konfiguracje globalne, a konfiguracje globalne mogą nadpisywać konfiguracje zdalne.
+
+:::note
+W katalogach `.opencode` i `~/.config/opencode` używane są **nazwy w liczbie mnogiej** dla podkatalogów: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` i `themes/`. Nazwy w liczbie pojedynczej (np. `agent/`) są również obsługiwane dla kompatybilności wstecznej.
+:::
+
+---
+
+### Zdalna
+
+Organizacje mogą publikować konfigurację pod adresem `.well-known/opencode`. Jest ona pobierana automatycznie po uwierzytelnieniu u dostawcy, który ją obsługuje.
+
+Konfiguracja zdalna jest ładowana jako pierwsza i stanowi bazę. Wszystkie inne źródła konfiguracji (globalne, projektowe) mogą ją nadpisywać.
+
+Na przykład, jeśli Twoja organizacja udostępnia serwery MCP, które są domyślnie wyłączone:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+Możesz włączyć serwer w konfiguracji projektu:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### Globalna
+
+Umieść swoją globalną konfigurację OpenCode w `~/.config/opencode/opencode.json`. Użyj jej do ustawień ogólnych dla użytkownika, takich jak motywy, domyślny dostawca lub skróty klawiszowe.
+
+Konfiguracja globalna ma pierwszeństwo przed konfiguracją zdalną.
+
+---
+
+### Projekt
+
+Dodaj `opencode.json` w katalogu głównym projektu. Konfiguracja projektu ma najwyższy priorytet wśród plików konfiguracyjnych — nadpisuje konfiguracje globalne i zdalne.
+
+:::tip
+Dodaj ten plik do kontroli wersji, aby udostępniać konfigurację zespołowi.
+:::
+
+Kiedy OpenCode się uruchamia, szuka pliku konfiguracyjnego w katalogu głównym repozytorium Git.
+
+Może on być przechowywany w Git i mieć ten sam schemat, co konfiguracja globalna.
+
+---
+
+### Niestandardowa ścieżka
+
+Możesz załadować niestandardowy plik konfiguracyjny, ustawiając zmienną środowiskową `OPENCODE_CONFIG`.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+Konfiguracja niestandardowa jest ładowana po konfiguracji globalnej i przed konfiguracją projektu w kolejności priorytetów.
+
+---
+
+### Niestandardowy katalog
+
+Możesz ustawić niestandardowy katalog konfiguracyjny za pomocą zmiennej środowiskowej `OPENCODE_CONFIG_DIR`. Katalog ten będzie przeszukiwany pod kątem agentów, poleceń, trybów i wtyczek, tak jak standardowy katalog `.opencode` i powinien zachować tę samą strukturę.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Katalog niestandardowy jest ładowany po globalnej konfiguracji i katalogach `.opencode`, więc **może być łączony** z ich zawartością.
+
+---
+
+## Schemat
+
+Plik konfiguracyjny ma schemat JSON dostępny pod adresem [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+Twój edytor powinien zapewniać walidację i autouzupełnianie na podstawie tego schematu.
+
+---
+
+### TUI
+
+Możesz skonfigurować zachowanie TUI za pomocą opcji `tui`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+Dostępne opcje:
+
+- `scroll_acceleration.enabled` - Włącz przyspieszenie przewijania na gładzikach macOS. **Ma pierwszeństwo przed `scroll_speed`.**
+- `scroll_speed` - Niestandardowy mnożnik szybkości przewijania (domyślnie: `3`, minimalnie: `1`). Ignorowane, jeśli `scroll_acceleration.enabled` ustawiono na `true`.
+- `diff_style` – Sterowanie renderowaniem różnic. `"auto"` przełącza się w zależności od szerokości terminala, `"stacked"` zawsze wymusza pojedynczą kolumnę.
+
+[Dowiedz się więcej o korzystaniu z TUI](/docs/tui).
+
+---
+
+### Server (Serwer)
+
+Możesz skonfigurować serwer dla `opencode serve` i `opencode web` za pomocą opcji `server`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+Dostępne opcje:
+
+- `port` - Port do nasłuchiwania.
+- `hostname` — Nazwa hosta, z którą należy się powiązać. Gdy `mdns` jest włączone i nie ustawiono innej nazwy hosta, domyślnie jest to `0.0.0.0`.
+- `mdns` - Włącz wykrywanie usług mDNS. Dzięki temu inne urządzenia w sieci mogą łatwo znaleźć Twój serwer OpenCode.
+- `mdnsDomain` - Niestandardowa nazwa domeny dla usług mDNS. Domyślnie `opencode.local`. Przydatne do uruchamiania wielu instancji w tej samej sieci.
+- `cors` - Dozwolone źródła CORS podczas korzystania z serwera HTTP z przeglądarki. Wartość musi być listą źródeł (schemat + host + opcjonalny port), np. `https://app.example.com`.
+
+[Dowiedz się więcej o serwerze](/docs/server).
+
+---
+
+### Tools (Narzędzia)
+
+Kontroluj, które narzędzia są dostępne dla LLM, za pomocą opcji `tools`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Dowiedz się więcej o narzędziach](/docs/tools).
+
+---
+
+### Models (Modele)
+
+Możesz skonfigurować dostawców i modele, których chcesz używać, za pomocą opcji `provider`, `model` i `small_model`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+Opcja `small_model` konfiguruje oddzielny model do lżejszych zadań, takich jak generowanie tytułów. Domyślnie OpenCode wybiera tańszy model od tego samego dostawcy, jeśli jest dostępny, w przeciwnym razie powraca do modelu głównego.
+
+Opcje dostawcy mogą zawierać `timeout` i `setCacheKey`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - Limit czasu żądania w milisekundach (domyślnie: 300000). Ustaw na `false`, aby wyłączyć.
+- `setCacheKey` — Wymuś ustawienie klucza pamięci podręcznej dla dostawcy.
+
+Możesz także skonfigurować [modele lokalne](/docs/models#local). [Dowiedz się więcej o modelach](/docs/models).
+
+---
+
+#### Opcje specyficzne dla dostawców
+
+Niektórzy dostawcy obsługują dodatkowe opcje konfiguracji poza `timeout` i `apiKey`.
+
+##### Amazon Bedrock
+
+Amazon Bedrock umożliwia konfigurację połączenia z AWS:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` — Region AWS dla Bedrock (domyślnie `AWS_REGION` env var lub `us-east-1`)
+- `profile` - Nazwa profilu AWS z `~/.aws/credentials` (domyślnie `AWS_PROFILE` env var)
+- `endpoint` — Niestandardowy adres URL punktu końcowego (np. dla punktów końcowych VPC). Jest to alias dla opcji ogólnej `baseURL` przy użyciu terminologii AWS. Jeśli podano oba, pierwszeństwo ma `endpoint`.
+
+:::note
+Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo przed uwierzytelnianiem opartym na profilu. Aby uzyskać szczegółowe informacje, zobacz [pierwszeństwo uwierzytelniania](/docs/providers#authentication-precedence).
+:::
+
+[Dowiedz się więcej o Amazon Bedrock](/docs/providers#amazon-bedrock).
+
+---
+
+### Theme (Motyw)
+
+Skonfiguruj motyw interfejsu OpenCode za pomocą opcji `theme`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[Dowiedz się więcej o motywach](/docs/themes).
+
+---
+
+### Agents (Agenci)
+
+Możesz zdefiniować i skonfigurować agentów za pomocą opcji `agent`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+Możesz także definiować agentów przy użyciu plików markdown w `~/.config/opencode/agents/` lub `.opencode/agents/`. [Dowiedz się więcej o agentach](/docs/agents).
+
+---
+
+### Default Agent (Domyślny agent)
+
+Domyślnego agenta można ustawić za pomocą opcji `default_agent`. Określa to agenta, który jest używany, jeśli nie wybrano żadnego innego.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+Agent domyślny musi być agentem typu `primary` (nie `subagent`). Może to być agent wbudowany, taki jak `"build"` lub `"plan"`, albo zdefiniowany przez Ciebie [agent niestandardowy](/docs/agents). Jeśli agent nie istnieje lub jest subagentem, OpenCode powróci do `"build"` z ostrzeżeniem.
+
+Dotyczy to wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji desktopowej i GitHub Actions.
+
+---
+
+### Share (Udostępnianie)
+
+Możesz skonfigurować [udostępnianie](/docs/share) za pomocą opcji `share`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+Opcje:
+
+- `"manual"` – Zezwalaj na ręczne udostępnianie (domyślnie)
+- `"auto"` - Automatycznie udostępniaj nowe rozmowy
+- `"disabled"` - Całkowicie wyłącz udostępnianie
+
+Domyślnie ustawiony jest tryb ręczny, w którym należy jawnie udostępniać rozmowy za pomocą polecenia `/share`.
+
+---
+
+### Commands (Polecenia)
+
+Możesz zdefiniować niestandardowe polecenia dla powtarzalnych zadań za pomocą opcji `command`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+Możesz także definiować polecenia przy użyciu plików Markdown w `~/.config/opencode/commands/` lub `.opencode/commands/`. [Dowiedz się więcej o poleceniach](/docs/commands).
+
+---
+
+### Keybinds (Skróty klawiszowe)
+
+Możesz dostosować skróty klawiszowe za pomocą opcji `keybinds`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[Dowiedz się więcej o skrótach klawiszowych](/docs/keybinds).
+
+---
+
+### Autoupdate (Automatyczna aktualizacja)
+
+OpenCode może automatycznie pobierać nowe wersje. Możesz to kontrolować za pomocą opcji `autoupdate`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+Jeśli nie chcesz automatycznych aktualizacji, ale chcesz być powiadamiany o nowych wersjach, ustaw `autoupdate` na `"notify"`.
+Działa to tylko wtedy, gdy OpenCode nie został zainstalowany przez menedżera pakietów, takiego jak Homebrew.
+
+---
+
+### Formatters (Formatery)
+
+Możesz skonfigurować formatery kodu za pomocą opcji `formatter`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[Dowiedz się więcej o formaterach](/docs/formatters).
+
+---
+
+### Permissions (Uprawnienia)
+
+Domyślnie OpenCode **zezwala na wszystkie działania** bez konieczności zatwierdzania. Możesz to zmienić za pomocą opcji `permission`.
+
+Na przykład, aby wymagać zatwierdzenia dla narzędzi `edit` i `bash`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[Dowiedz się więcej o uprawnieniach](/docs/permissions).
+
+---
+
+### Compaction (Kompaktowanie)
+
+Możesz kontrolować zachowanie kompaktowania kontekstu za pomocą opcji `compaction`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - Automatycznie kompaktuj, gdy kontekst jest pełny (domyślnie: `true`).
+- `prune` - Usuń stare wyniki narzędzi, aby zaoszczędzić tokeny (domyślnie: `true`).
+
+---
+
+### Watcher (Obserwator)
+
+Skonfiguruj ignorowane wzorce plików dla obserwatora plików za pomocą `watcher`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+Wzorce są zgodne ze składnią glob. Użyj tej opcji, aby wykluczyć często zmieniające się lub duże katalogi z monitorowania.
+
+---
+
+### MCP Servers (Serwery MCP)
+
+Skonfiguruj serwery MCP, których chcesz używać, za pomocą opcji `mcp`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[Dowiedz się więcej o serwerach MCP](/docs/mcp-servers).
+
+---
+
+### Plugins (Wtyczki)
+
+[Wtyczki](/docs/plugins) rozszerzają OpenCode o niestandardowe narzędzia, hooki i integracje.
+
+Umieść pliki wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`. Możesz także załadować wtyczkę z npm za pomocą opcji `plugin`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[Dowiedz się więcej o wtyczkach](/docs/plugins).
+
+---
+
+### Instructions (Instrukcje)
+
+Określ pliki instrukcji dla modelu, używając opcji `instructions`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Załadowane pliki są dołączane do promptu systemowego. Obsługuje wzorce glob. [Dowiedz się więcej o zasadach](/docs/rules).
+
+---
+
+### Disabled Providers (Wyłączeni dostawcy)
+
+Zapobiegaj automatycznemu ładowaniu dostawców za pomocą opcji `disabled_providers`. Jest to przydatne, gdy chcesz wyłączyć niektórych dostawców, nawet jeśli masz dla nich dane uwierzytelniające.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers` ma pierwszeństwo przed `enabled_providers`.
+:::
+
+Opcja `disabled_providers` przyjmuje tablicę identyfikatorów dostawców. Gdy dostawca jest wyłączony:
+
+- Nie zostanie załadowany podczas startu.
+- Nie zostanie załadowany, nawet jeśli podasz klucz API za pomocą `/connect`.
+- Modele tego dostawcy nie pojawią się na liście wyboru modeli.
+
+---
+
+### Enabled Providers (Włączeni dostawcy)
+
+Możesz określić listę dozwolonych dostawców za pomocą `enabled_providers`. Po ustawieniu, tylko wymienieni dostawcy będą ładowani.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+Jest to przydatne, gdy chcesz ograniczyć użycie OpenCode tylko do określonych dostawców.
+
+:::note
+`disabled_providers` ma pierwszeństwo przed `enabled_providers`.
+:::
+
+Jeśli dostawca jest wymieniony zarówno w `enabled_providers`, jak i `disabled_providers`, `disabled_providers` wygrywa.
+
+---
+
+### Experimental (Eksperymentalne)
+
+Klucz `experimental` zawiera opcje, które są we wczesnej fazie rozwoju.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+Opcje eksperymentalne nie są stabilne. Mogą ulec zmianie lub zostać usunięte bez ostrzeżenia.
+:::
+
+---
+
+## Zmienne
+
+Możesz używać specjalnej składni w plikach konfiguracyjnych, aby odwoływać się do zmiennych środowiskowych i zawartości plików.
+
+---
+
+### Env vars (Zmienne środowiskowe)
+
+Użyj `{env:VARIABLE_NAME}`, aby wstawić wartość zmiennej środowiskowej:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Jeśli zmienna środowiskowa nie jest ustawiona, zostanie zastąpiona pustym ciągiem.
+
+---
+
+### Files (Pliki)
+
+Użyj `{file:path/to/file}`, aby wstawić zawartość pliku:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+Ścieżki plików mogą być:
+
+- Względne do pliku konfiguracyjnego
+- Lub absolutne, zaczynające się od `/` lub `~`
+
+Zalecamy używanie tego do:
+
+- Przechowywania wrażliwych danych, takich jak klucze API, w oddzielnych plikach.
+- Ładowania dużych promptów bez zaśmiecania konfiguracji.
+- Dzielenia fragmentów konfiguracji między wieloma plikami.
