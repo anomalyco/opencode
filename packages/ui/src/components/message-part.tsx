@@ -92,6 +92,7 @@ export interface MessageProps {
   message: MessageType
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  interrupted?: boolean
 }
 
 export interface MessagePartProps {
@@ -336,7 +337,13 @@ export function Message(props: MessageProps) {
   return (
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
+        {(userMessage) => (
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            interrupted={props.interrupted}
+          />
+        )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
@@ -498,7 +505,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; interrupted?: boolean }) {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
@@ -540,7 +547,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   return (
-    <div data-component="user-message">
+    <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -578,7 +585,12 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           <div data-slot="user-message-text">
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           </div>
-          <div data-slot="user-message-copy-wrapper">
+          <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
+            <Show when={props.interrupted}>
+              <span data-slot="user-message-interrupted" class="text-13-regular text-text-weak cursor-default">
+                {i18n.t("ui.message.interrupted")}
+              </span>
+            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"
@@ -839,6 +851,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = props.part as TextPart
+  const interrupted = createMemo(
+    () =>
+      props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
+  )
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
@@ -870,7 +886,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>
         <Show when={showCopy()}>
-          <div data-slot="text-part-copy-wrapper">
+          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+            <Show when={interrupted()}>
+              <span data-slot="text-part-interrupted" class="text-13-regular text-text-weak cursor-default">
+                {i18n.t("ui.message.interrupted")}
+              </span>
+            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"

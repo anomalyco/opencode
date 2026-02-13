@@ -23,6 +23,10 @@
   max-width: 100%;
   gap: 8px;
 
+  &[data-interrupted] {
+    color: var(--text-weak);
+  }
+
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
@@ -126,6 +130,10 @@
     }
   }
 
+  [data-slot="user-message-copy-wrapper"][data-interrupted] {
+    gap: 12px;
+  }
+
   &:hover [data-slot="user-message-copy-wrapper"],
   &:focus-within [data-slot="user-message-copy-wrapper"] {
     opacity: 1;
@@ -163,6 +171,12 @@
       display: inline-flex;
       width: fit-content;
     }
+  }
+
+  [data-slot="text-part-copy-wrapper"][data-interrupted] {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 12px;
   }
 
   &:hover [data-slot="text-part-copy-wrapper"],

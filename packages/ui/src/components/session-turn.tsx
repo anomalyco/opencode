@@ -200,7 +200,10 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const error = createMemo(
+    () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
+  )
   const showAssistantCopyPartID = createMemo(() => {
     const messages = assistantMessages()
 
@@ -264,7 +267,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
                 </div>
                 <Show when={working() && assistantVisible() === 0 && !error()}>
                   <div data-slot="session-turn-thinking">
