@@ -950,6 +950,14 @@ describe("session.message-v2.toModelMessage", () => {
 })
 
 describe("session.message-v2.fromError", () => {
+  test("classifies timeout DOMException as retryable APIError", () => {
+    const result = MessageV2.fromError(new DOMException("operation timed out", "TimeoutError"), { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toBe("operation timed out")
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+  })
+
   test("serializes context_length_exceeded as ContextOverflowError", () => {
     const input = {
       type: "error",
