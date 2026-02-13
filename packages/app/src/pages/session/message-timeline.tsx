@@ -4,7 +4,6 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
@@ -217,18 +216,22 @@ export function MessageTimeline(props: {
                   {(id) => (
                     <div class="shrink-0 flex items-center gap-3">
                       <SessionContextUsage placement="bottom" />
-                      <DropdownMenu open={props.titleState.menuOpen} onOpenChange={props.onTitleMenuOpen}>
-                        <Tooltip value={props.t("common.moreOptions")} placement="top">
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                            aria-label={props.t("common.moreOptions")}
-                          />
-                        </Tooltip>
+                      <DropdownMenu
+                        gutter={4}
+                        placement="bottom-end"
+                        open={props.titleState.menuOpen}
+                        onOpenChange={props.onTitleMenuOpen}
+                      >
+                        <DropdownMenu.Trigger
+                          as={IconButton}
+                          icon="dot-grid"
+                          variant="ghost"
+                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                          aria-label={props.t("common.moreOptions")}
+                        />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content
+                            style={{ "min-width": "104px" }}
                             onCloseAutoFocus={(event) => {
                               if (!props.titleState.pendingRename) return
                               event.preventDefault()
