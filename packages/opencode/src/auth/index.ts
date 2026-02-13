@@ -39,7 +39,7 @@ export namespace Auth {
       profiles: z.record(z.string(), Info),
       currentProfile: z.string().optional(),
     })
-    .meta({ ref: "Provider" })
+    .meta({ ref: "AuthProvider" })
   export type Provider = z.infer<typeof Provider>
 
   const ProviderOrInfo = z.union([Info, Provider])
