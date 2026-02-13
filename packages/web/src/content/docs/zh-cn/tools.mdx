@@ -45,9 +45,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### Bash
+### bash
 
-在专项任务环境中执行shell命令。
+在项目环境中执行shell命令。
 
 ```json title="opencode.json" {4}
 {
@@ -62,7 +62,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 编辑
+### edit
 
 使用精确的字符串替换来修改现有文件。
 
@@ -79,9 +79,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 写入
+### write
 
-创建新文件或覆盖现有文件。
+建立新文件或覆盖现有文件。
 
 ```json title="opencode.json" {4}
 {
@@ -100,7 +100,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 读取
+### read
 
 读取代码库中的文件内容。
 
@@ -134,7 +134,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 通配符
+### glob
 
 通过模式匹配查找文件。
 
@@ -151,9 +151,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 罗列
+### list
 
-列出给定路径下的文件和目录。
+列出给定路径中的文件和目录。
 
 ```json title="opencode.json" {4}
 {
@@ -191,7 +191,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 修补
+### patch
 
 对文件应用补丁。
 
@@ -212,7 +212,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 技能
+### skill
 
 加载[技能](/docs/skills)（`SKILL.md` 文件）并在对话中返回其内容。
 
@@ -227,7 +227,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 写入待办
+### todowrite
 
 在编码会话过程中管理待办事项列表。
 
@@ -248,7 +248,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 读取待办
+### todoread
 
 阅读现有的待办事项清单。
 
@@ -269,7 +269,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 网页获取
+### webfetch
 
 获取网页内容。
 
@@ -286,9 +286,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-### 网页搜索
+### websearch
 
-在网上搜索信息。
+在网络上搜索资料。
 
 :::note
 只有在使用 OpenCode 提供程序时，或者当 OPENCODE_ENABLE_EXA 环境变量被设置为任何真值（例如 true 或 1）时，此工具才可用。
@@ -320,7 +320,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ---
 
-### 提问
+### question
 
 在执行过程中向用户提问。
 
