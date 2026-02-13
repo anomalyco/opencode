@@ -118,9 +118,7 @@ export namespace HotReload {
     () => {
       if (!Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD) return {}
 
-      const debounce = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_DEBOUNCE_MS ?? 700
       const cooldown = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_COOLDOWN_MS ?? 1500
-      const mode = Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD_MODE === "manual" ? "manual" : "auto"
       let timer: ReturnType<typeof setTimeout> | undefined
       let busy = false
       let last = 0
@@ -140,11 +138,6 @@ export namespace HotReload {
         await Skill.reset()
         await Agent.reset()
         await Command.reset()
-      }
-
-      const schedule = () => {
-        if (timer) clearTimeout(timer)
-        timer = setTimeout(() => flush("timer"), debounce)
       }
 
       const flush = (reason: "timer" | "session" | "api") => {
@@ -193,16 +186,14 @@ export namespace HotReload {
             busy = false
             if (!latest) return
             if (timer) clearTimeout(timer)
-            timer = setTimeout(() => flush("timer"), debounce)
+            timer = setTimeout(() => flush("timer"), 0)
           })
         return { ok: true, queued: false, sessions }
       }
 
-      const request = (hit: { file: string; event: "add" | "change" | "unlink" }, mode: "file" | "api") => {
+      const request = (hit: { file: string; event: "add" | "change" | "unlink" }) => {
         latest = hit
-        if (mode === "api") return flush("api")
-        schedule()
-        return { ok: true, queued, sessions: active() }
+        return flush("api")
       }
 
       const unsubFile = Bus.subscribe(FileWatcher.Event.Updated, (event) => {
@@ -215,8 +206,6 @@ export namespace HotReload {
         } as const
 
         void Bus.publish(Event.Changed, hit)
-        if (mode === "manual") return
-        void request(hit, "file")
       })
 
       const unsubSession = Bus.subscribe(SessionStatus.Event.Status, () => {
@@ -225,7 +214,7 @@ export namespace HotReload {
         timer = setTimeout(() => flush("session"), 0)
       })
 
-      log.info("hot reload enabled", { debounce, cooldown, mode })
+      log.info("hot reload enabled", { cooldown, mode: "manual" })
       return {
         unsubFile,
         unsubSession,
@@ -256,7 +245,7 @@ export namespace HotReload {
     }
     const file = input?.file?.trim() || "api"
     const event = input?.event || "change"
-    const result = req({ file, event }, "api")
+    const result = req({ file, event })
     return { ...result, enabled: true }
   }
 }
