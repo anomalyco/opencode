@@ -75,7 +75,6 @@ export function Header() {
   })
 
   const currentIndex = createMemo(() => siblings().findIndex((x) => x.id === session()?.id))
-  const total = createMemo(() => siblings().length)
 
   return (
     <box flexShrink={0}>
@@ -95,10 +94,13 @@ export function Header() {
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
                 <text fg={theme.text}>
-                  <b>Subagent session</b>{" "}
-                  <span style={{ fg: theme.textMuted }}>
-                    {currentIndex() + 1} / {total()}
-                  </span>
+                  <b>Subagent session</b>
+                  <Show when={currentIndex() >= 0}>
+                    {" "}
+                    <span style={{ fg: theme.textMuted }}>
+                      {currentIndex() + 1} / {siblings().length}
+                    </span>
+                  </Show>
                 </text>
                 <ContextInfo context={context} cost={cost} />
               </box>
