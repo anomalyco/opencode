@@ -66,7 +66,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const session = await iife(async () => {
         if (params.task_id) {
           const found = await Session.get(params.task_id).catch(() => {})
-          if (found) return found
+          if (found) {
+            // Guard: verify session ownership — prevents cross-session hijacking.
+            // A resumed session must belong to the calling session.
+            if (found.parentID && found.parentID !== ctx.sessionID) {
+              throw new Error(
+                `Session ${params.task_id} belongs to parent ${found.parentID}, ` +
+                  `not ${ctx.sessionID}. Cross-session resume rejected.`,
+              )
+            }
+            return found
+          }
         }
 
         return await Session.create({
@@ -103,10 +113,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+      // Guard: reject model fallback to parent — prevents governance bypass.
+      // If agent.model is undefined, the old code fell back to the parent's
+      // model (msg.info.modelID), silently routing e.g. a backend/codex agent
+      // through the parent's opus. This violates cross-family review rules.
+      // See: #6636, #11699.
+      if (!agent.model) {
+        throw new Error(
+          `Agent "${agent.name}" has no model configured in opencode.json. ` +
+            `Refusing to fall back to parent model (${msg.info.providerID}/${msg.info.modelID}) — governance bypass.`,
+        )
       }
+      const model = agent.model
 
       ctx.metadata({
         title: params.description,
@@ -143,7 +161,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      const text = result.parts.findLast((x: { type: string }) => x.type === "text")?.text ?? ""
 
       const output = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,

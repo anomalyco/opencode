@@ -195,6 +195,7 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+      status?: "success" | "error"
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (

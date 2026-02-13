@@ -349,7 +349,6 @@ export namespace SessionPrompt {
       const task = tasks.pop()
 
       // pending subtask
-      // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
@@ -404,17 +403,6 @@ export namespace SessionPrompt {
           subagent_type: task.agent,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-            agent: lastUser.agent,
-            parentAgent: lastUser.parentAgent,
-          },
-          { args: taskArgs },
-        )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
         const taskCtx: Tool.Context = {
@@ -444,7 +432,12 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
+        const result = await Tool.invoke({
+          tool: "task",
+          args: taskArgs,
+          ctx: { sessionID, callID: part.id, agent: lastUser.agent, parentAgent: lastUser.parentAgent },
+          fn: () => taskTool.execute(taskArgs, taskCtx),
+        }).catch((error) => {
           executionError = error
           log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
           return undefined
@@ -455,18 +448,6 @@ export namespace SessionPrompt {
           sessionID,
           messageID: assistantMessage.id,
         }))
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-            args: taskArgs,
-            agent: lastUser.agent,
-            parentAgent: lastUser.parentAgent,
-          },
-          result,
-        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -798,42 +779,21 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              agent: ctx.agent,
-              parentAgent: ctx.parentAgent,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, ctx)
-          const output = {
-            ...result,
-            attachments: result.attachments?.map((attachment) => ({
+          const result = await Tool.invoke({
+            tool: item.id,
+            args,
+            ctx,
+            fn: () => item.execute(args, ctx),
+          })
+          return {
+            ...result!,
+            attachments: result?.attachments?.map((attachment) => ({
               ...attachment,
               id: Identifier.ascending("part"),
               sessionID: ctx.sessionID,
               messageID: input.processor.message.id,
             })),
           }
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              args,
-              agent: ctx.agent,
-              parentAgent: ctx.parentAgent,
-            },
-            output,
-          )
-          return output
         },
       })
     }
@@ -848,89 +808,69 @@ export namespace SessionPrompt {
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            agent: ctx.agent,
-            parentAgent: ctx.parentAgent,
-          },
-          {
-            args,
-          },
-        )
-
-        await ctx.ask({
-          permission: key,
-          metadata: {},
-          patterns: ["*"],
-          always: ["*"],
-        })
-
-        const result = await execute(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            args,
-            agent: ctx.agent,
-            parentAgent: ctx.parentAgent,
-          },
-          result,
-        )
-
-        const textParts: string[] = []
-        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
-
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+        return Tool.invoke({
+          tool: key,
+          args,
+          ctx,
+          async fn() {
+            await ctx.ask({
+              permission: key,
+              metadata: {},
+              patterns: ["*"],
+              always: ["*"],
             })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
-              attachments.push({
-                type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
-              })
-            }
-          }
-        }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
+            const result = await execute(args, opts)
 
-        return {
-          title: "",
-          metadata,
-          output: truncated.content,
-          attachments: attachments.map((attachment) => ({
-            ...attachment,
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: input.processor.message.id,
-          })),
-          content: result.content, // directly return content to preserve ordering when outputting to model
-        }
+            const textParts: string[] = []
+            const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+
+            for (const contentItem of result.content) {
+              if (contentItem.type === "text") {
+                textParts.push(contentItem.text)
+              } else if (contentItem.type === "image") {
+                attachments.push({
+                  type: "file",
+                  mime: contentItem.mimeType,
+                  url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+                })
+              } else if (contentItem.type === "resource") {
+                const { resource } = contentItem
+                if (resource.text) {
+                  textParts.push(resource.text)
+                }
+                if (resource.blob) {
+                  attachments.push({
+                    type: "file",
+                    mime: resource.mimeType ?? "application/octet-stream",
+                    url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
+                }
+              }
+            }
+
+            const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+            const metadata = {
+              ...(result.metadata ?? {}),
+              truncated: truncated.truncated,
+              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+            }
+
+            return {
+              title: "",
+              metadata,
+              output: truncated.content,
+              attachments: attachments.map((attachment) => ({
+                ...attachment,
+                id: Identifier.ascending("part"),
+                sessionID: ctx.sessionID,
+                messageID: input.processor.message.id,
+              })),
+              content: result.content, // directly return content to preserve ordering when outputting to model
+            }
+          },
+        })
       }
       tools[key] = item
     }

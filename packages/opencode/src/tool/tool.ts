@@ -25,6 +25,7 @@ export namespace Tool {
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
   }
+
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
     init: (ctx?: InitContext) => Promise<{
@@ -43,8 +44,53 @@ export namespace Tool {
     }>
   }
 
+  // resolved return type of a tool's execute() function
+  export type Result = Awaited<ReturnType<Awaited<ReturnType<Info["init"]>>["execute"]>>
+
   export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
   export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
+
+  // lazy-cached to avoid circular dep: tool.ts -> plugin -> session -> tool.ts
+  let plugin: typeof import("../plugin") | undefined
+
+  // wraps tool execution with plugin before/after hooks
+  export async function invoke(input: {
+    tool: string
+    args: unknown
+    ctx: { sessionID: string; callID?: string; agent: string; parentAgent?: string }
+    fn: () => Promise<Result>
+  }) {
+    plugin ??= await import("../plugin")
+    const hook = {
+      tool: input.tool,
+      sessionID: input.ctx.sessionID,
+      callID: input.ctx.callID ?? "",
+      agent: input.ctx.agent,
+      parentAgent: input.ctx.parentAgent,
+    }
+    await plugin.Plugin.trigger("tool.execute.before", hook, { args: input.args })
+    try {
+      const result = await input.fn()
+      await plugin.Plugin.trigger(
+        "tool.execute.after",
+        { ...hook, args: input.args },
+        { ...result, status: "success" as const },
+      )
+      return result
+    } catch (error) {
+      await plugin.Plugin.trigger(
+        "tool.execute.after",
+        { ...hook, args: input.args },
+        {
+          title: "",
+          output: "",
+          metadata: { error: error instanceof Error ? error.message : String(error) },
+          status: "error" as const,
+        },
+      )
+      throw error
+    }
+  }
 
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,

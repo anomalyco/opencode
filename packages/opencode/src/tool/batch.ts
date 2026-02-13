@@ -76,8 +76,13 @@ export const BatchTool = Tool.define("batch", async () => {
             },
           })
 
-          const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
-          const attachments = result.attachments?.map((attachment) => ({
+          const result = await Tool.invoke({
+            tool: call.tool,
+            args: validatedParams,
+            ctx: { ...ctx, callID: partID },
+            fn: () => tool.execute(validatedParams, { ...ctx, callID: partID }),
+          })
+          const attachments = result?.attachments?.map((attachment) => ({
             ...attachment,
             id: Identifier.ascending("part"),
             sessionID: ctx.sessionID,
