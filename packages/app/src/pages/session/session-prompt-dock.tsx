@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { BasicTool } from "@opencode-ai/ui/basic-tool"
@@ -24,6 +24,78 @@ export function SessionPromptDock(props: {
   onSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
+  const done = createMemo(
+    () =>
+      props.todos.length > 0 && props.todos.every((todo) => todo.status === "completed" || todo.status === "cancelled"),
+  )
+
+  const [dock, setDock] = createSignal(props.todos.length > 0)
+  const [closing, setClosing] = createSignal(false)
+  const [opening, setOpening] = createSignal(false)
+  let timer: number | undefined
+  let raf: number | undefined
+
+  createEffect(() => {
+    if (timer) window.clearTimeout(timer)
+    if (raf) cancelAnimationFrame(raf)
+
+    if (props.todos.length === 0) {
+      setDock(false)
+      setClosing(false)
+      setOpening(false)
+      timer = undefined
+      raf = undefined
+      return
+    }
+
+    if (!done()) {
+      const wasHidden = !dock() || closing()
+      setDock(true)
+      setClosing(false)
+      if (wasHidden) {
+        setOpening(true)
+        raf = requestAnimationFrame(() => {
+          setOpening(false)
+          raf = undefined
+        })
+      } else {
+        setOpening(false)
+        raf = undefined
+      }
+      timer = undefined
+      return
+    }
+
+    setDock(true)
+    setOpening(false)
+    raf = undefined
+    if (!closing()) {
+      setClosing(true)
+      timer = window.setTimeout(() => {
+        setDock(false)
+        setClosing(false)
+        timer = undefined
+      }, 400)
+      return
+    }
+
+    timer = window.setTimeout(() => {
+      setDock(false)
+      setClosing(false)
+      timer = undefined
+    }, 400)
+  })
+
+  onCleanup(() => {
+    if (!timer) return
+    window.clearTimeout(timer)
+  })
+
+  onCleanup(() => {
+    if (!raf) return
+    cancelAnimationFrame(raf)
+  })
+
   return (
     <div
       ref={props.setPromptDockRef}
@@ -124,18 +196,30 @@ export function SessionPromptDock(props: {
               </div>
             }
           >
-            <Show when={props.todos.length > 0}>
-              <SessionTodoDock
-                todos={props.todos}
-                title={props.t("session.todo.title")}
-                collapseLabel={props.t("session.todo.collapse")}
-                expandLabel={props.t("session.todo.expand")}
-              />
+            <Show when={dock()}>
+              <div
+                classList={{
+                  "transition-[max-height,opacity,transform] duration-[400ms] ease-out overflow-hidden": true,
+                  "max-h-[320px]": !closing(),
+                  "max-h-0 pointer-events-none": closing(),
+                  "opacity-0 translate-y-9": closing() || opening(),
+                  "opacity-100 translate-y-0": !closing() && !opening(),
+                }}
+              >
+                <SessionTodoDock
+                  todos={props.todos}
+                  title={props.t("session.todo.title")}
+                  collapseLabel={props.t("session.todo.collapse")}
+                  expandLabel={props.t("session.todo.expand")}
+                />
+              </div>
             </Show>
             <div
               classList={{
                 "relative z-10": true,
-                "-mt-9": props.todos.length > 0,
+                "transition-[margin] duration-[400ms] ease-out": true,
+                "-mt-9": dock() && !closing(),
+                "mt-0": !dock() || closing(),
               }}
             >
               <PromptInput
