@@ -15,12 +15,10 @@ export const dict = {
   "command.category.agent": "エージェント",
   "command.category.permissions": "権限",
   "command.category.workspace": "ワークスペース",
-
   "command.category.settings": "設定",
   "theme.scheme.system": "システム",
   "theme.scheme.light": "ライト",
   "theme.scheme.dark": "ダーク",
-
   "command.sidebar.toggle": "サイドバーの切り替え",
   "command.project.open": "プロジェクトを開く",
   "command.provider.connect": "プロバイダーに接続",
@@ -31,17 +29,13 @@ export const dict = {
   "command.session.previous.unseen": "前の未読セッション",
   "command.session.next.unseen": "次の未読セッション",
   "command.session.archive": "セッションをアーカイブ",
-
   "command.palette": "コマンドパレット",
-
   "command.theme.cycle": "テーマの切り替え",
   "command.theme.set": "テーマを使用: {{theme}}",
   "command.theme.scheme.cycle": "配色の切り替え",
   "command.theme.scheme.set": "配色を使用: {{scheme}}",
-
   "command.language.cycle": "言語の切り替え",
   "command.language.set": "言語を使用: {{language}}",
-
   "command.session.new": "新しいセッション",
   "command.file.open": "ファイルを開く",
   "command.tab.close": "タブを閉じる",
@@ -72,6 +66,7 @@ export const dict = {
   "command.permissions.autoaccept.enable": "編集を自動承認",
   "command.permissions.autoaccept.disable": "編集の自動承認を停止",
   "command.workspace.toggle": "ワークスペースを切り替え",
+  "command.workspace.toggle.description": "サイドバーでの複数のワークスペースの有効化・無効化",
   "command.session.undo": "元に戻す",
   "command.session.undo.description": "最後のメッセージを元に戻す",
   "command.session.redo": "やり直す",
@@ -84,32 +79,30 @@ export const dict = {
   "command.session.share.description": "このセッションを共有しURLをクリップボードにコピー",
   "command.session.unshare": "セッションの共有を停止",
   "command.session.unshare.description": "このセッションの共有を停止",
-
   "palette.search.placeholder": "ファイル、コマンド、セッションを検索",
   "palette.empty": "結果が見つかりません",
   "palette.group.commands": "コマンド",
   "palette.group.files": "ファイル",
-
   "dialog.provider.search.placeholder": "プロバイダーを検索",
   "dialog.provider.empty": "プロバイダーが見つかりません",
   "dialog.provider.group.popular": "人気",
   "dialog.provider.group.other": "その他",
   "dialog.provider.tag.recommended": "推奨",
+  "dialog.provider.opencode.note": "Claude, GPT, Geminiなどを含む厳選されたモデル",
   "dialog.provider.anthropic.note": "Claude Pro/MaxまたはAPIキーで接続",
-  "dialog.provider.openai.note": "ChatGPT Pro/PlusまたはAPIキーで接続",
   "dialog.provider.copilot.note": "CopilotまたはAPIキーで接続",
-
+  "dialog.provider.openai.note": "ChatGPT Pro/PlusまたはAPIキーで接続",
+  "dialog.provider.google.note": "高速で構造化された応答のためのGeminiモデル",
+  "dialog.provider.openrouter.note": "1つのプロバイダーからすべてのサポートされているモデルにアクセス",
+  "dialog.provider.vercel.note": "スマートルーターによるAIモデルへの統合アクセス",
   "dialog.model.select.title": "モデルを選択",
   "dialog.model.search.placeholder": "モデルを検索",
   "dialog.model.empty": "モデルが見つかりません",
   "dialog.model.manage": "モデルを管理",
   "dialog.model.manage.description": "モデルセレクターに表示するモデルをカスタマイズします。",
-
   "dialog.model.unpaid.freeModels.title": "OpenCodeが提供する無料モデル",
   "dialog.model.unpaid.addMore.title": "人気のプロバイダーからモデルを追加",
-
   "dialog.provider.viewAll": "さらにプロバイダーを表示",
-
   "provider.connect.title": "{{provider}}を接続",
   "provider.connect.title.anthropicProMax": "Claude Pro/Maxでログイン",
   "provider.connect.selectMethod": "{{provider}}のログイン方法を選択してください。",
@@ -143,12 +136,46 @@ export const dict = {
   "provider.connect.oauth.auto.confirmationCode": "確認コード",
   "provider.connect.toast.connected.title": "{{provider}}が接続されました",
   "provider.connect.toast.connected.description": "{{provider}}モデルが使用可能になりました。",
-
+  "provider.custom.title": "カスタムプロバイダー",
+  "provider.custom.description.prefix": "OpenAI互換のプロバイダーを設定します。詳細は",
+  "provider.custom.description.link": "プロバイダー設定ドキュメント",
+  "provider.custom.description.suffix": "をご覧ください。",
+  "provider.custom.field.providerID.label": "プロバイダーID",
+  "provider.custom.field.providerID.placeholder": "myprovider",
+  "provider.custom.field.providerID.description": "小文字、数字、ハイフン、アンダースコア",
+  "provider.custom.field.name.label": "表示名",
+  "provider.custom.field.name.placeholder": "My AI Provider",
+  "provider.custom.field.baseURL.label": "ベースURL",
+  "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
+  "provider.custom.field.apiKey.label": "APIキー",
+  "provider.custom.field.apiKey.placeholder": "APIキー",
+  "provider.custom.field.apiKey.description": "オプション。ヘッダーで認証を管理する場合は空のままにしてください。",
+  "provider.custom.models.label": "モデル",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "model-id",
+  "provider.custom.models.name.label": "名前",
+  "provider.custom.models.name.placeholder": "表示名",
+  "provider.custom.models.remove": "モデルを削除",
+  "provider.custom.models.add": "モデルを追加",
+  "provider.custom.headers.label": "ヘッダー (オプション)",
+  "provider.custom.headers.key.label": "ヘッダー",
+  "provider.custom.headers.key.placeholder": "Header-Name",
+  "provider.custom.headers.value.label": "値",
+  "provider.custom.headers.value.placeholder": "value",
+  "provider.custom.headers.remove": "ヘッダーを削除",
+  "provider.custom.headers.add": "ヘッダーを追加",
+  "provider.custom.error.providerID.required": "プロバイダーIDが必要です",
+  "provider.custom.error.providerID.format": "小文字、数字、ハイフン、アンダースコアを使用してください",
+  "provider.custom.error.providerID.exists": "そのプロバイダーIDは既に存在します",
+  "provider.custom.error.name.required": "表示名が必要です",
+  "provider.custom.error.baseURL.required": "ベースURLが必要です",
+  "provider.custom.error.baseURL.format": "http:// または https:// で始まる必要があります",
+  "provider.custom.error.required": "必須",
+  "provider.custom.error.duplicate": "重複",
   "provider.disconnect.toast.disconnected.title": "{{provider}}が切断されました",
   "provider.disconnect.toast.disconnected.description": "{{provider}}のモデルは利用できなくなりました。",
   "model.tag.free": "無料",
   "model.tag.latest": "最新",
-
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
@@ -165,6 +192,7 @@ export const dict = {
   "model.tooltip.context": "コンテキスト上限 {{limit}}",
   "common.search.placeholder": "検索",
   "common.goBack": "戻る",
+  "common.goForward": "進む",
   "common.loading": "読み込み中",
   "common.loading.ellipsis": "...",
   "common.cancel": "キャンセル",
@@ -175,14 +203,12 @@ export const dict = {
   "common.saving": "保存中...",
   "common.default": "デフォルト",
   "common.attachment": "添付ファイル",
-
   "prompt.placeholder.shell": "シェルコマンドを入力...",
   "prompt.placeholder.normal": '何でも聞いてください... "{{example}}"',
   "prompt.placeholder.summarizeComments": "コメントを要約…",
   "prompt.placeholder.summarizeComment": "コメントを要約…",
-  "prompt.mode.shell": "Shell",
+  "prompt.mode.shell": "シェル",
   "prompt.mode.shell.exit": "escで終了",
-
   "prompt.example.1": "コードベースのTODOを修正",
   "prompt.example.2": "このプロジェクトの技術スタックは何ですか？",
   "prompt.example.3": "壊れたテストを修正",
@@ -208,7 +234,6 @@ export const dict = {
   "prompt.example.23": "このリストにページネーションを追加",
   "prompt.example.24": "〜のCLIコマンドを作成",
   "prompt.example.25": "ここでは環境変数はどう機能しますか？",
-
   "prompt.popover.emptyResults": "一致する結果がありません",
   "prompt.popover.emptyCommands": "一致するコマンドがありません",
   "prompt.dropzone.label": "画像またはPDFをここにドロップ",
@@ -224,7 +249,6 @@ export const dict = {
   "prompt.attachment.remove": "添付ファイルを削除",
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
-
   "prompt.toast.pasteUnsupported.title": "サポートされていない貼り付け",
   "prompt.toast.pasteUnsupported.description": "ここでは画像またはPDFのみ貼り付け可能です。",
   "prompt.toast.modelAgentRequired.title": "エージェントとモデルを選択",
@@ -235,24 +259,18 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "コマンドの送信に失敗しました",
   "prompt.toast.promptSendFailed.title": "プロンプトの送信に失敗しました",
   "prompt.toast.promptSendFailed.description": "セッションを取得できませんでした",
-
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}個中{{enabled}}個が有効",
   "dialog.mcp.empty": "MCPが設定されていません",
-
   "dialog.lsp.empty": "ファイルタイプから自動検出されたLSP",
   "dialog.plugins.empty": "opencode.jsonで設定されたプラグイン",
-
   "mcp.status.connected": "接続済み",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "認証が必要",
   "mcp.status.disabled": "無効",
-
   "dialog.fork.empty": "フォーク元のメッセージがありません",
-
   "dialog.directory.search.placeholder": "フォルダを検索",
   "dialog.directory.empty": "フォルダが見つかりません",
-
   "dialog.server.title": "サーバー",
   "dialog.server.description": "このアプリが接続するOpenCodeサーバーを切り替えます。",
   "dialog.server.search.placeholder": "サーバーを検索",
@@ -270,14 +288,12 @@ export const dict = {
   "dialog.server.default.set": "現在のサーバーをデフォルトに設定",
   "dialog.server.default.clear": "クリア",
   "dialog.server.action.remove": "サーバーを削除",
-
   "dialog.server.menu.edit": "編集",
   "dialog.server.menu.default": "デフォルトに設定",
   "dialog.server.menu.defaultRemove": "デフォルト設定を解除",
   "dialog.server.menu.delete": "削除",
   "dialog.server.current": "現在のサーバー",
   "dialog.server.status.default": "デフォルト",
-
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.name": "名前",
   "dialog.project.edit.icon": "アイコン",
@@ -286,7 +302,6 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "推奨: 128x128px",
   "dialog.project.edit.color": "色",
   "dialog.project.edit.color.select": "{{color}}の色を選択",
-
   "dialog.project.edit.worktree.startup": "ワークスペース起動スクリプト",
   "dialog.project.edit.worktree.startup.description":
     "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
@@ -298,10 +313,8 @@ export const dict = {
   "context.breakdown.assistant": "アシスタント",
   "context.breakdown.tool": "ツール呼び出し",
   "context.breakdown.other": "その他",
-
   "context.systemPrompt.title": "システムプロンプト",
   "context.rawMessages.title": "生のメッセージ",
-
   "context.stats.session": "セッション",
   "context.stats.messages": "メッセージ",
   "context.stats.provider": "プロバイダー",
@@ -318,29 +331,42 @@ export const dict = {
   "context.stats.totalCost": "総コスト",
   "context.stats.sessionCreated": "セッション作成日時",
   "context.stats.lastActivity": "最終アクティビティ",
-
   "context.usage.tokens": "トークン",
   "context.usage.usage": "使用量",
   "context.usage.cost": "コスト",
   "context.usage.clickToView": "クリックしてコンテキストを表示",
   "context.usage.view": "コンテキスト使用量を表示",
-
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
+  "language.th": "ไทย",
   "toast.language.title": "言語",
   "toast.language.description": "{{language}}に切り替えました",
-
   "toast.theme.title": "テーマが切り替わりました",
   "toast.scheme.title": "配色",
-
+  "toast.workspace.enabled.title": "ワークスペースが有効になりました",
+  "toast.workspace.enabled.description": "サイドバーに複数のワークツリーが表示されます",
+  "toast.workspace.disabled.title": "ワークスペースが無効になりました",
+  "toast.workspace.disabled.description": "サイドバーにはメインのワークツリーのみが表示されます",
   "toast.permissions.autoaccept.on.title": "編集を自動承認中",
   "toast.permissions.autoaccept.on.description": "編集と書き込みの権限は自動的に承認されます",
   "toast.permissions.autoaccept.off.title": "編集の自動承認を停止しました",
   "toast.permissions.autoaccept.off.description": "編集と書き込みの権限には承認が必要です",
-
   "toast.model.none.title": "モデルが選択されていません",
   "toast.model.none.description": "このセッションを要約するにはプロバイダーを接続してください",
-
   "toast.file.loadFailed.title": "ファイルの読み込みに失敗しました",
-
   "toast.file.listFailed.title": "ファイル一覧の取得に失敗しました",
   "toast.context.noLineSelection.title": "行が選択されていません",
   "toast.context.noLineSelection.description": "まずファイルタブで行範囲を選択してください。",
@@ -349,19 +375,15 @@ export const dict = {
   "toast.session.share.success.description": "共有URLをクリップボードにコピーしました！",
   "toast.session.share.failed.title": "セッションの共有に失敗しました",
   "toast.session.share.failed.description": "セッションの共有中にエラーが発生しました",
-
   "toast.session.unshare.success.title": "セッションの共有を解除しました",
   "toast.session.unshare.success.description": "セッションの共有解除に成功しました！",
   "toast.session.unshare.failed.title": "セッションの共有解除に失敗しました",
   "toast.session.unshare.failed.description": "セッションの共有解除中にエラーが発生しました",
-
   "toast.session.listFailed.title": "{{project}}のセッション読み込みに失敗しました",
-
   "toast.update.title": "アップデートが利用可能です",
   "toast.update.description": "OpenCodeの新しいバージョン ({{version}}) がインストール可能です。",
   "toast.update.action.installRestart": "インストールして再起動",
   "toast.update.action.notYet": "今はしない",
-
   "error.page.title": "問題が発生しました",
   "error.page.description": "アプリケーションの読み込み中にエラーが発生しました。",
   "error.page.details.label": "エラー詳細",
@@ -372,12 +394,10 @@ export const dict = {
   "error.page.report.prefix": "このエラーをOpenCodeチームに報告してください: ",
   "error.page.report.discord": "Discord",
   "error.page.version": "バージョン: {{version}}",
-
   "error.dev.rootNotFound":
     "ルート要素が見つかりません。index.htmlに追加するのを忘れていませんか？またはid属性のスペルが間違っていませんか？",
-
   "error.globalSync.connectFailed": "サーバーに接続できませんでした。`{{url}}`でサーバーが実行されていますか？",
-
+  "directory.error.invalidUrl": "URL内のディレクトリが無効です。",
   "error.chain.unknown": "不明なエラー",
   "error.chain.causedBy": "原因:",
   "error.chain.apiError": "APIエラー",
@@ -398,21 +418,17 @@ export const dict = {
   "error.chain.configFrontmatterError": "{{path}} のフロントマターの解析に失敗しました:\n{{message}}",
   "error.chain.configInvalid": "{{path}} の設定ファイルが無効です",
   "error.chain.configInvalidWithMessage": "{{path}} の設定ファイルが無効です: {{message}}",
-
   "notification.permission.title": "権限が必要です",
   "notification.permission.description": "{{projectName}} の {{sessionTitle}} が権限を必要としています",
   "notification.question.title": "質問",
   "notification.question.description": "{{projectName}} の {{sessionTitle}} から質問があります",
   "notification.action.goToSession": "セッションへ移動",
-
   "notification.session.responseReady.title": "応答の準備ができました",
   "notification.session.error.title": "セッションエラー",
   "notification.session.error.fallbackDescription": "エラーが発生しました",
-
   "home.recentProjects": "最近のプロジェクト",
   "home.empty.title": "最近のプロジェクトはありません",
   "home.empty.description": "ローカルプロジェクトを開いて始めましょう",
-
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
   "session.tab.context": "コンテキスト",
@@ -430,18 +446,19 @@ export const dict = {
   "session.messages.loadingEarlier": "以前のメッセージを読み込み中...",
   "session.messages.loadEarlier": "以前のメッセージを読み込む",
   "session.messages.loading": "メッセージを読み込み中...",
-
   "session.messages.jumpToLatest": "最新へジャンプ",
   "session.context.addToContext": "{{selection}}をコンテキストに追加",
-
   "session.new.worktree.main": "メインブランチ",
   "session.new.worktree.mainWithBranch": "メインブランチ ({{branch}})",
   "session.new.worktree.create": "新しいワークツリーを作成",
   "session.new.lastModified": "最終更新",
-
   "session.header.search.placeholder": "{{project}}を検索",
   "session.header.searchFiles": "ファイルを検索",
-
+  "session.header.openIn": "で開く",
+  "session.header.open.action": "{{app}}を開く",
+  "session.header.open.ariaLabel": "{{app}}で開く",
+  "session.header.open.menu": "開くオプション",
+  "session.header.open.copyPath": "パスをコピー",
   "status.popover.trigger": "ステータス",
   "status.popover.ariaLabel": "サーバー設定",
   "status.popover.tab.servers": "サーバー",
@@ -449,7 +466,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "プラグイン",
   "status.popover.action.manageServers": "サーバーを管理",
-
   "session.share.popover.title": "ウェブで公開",
   "session.share.popover.description.shared":
     "このセッションはウェブで公開されています。リンクを知っている人なら誰でもアクセスできます。",
@@ -463,16 +479,13 @@ export const dict = {
   "session.share.action.view": "表示",
   "session.share.copy.copied": "コピーしました",
   "session.share.copy.copyLink": "リンクをコピー",
-
   "lsp.tooltip.none": "LSPサーバーなし",
   "lsp.label.connected": "{{count}} LSP",
-
   "prompt.loading": "プロンプトを読み込み中...",
   "terminal.loading": "ターミナルを読み込み中...",
   "terminal.title": "ターミナル",
   "terminal.title.numbered": "ターミナル {{number}}",
   "terminal.close": "ターミナルを閉じる",
-
   "terminal.connectionLost.title": "接続が失われました",
   "terminal.connectionLost.description":
     "ターミナルの接続が中断されました。これはサーバーが再起動したときに発生することがあります。",
@@ -488,7 +501,6 @@ export const dict = {
   "common.close": "閉じる",
   "common.edit": "編集",
   "common.loadMore": "さらに読み込む",
-
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "メニューを切り替え",
   "sidebar.nav.projectsAndSessions": "プロジェクトとセッション",
@@ -501,18 +513,19 @@ export const dict = {
   "sidebar.gettingStarted.line2": "プロバイダーを接続して、Claude、GPT、Geminiなどのモデルを使用できます。",
   "sidebar.project.recentSessions": "最近のセッション",
   "sidebar.project.viewAllSessions": "すべてのセッションを表示",
-
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "デスクトップ",
   "settings.section.server": "サーバー",
   "settings.tab.general": "一般",
   "settings.tab.shortcuts": "ショートカット",
-
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL統合",
+  "settings.desktop.wsl.description": "Windows上のWSL内でOpenCodeサーバーを実行します。",
   "settings.general.section.appearance": "外観",
   "settings.general.section.notifications": "システム通知",
   "settings.general.section.updates": "アップデート",
   "settings.general.section.sounds": "効果音",
-
+  "settings.general.section.display": "ディスプレイ",
   "settings.general.row.language.title": "言語",
   "settings.general.row.language.description": "OpenCodeの表示言語を変更します",
   "settings.general.row.appearance.title": "外観",
@@ -521,10 +534,12 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
-
+  "settings.general.row.wayland.title": "ネイティブWaylandを使用",
+  "settings.general.row.wayland.description": "WaylandでのX11フォールバックを無効にします。再起動が必要です。",
+  "settings.general.row.wayland.tooltip":
+    "リフレッシュレートが混在するモニターを使用しているLinuxでは、ネイティブWaylandの方が安定する場合があります。",
   "settings.general.row.releaseNotes.title": "リリースノート",
   "settings.general.row.releaseNotes.description": "アップデート後に「新機能」ポップアップを表示",
-
   "settings.updates.row.startup.title": "起動時にアップデートを確認",
   "settings.updates.row.startup.description": "OpenCode の起動時に自動でアップデートを確認します",
   "settings.updates.row.check.title": "アップデートを確認",
@@ -533,7 +548,6 @@ export const dict = {
   "settings.updates.action.checking": "確認中...",
   "settings.updates.toast.latest.title": "最新です",
   "settings.updates.toast.latest.description": "OpenCode は最新バージョンです。",
-
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -598,14 +612,12 @@ export const dict = {
   "settings.general.notifications.permissions.description": "権限が必要な場合にシステム通知を表示します",
   "settings.general.notifications.errors.title": "エラー",
   "settings.general.notifications.errors.description": "エラーが発生した場合にシステム通知を表示します",
-
   "settings.general.sounds.agent.title": "エージェント",
   "settings.general.sounds.agent.description": "エージェントが完了したか、注意が必要な場合に音を再生します",
   "settings.general.sounds.permissions.title": "権限",
   "settings.general.sounds.permissions.description": "権限が必要な場合に音を再生します",
   "settings.general.sounds.errors.title": "エラー",
   "settings.general.sounds.errors.description": "エラーが発生した場合に音を再生します",
-
   "settings.shortcuts.title": "キーボードショートカット",
   "settings.shortcuts.reset.button": "デフォルトにリセット",
   "settings.shortcuts.reset.toast.title": "ショートカットをリセットしました",
@@ -616,14 +628,12 @@ export const dict = {
   "settings.shortcuts.pressKeys": "キーを押してください",
   "settings.shortcuts.search.placeholder": "ショートカットを検索",
   "settings.shortcuts.search.empty": "ショートカットが見つかりません",
-
   "settings.shortcuts.group.general": "一般",
   "settings.shortcuts.group.session": "セッション",
   "settings.shortcuts.group.navigation": "ナビゲーション",
   "settings.shortcuts.group.modelAndAgent": "モデルとエージェント",
   "settings.shortcuts.group.terminal": "ターミナル",
   "settings.shortcuts.group.prompt": "プロンプト",
-
   "settings.providers.title": "プロバイダー",
   "settings.providers.description": "プロバイダー設定はここで構成できます。",
   "settings.providers.section.connected": "接続済みプロバイダー",
@@ -641,16 +651,13 @@ export const dict = {
   "settings.commands.description": "コマンド設定はここで構成できます。",
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "MCP設定はここで構成できます。",
-
   "settings.permissions.title": "権限",
   "settings.permissions.description": "サーバーがデフォルトで使用できるツールを制御します。",
   "settings.permissions.section.tools": "ツール",
   "settings.permissions.toast.updateFailed.title": "権限の更新に失敗しました",
-
   "settings.permissions.action.allow": "許可",
   "settings.permissions.action.ask": "確認",
   "settings.permissions.action.deny": "拒否",
-
   "settings.permissions.tool.read.title": "読み込み",
   "settings.permissions.tool.read.description": "ファイルの読み込み (ファイルパスに一致)",
   "settings.permissions.tool.edit.title": "編集",
@@ -673,22 +680,20 @@ export const dict = {
   "settings.permissions.tool.todoread.description": "Todoリストの読み込み",
   "settings.permissions.tool.todowrite.title": "Todo書き込み",
   "settings.permissions.tool.todowrite.description": "Todoリストの更新",
-  "settings.permissions.tool.webfetch.title": "Web Fetch",
+  "settings.permissions.tool.webfetch.title": "Web取得",
   "settings.permissions.tool.webfetch.description": "URLからコンテンツを取得",
-  "settings.permissions.tool.websearch.title": "Web Search",
+  "settings.permissions.tool.websearch.title": "Web検索",
   "settings.permissions.tool.websearch.description": "ウェブを検索",
-  "settings.permissions.tool.codesearch.title": "Code Search",
+  "settings.permissions.tool.codesearch.title": "コード検索",
   "settings.permissions.tool.codesearch.description": "ウェブ上のコードを検索",
   "settings.permissions.tool.external_directory.title": "外部ディレクトリ",
   "settings.permissions.tool.external_directory.description": "プロジェクトディレクトリ外のファイルへのアクセス",
-  "settings.permissions.tool.doom_loop.title": "Doom Loop",
+  "settings.permissions.tool.doom_loop.title": "無限ループ",
   "settings.permissions.tool.doom_loop.description": "同一入力による繰り返しのツール呼び出しを検出",
-
   "session.delete.failed.title": "セッションの削除に失敗しました",
   "session.delete.title": "セッションの削除",
   "session.delete.confirm": 'セッション "{{name}}" を削除しますか？',
   "session.delete.button": "セッションを削除",
-
   "workspace.new": "新しいワークスペース",
   "workspace.type.local": "ローカル",
   "workspace.type.sandbox": "サンドボックス",

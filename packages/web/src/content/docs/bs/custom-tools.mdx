@@ -1,0 +1,169 @@
+---
+title: Prilagođeni alati
+description: Kreirajte alate koje LLM može pozvati u otvorenom kodu.
+---
+
+Prilagođeni alati su funkcije koje kreirate i koje LLM može pozvati tokom razgovora. Oni rade zajedno sa [ugrađenim opencode](/docs/tools) alatima kao što su `read`, `write` i `bash`.
+
+---
+
+## Kreiranje alata
+
+Alati su definisani kao **TypeScript** ili **JavaScript** datoteke. Međutim, definicija alata može pozvati skripte napisane na **bilo kom jeziku** — TypeScript ili JavaScript se koriste samo za samu definiciju alata.
+
+---
+
+### Lokacija
+
+Mogu se definisati:
+
+- Lokalno postavljanjem u `.opencode/tools/` direktorij vašeg projekta.
+- Ili globalno, postavljanjem u `~/.config/opencode/tools/`.
+
+---
+
+### Struktura
+
+Najlakši način za kreiranje alata je korištenje pomoćnika `tool()` koji pruža sigurnost tipa i validaciju.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**ime datoteke** postaje **naziv alata**. Gore navedeno je kreirano pomoću `database` alata.
+
+---
+
+#### Više alata po datoteci
+
+Također možete izvesti više alata iz jedne datoteke. Svaki izvoz postaje **poseban alat** pod nazivom **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Ovo stvara dva alata: `math_add` i `math_multiply`.
+
+---
+
+### Argumenti
+
+Možete koristiti `tool.schema`, što je samo [Zod](https://zod.dev), da definirate tipove argumenata.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Također možete direktno uvesti [Zod](https://zod.dev) i vratiti običan objekt:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Kontekst
+
+Alati primaju kontekst o trenutnoj sesiji:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+Koristite `context.directory` za radni direktorij sesije.
+Koristite `context.worktree` za korijen git radnog stabla.
+
+---
+
+## Primjeri
+
+### Pisanje alata u Python-u
+
+Možete pisati svoje alate na bilo kom jeziku koji želite. Evo primjera koji zbraja dva broja koristeći Python.
+Prvo kreirajte alat kao Python skriptu:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Zatim kreirajte definiciju alata koja ga poziva:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Ovdje koristimo [`Bun.$`\_](https://bun.com/docs/runtime/shell) uslužni program za pokretanje Python skripte.

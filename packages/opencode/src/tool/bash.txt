@@ -87,7 +87,7 @@ Important notes:
 - If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit
 
 # Creating pull requests
-Use the gh command via the Bash tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a Github URL use the gh command to get the information needed.
+Use the gh command via the Bash tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a GitHub URL use the gh command to get the information needed.
 
 IMPORTANT: When the user asks you to create a pull request, follow these steps carefully:
 
@@ -112,4 +112,4 @@ Important:
 - Return the PR URL when you're done, so the user can see it
 
 # Other common operations
-- View comments on a Github PR: gh api repos/foo/bar/pulls/123/comments
+- View comments on a GitHub PR: gh api repos/foo/bar/pulls/123/comments
