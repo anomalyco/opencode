@@ -72,9 +72,13 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         </div>
       </div>
 
-      <Show when={store.collapsed} fallback={<TodoList todos={props.todos} />}>
-        <div class="px-3 pb-11 text-12-regular text-text-base truncate">{preview()}</div>
-      </Show>
+      <div hidden={store.collapsed}>
+        <TodoList todos={props.todos} />
+      </div>
+
+      <div hidden={!store.collapsed} class="px-3 pb-11 text-12-regular text-text-base truncate">
+        {preview()}
+      </div>
     </div>
   )
 }
