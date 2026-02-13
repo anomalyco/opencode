@@ -259,7 +259,7 @@ function ApiMethod(props: ApiMethodProps) {
             Mammouth AI provides a curated selection of great models from various providers with a single API key.
           </text>
           <text fg={theme.text}>
-            Go to <span style={{ fg: theme.primary }}>https://mammouth.ai/app/account/settings/api</span> to get your key
+            Go to <span style={{ fg: theme.primary }}>https://mammouth.ai/app/account/api</span> to get your key
           </text>
         </box>
       )
