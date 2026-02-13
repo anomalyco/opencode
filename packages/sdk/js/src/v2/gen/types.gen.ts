@@ -1692,6 +1692,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Remove horizontal padding in the terminal interface
+     */
+    no_terminal_padding_x?: boolean
   }
   server?: ServerConfig
   /**
