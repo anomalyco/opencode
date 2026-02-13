@@ -8,21 +8,20 @@ export const ProviderCommand = cmd({
   command: "provider",
   describe: "Provider debugging utilities",
   builder: (yargs) => yargs.command(ProviderDetectCommand).command(ProviderProbeCommand).demandCommand(),
-  async handler() { },
+  async handler() {},
 })
 
 export const ProviderDetectCommand = cmd({
   command: "detect <providerId>",
   describe: "probe models by provider ID",
   builder: (yargs) =>
-    yargs
-      .positional("providerId", {
-        describe: "provider ID",
-        type: "string",
-      }),
+    yargs.positional("providerId", {
+      describe: "provider ID",
+      type: "string",
+    }),
   async handler(args) {
     const providerId = args.providerId as string
-    
+
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
@@ -50,15 +49,14 @@ export const ProviderProbeCommand = cmd({
   command: "probe <url>",
   describe: "probe local provider by URL",
   builder: (yargs) =>
-    yargs
-      .positional("url", {
-        describe: "provider URL",
-        type: "string",
-      }),
+    yargs.positional("url", {
+      describe: "provider URL",
+      type: "string",
+    }),
   async handler(args) {
     const url = args.url as string
 
-    const type = await LocalProvider.detect_provider(url);
+    const type = await LocalProvider.detect_provider(url)
     if (!type) {
       console.error(`No supported local provider detected at URL: ${url}`)
       process.exit(1)

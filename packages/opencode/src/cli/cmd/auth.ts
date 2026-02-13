@@ -11,6 +11,7 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { LocalProvider } from "../../provider/local"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -277,9 +278,10 @@ export const AuthLoginCommand = cmd({
           openrouter: 5,
           vercel: 6,
         }
+
         let provider = await prompts.autocomplete({
           message: "Select provider",
-          maxItems: 8,
+          maxItems: 10,
           options: [
             ...pipe(
               providers,
@@ -299,6 +301,11 @@ export const AuthLoginCommand = cmd({
               })),
             ),
             {
+              value: "local",
+              label: "Local",
+              hint: "Ollama, LMStudio, llama.cpp, vLLM",
+            },
+            {
               value: "other",
               label: "Other",
             },
@@ -311,6 +318,102 @@ export const AuthLoginCommand = cmd({
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
           if (handled) return
+        }
+
+        if (provider === "local") {
+          const localProviderType = await prompts.select({
+            message: "Select local provider",
+            options: [
+              { label: "Ollama", value: LocalProvider.Ollama },
+              { label: "LMStudio", value: LocalProvider.LMStudio },
+              { label: "Llama.cpp", value: LocalProvider.LlamaCPP },
+              { label: "vLLM", value: LocalProvider.Vllm },
+            ],
+          })
+          if (prompts.isCancel(localProviderType)) throw new UI.CancelledError()
+
+          const defaultURL = LocalProvider.default_url(localProviderType)
+          const baseURL = await prompts.text({
+            message: "Enter provider base URL",
+            initialValue: defaultURL,
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(baseURL)) throw new UI.CancelledError()
+
+          const spinner = prompts.spinner()
+          spinner.start("Detecting provider...")
+
+          const detected = await LocalProvider.detect_provider(baseURL)
+          if (!detected) {
+            spinner.stop(`No ${localProviderType} provider detected at this URL`, 1)
+            prompts.outro("Done")
+            return
+          }
+
+          if (detected !== localProviderType) {
+            spinner.stop(`Expected ${localProviderType} but detected ${detected}`, 1)
+            prompts.outro("Done")
+            return
+          }
+
+          spinner.stop(`Detected ${localProviderType}`)
+
+          const providerName = await prompts.text({
+            message: "Provider name",
+            initialValue: localProviderType,
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(providerName)) throw new UI.CancelledError()
+
+          const config = await Config.getGlobal()
+          const providerID = await (async function resolveProviderID(value: string): Promise<string> {
+            if (!config.provider?.[value]) return value
+
+            const action = await prompts.select({
+              message: `Provider "${value}" already exists`,
+              options: [
+                { label: "Overwrite existing", value: "overwrite" },
+                { label: "Choose a different name", value: "rename" },
+              ],
+            })
+            if (prompts.isCancel(action)) throw new UI.CancelledError()
+            if (action === "overwrite") return value
+
+            const renamed = await prompts.text({
+              message: "New provider name",
+              validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+            })
+            if (prompts.isCancel(renamed)) throw new UI.CancelledError()
+
+            return resolveProviderID(renamed)
+          })(providerName)
+
+          const key = await prompts.password({
+            message: "Enter API key (optional, press enter to skip)",
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+
+          await Config.updateGlobal({
+            provider: {
+              [providerID]: {
+                options: {
+                  baseURL,
+                  local: true,
+                },
+              },
+            },
+          })
+
+          if (key?.length) {
+            await Auth.set(providerID, {
+              type: "api",
+              key,
+            })
+          }
+
+          prompts.log.success(`Added ${localProviderType} at ${baseURL}`)
+          prompts.outro("Done")
+          return
         }
 
         if (provider === "other") {

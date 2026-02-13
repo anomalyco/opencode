@@ -886,6 +886,7 @@ export namespace Config {
         .object({
           apiKey: z.string().optional(),
           baseURL: z.string().optional(),
+          local: z.boolean().optional().describe("Mark provider as a local provider (Ollama, LMStudio, etc.)"),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z

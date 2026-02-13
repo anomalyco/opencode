@@ -9294,6 +9294,10 @@
               "baseURL": {
                 "type": "string"
               },
+              "local": {
+                "description": "Mark provider as a local provider (Ollama, LMStudio, etc.)",
+                "type": "boolean"
+              },
               "enterpriseUrl": {
                 "description": "GitHub Enterprise URL for copilot authentication",
                 "type": "string"

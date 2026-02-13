@@ -11,6 +11,13 @@ export enum LocalProvider {
   Vllm = "vllm",
 }
 
+const LOCAL_PROVIDER_DEFAULTS: Record<LocalProvider, string> = {
+  [LocalProvider.Ollama]: "http://localhost:11434/v1",
+  [LocalProvider.LMStudio]: "http://localhost:1234/v1",
+  [LocalProvider.LlamaCPP]: "http://localhost:8080/v1",
+  [LocalProvider.Vllm]: "http://localhost:8000/v1",
+}
+
 export interface LocalModel {
   id: string
   context_length: number
@@ -20,6 +27,10 @@ export interface LocalModel {
 
 export namespace LocalProvider {
   const log = Log.create({ service: "provider.local" })
+
+  export function default_url(provider: LocalProvider): string {
+    return LOCAL_PROVIDER_DEFAULTS[provider]
+  }
 
   function normalizeUrl(url: string): string {
     const base = url.endsWith("/v1") ? url.slice(0, -3) : url

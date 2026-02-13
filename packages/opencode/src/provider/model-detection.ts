@@ -10,8 +10,8 @@ export namespace ProviderModelDetection {
   const log = Log.create({ service: "provider.model-detection" })
 
   export async function detect(provider: Provider.Info): Promise<string[] | Provider.Model[] | undefined> {
-    const modelsDev = await ModelsDev.get();
-    delete modelsDev["lmstudio"]; // LMStudio is not a cloud provider
+    const modelsDev = await ModelsDev.get()
+    delete modelsDev["lmstudio"] // LMStudio is not a cloud provider
 
     // provider.models.length can be 0 for local providers that rely on detection only
     const model = Object.values(provider.models).at(0)
@@ -19,7 +19,7 @@ export namespace ProviderModelDetection {
     const providerBaseURL = provider.options["baseURL"] ?? model?.api?.url ?? ""
 
     log.debug("starting model detection", { providerID: provider.id, providerNPM, providerBaseURL })
-    
+
     // Skip local detection for known cloud providers
     const localProvider = provider.id in modelsDev ? null : await LocalProvider.detect_provider(providerBaseURL)
 
@@ -94,7 +94,7 @@ function expandLocalModels(provider: Provider.Info, localModels: LocalModel[]): 
         context: localModel.context_length,
         // TODO: can we drop this field?
         // properly detect the value?
-        output: 16 * 1024
+        output: 16 * 1024,
       },
       capabilities: {
         temperature: true,

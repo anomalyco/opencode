@@ -723,9 +723,22 @@ export namespace Provider {
         return
       }
       const match = database[providerID]
-      if (!match) return
-      // @ts-expect-error
-      providers[providerID] = mergeDeep(match, provider)
+      if (match) {
+        // @ts-expect-error
+        providers[providerID] = mergeDeep(match, provider)
+        return
+      }
+      const isLocal = provider.options?.local === true
+      if (isLocal) {
+        providers[providerID] = {
+          id: providerID,
+          name: provider.name ?? providerID,
+          source: provider.source ?? "config",
+          env: provider.env ?? [],
+          options: provider.options ?? {},
+          models: {},
+        }
+      }
     }
 
     // extend database from config
@@ -911,7 +924,7 @@ export namespace Provider {
       Object.values(providers).map(async (provider) => {
         const detected = await ProviderModelDetection.detect(provider)
         if (!detected) return
-        
+
         // Local models return the actual loaded models
         // Replace the entire models list with the detected models
         if (detected.length > 0 && typeof detected[0] !== "string") {
@@ -922,8 +935,8 @@ export namespace Provider {
           }
 
           return
-        } 
-        
+        }
+
         const detectedModelIds = detected as string[]
 
         // remove models that were not detected

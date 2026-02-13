@@ -1499,6 +1499,10 @@ export type ProviderConfig = {
     apiKey?: string
     baseURL?: string
     /**
+     * Mark provider as a local provider (Ollama, LMStudio, etc.)
+     */
+    local?: boolean
+    /**
      * GitHub Enterprise URL for copilot authentication
      */
     enterpriseUrl?: string
