@@ -88,7 +88,8 @@ export function Footer() {
     const r5 = computeThroughput(5_000)
     const r30 = computeThroughput(30_000)
     const r60 = computeThroughput(60_000)
-    const stalled = busyRaw && elapsed > 2000 && r1 < 10
+    // Only show STALL when stream is quiet AND no tool is running (tool execution is expected to be quiet)
+    const stalled = busyRaw && !activeToolRaw && elapsed > 2000 && r1 < 10
 
     setTelemetry({
       busy: busyRaw,
