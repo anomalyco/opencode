@@ -55,10 +55,10 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
           toggle()
         }}
       >
-        <span class="text-14-regular text-text-strong">{summary()}</span>
+        <span class="text-14-regular text-text-strong cursor-default">{summary()}</span>
         <div class="ml-1 flex-1 min-w-0">
           <Show when={store.collapsed && preview()}>
-            <div class="text-14-regular text-text-base truncate">{preview()}</div>
+            <div class="text-14-regular text-text-base truncate cursor-default">{preview()}</div>
           </Show>
         </div>
         <div class="ml-1">
