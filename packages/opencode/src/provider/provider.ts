@@ -804,12 +804,7 @@ export namespace Provider {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
             attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-            toolcall:
-              model.tool_call ??
-              existingModel?.capabilities.toolcall ??
-              (provider.npm === "@ai-sdk/openai-compatible" || model.provider?.npm === "@ai-sdk/openai-compatible"
-                ? true
-                : false),
+            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
             input: {
               text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
               audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
@@ -858,23 +853,27 @@ export namespace Provider {
     // Dynamic Ollama Loading for multiple potential provider IDs
     const ollamaProviderIDs = ["ollama", "ollama-cloud"]
 
-    for (const providerID of ollamaProviderIDs) {
-      if (!isProviderAllowed(providerID)) continue
+    if (process.env.OPENCODE_DISABLE_OLLAMA_CHECK !== "true") {
+      for (const providerID of ollamaProviderIDs) {
+        if (!isProviderAllowed(providerID)) continue
 
-      try {
-        const defaultBase = "http://127.0.0.1:11434"
-        const configBase = database[providerID]?.options?.baseURL as string | undefined
-        const apiBase = database[providerID]?.options?.api as string | undefined
-        // If configBase is present, use it but strip /v1 suffix. Also check 'api' field used in user config.
-        const baseUrl = (configBase || apiBase) ? (configBase || apiBase)!.replace(/\/v1\/?$/, "") : defaultBase
+        try {
+          const defaultBase = "http://127.0.0.1:11434"
+          const configBase = database[providerID]?.options?.baseURL
+          const apiBase = database[providerID]?.options?.api
 
-        // Only auto-discover for 'ollama' (default) OR if the provider is explicitly configured in database
-        if (providerID !== "ollama" && !database[providerID]) continue
+          const rawBase = (typeof configBase === "string" && configBase) || (typeof apiBase === "string" && apiBase)
+          const baseUrl = rawBase ? rawBase.replace(/\/v1\/?$/, "") : defaultBase
 
-        // Only attempt if it looks like a local ollama instance or explicitly requested
-        if (baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost") || providerID === "ollama") {
-          const response = await fetch(`${baseUrl}/api/tags`)
-          if (response.ok) {
+          // Only auto-discover for 'ollama' (default) OR if the provider is explicitly configured in database
+          if (providerID !== "ollama" && !database[providerID]) continue
+
+          // Only attempt if it looks like a local ollama instance or explicitly requested
+          if (baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost") || providerID === "ollama") {
+            const response = await fetch(`${baseUrl}/api/tags`, {
+              signal: AbortSignal.timeout(500),
+            })
+            if (response.ok) {
             const data = (await response.json()) as { models: { name: string }[] }
             const ollamaModels: Record<string, Model> = {}
 
@@ -953,6 +952,7 @@ export namespace Provider {
         // Silent failure if Ollama is not running
       }
     }
+  }
 
     // load env
     const env = Env.all()

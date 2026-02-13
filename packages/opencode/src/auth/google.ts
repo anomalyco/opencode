@@ -43,8 +43,15 @@ export namespace GoogleAuth {
     spinner.start("Waiting for authorization...")
 
     return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        server.stop()
+        spinner.stop("Login timed out", 1)
+        resolve()
+      }, 5 * 60 * 1000) // 5 minutes timeout
+
       const server = Bun.serve({
         port: CALLBACK_PORT,
+        hostname: "127.0.0.1",
         async fetch(req) {
           const reqUrl = new URL(req.url)
           if (reqUrl.pathname === "/oauth2callback") {
@@ -52,16 +59,29 @@ export namespace GoogleAuth {
             const returnedState = reqUrl.searchParams.get("state")
 
             if (returnedState !== state) {
-              spinner.stop("State mismatch error", 1)
-              resolve()
-              return new Response("Authentication failed: State mismatch", { status: 400 })
+              const msg = "Authentication failed: State mismatch"
+              spinner.stop(msg, 1)
+              clearTimeout(timeout)
+              setTimeout(() => {
+                server.stop()
+                resolve()
+              }, 1000)
+              return new Response(msg, { status: 400 })
             }
 
             if (!code) {
-              spinner.stop("No authorization code received", 1)
-              resolve()
-              return new Response("Authentication failed: No code", { status: 400 })
+              const msg = "Authentication failed: No code received"
+              spinner.stop(msg, 1)
+              clearTimeout(timeout)
+              setTimeout(() => {
+                server.stop()
+                resolve()
+              }, 1000)
+              return new Response(msg, { status: 400 })
             }
+
+            let success = false
+            let errorMsg = ""
 
             try {
               const tokenResponse = await fetch(TOKEN_URL, {
@@ -79,7 +99,8 @@ export namespace GoogleAuth {
               const tokens = await tokenResponse.json() as any
 
               if (tokens.error) {
-                spinner.stop(`Token exchange failed: ${tokens.error_description || tokens.error}`, 1)
+                errorMsg = tokens.error_description || tokens.error
+                spinner.stop(`Token exchange failed: ${errorMsg}`, 1)
               } else {
                 await Auth.set("google", {
                   type: "oauth",
@@ -90,29 +111,30 @@ export namespace GoogleAuth {
                   clientSecret,
                 })
                 spinner.stop("Google Login successful")
+                success = true
               }
             } catch (err) {
-              spinner.stop("Error during token exchange", 1)
+              errorMsg = err instanceof Error ? err.message : String(err)
+              spinner.stop(`Error during token exchange: ${errorMsg}`, 1)
               console.error(err)
             }
 
+            clearTimeout(timeout)
             // Small delay to ensure user sees the "Success" message in browser before server stops
             setTimeout(() => {
               server.stop()
               resolve()
             }, 1000)
 
-            if (redirectUrl) {
-              return Response.redirect(redirectUrl)
+            if (success) {
+              if (redirectUrl) {
+                return Response.redirect(redirectUrl)
+              }
+              return new Response("Authentication successful! You can close this window and return to the CLI.")
+            } else {
+              return new Response(`Authentication failed: ${errorMsg}`, { status: 500 })
             }
-            return new Response("Authentication successful! You can close this window and return to the CLI.")
           }
-          /**
-           * By default, Bun server will return 404 for any other path.
-           * However, typically oauth redirects might have fragment based redirect 
-           * or just hit /callback directly from browser.
-           * We need to handle options request or just return 404 for favicon etc.
-           */
           return new Response("Not Found", { status: 404 })
         },
       })
