@@ -85,17 +85,31 @@
     width: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: flex-start;
+    gap: 8px;
     padding: 0 4px;
   }
 
   [data-slot="session-turn-diffs-title"] {
-    color: var(--text-base);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  [data-slot="session-turn-diffs-label"] {
+    color: var(--text-strong);
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
+  }
+
+  [data-slot="session-turn-diffs-count"] {
+    color: var(--text-base);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-x-large);
   }
 
   [data-slot="session-turn-diffs-meta"] {

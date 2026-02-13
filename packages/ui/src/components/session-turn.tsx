@@ -288,12 +288,15 @@ export function SessionTurn(
                     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
                       <Collapsible.Trigger>
                         <div data-component="session-turn-diffs-trigger">
-                          <span data-slot="session-turn-diffs-title">
-                            {edited() === 1 ? "Edited file" : "Edited files"} ({edited()})
-                          </span>
-                          <div data-slot="session-turn-diffs-meta">
-                            <DiffChanges changes={diffs()} variant="bars" />
-                            <Collapsible.Arrow />
+                          <div data-slot="session-turn-diffs-title">
+                            <span data-slot="session-turn-diffs-label">Edited</span>
+                            <span data-slot="session-turn-diffs-count">
+                              {edited()} {edited() === 1 ? "file" : "files"}
+                            </span>
+                            <div data-slot="session-turn-diffs-meta">
+                              <DiffChanges changes={diffs()} variant="bars" />
+                              <Collapsible.Arrow />
+                            </div>
                           </div>
                         </div>
                       </Collapsible.Trigger>
