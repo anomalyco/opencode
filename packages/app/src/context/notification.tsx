@@ -233,7 +233,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (!session) return
         if (session.parentID) return
 
-        playSound(soundSrc(settings.sounds.agent()))
+        if (settings.sounds.agentEnabled()) {
+          playSound(soundSrc(settings.sounds.agent()))
+        }
 
         append({
           directory,
@@ -260,7 +262,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (meta.disposed) return
         if (session?.parentID) return
 
-        playSound(soundSrc(settings.sounds.errors()))
+        if (settings.sounds.errorsEnabled()) {
+          playSound(soundSrc(settings.sounds.errors()))
+        }
 
         const error = "error" in event.properties ? event.properties.error : undefined
         append({
