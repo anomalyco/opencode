@@ -1,6 +1,7 @@
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { For, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 
@@ -27,15 +28,15 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
     return `${completed} of ${total} ${props.title.toLowerCase()} completed`
   })
 
-  const preview = createMemo(() => {
-    const active =
+  const active = createMemo(
+    () =>
       props.todos.find((todo) => todo.status === "in_progress") ??
       props.todos.find((todo) => todo.status === "pending") ??
       props.todos.filter((todo) => todo.status === "completed").at(-1) ??
-      props.todos[0]
-    if (!active) return ""
-    return active.content
-  })
+      props.todos[0],
+  )
+
+  const preview = createMemo(() => active()?.content ?? "")
 
   return (
     <div
@@ -58,7 +59,11 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         <span class="text-14-regular text-text-strong cursor-default">{summary()}</span>
         <div class="ml-1 flex-1 min-w-0">
           <Show when={store.collapsed && preview()}>
-            <div class="text-14-regular text-text-base truncate cursor-default">{preview()}</div>
+            <div class="text-14-regular text-text-base truncate cursor-default">
+              <Show when={active()?.status === "in_progress"} fallback={preview()}>
+                <TextShimmer text={preview()} />
+              </Show>
+            </div>
           </Show>
         </div>
         <div class="ml-1">
