@@ -2,6 +2,7 @@ import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util/log"
 import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import { Config } from "../config/config"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
 
@@ -12,6 +13,19 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const OPENAI_OAUTH_ALLOWED_MODELS = [
+  "gpt-5.1-codex-max",
+  "gpt-5.1-codex-mini",
+  "gpt-5.2",
+  "gpt-5.2-codex",
+  "gpt-5.3-codex",
+  "gpt-5.1-codex",
+]
+
+export function buildOpenAIOAuthAllowedModels(configModelIds: string[]) {
+  // OAuth 기본 허용 목록은 유지하고, 사용자가 설정한 모델 키를 추가 허용한다.
+  return new Set([...OPENAI_OAUTH_ALLOWED_MODELS, ...configModelIds])
+}
 
 interface PkceCodes {
   verifier: string
@@ -356,15 +370,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
 
-        // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set([
-          "gpt-5.1-codex-max",
-          "gpt-5.1-codex-mini",
-          "gpt-5.2",
-          "gpt-5.2-codex",
-          "gpt-5.3-codex",
-          "gpt-5.1-codex",
-        ])
+        const cfg = await Config.get()
+        const configModelIds = Object.keys(cfg.provider?.openai?.models ?? {})
+        const allowedModels = buildOpenAIOAuthAllowedModels(configModelIds)
         for (const modelId of Object.keys(provider.models)) {
           if (!allowedModels.has(modelId)) {
             delete provider.models[modelId]

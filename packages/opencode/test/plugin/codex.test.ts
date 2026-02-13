@@ -3,6 +3,7 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  buildOpenAIOAuthAllowedModels,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 
@@ -118,6 +119,20 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("buildOpenAIOAuthAllowedModels", () => {
+    test("keeps default OAuth allowlist", () => {
+      const models = buildOpenAIOAuthAllowedModels([])
+      expect(models.has("gpt-5.2")).toBe(true)
+      expect(models.has("gpt-5.1-codex-max")).toBe(true)
+    })
+
+    test("adds user configured model keys", () => {
+      const models = buildOpenAIOAuthAllowedModels(["gpt-5.3-codex-spark", "my-openai-alias"])
+      expect(models.has("gpt-5.3-codex-spark")).toBe(true)
+      expect(models.has("my-openai-alias")).toBe(true)
     })
   })
 })
