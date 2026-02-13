@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -8,7 +8,7 @@ import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis } from "@/utils/solid-dnd"
 import { SortableTerminalTab } from "@/components/session"
 import { Terminal } from "@/components/terminal"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
+import { useTerminal } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
@@ -28,6 +28,10 @@ export function TerminalPanel(props: {
   handleTerminalDragEnd: () => void
   onCloseTab: () => void
 }) {
+  const all = createMemo(() => props.terminal.all())
+  const ids = createMemo(() => all().map((pty) => pty.id))
+  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+
   return (
     <Show when={props.open}>
       <div
@@ -86,8 +90,8 @@ export function TerminalPanel(props: {
                 class="!h-auto !flex-none"
               >
                 <Tabs.List class="h-10">
-                  <SortableProvider ids={props.terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={props.terminal.all()}>
+                  <SortableProvider ids={ids()}>
+                    <For each={all()}>
                       {(pty) => (
                         <SortableTerminalTab
                           terminal={pty}
@@ -117,7 +121,7 @@ export function TerminalPanel(props: {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <For each={props.terminal.all()}>
+                <For each={all()}>
                   {(pty) => (
                     <div
                       id={`terminal-wrapper-${pty.id}`}
@@ -141,9 +145,8 @@ export function TerminalPanel(props: {
             <DragOverlay>
               <Show when={props.activeTerminalDraggable()}>
                 {(draggedId) => {
-                  const pty = createMemo(() => props.terminal.all().find((t: LocalPTY) => t.id === draggedId()))
                   return (
-                    <Show when={pty()}>
+                    <Show when={byId().get(draggedId())}>
                       {(t) => (
                         <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                           {terminalTabLabel({

@@ -1,38 +1,46 @@
+use futures::{FutureExt, Stream, StreamExt, future};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
 use tauri_plugin_shell::{
     ShellExt,
-    process::{Command, CommandChild, CommandEvent, TerminatedPayload},
+    process::{CommandChild, CommandEvent, TerminatedPayload},
 };
 use tauri_plugin_store::StoreExt;
+use tauri_specta::Event;
 use tokio::sync::oneshot;
+use tracing::Instrument;
 
-use crate::{
-    LogState,
-    constants::{MAX_LOG_ENTRIES, SETTINGS_STORE, WSL_ENABLED_KEY},
-};
+use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
     pub hostname: Option<String>,
     pub port: Option<u32>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
 }
 
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
-    create_command(app, "debug config", &[])
-        .output()
+    let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
+
+    events
+        .fold(String::new(), async |mut config_str, event| {
+            if let CommandEvent::Stdout(stdout) = event
+                && let Ok(s) = str::from_utf8(&stdout)
+            {
+                config_str += s
+            }
+
+            config_str
+        })
+        .map(|v| serde_json::from_str::<Config>(&v))
         .await
-        .inspect_err(|e| eprintln!("Failed to read OC config: {e}"))
         .ok()
-        .and_then(|out| String::from_utf8(out.stdout.to_vec()).ok())
-        .and_then(|s| serde_json::from_str::<Config>(&s).ok())
 }
 
 fn get_cli_install_path() -> Option<std::path::PathBuf> {
@@ -104,12 +112,12 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
 
 pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     if cfg!(debug_assertions) {
-        println!("Skipping CLI sync for debug build");
+        tracing::debug!("Skipping CLI sync for debug build");
         return Ok(());
     }
 
     if !is_cli_installed() {
-        println!("No CLI installation found, skipping sync");
+        tracing::info!("No CLI installation found, skipping sync");
         return Ok(());
     }
 
@@ -132,21 +140,21 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     let app_version = app.package_info().version.clone();
 
     if cli_version >= app_version {
-        println!(
-            "CLI version {} is up to date (app version: {}), skipping sync",
-            cli_version, app_version
+        tracing::info!(
+            %cli_version, %app_version,
+            "CLI is up to date, skipping sync"
         );
         return Ok(());
     }
 
-    println!(
-        "CLI version {} is older than app version {}, syncing",
-        cli_version, app_version
+    tracing::info!(
+        %cli_version, %app_version,
+        "CLI is older than app version, syncing"
     );
 
     install_cli(app)?;
 
-    println!("Synced installed CLI");
+    tracing::info!("Synced installed CLI");
 
     Ok(())
 }
@@ -178,7 +186,11 @@ fn shell_escape(input: &str) -> String {
     escaped
 }
 
-pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, String)]) -> Command {
+pub fn spawn_command(
+    app: &tauri::AppHandle,
+    args: &str,
+    extra_env: &[(&str, String)],
+) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), tauri_plugin_shell::Error> {
     let state_dir = app
         .path()
         .resolve("", BaseDirectory::AppLocalData)
@@ -205,9 +217,9 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
-    if cfg!(windows) {
+    let cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
-            println!("WSL is enabled, spawning CLI server in WSL.");
+            tracing::info!("WSL is enabled, spawning CLI server in WSL");
             let version = app.package_info().version.to_string();
             let mut script = vec![
                 "set -e".to_string(),
@@ -237,10 +249,9 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
 
             script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
-            return app
-                .shell()
+            app.shell()
                 .command("wsl")
-                .args(["-e", "bash", "-lc", &script.join("\n")]);
+                .args(["-e", "bash", "-lc", &script.join("\n")])
         } else {
             let mut cmd = app
                 .shell()
@@ -252,7 +263,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
                 cmd = cmd.env(key, value);
             }
 
-            return cmd;
+            cmd
         }
     } else {
         let sidecar = get_sidecar_path(app);
@@ -271,7 +282,13 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
         }
 
         cmd
-    }
+    };
+
+    let (rx, child) = cmd.spawn()?;
+    let event_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
+
+    Ok((event_stream, child))
 }
 
 pub fn serve(
@@ -280,111 +297,105 @@ pub fn serve(
     port: u32,
     password: &str,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
-    let log_state = app.state::<LogState>();
-    let log_state_clone = log_state.inner().clone();
-
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
-    println!("spawning sidecar on port {port}");
-
-    if let Ok(mut logs) = log_state_clone.0.lock() {
-        let args =
-            format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}");
-
-        #[cfg(target_os = "windows")]
-        {
-            logs.push_back(format!("[SPAWN] sidecar=opencode-cli args=\"{args}\"\n"));
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let sidecar = get_sidecar_path(app);
-            let shell = get_user_shell();
-            let cmd = if shell.ends_with("/nu") {
-                format!("^\"{}\" {}", sidecar.display(), args)
-            } else {
-                format!("\"{}\" {}", sidecar.display(), args)
-            };
-            logs.push_back(format!("[SPAWN] shell=\"{shell}\" argv=\"-il -c {cmd}\"\n"));
-        }
-
-        while logs.len() > MAX_LOG_ENTRIES {
-            logs.pop_front();
-        }
-    }
+    tracing::info!(port, "Spawning sidecar");
 
     let envs = [
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
 
-    let (mut rx, child) = create_command(
+    let (events, child) = spawn_command(
         app,
         format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
-    .spawn()
     .expect("Failed to spawn opencode");
 
-    tokio::spawn(async move {
-        let mut exit_tx = Some(exit_tx);
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    print!("{line}");
+    let mut exit_tx = Some(exit_tx);
+    tokio::spawn(
+        events
+            .for_each(move |event| {
+                match event {
+                    CommandEvent::Stdout(line_bytes) => {
+                        let line = String::from_utf8_lossy(&line_bytes);
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Stderr(line_bytes) => {
+                        let line = String::from_utf8_lossy(&line_bytes);
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Error(err) => {
+                        tracing::error!("{err}");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(
+                            code = ?payload.code,
+                            signal = ?payload.signal,
+                            "Sidecar terminated"
+                        );
 
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDOUT] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
+                        if let Some(tx) = exit_tx.take() {
+                            let _ = tx.send(payload);
                         }
                     }
+                    _ => {}
                 }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    eprint!("{line}");
 
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDERR] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
-                }
-                CommandEvent::Error(err) => {
-                    eprintln!("{err}");
-
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[ERROR] {err}\n"));
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
-                }
-                CommandEvent::Terminated(payload) => {
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!(
-                            "[EXIT] code={:?} signal={:?}\n",
-                            payload.code, payload.signal
-                        ));
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
-
-                    if let Some(tx) = exit_tx.take() {
-                        let _ = tx.send(payload);
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
+                future::ready(())
+            })
+            .instrument(tracing::info_span!("sidecar")),
+    );
 
     (child, exit_rx)
+}
+
+pub mod sqlite_migration {
+    use super::*;
+
+    #[derive(
+        tauri_specta::Event, serde::Serialize, serde::Deserialize, Clone, Copy, Debug, specta::Type,
+    )]
+    #[serde(tag = "type", content = "value")]
+    pub enum SqliteMigrationProgress {
+        InProgress(u8),
+        Done,
+    }
+
+    pub(super) fn logs_middleware(
+        app: AppHandle,
+        stream: impl Stream<Item = CommandEvent>,
+    ) -> impl Stream<Item = CommandEvent> {
+        let app = app.clone();
+        let mut done = false;
+
+        stream.filter_map(move |event| {
+            if done {
+                return future::ready(Some(event));
+            }
+
+            future::ready(match &event {
+                CommandEvent::Stdout(stdout) => {
+                    let Ok(s) = str::from_utf8(stdout) else {
+                        return future::ready(None);
+                    };
+
+                    if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
+                        if let Ok(progress) = s.parse::<u8>() {
+                            let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
+                        } else if s == "done" {
+                            done = true;
+                            let _ = SqliteMigrationProgress::Done.emit(&app);
+                        }
+
+                        None
+                    } else {
+                        Some(event)
+                    }
+                }
+                _ => Some(event),
+            })
+        })
+    }
 }

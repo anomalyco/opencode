@@ -258,11 +258,11 @@ Para perfis de inferência personalizados, use o nome do modelo e do provedor na
 2. Aqui você pode selecionar a opção **Claude Pro/Max** e isso abrirá seu navegador e pedirá para você se autenticar.
 
    ```txt
-   ┌ Select auth method
+   ┌ Selecione o método de autenticação
    │
    │ Claude Pro/Max
-   │ Create an API Key
-   │ Manually enter API Key
+   │ Criar uma chave de API
+   │ Inserir manualmente a chave de API
    └
    ```
 
@@ -278,9 +278,9 @@ Usar sua assinatura Claude Pro/Max no opencode não é oficialmente suportado pe
 
 ##### Usando chaves da API
 
-Você também pode selecionar **Criar uma chave da API** se não tiver uma assinatura Pro/Max. Isso também abrirá seu navegador e pedirá que você faça login na Anthropic e lhe dará um código que você pode colar no seu terminal.
+Você também pode selecionar **Criar uma chave de API** se não tiver uma assinatura Pro/Max. Isso também abrirá seu navegador e pedirá que você faça login na Anthropic e lhe dará um código que você pode colar no seu terminal.
 
-Ou, se você já tiver uma chave da API, pode selecionar **Inserir chave da API manualmente** e colá-la no seu terminal.
+Ou, se você já tiver uma chave da API, pode selecionar **Inserir manualmente a chave de API** e colá-la no seu terminal.
 
 ---
 
@@ -642,10 +642,10 @@ GitLab Duo fornece um chat agente com suporte a ferramentas nativas através do 
 2. Escolha seu método de autenticação:
 
    ```txt
-   ┌ Select auth method
+   ┌ Selecione o método de autenticação
    │
-   │ OAuth (Recommended)
-   │ Personal Access Token
+   │ OAuth (Recomendado)
+   │ Token de Acesso Pessoal
    └
    ```
 
@@ -797,13 +797,13 @@ Alguns modelos precisam ser habilitados manualmente nas suas [configurações do
 2. Navegue até [github.com/login/device](https://github.com/login/device) e insira o código.
 
    ```txt
-   ┌ Login with GitHub Copilot
+   ┌ Login com GitHub Copilot
    │
    │ https://github.com/login/device
    │
-   │ Enter code: 8F43-6FCF
+   │ Digite o código: 8F43-6FCF
    │
-   └ Waiting for authorization...
+   └ Aguardando autorização...
    ```
 
 3. Agora execute o comando `/models` para selecionar o modelo que você deseja.
@@ -1305,10 +1305,10 @@ Recomendamos se inscrever para [ChatGPT Plus ou Pro](https://chatgpt.com/pricing
 2. Aqui você pode selecionar a opção **ChatGPT Plus/Pro** e isso abrirá seu navegador e pedirá para você se autenticar.
 
    ```txt
-   ┌ Select auth method
+   ┌ Selecione o método de autenticação
    │
    │ ChatGPT Plus/Pro
-   │ Manually enter API Key
+   │ Inserir manualmente a chave de API
    └
    ```
 
@@ -1749,11 +1749,12 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
    ```bash
    $ /connect
 
-   ┌  Add credential
+   ┌  Adicionar credencial
    │
-   ◆  Select provider
-   │  ...
-   │  ● Other
+   ▲  Isso armazena apenas uma credencial para myprovider - você precisará configurá-lo no opencode.json, verifique a documentação para exemplos.
+   │
+   ◇  Digite sua chave de API
+   │  sk-...
    └
    ```
 
@@ -1762,10 +1763,12 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
    ```bash
    $ /connect
 
-   ┌  Add credential
+   ┌  Adicionar credencial
    │
-   ◇  Enter provider id
-   │  myprovider
+   ▲  Isso armazena apenas uma credencial para myprovider - você precisará configurá-lo no opencode.json, verifique a documentação para exemplos.
+   │
+   ◇  Digite sua chave de API
+   │  sk-...
    └
    ```
 
@@ -1778,11 +1781,11 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
    ```bash
    $ /connect
 
-   ┌  Add credential
+   ┌  Adicionar credencial
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  Isso armazena apenas uma credencial para myprovider - você precisará configurá-lo no opencode.json, verifique a documentação para exemplos.
    │
-   ◇  Enter your API key
+   ◇  Digite sua chave de API
    │  sk-...
    └
    ```
@@ -1795,14 +1798,16 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
+         "name": "Nome de Exibição do Meu Provedor de IA",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
          "models": {
            "my-model-name": {
-             "name": "My Model Display Name"
+             "name": "Nome de Exibição do Meu Modelo"
            }
+         }
+       }
          }
        }
      }
@@ -1833,7 +1838,7 @@ Aqui está um exemplo definindo as opções `apiKey`, `headers` e `limit` do mod
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
+      "name": "Nome de Exibição do Meu Provedor de IA",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",
@@ -1843,7 +1848,19 @@ Aqui está um exemplo definindo as opções `apiKey`, `headers` e `limit` do mod
       },
       "models": {
         "my-model-name": {
-          "name": "My Model Display Name",
+          "name": "Nome de Exibição do Meu Modelo",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "Nome de Exibição do Meu Modelo",
           "limit": {
             "context": 200000,
             "output": 65536

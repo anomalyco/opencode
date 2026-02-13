@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Bruge OpenCode-terminalbrugergrænsefladeet.
+description: Brug af OpenCode-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode gir et interaktivt terminalgrænseflade eller TUI for at jobbe med prosjektene dine med en LLM.
+OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-Å køre OpenCode starter TUI for nuværende mappe.
+At køre OpenCode starter TUI for den nuværende mappe.
 
 ```bash
 opencode
@@ -29,10 +29,10 @@ Give me a quick summary of the codebase.
 
 ## Filreferencer
 
-Du kan referere til filer i dine meddelelser med `@`. Det laver en fuzzy filsøgning i det nuværende arbejdsmappe.
+Du kan referere til filer i dine beskeder med `@`. Det laver en fuzzy filsøgning i den nuværende arbejdsmappe.
 
 :::tip
-Du kan også bruge `@` til at referere til filer i dine meddelelser.
+Du kan også bruge `@` til at referere til filer i dine beskeder.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
@@ -51,19 +51,19 @@ Start en besked med `!` for at køre en shell-kommando.
 !ls -la
 ```
 
-Outputtet fra kommandoen tilføjes til samtalen som et værktøjresultat.
+Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ---
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt at utføre handlinger. For eksempel:
+Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
 ```
 
-De fleste kommandoer har også genvejstast som bruger `ctrl+x` som Leader-tast, der `ctrl+x` er standard Leader-tast. [Læs mere](/docs/keybinds).
+De fleste kommandoer har også genvejstaster som bruger `ctrl+x` som Leader-tast, hvor `ctrl+x` er standard Leader-tast. [Læs mere](/docs/keybinds).
 
 Her er alle tilgængelige skråstregskommandoer:
 
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en leverandør til OpenCode. Lar deg velge fra tilgængelige leverandører og tilføje til deres API-nøgler.
+Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -93,7 +93,7 @@ Komprimer nuværende session. _Alias_: `/summarize`
 
 ### details
 
-Veksle værktøjutførelsesdetaljer.
+Skift visning af værktøjsudførelsesdetaljer.
 
 ```bash frame="none"
 /details
@@ -105,7 +105,7 @@ Veksle værktøjutførelsesdetaljer.
 
 ### editor
 
-Åbn eksternt redigeringsprogram for at skrive beskeder. Bruger redigeringsprogrammet i miljøvariabelen `EDITOR`. [Læs mere](#editor-setup).
+Åbn eksternt redigeringsprogram for at skrive beskeder. Bruger redigeringsprogrammet i miljøvariablen `EDITOR`. [Læs mere](#editor-setup).
 
 ```bash frame="none"
 /editor
@@ -129,7 +129,7 @@ Afslut OpenCode. _Aliaser_: `/quit`, `/q`
 
 ### export
 
-Eksporter nuværende samtale til Markdown og åpne i standardredigeringsprogrammet. Bruger redigeringsprogrammet i miljøvariabelen `EDITOR`. [Læs mere](#editor-setup).
+Eksporter nuværende samtale til Markdown og åbn i standardredigeringsprogrammet. Bruger redigeringsprogrammet i miljøvariablen `EDITOR`. [Læs mere](#editor-setup).
 
 ```bash frame="none"
 /export
@@ -189,14 +189,13 @@ Start en ny session. _Alias_: `/clear`
 
 ### redo
 
-Gentag en tidligere fortrudt besked. Kun tilgængelig etter brug av `/undo`.
+Gentag en tidligere fortrudt besked. Kun tilgængelig efter brug af `/undo`.
 
 :::tip
-Eventuelle filændringer vil også bli genoprettet.
+Eventuelle filændringer vil også blive genoprettet.
 :::
 
-Internt bruger dette Git til at administrere filændringerne. Så dit prosjekt **må
-være et Git-depot**.
+Internt bruger dette Git til at administrere filændringerne. Så dit projekt **skal være et Git-depot**.
 
 ```bash frame="none"
 /redo
@@ -208,7 +207,7 @@ være et Git-depot**.
 
 ### sessions
 
-List opp og bytt mellom sessioner. _Aliaser_: `/resume`, `/continue`
+List og skift mellem sessioner. _Aliaser_: `/resume`, `/continue`
 
 ```bash frame="none"
 /sessions
@@ -244,10 +243,10 @@ Liste over tilgængelige temaer.
 
 ### thinking
 
-Veksle mellom synligheten av tenke-/resonneringsblokker i samtalen. Når den er aktiveret, kan du se modellens resonneringsprosess for modeller som støtter utvidet tenkning.
+Skift synligheden af tænke-/ræsonneringsblokke i samtalen. Når den er aktiveret, kan du se modellens ræsonneringsproces for modeller, som understøtter udvidet tænkning.
 
 :::note
-Denne kommandoen kontrollerer bare om tenkeblokker **vises** - den aktiverer eller deaktiverer ikke modellens resonneringsmuligheter. For at veksle mellom faktiske resonneringsmuligheter, brug `ctrl+t` for at bla gennem modellvarianter.
+Denne kommando kontrollerer bare om tænkeblokke **vises** - den aktiverer eller deaktiverer ikke modellens ræsonneringsmuligheder. For at skifte mellem faktiske ræsonneringsmuligheder, brug `ctrl+t` for at bladre gennem modelvarianter.
 :::
 
 ```bash frame="none"
@@ -258,14 +257,13 @@ Denne kommandoen kontrollerer bare om tenkeblokker **vises** - den aktiverer ell
 
 ### undo
 
-Angre siste besked i samtalen. Fjerner den siste brugerbeskeden, alle påfølgende svar og eventuelle filændringer.
+Fortryd sidste besked i samtalen. Fjerner den sidste brugerbesked, alle efterfølgende svar og eventuelle filændringer.
 
 :::tip
-Eventuelle filændringer vil også bli nullstillet.
+Eventuelle filændringer vil også blive nulstillet.
 :::
 
-Internt bruger dette Git til at administrere filændringerne. Så dit prosjekt **må
-være et Git-depot**.
+Internt bruger dette Git til at administrere filændringerne. Så dit projekt **skal være et Git-depot**.
 
 ```bash frame="none"
 /undo
@@ -277,7 +275,7 @@ være et Git-depot**.
 
 ### unshare
 
-Ophæv deling av nuværende session. [Læs mere](/docs/share#un-sharing).
+Ophæv deling af nuværende session. [Læs mere](/docs/share#un-sharing).
 
 ```bash frame="none"
 /unshare
@@ -287,7 +285,7 @@ Ophæv deling av nuværende session. [Læs mere](/docs/share#un-sharing).
 
 ## Opsætning af editor
 
-Både kommandoerne `/editor` og `/export` bruger editoren som er spesifisert i miljøvariabelen `EDITOR`.
+Både kommandoerne `/editor` og `/export` bruger editoren som er specificeret i miljøvariablen `EDITOR`.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -301,7 +299,7 @@ Både kommandoerne `/editor` og `/export` bruger editoren som er spesifisert i m
     export EDITOR="code --wait"
     ```
 
-    For at gøre det permanent, tilføj dette til i shellprofilen din;
+    For at gøre det permanent, tilføj dette til din shellprofil;
     `~/.bashrc`, `~/.zshrc` osv.
 
   </TabItem>
@@ -315,8 +313,7 @@ Både kommandoerne `/editor` og `/export` bruger editoren som er spesifisert i m
     set EDITOR=code --wait
     ```
 
-    For at gøre det permanent, brug **Systemegenskaber** > **Miljø
-    Variabler**.
+    For at gøre det permanent, brug **Systemegenskaber** > **Miljøvariabler**.
 
   </TabItem>
 
@@ -329,7 +326,7 @@ Både kommandoerne `/editor` og `/export` bruger editoren som er spesifisert i m
     $env:EDITOR = "code --wait"
     ```
 
-    For at gøre det permanent, tilføj dette til i PowerShell-profilen din.
+    For at gøre det permanent, tilføj dette til din PowerShell-profil.
 
   </TabItem>
 </Tabs>
@@ -346,10 +343,10 @@ Populære redigeringsalternativer inkluderer:
 - `subl` - Sublime Text
 
 :::note
-Nogle editorer som VS Code må startes med flaget `--wait`.
+Nogle editorer som VS Code skal startes med flaget `--wait`.
 :::
 
-Nogle editorer kræver kommandolinjeargumenter for at køre i blokeringstilstand. `--wait`-flaget gør at redigeringsprocessen blokeres til den lukkes.
+Nogle editorer kræver kommandolinjeargumenter for at køre i blokeringstilstand. `--wait`-flaget gør at redigeringsprocessen blokeres indtil den lukkes.
 
 ---
 
@@ -371,20 +368,20 @@ Du kan tilpasse TUI-adfærden gennem OpenCode-konfigurationsfilen.
 
 ### Indstillinger
 
-- `scroll_acceleration` - Aktiver rulleacceleration i macOS-stil for jævn, naturlig rulning. Når aktiveret, øger rullehastigheden med raske rullebevægelser og forblir presis for langsommere bevægelser. **Denne indstillingen har forrang over `scroll_speed` og tilsidesætter den når den er aktiveret.**
-- `scroll_speed` - Styrer hvor raskt TUI ruller når du bruger rullekommandoer (minimum: `1`). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
+- `scroll_acceleration` - Aktiver rulleacceleration i macOS-stil for jævn, naturlig rulning. Når aktiveret, øger rullehastigheden med hurtige rullebevægelser og forbliver præcis for langsommere bevægelser. **Denne indstilling har forrang over `scroll_speed` og tilsidesætter den, når den er aktiveret.**
+- `scroll_speed` - Styrer hvor hurtigt TUI ruller, når du bruger rullekommandoer (minimum: `1`). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
 
 ---
 
 ## Tilpasning
 
-Du kan tilpasse forskellige aspekter av TUI-visningen ved at bruge kommandopaletten (`ctrl+x h` eller `/help`). Disse indstillingene gemmes ved omstarter.
+Du kan tilpasse forskellige aspekter af TUI-visningen ved at bruge kommandopaletten (`ctrl+x h` eller `/help`). Disse indstillinger gemmes ved genstart.
 
 ---
 
-#### Username display
+#### Visning af brugernavn
 
-Veksle om brugernavnet dit vises i chat-beskeder. Få adgang til dette gennem:
+Skift om dit brugernavn vises i chat-beskeder. Få adgang til dette gennem:
 
 - Kommandopalet: Søg efter "brugernavn" eller "skjul brugernavn"
-- Innstillingen gemmes automatisk og vil bli husket over TUI sessioner
+- Indstillingen gemmes automatisk og vil blive husket over TUI-sessioner

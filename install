@@ -130,7 +130,7 @@ else
     needs_baseline=false
     if [ "$arch" = "x64" ]; then
       if [ "$os" = "linux" ]; then
-        if ! grep -qi avx2 /proc/cpuinfo 2>/dev/null; then
+        if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
           needs_baseline=true
         fi
       fi
@@ -138,6 +138,20 @@ else
       if [ "$os" = "darwin" ]; then
         avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
         if [ "$avx2" != "1" ]; then
+          needs_baseline=true
+        fi
+      fi
+
+      if [ "$os" = "windows" ]; then
+        ps="(Add-Type -MemberDefinition \"[DllImport(\"\"kernel32.dll\"\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);\" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)"
+        out=""
+        if command -v powershell.exe >/dev/null 2>&1; then
+          out=$(powershell.exe -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+        elif command -v pwsh >/dev/null 2>&1; then
+          out=$(pwsh -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+        fi
+        out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        if [ "$out" != "true" ] && [ "$out" != "1" ]; then
           needs_baseline=true
         fi
       fi
