@@ -170,7 +170,7 @@ export function MessageTimeline(props: {
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}
             >
-              <div class="h-10 w-full flex items-center justify-between gap-2">
+              <div class="h-12 w-full flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1 min-w-0 flex-1">
                   <Show when={props.parentID}>
                     <IconButton
@@ -185,7 +185,7 @@ export function MessageTimeline(props: {
                     <Show
                       when={props.titleState.editing}
                       fallback={
-                        <h1 class="text-16-medium text-text-strong truncate min-w-0" onDblClick={props.openTitleEditor}>
+                        <h1 class="text-14-medium text-text-strong truncate min-w-0" onDblClick={props.openTitleEditor}>
                           {props.title}
                         </h1>
                       }
@@ -194,7 +194,7 @@ export function MessageTimeline(props: {
                         ref={props.titleRef}
                         value={props.titleState.draft}
                         disabled={props.titleState.saving}
-                        class="text-16-medium text-text-strong grow-1 min-w-0"
+                        class="text-14-medium text-text-strong grow-1 min-w-0"
                         onInput={(event) => props.onTitleDraft(event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()
