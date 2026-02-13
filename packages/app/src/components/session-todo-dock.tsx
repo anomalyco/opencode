@@ -8,8 +8,24 @@ import { createStore } from "solid-js/store"
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
   return (
-    <svg viewBox="0 0 10 10" width="8" height="8" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="5" cy="5" r="2.25" />
+    <svg
+      viewBox="0 0 12 12"
+      width="12"
+      height="12"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      class="block"
+    >
+      <circle
+        cx="6"
+        cy="6"
+        r="3"
+        style={{
+          animation: "var(--animate-pulse-scale)",
+          "transform-origin": "center",
+          "transform-box": "fill-box",
+        }}
+      />
     </svg>
   )
 }
@@ -105,13 +121,18 @@ function TodoList(props: { todos: Todo[] }) {
           >
             <span
               class="text-14-regular min-w-0 break-words"
+              classList={{
+                "text-text-weak": todo.status === "completed" || todo.status === "cancelled",
+                "text-text-strong": todo.status !== "completed" && todo.status !== "cancelled",
+              }}
               style={{
-                color: todo.status === "completed" ? "var(--text-base)" : "var(--text-strong)",
                 "text-decoration":
                   todo.status === "completed" || todo.status === "cancelled" ? "line-through" : undefined,
               }}
             >
-              {todo.content}
+              <Show when={todo.status === "in_progress"} fallback={todo.content}>
+                <TextShimmer text={todo.content} />
+              </Show>
             </span>
           </Checkbox>
         )}
