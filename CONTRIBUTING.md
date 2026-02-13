@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > Before contributing, please read the section below carefully. Mammouth Code is a fork of OpenCode, and it's important to understand which project your contribution belongs to.
 
-First, we want to make it clear that Mammouth Code is a open fork of the open source OpenCode project. We are building on top of OpenCode and contributing back to it, but we are not affiliated with the OpenCode project or its maintainers in any way. We have our own roadmap and vision for Mammouth Code, which may diverge from OpenCode over time.
+First, we want to make it clear that Mammouth Code is an open fork of the open source OpenCode project. We are building on top of OpenCode and contributing back to it, but we are not affiliated with the OpenCode project or its maintainers in any way. We have our own roadmap and vision for Mammouth Code, which may diverge from OpenCode over time.
 
 Please, before contributing, take a moment to think if your contribution is something that belongs in Mammouth Code specifically, or if it is a more general improvement that would benefit the entire OpenCode ecosystem. If it's the latter, we encourage you to contribute to OpenCode directly. To do so, checkout the [OpenCode repository](https://github.com/anomalyco/opencode) and follow their contributing guidelines. If it's the former, we welcome your contribution to Mammouth Code!
 
