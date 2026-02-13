@@ -1,7 +1,7 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { MouseButton, Renderable, RGBA } from "@opentui/core"
+import { MouseButton, Renderable, RGBA, TextareaRenderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@/flag/flag"
@@ -67,17 +67,39 @@ function init() {
 
   const renderer = useRenderer()
 
+  const closeActiveDialog = () => {
+    const current = store.stack.at(-1)
+    if (!current) return
+    current.onClose?.()
+    setStore("stack", store.stack.slice(0, -1))
+    refocus()
+  }
+
+  const clearInput = () => {
+    const focused = renderer.currentFocusedRenderable as TextareaRenderable | null
+    if (!focused) return false
+    if (!(focused instanceof TextareaRenderable)) return false
+    if (focused.plainText.length === 0) return false
+    focused.clear()
+
+    return true
+  }
+
   useKeyboard((evt) => {
     if (store.stack.length === 0) return
     if (evt.defaultPrevented) return
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()) return
-    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
-      const current = store.stack.at(-1)!
-      current.onClose?.()
-      setStore("stack", store.stack.slice(0, -1))
+    if (evt.name === "escape") {
       evt.preventDefault()
       evt.stopPropagation()
-      refocus()
+      closeActiveDialog()
+      return
+    }
+    if (evt.ctrl && evt.name === "c") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      if (clearInput()) return
+      closeActiveDialog()
     }
   })
 
