@@ -1229,7 +1229,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && !working() && commentCount() === 0}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-6 w-4.5"
+                class="size-8"
                 aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>
