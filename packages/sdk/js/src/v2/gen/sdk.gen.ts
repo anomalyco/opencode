@@ -24,6 +24,8 @@ import type {
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
+  ExperimentalHotreloadApplyErrors,
+  ExperimentalHotreloadApplyResponses,
   ExperimentalResourceListResponses,
   FileListResponses,
   FilePartInput,
@@ -719,6 +721,82 @@ export class Config2 extends HeyApiClient {
   }
 }
 
+export class Hotreload extends HeyApiClient {
+  /**
+   * Apply hot reload
+   *
+   * Trigger an in-place reload of cached config/skills/agents/commands for the current instance. This is experimental and session-aware.
+   */
+  public apply<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      file?: string
+      event?: "add" | "change" | "unlink"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "file" },
+            { in: "body", key: "event" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalHotreloadApplyResponses,
+      ExperimentalHotreloadApplyErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/hotreload",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Resource extends HeyApiClient {
+  /**
+   * Get MCP resources
+   *
+   * Get all available MCP resources from connected servers. Optionally filter by name.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
+      url: "/experimental/resource",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Experimental extends HeyApiClient {
+  private _hotreload?: Hotreload
+  get hotreload(): Hotreload {
+    return (this._hotreload ??= new Hotreload({ client: this.client }))
+  }
+
+  private _resource?: Resource
+  get resource(): Resource {
+    return (this._resource ??= new Resource({ client: this.client }))
+  }
+}
+
 export class Tool extends HeyApiClient {
   /**
    * List tool IDs
@@ -895,34 +973,6 @@ export class Worktree extends HeyApiClient {
         ...params.headers,
       },
     })
-  }
-}
-
-export class Resource extends HeyApiClient {
-  /**
-   * Get MCP resources
-   *
-   * Get all available MCP resources from connected servers. Optionally filter by name.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
-      url: "/experimental/resource",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Experimental extends HeyApiClient {
-  private _resource?: Resource
-  get resource(): Resource {
-    return (this._resource ??= new Resource({ client: this.client }))
   }
 }
 
@@ -3216,6 +3266,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._config ??= new Config2({ client: this.client }))
   }
 
+  private _experimental?: Experimental
+  get experimental(): Experimental {
+    return (this._experimental ??= new Experimental({ client: this.client }))
+  }
+
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
@@ -3224,11 +3279,6 @@ export class OpencodeClient extends HeyApiClient {
   private _worktree?: Worktree
   get worktree(): Worktree {
     return (this._worktree ??= new Worktree({ client: this.client }))
-  }
-
-  private _experimental?: Experimental
-  get experimental(): Experimental {
-    return (this._experimental ??= new Experimental({ client: this.client }))
   }
 
   private _session?: Session
