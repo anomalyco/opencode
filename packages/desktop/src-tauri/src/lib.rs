@@ -566,8 +566,8 @@ async fn initialize(app: AppHandle) {
     // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
     // Then in the loading task, we wait for sqlite migration to complete before
     // starting our health check against the server, otherwise long migrations could result in a timeout.
-    let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
-    let sqlite_done = (sqlite_enabled && !sqlite_file_exists()).then(|| {
+    let needs_sqlite_migration = option_env!("OPENCODE_SQLITE").is_some() && !sqlite_file_exists();
+    let sqlite_done = needs_sqlite_migration.then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
@@ -665,12 +665,14 @@ async fn initialize(app: AppHandle) {
             }
 
             let _ = server_ready_rx.await;
+
+            tracing::info!("Loading task finished");
         }
     })
     .map_err(|_| ())
     .shared();
 
-    let loading_window = if sqlite_enabled
+    let loading_window = if needs_sqlite_migration
         && timeout(Duration::from_secs(1), loading_task.clone())
             .await
             .is_err()

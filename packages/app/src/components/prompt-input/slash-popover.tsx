@@ -52,47 +52,44 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
               fallback={<div class="text-text-weak px-2 py-1">{props.t("prompt.popover.emptyResults")}</div>}
             >
               <For each={props.atFlat.slice(0, 10)}>
-                {(item) => (
-                  <button
-                    classList={{
-                      "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
-                      "bg-surface-raised-base-hover": props.atActive === props.atKey(item),
-                    }}
-                    onClick={() => props.onAtSelect(item)}
-                    onMouseEnter={() => props.setAtActive(props.atKey(item))}
-                  >
-                    <Show
-                      when={item.type === "agent"}
-                      fallback={
-                        <>
-                          <FileIcon
-                            node={{ path: item.type === "file" ? item.path : "", type: "file" }}
-                            class="shrink-0 size-4"
-                          />
-                          <div class="flex items-center text-14-regular min-w-0">
-                            <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                              {item.type === "file"
-                                ? item.path.endsWith("/")
-                                  ? item.path
-                                  : getDirectory(item.path)
-                                : ""}
-                            </span>
-                            <Show when={item.type === "file" && !item.path.endsWith("/")}>
-                              <span class="text-text-strong whitespace-nowrap">
-                                {item.type === "file" ? getFilename(item.path) : ""}
-                              </span>
-                            </Show>
-                          </div>
-                        </>
-                      }
+                {(item) => {
+                  const key = props.atKey(item)
+
+                  if (item.type === "agent") {
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                        onClick={() => props.onAtSelect(item)}
+                        onMouseEnter={() => props.setAtActive(key)}
+                      >
+                        <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
+                        <span class="text-14-regular text-text-strong whitespace-nowrap">@{item.name}</span>
+                      </button>
+                    )
+                  }
+
+                  const isDirectory = item.path.endsWith("/")
+                  const directory = isDirectory ? item.path : getDirectory(item.path)
+                  const filename = isDirectory ? "" : getFilename(item.path)
+
+                  return (
+                    <button
+                      class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                      classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                      onClick={() => props.onAtSelect(item)}
+                      onMouseEnter={() => props.setAtActive(key)}
                     >
-                      <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
-                      <span class="text-14-regular text-text-strong whitespace-nowrap">
-                        @{item.type === "agent" ? item.name : ""}
-                      </span>
-                    </Show>
-                  </button>
-                )}
+                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
+                      <div class="flex items-center text-14-regular min-w-0">
+                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{directory}</span>
+                        <Show when={!isDirectory}>
+                          <span class="text-text-strong whitespace-nowrap">{filename}</span>
+                        </Show>
+                      </div>
+                    </button>
+                  )
+                }}
               </For>
             </Show>
           </Match>

@@ -374,9 +374,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         const configModelIds = Object.keys(cfg.provider?.openai?.models ?? {})
         const allowedModels = buildOpenAIOAuthAllowedModels(configModelIds)
         for (const modelId of Object.keys(provider.models)) {
-          if (!allowedModels.has(modelId)) {
-            delete provider.models[modelId]
-          }
+          if (modelId.includes("codex")) continue
+          if (allowedModels.has(modelId)) continue
+          delete provider.models[modelId]
         }
 
         if (!provider.models["gpt-5.3-codex"]) {

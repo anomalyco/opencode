@@ -6,6 +6,7 @@ import { usePrompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
+import { showToast } from "@opencode-ai/ui/toast"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -66,15 +67,23 @@ export const DialogFork: Component = () => {
       attachmentName: language.t("common.attachment"),
     })
 
-    dialog.close()
-
-    sdk.client.session.fork({ sessionID, messageID: item.id }).then((forked) => {
-      if (!forked.data) return
-      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
-      requestAnimationFrame(() => {
-        prompt.set(restored)
+    sdk.client.session
+      .fork({ sessionID, messageID: item.id })
+      .then((forked) => {
+        if (!forked.data) {
+          showToast({ title: language.t("common.requestFailed") })
+          return
+        }
+        dialog.close()
+        navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
+        requestAnimationFrame(() => {
+          prompt.set(restored)
+        })
       })
-    })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
   }
 
   return (
