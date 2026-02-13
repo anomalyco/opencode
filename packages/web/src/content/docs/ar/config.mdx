@@ -14,7 +14,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
+  // إعدادات السمة
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
@@ -326,7 +326,7 @@ opencode run "Hello world"
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
-        // Disable file modification tools for review-only agent
+        // تعطيل أدوات تعديل الملفات لوكيل المراجعة فقط
         "write": false,
         "edit": false,
       },
