@@ -175,8 +175,14 @@ export namespace Config {
     }
 
     // Inline config content overrides all non-managed config sources.
+    // Route through load() to enable {env:} and {file:} token substitution.
+    // Use a path within Instance.directory so relative {file:} paths resolve correctly.
+    // The filename "OPENCODE_CONFIG_CONTENT" appears in error messages for clarity.
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = mergeConfigConcatArrays(
+        result,
+        await load(Flag.OPENCODE_CONFIG_CONTENT, path.join(Instance.directory, "OPENCODE_CONFIG_CONTENT")),
+      )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -1161,6 +1167,12 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          reserved: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
       experimental: z
