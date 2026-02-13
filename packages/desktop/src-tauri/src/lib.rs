@@ -665,6 +665,8 @@ async fn initialize(app: AppHandle) {
             }
 
             let _ = server_ready_rx.await;
+
+            tracing::info!("Loading task finished");
         }
     })
     .map_err(|_| ())
