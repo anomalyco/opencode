@@ -271,7 +271,13 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (
+                    await SessionCompaction.isOverflow({
+                      tokens: usage.tokens,
+                      model: input.model,
+                      variant: streamInput.user.variant,
+                    })
+                  ) {
                     needsCompaction = true
                   }
                   break

@@ -461,7 +461,7 @@ export namespace ProviderTransform {
 
         if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
           const efforts = ["low", "medium", "high", "max"]
-          return Object.fromEntries(
+          const thinkingVariants = Object.fromEntries(
             efforts.map((effort) => [
               effort,
               {
@@ -472,6 +472,15 @@ export namespace ProviderTransform {
               },
             ]),
           )
+          return {
+            ...thinkingVariants,
+            "1m": {
+              headers: {
+                "anthropic-beta": "context-1m-2025-08-07",
+              },
+              contextLimit: 1_000_000,
+            },
+          }
         }
 
         return {
@@ -760,6 +769,13 @@ export namespace ProviderTransform {
 
   export function maxOutputTokens(model: Provider.Model): number {
     return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+  }
+
+  export function contextLimit(model: Provider.Model, variant?: string): number {
+    if (variant && model.variants?.[variant]?.contextLimit) {
+      return model.variants[variant].contextLimit
+    }
+    return model.limit.context
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
