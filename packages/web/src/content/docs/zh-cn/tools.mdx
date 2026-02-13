@@ -24,7 +24,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 }
 ```
 
-您还可以使用万用字元同时控制多个工具。例如，要求 MCP 服务器批准所有工具：
+您还可以使用通配符同时控制多个工具。例如，要求 MCP 服务器批准所有工具：
 
 ```json title="opencode.json"
 {
@@ -39,15 +39,15 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ---
 
-## 內建
+## 內建工具
 
 以下是 opencode 中可用的所有内置工具。
 
 ---
 
-### 巴什
+### Bash
 
-在专案环境中执行shell命令。
+在专项任务环境中执行shell命令。
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +58,13 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 }
 ```
 
-This tool allows the LLM to run terminal commands like `npm install`, `git status`, or any other shell command.
+这个工具允许 LLM 运行终端命令，例如：`npm install`, `git status`，或者其他任何终端命令。
 
 ---
 
-### 編輯
+### 编辑
 
-使用精確的字符串替換修改現有文件。
+使用精确的字符串替换来修改现有文件。
 
 ```json title="opencode.json" {4}
 {
@@ -75,13 +75,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-该工具取消替换精确的文字来匹配对文件执行精确编辑。这是 LLM 修改代码的主要方式。
+该工具通过替换完全匹配的文本来对文件进行精确编辑。这是 LLM 修改代码的主要方式。
 
 ---
 
-### 寫
+### 写入
 
-建立新文件或覆盖現有文件。
+创建新文件或覆盖现有文件。
 
 ```json title="opencode.json" {4}
 {
@@ -92,17 +92,17 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-使用它允许 LLM 创建新文件。如果现有文件已经存在，将会覆盖它们。
+使用此功能可允许 LLM 创建新文件。如果文件已存在，则会覆盖现有文件。
 
 :::note
-`write`工具由`edit`许可权控制，该许可权主题所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
+`写入`工具由`编辑`权限控制，涵盖所有文件修改（`编辑`、`写入`、`修补`、`多重编辑`）。
 :::
 
 ---
 
-### 讀
+### 读取
 
-從程式碼庫中讀取文件內容。
+读取代码库中的文件内容。
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-该工具讀取文件并返回其內容。它支持讀取大文件的特定行范围。
+该工具读取文件并返回其内容。它支持读取大型文件中的特定行范围。
 
 ---
 
 ### grep
 
-使用正規表示式搜索文件內容。
+使用正则表达式搜索文件内容。
 
 ```json title="opencode.json" {4}
 {
@@ -130,13 +130,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-在您的程式碼庫中快速進行內容搜索。支持完整的正規表示式語法和文件模式过濾。
+快速搜索代码库中的内容。支持完整的正则表达式语法和文件模式过滤。
 
 ---
 
-### 全域性
+### 通配符
 
-通过模式匹配查询文件。
+通过模式匹配查找文件。
 
 ```json title="opencode.json" {4}
 {
@@ -147,13 +147,13 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-使用 `**/*.js` 或 `src/**/*.ts` 等全域性模式搜索档案。返回按时间排序的匹配档案路径修改。
+使用类似 **/\*.js 或 src/**/\*.ts 的通配符模式搜索文件。返回按修改时间排序的匹配文件路径。
 
 ---
 
-### 列表
+### 罗列
 
-列出給定路徑中的文件和目录。
+列出给定路径下的文件和目录。
 
 ```json title="opencode.json" {4}
 {
@@ -164,16 +164,16 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 }
 ```
 
-该工具列出目录內容。它接受全域性模式來过濾結果。
+此工具用于列出目录内容。它接受通配符模式来筛选结果。
 
 ---
 
 ### lsp（实验性）
 
-与您配置的LSP服务器交互，通知计划码智慧功能，例如定义、引用、悬停资讯和呼叫层次结构。
+与已配置的 LSP 服务器交互，以获取代码智能功能，例如定义、引用、悬停信息和调用层次结构。
 
 :::note
-This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+只有当 OPENCODE_EXPERIMENTAL_LSP_TOOL=true（或 OPENCODE_EXPERIMENTAL=true）时，此工具才可用。
 :::
 
 ```json title="opencode.json" {4}
@@ -187,13 +187,13 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 
 支持的操作包括 `goToDefinition`、`findReferences`、`hover`、`documentSymbol`、`workspaceSymbol`、`goToImplementation`、`prepareCallHierarchy`、`incomingCalls` 和 `outgoingCalls`。
 
-To configure which LSP servers are available for your project, see [LSP Servers](/docs/lsp).
+要配置哪些 LSP 服务器可用于您的项目，请参阅 [LSP Servers](/docs/lsp).
 
 ---
 
-### 修補
+### 修补
 
-对文件应用補丁。
+对文件应用补丁。
 
 ```json title="opencode.json" {4}
 {
@@ -204,17 +204,17 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 }
 ```
 
-该工具将補丁文件应用到您的程式碼庫。对于应用來自各種來源的差異和補丁很有帮助。
+此工具可将补丁文件应用到您的代码库。它可用于应用来自各种来源的差异和补丁。
 
 :::note
-`patch`工具由`edit`许可权控制，该许可权主题所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
+`修补`工具由`编辑`权限控制，涵盖所有文件修改（`编辑`、`写入`、`修补`、`多重编辑`）。
 :::
 
 ---
 
 ### 技能
 
-加载[skill](/docs/skills)（`SKILL.md` 档案）并在对话中返回其内容。
+加载[技能](/docs/skills)（`SKILL.md` 文件）并在对话中返回其内容。
 
 ```json title="opencode.json" {4}
 {
@@ -227,9 +227,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### 待辦寫入
+### 写入待办
 
-在編碼会话期間管理待辦事項列表。
+在编码会话过程中管理待办事项列表。
 
 ```json title="opencode.json" {4}
 {
@@ -240,17 +240,17 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 }
 ```
 
-建立和更新任务列表以跟踪复杂操作期间的详细信息。LLM 使用它来组织多步骤任务。
+创建和更新任务列表，以跟踪复杂操作的进度。LLM 利用此功能来组织多步骤任务。
 
 :::note
-默认情况下，子代理取消此工具，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
+此工具默认情况下对子代理禁用，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
 :::
 
 ---
 
-### 託多雷德
+### 读取待办
 
-閱讀現有的待辦事項列表。
+阅读现有的待办事项清单。
 
 ```json title="opencode.json" {4}
 {
@@ -261,17 +261,17 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 }
 ```
 
-读取当前完成待办事项列表状态。由 LLM 用于跟踪哪些任务待处理或已已。
+读取当前待办事项列表状态。LLM 使用此信息来跟踪哪些任务处于待处理状态或已完成状态。
 
 :::note
-默认情况下，子代理取消此工具，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
+此工具默认情况下对子代理禁用，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
 :::
 
 ---
 
-### 網頁抓取
+### 网页获取
 
-获取網頁內容。
+获取网页内容。
 
 ```json title="opencode.json" {4}
 {
@@ -282,18 +282,18 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 }
 ```
 
-允许 LLM 获取和读取网页。对于查询文件或研究线上资源很有帮助。
+允许LLM获取并读取网页。可用于查找文档或研究在线资源。
 
 ---
 
-### 網路搜索
+### 网页搜索
 
-在網路上搜索資訊。
+在网上搜索信息。
 
 :::note
-仅当使用 opencode 提供或 `OPENCODE_ENABLE_EXA` 程序环境变量设置为任何真值（例如 `true` 或 `1`）时，此工具才可用。
+只有在使用 OpenCode 提供程序时，或者当 OPENCODE_ENABLE_EXA 环境变量被设置为任何真值（例如 true 或 1）时，此工具才可用。
 
-要在启动 opencode 时启用：
+在启动 OpenCode 时启用：
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -310,19 +310,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-使用 Exa AI 执行网路搜索以线上查询相关资讯。对于研究主题、查询时事或收集训练超出数据范围的资讯很有帮助。
+利用 Exa AI 进行网络搜索，查找相关信息。可用于研究特定主题、了解时事新闻或收集超出训练数据范围的信息。
 
-不需要 API 密钥 — 该工具消耗身份验证即可直接连线到 Exa AI 的托管 MCP 服务。
+无需 API 密钥——该工具无需身份验证即可直接连接到 Exa AI 托管的 MCP 服务。
 
 :::tip
-当您需要查询资讯（发现）时，请使用 `websearch`；当您需要从特定 URL 检索内容（搜索）时，请使用 `webfetch`。
+当您需要查找信息时，请使用`网页搜索`；当您需要从特定 URL 检索内容时，请使用`网页获取`。
 :::
 
 ---
 
-### 問題
+### 提问
 
-在执行过程中詢問用户問題。
+在执行过程中向用户提问。
 
 ```json title="opencode.json" {4}
 {
@@ -333,20 +333,20 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-该工具允许 LLM 在任务期间询问用户问题。它适用于：
+该工具允许 LLM 在执行任务期间向用户提问。它在以下方面很有用：
 
-- 收集用户偏好或要求
-- 澄清不明確的指令
-- 就實施选择做出決策
-- 提供选择方向
+- 收集用户偏好或需求
+- 澄清含糊不清的指示
+- 就实施方案做出决定
+- 提供关于选择下一步方向的选项
 
-每个問題都包含標題、問題文字和選項列表。用户可以從提供的選項中進行选择或輸入自定義答案。当存在多个問題時，用户可以在提交所有答案之前在这些問題之间导航。
+每个问题都包含标题、问题正文和选项列表。用户可以从提供的选项中选择答案，也可以输入自定义答案。如果有多个问题，用户可以在提交所有答案之前在不同问题之间切换。
 
 ---
 
-## 定製工具
+## 自定义工具
 
-自定义工具可以让您定义LLM可以调用自己的函式。这些是在您的配置文件中定义的并且可以执行任何代码。
+自定义工具允许您定义LLM可以调用的自定义函数。这些函数在您的配置文件中定义，并且可以执行任意代码。
 
 [了解更多](/docs/custom-tools)关于创建自定义工具。
 
@@ -360,15 +360,15 @@ MCP（模型上下文协议）服务器允许您集成外部工具和服务。�
 
 ---
 
-## 内部結構
+## 内部规则
 
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+在内部，`grep`、 `通配符` 和 `罗列` 等工具底层都使用了 ripgrep。默认情况下，ripgrep 会遵循 .gitignore 文件中的规则，这意味着 .gitignore 文件中列出的文件和目录将被排除在搜索和列表之外。
 
 ---
 
 ### 忽略模式
 
-要包含通常会被忽略的文件，请在专案根目录中建立 `.ignore` 文件。该文件可以明确允许某些路径。
+为了使工具不跳过那些通常会被忽略的文件，请在项目根目录下创建一个 `.ignore` 文件。该文件内定义的目录可以不会被跳过。
 
 ```text title=".ignore"
 !node_modules/
@@ -376,4 +376,4 @@ Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.c
 !build/
 ```
 
-例如，此 `.ignore` 档案允许 ripgrep 在 `node_modules/`、`dist/` 和 `build/` 目录中搜索，即使它们列在 `.gitignore` 中。
+例如，这个 `.ignore` 文件允许 ripgrep 在 `node_modules/`、`dist/` 和 `build/` 目录中搜索，即使它们已在 `.gitignore` 中列出。

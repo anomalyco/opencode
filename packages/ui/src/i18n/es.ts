@@ -8,6 +8,11 @@ export const dict = {
   "ui.sessionReview.change.added": "Añadido",
   "ui.sessionReview.change.removed": "Eliminado",
   "ui.sessionReview.change.modified": "Modificado",
+  "ui.sessionReview.image.loading": "Cargando...",
+  "ui.sessionReview.image.placeholder": "Imagen",
+  "ui.sessionReview.largeDiff.title": "Diff demasiado grande para renderizar",
+  "ui.sessionReview.largeDiff.meta": "Límite: {{lines}} líneas / {{limit}}. Actual: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Renderizar de todos modos",
 
   "ui.lineComment.label.prefix": "Comentar en ",
   "ui.lineComment.label.suffix": "",

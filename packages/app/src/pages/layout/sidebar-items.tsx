@@ -97,14 +97,22 @@ const SessionRow = (props: {
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   scheduleHoverPrefetch: () => void
   cancelHoverPrefetch: () => void
+  onHoverChange?: (hovered: boolean) => void
+  titleRef?: (el: HTMLSpanElement | undefined) => void
+  containerRef?: (el: HTMLDivElement | undefined) => void
+  marquee?: Accessor<boolean>
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-    onPointerEnter={props.scheduleHoverPrefetch}
-    onPointerLeave={props.cancelHoverPrefetch}
-    onMouseEnter={props.scheduleHoverPrefetch}
-    onMouseLeave={props.cancelHoverPrefetch}
+    onPointerEnter={() => {
+      props.onHoverChange?.(true)
+      props.scheduleHoverPrefetch()
+    }}
+    onPointerLeave={() => {
+      props.onHoverChange?.(false)
+      props.cancelHoverPrefetch()
+    }}
     onFocus={() => props.prefetchSession(props.session, "high")}
     onClick={() => {
       props.setHoverSession(undefined)
@@ -132,9 +140,18 @@ const SessionRow = (props: {
           </Match>
         </Switch>
       </div>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-        {props.session.title}
-      </span>
+      <div ref={props.containerRef} class="grow-1 min-w-0 overflow-hidden">
+        <span
+          ref={props.titleRef}
+          class="text-14-regular text-text-strong whitespace-nowrap"
+          classList={{
+            "inline-block marquee": props.marquee?.() ?? false,
+            "block overflow-hidden text-ellipsis": !(props.marquee?.() ?? false),
+          }}
+        >
+          {props.session.title}
+        </span>
+      </div>
       <Show when={props.session.summary}>
         {(summary) => (
           <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
@@ -289,65 +306,31 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
 
   const item = (
-    <A
-      href={`/${props.slug}/session/${props.session.id}`}
-      class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-      onPointerEnter={() => {
-        setItemHovered(true)
-        scheduleHoverPrefetch()
+    <SessionRow
+      session={props.session}
+      slug={props.slug}
+      mobile={props.mobile}
+      dense={props.dense}
+      tint={tint}
+      isWorking={isWorking}
+      hasPermissions={hasPermissions}
+      hasError={hasError}
+      unseenCount={unseenCount}
+      setHoverSession={props.setHoverSession}
+      clearHoverProjectSoon={props.clearHoverProjectSoon}
+      sidebarOpened={layout.sidebar.opened}
+      prefetchSession={props.prefetchSession}
+      scheduleHoverPrefetch={scheduleHoverPrefetch}
+      cancelHoverPrefetch={cancelHoverPrefetch}
+      onHoverChange={setItemHovered}
+      titleRef={(el) => {
+        titleRef = el
       }}
-      onPointerLeave={() => {
-        setItemHovered(false)
-        cancelHoverPrefetch()
+      containerRef={(el) => {
+        containerRef = el
       }}
-      onFocus={() => props.prefetchSession(props.session, "high")}
-      onClick={() => {
-        props.setHoverSession(undefined)
-        if (layout.sidebar.opened()) return
-        props.clearHoverProjectSoon()
-      }}
-    >
-      <div class="flex items-center gap-1 w-full">
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-            <Match when={isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-        <div ref={containerRef} class="grow-1 min-w-0 overflow-hidden">
-          <span
-            ref={titleRef}
-            class="text-14-regular text-text-strong whitespace-nowrap"
-            classList={{
-              "inline-block marquee": marquee(),
-              "block overflow-hidden text-ellipsis": !marquee(),
-            }}
-          >
-            {props.session.title}
-          </span>
-        </div>
-        <Show when={props.session.summary}>
-          {(summary) => (
-            <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-              <DiffChanges changes={summary()} />
-            </div>
-          )}
-        </Show>
-      </div>
-    </A>
+      marquee={marquee}
+    />
   )
 
   return (

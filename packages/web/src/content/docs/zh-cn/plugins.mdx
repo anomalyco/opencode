@@ -15,7 +15,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-### 從本地文件
+### 从本地文件
 
 将 JavaScript 或 TypeScript 文件放置在插件目录中。
 
@@ -51,7 +51,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-### 加載顺序
+### 加载顺序
 
 插件從所有源加載，所有掛鉤按顺序運行。加載顺序为：
 
@@ -71,7 +71,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ---
 
-### 依賴關係
+### 依赖关系
 
 本地插件和自定义工具可以使用外部 npm 包。将 `package.json` 添加到您的配置目录，其中包含您需要的依赖项。
 
@@ -101,7 +101,7 @@ export const MyPlugin = async (ctx) => {
 
 ---
 
-### 基本結構
+### 基本结构
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -139,7 +139,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### 活动
+### 事件
 
 插件可以訂閱事件，如下面的示例部分所示。以下是可用的不同事件的列表。
 
@@ -152,11 +152,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `file.edited`
 - `file.watcher.updated`
 
-#### 安装活动
+#### 安装事件
 
 - `installation.updated`
 
-#### LSP活动
+#### LSP 事件
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -173,11 +173,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `permission.asked`
 - `permission.replied`
 
-#### 服務器事件
+#### 服务器事件
 
 - `server.connected`
 
-#### 会话活动
+#### 会话事件
 
 - `session.created`
 - `session.compacted`
@@ -188,11 +188,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `session.status`
 - `session.updated`
 
-#### 都都活动
+#### 待办事项事件
 
 - `todo.updated`
 
-#### 殼牌活动
+#### Shell 事件
 
 - `shell.env`
 
@@ -201,7 +201,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI 活动
+#### TUI 事件
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -215,7 +215,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### 發送通知
+### 发送通知
 
 当某些事件發生時發送通知：
 
@@ -258,7 +258,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
-### 注入環境變量
+### 注入环境变量
 
 将环境变量注入所有shell执行（AI工具和用户终端）：
 
@@ -275,7 +275,7 @@ export const InjectEnvPlugin = async () => {
 
 ---
 
-### 定制工具
+### 自定义工具
 
 插件还可以向 opencode 添加自定义工具：
 
@@ -310,7 +310,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 ---
 
-### 記錄
+### 日志
 
 使用 `client.app.log()` 而不是 `console.log` 进行成型日志记录：
 
@@ -331,7 +331,7 @@ export const MyPlugin = async ({ client }) => {
 
 ---
 
-### 壓實鉤
+### 压缩钩子
 
 自定義壓縮会话時包含的上下文：
 
