@@ -1,7 +1,8 @@
 import type { TextareaRenderable } from "@opentui/core"
 
 function lineStart(text: string, offset: number) {
-  const index = text.lastIndexOf("\n", Math.max(0, offset - 1))
+  if (offset <= 0) return 0
+  const index = text.lastIndexOf("\n", offset - 1)
   if (index === -1) return 0
   return index + 1
 }

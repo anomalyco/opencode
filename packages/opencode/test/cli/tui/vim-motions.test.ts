@@ -149,6 +149,30 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.cursorOffset).toBe(0)
   })
 
+  test("j/k move across leading empty first line", () => {
+    const text = "\nline1\nline2\nline3\n"
+    const ctx = createHandler(text)
+    ctx.textarea.cursorOffset = rowColToOffset(text, 1, 0)
+
+    ctx.handler.handleKey(createEvent("k").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(text, 0, 0))
+
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(text, 1, 0))
+  })
+
+  test("j/k move across trailing empty last line", () => {
+    const text = "\nline1\nline2\nline3\n"
+    const ctx = createHandler(text)
+    ctx.textarea.cursorOffset = rowColToOffset(text, 3, 0)
+
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(text, 4, 0))
+
+    ctx.handler.handleKey(createEvent("k").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(text, 3, 0))
+  })
+
   test("supports word and big-word key shapes", () => {
     const ctx = createHandler("foo,bar baz")
 
