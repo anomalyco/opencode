@@ -39,7 +39,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
   return (
     <div class="bg-surface-inset-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip">
       <div
-        class="px-3 py-2 flex items-center gap-2"
+        class="pl-3 pr-2 py-2 flex items-center gap-2"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -56,7 +56,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         <div class="ml-auto">
           <IconButton
             icon="chevron-down"
-            size="small"
+            size="normal"
             variant="ghost"
             classList={{ "rotate-180": !store.collapsed }}
             onMouseDown={(event) => {
