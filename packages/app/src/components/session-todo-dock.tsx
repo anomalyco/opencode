@@ -20,11 +20,11 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
 
   const toggle = () => setStore("collapsed", (value) => !value)
 
-  const progress = createMemo(() => {
+  const summary = createMemo(() => {
     const total = props.todos.length
     if (total === 0) return ""
     const completed = props.todos.filter((todo) => todo.status === "completed").length
-    return `${completed}/${total}`
+    return `${completed} of ${total} ${props.title.toLowerCase()} completed`
   })
 
   const preview = createMemo(() => {
@@ -55,10 +55,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
           toggle()
         }}
       >
-        <span class="text-14-medium text-text-strong">{props.title}</span>
-        <Show when={progress()}>
-          <span class="text-14-regular text-text-weak">{progress()}</span>
-        </Show>
+        <span class="text-14-regular text-text-strong">{summary()}</span>
         <div class="ml-1 flex-1 min-w-0">
           <Show when={store.collapsed && preview()}>
             <div class="text-14-regular text-text-base truncate">{preview()}</div>
