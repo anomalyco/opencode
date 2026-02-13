@@ -2,7 +2,7 @@ import type { Todo } from "@opencode-ai/sdk/v2"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
 function dot(status: Todo["status"]) {
@@ -102,20 +102,69 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
       </div>
 
       <div hidden={store.collapsed}>
-        <TodoList todos={props.todos} />
+        <TodoList todos={props.todos} open={!store.collapsed} />
       </div>
     </div>
   )
 }
 
-function TodoList(props: { todos: Todo[] }) {
+function TodoList(props: { todos: Todo[]; open: boolean }) {
   const [stuck, setStuck] = createSignal(false)
+  const [scrolling, setScrolling] = createSignal(false)
+  let scrollRef!: HTMLDivElement
+  let timer: number | undefined
+
+  const inProgress = createMemo(() => props.todos.findIndex((todo) => todo.status === "in_progress"))
+
+  const ensure = () => {
+    if (!props.open) return
+    if (scrolling()) return
+    if (!scrollRef || scrollRef.offsetParent === null) return
+
+    const el = scrollRef.querySelector('[data-in-progress="true"]')
+    if (!(el instanceof HTMLElement)) return
+
+    const topFade = 16
+    const bottomFade = 44
+    const container = scrollRef.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    const top = rect.top - container.top + scrollRef.scrollTop
+    const bottom = rect.bottom - container.top + scrollRef.scrollTop
+    const viewTop = scrollRef.scrollTop + topFade
+    const viewBottom = scrollRef.scrollTop + scrollRef.clientHeight - bottomFade
+
+    if (top < viewTop) {
+      scrollRef.scrollTop = Math.max(0, top - topFade)
+    } else if (bottom > viewBottom) {
+      scrollRef.scrollTop = bottom - (scrollRef.clientHeight - bottomFade)
+    }
+
+    setStuck(scrollRef.scrollTop > 0)
+  }
+
+  createEffect(
+    on([() => props.open, inProgress], () => {
+      if (!props.open) return
+      requestAnimationFrame(ensure)
+    }),
+  )
+
+  onCleanup(() => {
+    if (!timer) return
+    window.clearTimeout(timer)
+  })
 
   return (
     <div class="relative">
       <div
         class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
-        onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
+        ref={scrollRef}
+        onScroll={(e) => {
+          setStuck(e.currentTarget.scrollTop > 0)
+          setScrolling(true)
+          if (timer) window.clearTimeout(timer)
+          timer = window.setTimeout(() => setScrolling(false), 250)
+        }}
       >
         <For each={props.todos}>
           {(todo) => (
@@ -123,6 +172,7 @@ function TodoList(props: { todos: Todo[] }) {
               readOnly
               checked={todo.status === "completed"}
               indeterminate={todo.status === "in_progress"}
+              data-in-progress={todo.status === "in_progress"}
               icon={dot(todo.status)}
             >
               <span
