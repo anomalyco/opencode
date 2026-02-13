@@ -5,6 +5,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Format } from "../../src/format"
+import type { DiffRange } from "../../src/format/diff-range"
 import * as Formatter from "../../src/format/formatter"
 
 const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
@@ -239,6 +240,100 @@ describe("Format", () => {
           },
         },
       },
+    ),
+  )
+
+  it.live("passes ranges to buildRangeCommand and skips it when no ranges given", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const file = `${dir}/test.ranged`
+        yield* Effect.promise(() => Bun.write(file, ""))
+
+        const captured: DiffRange[][] = []
+        const orig = {
+          extensions: Formatter.gofmt.extensions,
+          enabled: Formatter.gofmt.enabled,
+          build: Formatter.gofmt.buildRangeCommand,
+        }
+
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            Formatter.gofmt.extensions = [".ranged"]
+            Formatter.gofmt.enabled = async () => ["sh", "-c", "true"]
+            Formatter.gofmt.buildRangeCommand = (_file, _cmd, ranges) => {
+              captured.push(ranges)
+              return [["sh", "-c", "true"]]
+            }
+          }),
+          () =>
+            Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                const ranges: DiffRange[] = [
+                  { start: 5, end: 15 },
+                  { start: 30, end: 50 },
+                ]
+
+                yield* fmt.file(file, ranges)
+                expect(captured.length).toBe(1)
+                expect(captured[0]).toEqual(ranges)
+
+                yield* fmt.file(file)
+                // called without ranges — buildRangeCommand must not be invoked
+                expect(captured.length).toBe(1)
+              }),
+            ),
+          () =>
+            Effect.sync(() => {
+              Formatter.gofmt.extensions = orig.extensions
+              Formatter.gofmt.enabled = orig.enabled
+              Formatter.gofmt.buildRangeCommand = orig.build
+            }),
+        )
+      }),
+    ),
+  )
+
+  it.live("executes all commands returned by buildRangeCommand", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const file = `${dir}/test.multi`
+        yield* Effect.promise(() => Bun.write(file, ""))
+
+        const orig = {
+          extensions: Formatter.gofmt.extensions,
+          enabled: Formatter.gofmt.enabled,
+          build: Formatter.gofmt.buildRangeCommand,
+        }
+
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            Formatter.gofmt.extensions = [".multi"]
+            Formatter.gofmt.enabled = async () => ["sh", "-c", "true"]
+            // Each command appends a marker so we can count actual executions
+            Formatter.gofmt.buildRangeCommand = () => [
+              ["sh", "-c", `printf A >> "${file}"`],
+              ["sh", "-c", `printf B >> "${file}"`],
+              ["sh", "-c", `printf C >> "${file}"`],
+            ]
+          }),
+          () =>
+            Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                const ranges: DiffRange[] = [{ start: 0, end: 10 }]
+                yield* fmt.file(file, ranges)
+                // All 3 commands must have executed, writing ABC
+                const content = yield* Effect.promise(() => Bun.file(file).text())
+                expect(content).toBe("ABC")
+              }),
+            ),
+          () =>
+            Effect.sync(() => {
+              Formatter.gofmt.extensions = orig.extensions
+              Formatter.gofmt.enabled = orig.enabled
+              Formatter.gofmt.buildRangeCommand = orig.build
+            }),
+        )
+      }),
     ),
   )
 })

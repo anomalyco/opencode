@@ -4,6 +4,7 @@ import { Filesystem } from "../util"
 import { Process } from "../util"
 import { which } from "../util/which"
 import { Flag } from "@/flag/flag"
+import { DiffRange } from "./diff-range"
 
 export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {}
 
@@ -12,6 +13,7 @@ export interface Info {
   environment?: Record<string, string>
   extensions: string[]
   enabled(context: Context): Promise<string[] | false>
+  buildRangeCommand?(file: string, cmd: string[], ranges: DiffRange[]): string[][]
 }
 
 export const gofmt: Info = {
@@ -80,6 +82,14 @@ export const prettier: Info = {
       }
     }
     return false
+  },
+  // Note: only cmd[0] (the binary) is forwarded; extra flags in cmd are not
+  // forwarded because prettier's range flags replace the write invocation entirely.
+  buildRangeCommand(file: string, cmd: string[], ranges: DiffRange[]) {
+    const bin = cmd[0]!
+    return [...ranges]
+      .sort((a, b) => b.start - a.start)
+      .map((r) => [bin, "--write", `--range-start=${r.start}`, `--range-end=${r.end}`, file])
   },
 }
 
@@ -172,6 +182,15 @@ export const clang: Info = {
       if (match) return [match, "-i", "$FILE"]
     }
     return false
+  },
+  // Note: only cmd[0] (the binary) is forwarded; extra flags in cmd are not
+  // forwarded because clang-format's --offset/--length flags replace the -i invocation.
+  buildRangeCommand(file: string, cmd: string[], ranges: DiffRange[]) {
+    const bin = cmd[0]!
+    if (!ranges.every((r) => r.byteStart != null && r.byteEnd != null)) return [[bin, "-i", file]]
+    return [
+      [bin, "-i", ...ranges.flatMap((r) => [`--offset=${r.byteStart}`, `--length=${r.byteEnd! - r.byteStart!}`]), file],
+    ]
   },
 }
 

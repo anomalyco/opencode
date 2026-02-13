@@ -14,6 +14,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
+import { calculateRanges, DiffRange } from "../format/diff-range"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -234,8 +235,9 @@ export const ApplyPatchTool = Tool.define(
         }
 
         if (edited) {
-          yield* format.file(edited)
-          yield* bus.publish(File.Event.Edited, { file: edited })
+          const ranges = calculateRanges(change.oldContent, change.newContent)
+          yield* format.file(edited, ranges)
+          yield* bus.publish(File.Event.Edited, { file: edited, ranges: ranges.map(DiffRange.toJSON) })
         }
       }
 

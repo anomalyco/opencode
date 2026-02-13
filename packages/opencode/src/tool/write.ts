@@ -13,6 +13,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { calculateRanges, DiffRange } from "../format/diff-range"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -51,9 +52,10 @@ export const WriteTool = Tool.define(
             },
           })
 
+          const ranges = calculateRanges(contentOld, params.content)
           yield* fs.writeWithDirs(filepath, params.content)
-          yield* format.file(filepath)
-          yield* bus.publish(File.Event.Edited, { file: filepath })
+          yield* format.file(filepath, ranges)
+          yield* bus.publish(File.Event.Edited, { file: filepath, ranges: ranges.map(DiffRange.toJSON) })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
