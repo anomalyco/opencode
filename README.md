@@ -111,6 +111,27 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Branch Protocol
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Post-review, stable. All commits have been reviewed. |
+| `dev` | Moving ref to unblock. Integration branch for active development. |
+| `user/the-thing-<linear-id>` | Feature/fix branches. Named `b7r6/feature-name-SLI-123`. |
+
+#### Commit Message Convention
+
+```
+// opencode // area // description // 0x0N
+
+Examples:
+// opencode // tui // streaming telemetry in footer bar // 0x01
+// opencode // config // add expert mode auto-approve // 0x02
+// opencode // agent // fix permission chain ordering // 0x03
+```
+
+The `0x0N` suffix is a sequential counter within the branch for easy reference.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
