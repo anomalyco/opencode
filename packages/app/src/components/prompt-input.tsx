@@ -1060,8 +1060,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={agentNames()}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-full" : "max-w-[120px]"}`}
-                    valueClass="truncate"
+                    class="capitalize max-w-[280px]"
                     variant="ghost"
                   />
                 </TooltipKeybind>

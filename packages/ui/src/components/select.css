@@ -146,6 +146,12 @@
     outline: none;
     user-select: none;
 
+    [data-slot="select-select-item-label"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     &[data-highlighted] {
       background: var(--surface-raised-base-hover);
     }
