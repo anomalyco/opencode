@@ -19,17 +19,21 @@ if (process.argv.includes("--baseline")) flags.push("--baseline")
 if (process.argv.includes("--skip-install")) flags.push("--skip-install")
 
 // Step 1: Run the opencode build as a subprocess
-console.log("Running opencode build...")
-const buildArgs = ["run", "script/build.ts", ...flags]
-const result = Bun.spawnSync(["bun", ...buildArgs], {
-  cwd: opencodePkgDir,
-  stdio: ["inherit", "inherit", "inherit"],
-  env: { ...process.env },
-})
+if (!process.argv.includes("--skip-opencode-build")) {
+  console.log("Running opencode build...")
+  const buildArgs = ["run", "script/build.ts", ...flags]
+  const result = Bun.spawnSync(["bun", ...buildArgs], {
+    cwd: opencodePkgDir,
+    stdio: ["inherit", "inherit", "inherit"],
+    env: { ...process.env },
+  })
 
-if (result.exitCode !== 0) {
-  console.error(`opencode build failed with exit code ${result.exitCode}`)
-  process.exit(1)
+  if (result.exitCode !== 0) {
+    console.error(`opencode build failed with exit code ${result.exitCode}`)
+    process.exit(1)
+  }
+} else {
+  console.log("Skipping opencode build (--skip-opencode-build)")
 }
 
 // Step 2: Clean our dist

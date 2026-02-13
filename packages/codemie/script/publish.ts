@@ -21,7 +21,7 @@ if (!version) {
 }
 
 // Create the wrapper package directory
-const wrapperName = "@codemieai/codemie"
+const wrapperName = "@codemieai/codemie-opencode"
 const wrapperDir = `./dist/${pkg.name}`
 await $`mkdir -p ${wrapperDir}`
 await $`cp -r ./bin ${wrapperDir}/bin`
