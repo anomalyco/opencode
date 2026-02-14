@@ -1,6 +1,7 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
+import { $ } from "bun"
 import { Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"

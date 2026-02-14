@@ -2562,3 +2562,159 @@ describe("closeGroup store proxy identity", () => {
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// Compact mode safeguards (panelMode 5 ↔ review panel)
+// ---------------------------------------------------------------------------
+
+describe("compact mode: auto-restore when review closes", () => {
+  test("reactive guard resets panelMode to 0 when reviewPanel closes while panelMode is 5", () => {
+    let api: any
+    let dispose: () => void
+
+    createRoot((d) => {
+      dispose = d
+      api = initLayout()
+
+      const g1 = api.split.groups()[0].id
+      const layout = api.groupLayout(g1)
+
+      // Wire up the same reactive guard that session.tsx uses
+      createEffect(
+        on(
+          () => layout.reviewPanel.opened(),
+          (open) => {
+            if (!open && layout.session.panelMode() === 5) {
+              layout.session.setPanelMode(0)
+            }
+          },
+        ),
+      )
+    })
+
+    try {
+      const g1 = api.split.groups()[0].id
+      const layout = api.groupLayout(g1)
+
+      // Compact mode: review open + messages hidden
+      layout.reviewPanel.setOpened(true)
+      layout.session.setPanelMode(5)
+      expect(layout.session.panelMode()).toBe(5)
+
+      // Close review panel → guard should auto-restore panelMode
+      layout.reviewPanel.setOpened(false)
+      expect(layout.session.panelMode()).toBe(0)
+    } finally {
+      dispose!()
+    }
+  })
+
+  test("panelMode stays at 5 while reviewPanel remains open", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const g1 = api.split.groups()[0].id
+      const layout = api.groupLayout(g1)
+
+      layout.reviewPanel.setOpened(true)
+      layout.session.setPanelMode(5)
+
+      // Review still open — panelMode should stay
+      expect(layout.session.panelMode()).toBe(5)
+      expect(layout.reviewPanel.opened()).toBe(true)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("panelMode 0 is unaffected when review closes (guard only fires for panelMode 5)", () => {
+    let api: any
+    let dispose: () => void
+
+    createRoot((d) => {
+      dispose = d
+      api = initLayout()
+
+      const g1 = api.split.groups()[0].id
+      const layout = api.groupLayout(g1)
+
+      createEffect(
+        on(
+          () => layout.reviewPanel.opened(),
+          (open) => {
+            if (!open && layout.session.panelMode() === 5) {
+              layout.session.setPanelMode(0)
+            }
+          },
+        ),
+      )
+    })
+
+    try {
+      const g1 = api.split.groups()[0].id
+      const layout = api.groupLayout(g1)
+
+      // Open then close review panel with panelMode at 0 (default)
+      layout.reviewPanel.setOpened(true)
+      layout.reviewPanel.setOpened(false)
+
+      // panelMode should still be 0 (guard was a no-op)
+      expect(layout.session.panelMode()).toBe(0)
+    } finally {
+      dispose!()
+    }
+  })
+
+  test("guard works per-group in split mode", () => {
+    let api: any
+    let dispose: () => void
+
+    createRoot((d) => {
+      dispose = d
+      api = initLayout()
+
+      api.split.toggle()
+      const groups = api.split.groups()
+      const layout1 = api.groupLayout(groups[0].id)
+      const layout2 = api.groupLayout(groups[1].id)
+
+      // Wire guard for both groups
+      for (const layout of [layout1, layout2]) {
+        createEffect(
+          on(
+            () => layout.reviewPanel.opened(),
+            (open) => {
+              if (!open && layout.session.panelMode() === 5) {
+                layout.session.setPanelMode(0)
+              }
+            },
+          ),
+        )
+      }
+    })
+
+    try {
+      const groups = api.split.groups()
+      const layout1 = api.groupLayout(groups[0].id)
+      const layout2 = api.groupLayout(groups[1].id)
+
+      // Put both groups in compact mode
+      layout1.reviewPanel.setOpened(true)
+      layout1.session.setPanelMode(5)
+      layout2.reviewPanel.setOpened(true)
+      layout2.session.setPanelMode(5)
+
+      // Close review in group 1 only
+      layout1.reviewPanel.setOpened(false)
+
+      // Group 1 restored, group 2 still compact
+      expect(layout1.session.panelMode()).toBe(0)
+      expect(layout2.session.panelMode()).toBe(5)
+
+      // Close review in group 2
+      layout2.reviewPanel.setOpened(false)
+      expect(layout2.session.panelMode()).toBe(0)
+    } finally {
+      dispose!()
+    }
+  })
+})

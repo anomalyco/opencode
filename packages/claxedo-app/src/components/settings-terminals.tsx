@@ -17,7 +17,7 @@ const TERMINAL_COMMANDS_KEY = "claxedo.terminalCommands"
 // Default commands
 const DEFAULT_COMMANDS = {
   claude: "claude --dangerously-skip-permissions",
-  codex: 'codex -c model_reasoning_effort="high" --ask-for-approval never --sandbox danger-full-access -c model_reasoning_summary="detailed" -c model_supports_reasoning_summaries=true',
+  codex: 'codex -c model_reasoning_effort="high" --ask-for-approval never --sandbox danger-full-access',
 }
 
 export type CustomCommand = {

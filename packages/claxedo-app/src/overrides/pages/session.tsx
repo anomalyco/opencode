@@ -326,6 +326,19 @@ export default function Page() {
     ),
   )
 
+  // Auto-restore messages when review panel is closed while messages are hidden.
+  // Without this, the user could end up with just a file tree and no prompt/messages.
+  createEffect(
+    on(
+      () => desktopReviewOpen(),
+      (reviewOpen) => {
+        if (!reviewOpen && messagesHidden()) {
+          layout.session.setPanelMode(0)
+        }
+      },
+    ),
+  )
+
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)

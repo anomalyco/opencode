@@ -51,7 +51,11 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 
 export type ReviewDiffStyle = "unified" | "split"
 
-export const { use: useLayout, provider: LayoutProvider, ctx: LayoutContext } = createSimpleContext({
+export const {
+  use: useLayout,
+  provider: LayoutProvider,
+  ctx: LayoutContext,
+} = createSimpleContext({
   name: "Layout",
   init: () => {
     const globalSdk = useGlobalSDK()
@@ -468,12 +472,13 @@ export const { use: useLayout, provider: LayoutProvider, ctx: LayoutContext } = 
           if (s !== p.worktree) sandboxDirs.add(s)
         }
       }
-      const api = apiProjects
-        .map((p) => p.worktree)
-        .filter((w) => validWorktree(w) && !sandboxDirs.has(w))
+      const api = apiProjects.map((p) => p.worktree).filter((w) => validWorktree(w) && !sandboxDirs.has(w))
       if (api.length === 0) return
 
-      const current = server.projects.list().map((p) => p.worktree).filter(validWorktree)
+      const current = server.projects
+        .list()
+        .map((p) => p.worktree)
+        .filter(validWorktree)
       const apiSet = new Set(api)
       const keep = current.filter((worktree) => apiSet.has(worktree))
       const keepSet = new Set(keep)
@@ -761,6 +766,10 @@ export const { use: useLayout, provider: LayoutProvider, ctx: LayoutContext } = 
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setReviewPanelOpened(next: boolean) {
+          // When opening panel, ensure session width is at least 640
+          if (next && store.session && store.session.width < 640) {
+            setStore("session", "width", 640)
+          }
           const current = store.review
           if (!current) {
             setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })

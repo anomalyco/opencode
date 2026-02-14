@@ -95,30 +95,24 @@ export function SessionSidePanel(props: {
         {/* CSS hidden instead of <Show> to avoid expensive unmount/remount */}
         <div
           classList={{
-            "flex-1 min-w-0 h-full": true,
+            "flex-1 min-w-0 h-full relative": true,
             hidden: !props.reviewOpen,
           }}
         >
           {/* Direct review mode (when file tree is open with changes tab) */}
           <div
             classList={{
-              "relative h-full": true,
+              "h-full": true,
               hidden: !fileTreeChangesMode(),
             }}
           >
             {props.reviewPanel()}
-            {/* Compact mode floating prompt */}
-            <Show when={props.compactPrompt}>
-              <div class="absolute inset-x-0 bottom-0 z-50 p-4 bg-gradient-to-t from-background-base via-background-base/80 to-transparent flex justify-center">
-                {props.compactPrompt}
-              </div>
-            </Show>
           </div>
 
           {/* Tabbed mode (when file tree is closed or on non-changes tab) */}
           <div
             classList={{
-              "relative h-full": true,
+              "h-full": true,
               hidden: fileTreeChangesMode(),
             }}
           >
@@ -199,14 +193,8 @@ export function SessionSidePanel(props: {
                 </div>
 
                 <Show when={props.reviewTab}>
-                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict relative">
+                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={props.activeTab() === "review"}>{props.reviewPanel()}</Show>
-                    {/* Compact mode floating prompt */}
-                    <Show when={props.compactPrompt}>
-                      <div class="absolute inset-x-0 bottom-0 z-50 p-4 bg-gradient-to-t from-background-base via-background-base/80 to-transparent flex justify-center">
-                        {props.compactPrompt}
-                      </div>
-                    </Show>
                   </Tabs.Content>
                 </Show>
 
@@ -269,6 +257,13 @@ export function SessionSidePanel(props: {
               </DragOverlay>
             </DragDropProvider>
           </div>
+
+          {/* Compact mode floating prompt - at review area level so it shows regardless of tab/tree state */}
+          <Show when={props.compactPrompt}>
+            <div class="absolute inset-x-0 bottom-0 z-50 p-4 bg-gradient-to-t from-background-base via-background-base/80 to-transparent flex justify-center">
+              {props.compactPrompt}
+            </div>
+          </Show>
         </div>
 
         {/* File tree panel - CSS hidden instead of unmounted */}
