@@ -56,6 +56,17 @@ export type PromptRef = {
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
+// Mode options: LOCKED (no auto-recovery) or ARMED with timeout
+const MODE_OPTIONS = [
+  { mode: "locked", label: "LOCKED" },
+  { mode: "armed", label: "ARMED 1s" },
+  { mode: "armed", label: "ARMED 5s" },
+  { mode: "armed", label: "ARMED 30s" },
+  { mode: "armed", label: "ARMED 1m" },
+  { mode: "armed", label: "ARMED 10m" },
+  { mode: "armed", label: "ARMED 1h" },
+] as const
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -756,6 +767,12 @@ export function Prompt(props: PromptProps) {
     return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
 
+  // Mode label from KV (synced with footer)
+  const modeLabel = createMemo(() => {
+    const idx = kv.get("mode_index", 3) as number
+    return MODE_OPTIONS[idx]?.label ?? "ARMED 30s"
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -995,9 +1012,7 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
+              <text fg={highlight()}>{store.mode === "shell" ? "Shell" : modeLabel()} </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>

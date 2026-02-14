@@ -10,8 +10,7 @@
 -- - Resource limits via cgroups (when available)
 -- - seccomp-bpf syscall filtering
 --
--- The PTY is created by spawning bwrap with a shell, connected via
--- pipes that we wrap in a pseudo-terminal abstraction.
+-- Uses posix-pty for proper terminal emulation with resize support.
 --
 module Pty.Pty
   ( -- * PTY Manager
@@ -28,25 +27,29 @@ module Pty.Pty
     -- * Connection
   , connect
   , PtyConnection(..)
+    -- * Sandbox commit
+  , commitChanges
+  , getChangedFiles
   ) where
 
-import Control.Concurrent (forkIO, ThreadId, killThread)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
 import Control.Exception (try, SomeException, bracket)
-import Control.Monad (void, when, forM, forever)
+import Control.Monad (void, when, forever)
 import Data.ByteString (ByteString)
 import Data.IORef
 import Data.Map.Strict (Map)
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Word (Word64)
-import System.Directory (getCurrentDirectory)
+import System.Directory (findExecutable)
 import System.Exit (ExitCode(..))
-import System.IO (Handle, hClose, hSetBinaryMode, hSetBuffering, BufferMode(..))
-import System.Process
+import System.IO (Handle, hSetBinaryMode, hSetBuffering, BufferMode(..))
+import System.Posix.Pty (Pty, PtyControlCode(..), spawnWithPty, resizePty, readPty, writePty, closePty, createPty)
+import System.Posix.Types (Fd)
+import System.Process (ProcessHandle, getPid, terminateProcess, waitForProcess, getProcessExitCode)
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 
@@ -56,9 +59,19 @@ import qualified Sandbox.Sandbox as Sandbox
 
 -- | PTY Manager - holds all active PTY sessions
 data PtyManager = PtyManager
-  { pmSessions :: TVar (Map Text PtySession)
-  , pmCounter  :: IORef Word64
+  { pmSessions  :: TVar (Map Text RealPtySession)
+  , pmCounter   :: IORef Word64
   , pmDirectory :: FilePath  -- Default working directory
+  }
+
+-- | Real PTY session with posix-pty
+data RealPtySession = RealPtySession
+  { rpsInfo       :: PtyInfo
+  , rpsPty        :: Pty
+  , rpsProcess    :: ProcessHandle
+  , rpsBuffer     :: TVar PtyBuffer
+  , rpsOverlayDir :: Maybe FilePath
+  , rpsSandboxCfg :: Maybe SandboxConfig
   }
 
 -- | Create a new PTY manager
@@ -86,14 +99,26 @@ create mgr@PtyManager{..} input = do
   let sandbox = fromMaybe True (cpiSandbox input)
       cwd = T.unpack $ fromMaybe (T.pack pmDirectory) (cpiCwd input)
       title = fromMaybe ("Terminal " <> T.takeEnd 4 ptyId) (cpiTitle input)
-      env = fromMaybe [] (cpiEnv input)
+      sessionId = fromMaybe ptyId (cpiSessionId input)
+      -- Inject OPENCODE_SESSION_ID for proxy correlation
+      baseEnv = fromMaybe [] (cpiEnv input)
+      env = ("OPENCODE_SESSION_ID", sessionId) : baseEnv
       network = fromMaybe False (cpiNetwork input)
   
   if sandbox
-    then createSandboxed mgr ptyId cwd title env network input
+    then do
+      -- Check if bwrap is available
+      bwrapPath <- findExecutable "bwrap"
+      case bwrapPath of
+        Nothing -> createUnsandboxed mgr ptyId cwd title env input
+        Just _ -> do
+          result <- createSandboxed mgr ptyId cwd title env network input
+          case result of
+            Left _ -> createUnsandboxed mgr ptyId cwd title env input
+            Right info -> pure $ Right info
     else createUnsandboxed mgr ptyId cwd title env input
 
--- | Create a sandboxed PTY using bwrap
+-- | Create a sandboxed PTY using bwrap with real PTY
 createSandboxed :: PtyManager -> Text -> FilePath -> Text -> [(Text, Text)] -> Bool -> CreatePtyInput -> IO (Either Text PtyInfo)
 createSandboxed PtyManager{..} ptyId cwd title env network input = do
   -- Build sandbox config
@@ -111,36 +136,19 @@ createSandboxed PtyManager{..} ptyId cwd title env network input = do
     Right (overlayDir, _) -> do
       -- Build the full bwrap command
       let bwrapArgs = Sandbox.buildBwrapArgs config
+          envList = map (\(k, v) -> (T.unpack k, T.unpack v)) env ++ defaultEnvList
       
-      -- Create process with pipes
-      let cp = (proc "bwrap" bwrapArgs)
-            { std_in  = CreatePipe
-            , std_out = CreatePipe
-            , std_err = CreatePipe
-            , create_group = True
-            , new_session = True
-            }
+      -- Spawn with PTY
+      ptyResult <- try @SomeException $ 
+        spawnWithPty Nothing True "bwrap" bwrapArgs (80, 24)
       
-      procResult <- try @SomeException $ createProcess cp
-      
-      case procResult of
+      case ptyResult of
         Left e -> do
-          -- Cleanup sandbox dir on failure
-          void $ try @SomeException $ Sandbox.destroy overlayDir undefined
-          pure $ Left $ "Failed to spawn sandbox: " <> T.pack (show e)
+          void $ try @SomeException $ Sandbox.destroyDir overlayDir
+          pure $ Left $ "Failed to spawn sandbox PTY: " <> T.pack (show e)
         
-        Right (Just stdinH, Just stdoutH, Just stderrH, ph) -> do
-          -- Set binary mode and no buffering for PTY-like behavior
-          hSetBinaryMode stdinH True
-          hSetBinaryMode stdoutH True
-          hSetBinaryMode stderrH True
-          hSetBuffering stdinH NoBuffering
-          hSetBuffering stdoutH NoBuffering
-          
-          -- Get PID
+        Right (pty, ph) -> do
           pid <- getPid ph
-          
-          -- Create buffer
           bufferVar <- newTVarIO emptyBuffer
           
           let info = PtyInfo
@@ -154,55 +162,38 @@ createSandboxed PtyManager{..} ptyId cwd title env network input = do
                 , piSandbox = True
                 }
           
-          let session = PtySession
-                { psInfo       = info
-                , psProcess    = ph
-                , psMasterFd   = stdoutH  -- We read from stdout
-                , psBuffer     = bufferVar
-                , psOverlayDir = Just overlayDir
-                , psSandboxCfg = Just config
+          let session = RealPtySession
+                { rpsInfo       = info
+                , rpsPty        = pty
+                , rpsProcess    = ph
+                , rpsBuffer     = bufferVar
+                , rpsOverlayDir = Just overlayDir
+                , rpsSandboxCfg = Just config
                 }
           
-          -- Register session
           atomically $ modifyTVar' pmSessions (Map.insert ptyId session)
           
-          -- Start reader thread to fill buffer
-          void $ forkIO $ readerThread session stdinH stdoutH stderrH
+          -- Start reader thread
+          void $ forkIO $ ptyReaderThread session
           
           -- Monitor for exit
-          void $ forkIO $ exitMonitor pmSessions ptyId ph overlayDir
+          void $ forkIO $ exitMonitor pmSessions ptyId ph (Just overlayDir)
           
           pure $ Right info
-        
-        _ -> pure $ Left "Failed to create process pipes"
 
--- | Create an unsandboxed PTY (fallback for when sandbox not available)
+-- | Create an unsandboxed PTY
 createUnsandboxed :: PtyManager -> Text -> FilePath -> Text -> [(Text, Text)] -> CreatePtyInput -> IO (Either Text PtyInfo)
 createUnsandboxed PtyManager{..} ptyId cwd title env input = do
   let cmd = T.unpack $ fromMaybe "/bin/sh" (cpiCommand input)
       args = map T.unpack $ fromMaybe ["-l"] (cpiArgs input)
+      envList = Just $ map (\(k, v) -> (T.unpack k, T.unpack v)) env ++ defaultEnvList
   
-  let cp = (proc cmd args)
-        { std_in  = CreatePipe
-        , std_out = CreatePipe
-        , std_err = CreatePipe
-        , cwd     = Just cwd
-        , env     = Just $ map (\(k, v) -> (T.unpack k, T.unpack v)) env
-                         ++ defaultEnvList
-        , create_group = True
-        }
+  ptyResult <- try @SomeException $
+    spawnWithPty envList True cmd args (80, 24)
   
-  procResult <- try @SomeException $ createProcess cp
-  
-  case procResult of
-    Left e -> pure $ Left $ "Failed to spawn process: " <> T.pack (show e)
-    Right (Just stdinH, Just stdoutH, Just stderrH, ph) -> do
-      hSetBinaryMode stdinH True
-      hSetBinaryMode stdoutH True
-      hSetBinaryMode stderrH True
-      hSetBuffering stdinH NoBuffering
-      hSetBuffering stdoutH NoBuffering
-      
+  case ptyResult of
+    Left e -> pure $ Left $ "Failed to spawn PTY: " <> T.pack (show e)
+    Right (pty, ph) -> do
       pid <- getPid ph
       bufferVar <- newTVarIO emptyBuffer
       
@@ -217,21 +208,20 @@ createUnsandboxed PtyManager{..} ptyId cwd title env input = do
             , piSandbox = False
             }
       
-      let session = PtySession
-            { psInfo       = info
-            , psProcess    = ph
-            , psMasterFd   = stdoutH
-            , psBuffer     = bufferVar
-            , psOverlayDir = Nothing
-            , psSandboxCfg = Nothing
+      let session = RealPtySession
+            { rpsInfo       = info
+            , rpsPty        = pty
+            , rpsProcess    = ph
+            , rpsBuffer     = bufferVar
+            , rpsOverlayDir = Nothing
+            , rpsSandboxCfg = Nothing
             }
       
       atomically $ modifyTVar' pmSessions (Map.insert ptyId session)
-      void $ forkIO $ readerThread session stdinH stdoutH stderrH
-      void $ forkIO $ exitMonitorNoSandbox pmSessions ptyId ph
+      void $ forkIO $ ptyReaderThread session
+      void $ forkIO $ exitMonitor pmSessions ptyId ph Nothing
       
       pure $ Right info
-    _ -> pure $ Left "Failed to create process pipes"
 
 -- | Default environment variables
 defaultEnvList :: [(String, String)]
@@ -239,97 +229,95 @@ defaultEnvList =
   [ ("HOME", "/root")
   , ("USER", "root")
   , ("SHELL", "/bin/sh")
-  , ("PATH", "/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin")
+    -- NixOS-compatible PATH
+  , ("PATH", "/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin")
   , ("TERM", "xterm-256color")
   , ("LANG", "C.UTF-8")
   , ("LC_ALL", "C.UTF-8")
+    -- Route all HTTP traffic through MITM proxy
+  , ("HTTP_PROXY", "http://127.0.0.1:8888")
+  , ("HTTPS_PROXY", "http://127.0.0.1:8888")
+  , ("http_proxy", "http://127.0.0.1:8888")
+  , ("https_proxy", "http://127.0.0.1:8888")
   ]
 
 -- | Convert mount tuple to MountSpec
 toMountSpec :: (Text, Text, Bool) -> MountSpec
 toMountSpec (src, dest, ro) = MountSpec (T.unpack src) (T.unpack dest) ro
 
--- | Reader thread - reads from stdout and fills buffer
-readerThread :: PtySession -> Handle -> Handle -> Handle -> IO ()
-readerThread PtySession{..} stdinH stdoutH stderrH = do
-  -- Read loop
-  forever $ do
-    -- Read from stdout (non-blocking would be better)
-    chunk <- try @SomeException $ BS.hGetSome stdoutH 4096
-    case chunk of
-      Left _ -> pure ()  -- EOF or error
-      Right bs | BS.null bs -> pure ()
-      Right bs -> do
-        -- Update buffer
-        atomically $ modifyTVar' psBuffer $ \buf ->
-          let newCursor = pbCursor buf + fromIntegral (BS.length bs)
-              newData = BS.take bufferLimit (pbData buf <> bs)
-              excess = max 0 (BS.length newData - bufferLimit)
-              newBufferCursor = pbBufferCursor buf + fromIntegral excess
-          in buf
-            { pbData = newData
-            , pbCursor = newCursor
-            , pbBufferCursor = newBufferCursor
-            }
+-- | Reader thread - reads from PTY and fills buffer
+ptyReaderThread :: RealPtySession -> IO ()
+ptyReaderThread RealPtySession{..} = loop
+  where
+    loop = do
+      result <- try @SomeException $ readPty rpsPty
+      case result of
+        Left _ -> pure ()  -- PTY closed
+        Right bs | BS.null bs -> do
+          threadDelay 10000  -- 10ms
+          loop
+        Right bs -> do
+          atomically $ modifyTVar' rpsBuffer $ \buf ->
+            let newCursor = pbCursor buf + fromIntegral (BS.length bs)
+                newData = BS.take bufferLimit (pbData buf <> bs)
+                excess = max 0 (BS.length newData - bufferLimit)
+                newBufferCursor = pbBufferCursor buf + fromIntegral excess
+            in buf
+              { pbData = newData
+              , pbCursor = newCursor
+              , pbBufferCursor = newBufferCursor
+              }
+          loop
 
--- | Exit monitor thread - updates status when process exits
-exitMonitor :: TVar (Map Text PtySession) -> Text -> ProcessHandle -> FilePath -> IO ()
-exitMonitor sessions ptyId ph overlayDir = do
-  code <- waitForProcess ph
-  let status = case code of
-        ExitSuccess   -> PtyExited 0
-        ExitFailure n -> PtyExited n
-  
-  -- Update session status
-  atomically $ modifyTVar' sessions $ Map.adjust
-    (\s -> s { psInfo = (psInfo s) { piStatus = status } })
-    ptyId
-  
-  -- Cleanup overlay after a delay
-  void $ forkIO $ do
-    threadDelay 5000000  -- 5 seconds
-    void $ try @SomeException $ Sandbox.destroy overlayDir ph
-
--- | Exit monitor for non-sandboxed PTY
-exitMonitorNoSandbox :: TVar (Map Text PtySession) -> Text -> ProcessHandle -> IO ()
-exitMonitorNoSandbox sessions ptyId ph = do
+-- | Exit monitor thread
+exitMonitor :: TVar (Map Text RealPtySession) -> Text -> ProcessHandle -> Maybe FilePath -> IO ()
+exitMonitor sessions ptyId ph mOverlayDir = do
   code <- waitForProcess ph
   let status = case code of
         ExitSuccess   -> PtyExited 0
         ExitFailure n -> PtyExited n
   
   atomically $ modifyTVar' sessions $ Map.adjust
-    (\s -> s { psInfo = (psInfo s) { piStatus = status } })
+    (\s -> s { rpsInfo = (rpsInfo s) { piStatus = status } })
     ptyId
-
--- | Simple thread delay
-threadDelay :: Int -> IO ()
-threadDelay = Control.Concurrent.threadDelay
+  
+  -- Cleanup overlay after delay
+  case mOverlayDir of
+    Nothing -> pure ()
+    Just dir -> void $ forkIO $ do
+      threadDelay 5000000  -- 5 seconds
+      void $ try @SomeException $ Sandbox.destroyDir dir
 
 -- | Get a PTY session by ID
 get :: PtyManager -> Text -> IO (Maybe PtyInfo)
 get PtyManager{..} ptyId = do
   sessions <- readTVarIO pmSessions
-  pure $ fmap psInfo (Map.lookup ptyId sessions)
+  pure $ fmap rpsInfo (Map.lookup ptyId sessions)
 
 -- | List all PTY sessions
 list :: PtyManager -> IO [PtyInfo]
 list PtyManager{..} = do
   sessions <- readTVarIO pmSessions
-  pure $ map psInfo (Map.elems sessions)
+  pure $ map rpsInfo (Map.elems sessions)
 
 -- | Update a PTY session
 update :: PtyManager -> Text -> UpdatePtyInput -> IO (Maybe PtyInfo)
-update PtyManager{..} ptyId UpdatePtyInput{..} = do
+update mgr@PtyManager{..} ptyId UpdatePtyInput{..} = do
+  -- Handle resize if requested
+  case upiSize of
+    Just (ResizeInput rows cols) -> void $ resize mgr ptyId cols rows
+    Nothing -> pure ()
+  
+  -- Update title
   atomically $ do
     sessions <- readTVar pmSessions
     case Map.lookup ptyId sessions of
       Nothing -> pure Nothing
       Just session -> do
-        let info' = (psInfo session)
-              { piTitle = fromMaybe (piTitle (psInfo session)) upiTitle
+        let info' = (rpsInfo session)
+              { piTitle = fromMaybe (piTitle (rpsInfo session)) upiTitle
               }
-        let session' = session { psInfo = info' }
+        let session' = session { rpsInfo = info' }
         writeTVar pmSessions (Map.insert ptyId session' sessions)
         pure $ Just info'
 
@@ -347,14 +335,12 @@ remove PtyManager{..} ptyId = do
   case mSession of
     Nothing -> pure False
     Just session -> do
-      -- Kill the process
-      terminateProcess (psProcess session)
+      terminateProcess (rpsProcess session)
+      void $ try @SomeException $ closePty (rpsPty session)
       
-      -- Cleanup sandbox if applicable
-      case psOverlayDir session of
+      case rpsOverlayDir session of
         Nothing -> pure ()
-        Just dir -> void $ try @SomeException $ 
-          Sandbox.destroy dir (psProcess session)
+        Just dir -> void $ try @SomeException $ Sandbox.destroyDir dir
       
       pure True
 
@@ -365,21 +351,22 @@ write PtyManager{..} ptyId bs = do
   case Map.lookup ptyId sessions of
     Nothing -> pure False
     Just session -> do
-      -- We need stdin handle, but we stored stdout
-      -- This is a design issue - we need to keep both handles
-      -- For now, this is a placeholder
-      pure True
+      result <- try @SomeException $ writePty (rpsPty session) bs
+      case result of
+        Left _ -> pure False
+        Right _ -> pure True
 
--- | Resize a PTY (sends SIGWINCH)
+-- | Resize a PTY (sends SIGWINCH via ioctl TIOCSWINSZ)
 resize :: PtyManager -> Text -> Int -> Int -> IO Bool
 resize PtyManager{..} ptyId cols rows = do
   sessions <- readTVarIO pmSessions
   case Map.lookup ptyId sessions of
     Nothing -> pure False
     Just session -> do
-      -- In a real PTY implementation, we'd use ioctl TIOCSWINSZ
-      -- With pipes, we can't resize - this is a limitation
-      pure True
+      result <- try @SomeException $ resizePty (rpsPty session) (cols, rows)
+      case result of
+        Left _ -> pure False
+        Right _ -> pure True
 
 -- | PTY connection for WebSocket bridging
 data PtyConnection = PtyConnection
@@ -395,27 +382,64 @@ connect PtyManager{..} ptyId cursor = do
   case Map.lookup ptyId sessions of
     Nothing -> pure Nothing
     Just session -> do
-      -- Get current buffer state
-      buf <- readTVarIO (psBuffer session)
+      buf <- readTVarIO (rpsBuffer session)
       
-      -- Calculate replay data
       let replayFrom = fromMaybe 0 cursor
           replayData = if replayFrom >= pbCursor buf
             then BS.empty
             else let offset = max 0 (fromIntegral $ replayFrom - pbBufferCursor buf)
                  in BS.drop offset (pbData buf)
       
-      -- Create connection
-      -- This is a simplified implementation - real one needs
-      -- proper subscriber management
+      lastCursorRef <- newIORef (pbCursor buf)
+      runningRef <- newIORef True
+      
       pure $ Just PtyConnection
-        { pcSend = \_ -> pure ()  -- TODO: write to stdin
+        { pcSend = \bs -> void $ try @SomeException $ writePty (rpsPty session) bs
         , pcOnData = \handler -> do
-            -- Send replay data first
-            when (not $ BS.null replayData) $
-              handler replayData
-            -- Then subscribe to new data
-            -- TODO: proper subscription
-            pure ()
-        , pcClose = pure ()
+            when (not $ BS.null replayData) $ handler replayData
+            
+            void $ forkIO $ do
+              let pollLoop = do
+                    running <- readIORef runningRef
+                    when running $ do
+                      currentBuf <- readTVarIO (rpsBuffer session)
+                      lastCursor <- readIORef lastCursorRef
+                      
+                      when (pbCursor currentBuf > lastCursor) $ do
+                        let start = pbBufferCursor currentBuf
+                            offset = max 0 (fromIntegral $ lastCursor - start)
+                            newData = BS.drop offset (pbData currentBuf)
+                        when (not $ BS.null newData) $ handler newData
+                        writeIORef lastCursorRef (pbCursor currentBuf)
+                      
+                      threadDelay 10000
+                      pollLoop
+              pollLoop
+        , pcClose = writeIORef runningRef False
         }
+
+-- | Commit sandbox changes to real filesystem
+-- Copies modified files from sandbox overlay to the workdir
+commitChanges :: PtyManager -> Text -> IO (Either Text ())
+commitChanges PtyManager{..} ptyId = do
+  sessions <- readTVarIO pmSessions
+  case Map.lookup ptyId sessions of
+    Nothing -> pure $ Left "PTY not found"
+    Just session -> case (rpsOverlayDir session, rpsSandboxCfg session) of
+      (Nothing, _) -> pure $ Left "PTY is not sandboxed"
+      (_, Nothing) -> pure $ Left "PTY has no sandbox config"
+      (Just overlayDir, Just cfg) -> do
+        let workdir = scWorkdir cfg
+        Sandbox.commit overlayDir workdir
+
+-- | Get list of changed files in sandbox
+getChangedFiles :: PtyManager -> Text -> IO (Either Text [FilePath])
+getChangedFiles PtyManager{..} ptyId = do
+  sessions <- readTVarIO pmSessions
+  case Map.lookup ptyId sessions of
+    Nothing -> pure $ Left "PTY not found"
+    Just session -> case rpsOverlayDir session of
+      Nothing -> pure $ Left "PTY is not sandboxed"
+      Just overlayDir -> do
+        files <- Sandbox.getChanges overlayDir
+        pure $ Right files

@@ -207,12 +207,12 @@ instance ToJSON Usage where
 
 -- | Chat completion response
 data ChatResponse = ChatResponse
-  { crId         :: Text
-  , crModel      :: Text
-  , crRole       :: Role
-  , crContent    :: [ContentBlock]
-  , crStopReason :: Maybe StopReason
-  , crUsage      :: Usage
+  { respId         :: Text
+  , respModel      :: Text
+  , respRole       :: Role
+  , respContent    :: [ContentBlock]
+  , respStopReason :: Maybe StopReason
+  , respUsage      :: Usage
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ChatResponse where

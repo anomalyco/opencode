@@ -149,7 +149,10 @@ data Client = Client
 -- | Create a new OpenRouter client
 newClient :: Text -> IO Client
 newClient apiKey = do
-  manager <- HC.newManager HCT.tlsManagerSettings
+  let settings = HCT.tlsManagerSettings
+        { HC.managerResponseTimeout = HC.responseTimeoutMicro (60 * 1000000)  -- 60s timeout
+        }
+  manager <- HC.newManager settings
   pure Client
     { clApiKey = apiKey
     , clManager = manager

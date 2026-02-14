@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module Api where
 
@@ -109,6 +110,12 @@ instance ToJSON SessionTime where
     , "archived" .= stArchived st
     ]
 
+instance FromJSON SessionTime where
+  parseJSON = withObject "SessionTime" $ \v -> SessionTime
+    <$> v .: "created"
+    <*> v .: "updated"
+    <*> v .:? "archived"
+
 data Session = Session
   { sesId :: Text
   , sesSlug :: Text
@@ -159,6 +166,13 @@ instance ToJSON MessageInfo where
     , "time" .= msgTime m
     ]
 
+instance FromJSON MessageInfo where
+  parseJSON = withObject "MessageInfo" $ \v -> MessageInfo
+    <$> v .: "id"
+    <*> v .: "sessionID"
+    <*> v .: "role"
+    <*> v .: "time"
+
 data Message = Message
   { msgInfo :: MessageInfo
   , msgParts :: [Value]
@@ -169,6 +183,11 @@ instance ToJSON Message where
     [ "info" .= msgInfo m
     , "parts" .= msgParts m
     ]
+
+instance FromJSON Message where
+  parseJSON = withObject "Message" $ \v -> Message
+    <$> v .: "info"
+    <*> v .: "parts"
 
 data CreateMessageInput = CreateMessageInput
   { cmiMessageId :: Maybe Text
@@ -248,6 +267,46 @@ type FileReadAPI = "file" :> "content" :> QueryParam "directory" Text :> QueryPa
 -- /global/event
 type GlobalEventAPI = "global" :> "event" :> Raw
 
+-- PTY API (sandboxed terminals)
+
+-- /pty (List)
+type PtyListAPI = "pty" :> Get '[JSON] [Value]
+
+-- /pty (Create)
+type PtyCreateAPI = "pty" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /pty/:ptyID (Get)
+type PtyGetAPI = "pty" :> Capture "ptyID" Text :> Get '[JSON] Value
+
+-- /pty/:ptyID (Update)
+type PtyUpdateAPI = "pty" :> Capture "ptyID" Text :> ReqBody '[JSON] Value :> Put '[JSON] Value
+
+-- /pty/:ptyID (Delete)
+type PtyDeleteAPI = "pty" :> Capture "ptyID" Text :> Delete '[JSON] Bool
+
+-- /pty/:ptyID/connect (WebSocket) - handled separately as Raw
+type PtyConnectAPI = "pty" :> Capture "ptyID" Text :> "connect" :> Raw
+
+-- /pty/:ptyID/commit (Commit sandbox changes to real filesystem)
+type PtyCommitAPI = "pty" :> Capture "ptyID" Text :> "commit" :> Post '[JSON] Value
+
+-- /pty/:ptyID/changes (Get list of changed files in sandbox)
+type PtyChangesAPI = "pty" :> Capture "ptyID" Text :> "changes" :> Get '[JSON] Value
+
+-- /chat (LLM chat completion via OpenRouter)
+type ChatAPI = "chat" :> ReqBody '[JSON] ChatInput :> Post '[JSON] Value
+
+-- Chat input
+data ChatInput = ChatInput
+  { ciMessage :: Text
+  , ciModel   :: Maybe Text
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON ChatInput where
+  parseJSON = withObject "ChatInput" $ \v -> ChatInput
+    <$> v .: "message"
+    <*> v .:? "model"
+
 -- Combined API
 type OpencodeAPI = 
        HealthAPI
@@ -272,6 +331,17 @@ type OpencodeAPI =
   :<|> FileListAPI
   :<|> FileReadAPI
   :<|> GlobalEventAPI
+  -- PTY routes
+  :<|> PtyListAPI
+  :<|> PtyCreateAPI
+  :<|> PtyGetAPI
+  :<|> PtyUpdateAPI
+  :<|> PtyDeleteAPI
+  :<|> PtyConnectAPI
+  :<|> PtyCommitAPI
+  :<|> PtyChangesAPI
+  -- LLM
+  :<|> ChatAPI
 
 api :: Proxy OpencodeAPI
 api = Proxy

@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | PTY types for sandboxed shell sessions
 module Pty.Types
@@ -11,7 +12,6 @@ module Pty.Types
   , UpdatePtyInput(..)
   , ResizeInput(..)
     -- * PTY State
-  , PtySession(..)
   , PtyBuffer(..)
   , emptyBuffer
     -- * Constants
@@ -19,17 +19,11 @@ module Pty.Types
   , bufferChunk
   ) where
 
-import Control.Concurrent.STM (TVar)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
-import System.IO (Handle)
-import System.Posix.Types (ProcessID)
-import System.Process (ProcessHandle)
-
-import Sandbox.Types (SandboxConfig, Coeffects)
 
 -- | PTY status
 data PtyStatus
@@ -67,14 +61,15 @@ instance ToJSON PtyInfo where
 
 -- | Input for creating a new PTY
 data CreatePtyInput = CreatePtyInput
-  { cpiCommand  :: Maybe Text      -- ^ Command (default: shell)
-  , cpiArgs     :: Maybe [Text]    -- ^ Arguments
-  , cpiCwd      :: Maybe Text      -- ^ Working directory
-  , cpiTitle    :: Maybe Text      -- ^ Display title
-  , cpiEnv      :: Maybe [(Text, Text)]  -- ^ Environment variables
-  , cpiSandbox  :: Maybe Bool      -- ^ Enable sandboxing (default: true)
-  , cpiNetwork  :: Maybe Bool      -- ^ Allow network in sandbox (default: false)
-  , cpiMounts   :: Maybe [(Text, Text, Bool)]  -- ^ (src, dest, readonly)
+  { cpiCommand   :: Maybe Text      -- ^ Command (default: shell)
+  , cpiArgs      :: Maybe [Text]    -- ^ Arguments
+  , cpiCwd       :: Maybe Text      -- ^ Working directory
+  , cpiTitle     :: Maybe Text      -- ^ Display title
+  , cpiEnv       :: Maybe [(Text, Text)]  -- ^ Environment variables
+  , cpiSandbox   :: Maybe Bool      -- ^ Enable sandboxing (default: true)
+  , cpiNetwork   :: Maybe Bool      -- ^ Allow network in sandbox (default: false)
+  , cpiMounts    :: Maybe [(Text, Text, Bool)]  -- ^ (src, dest, readonly)
+  , cpiSessionId :: Maybe Text      -- ^ Session ID for proxy correlation
   } deriving (Eq, Show, Generic)
 
 instance FromJSON CreatePtyInput where
@@ -87,6 +82,7 @@ instance FromJSON CreatePtyInput where
     <*> v .:? "sandbox"
     <*> v .:? "network"
     <*> v .:? "mounts"
+    <*> v .:? "sessionId"
 
 -- | Input for updating a PTY
 data UpdatePtyInput = UpdatePtyInput
@@ -132,13 +128,3 @@ bufferLimit = 2 * 1024 * 1024
 -- | Chunk size for sending data
 bufferChunk :: Int
 bufferChunk = 64 * 1024
-
--- | Runtime PTY session state
-data PtySession = PtySession
-  { psInfo        :: PtyInfo
-  , psProcess     :: ProcessHandle
-  , psMasterFd    :: Handle           -- ^ PTY master handle
-  , psBuffer      :: TVar PtyBuffer   -- ^ Output buffer for replay
-  , psOverlayDir  :: Maybe FilePath   -- ^ Sandbox overlay dir (for cleanup)
-  , psSandboxCfg  :: Maybe SandboxConfig  -- ^ Sandbox config (if sandboxed)
-  }

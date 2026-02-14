@@ -26,24 +26,22 @@ module Proxy.Proxy
 
 import Control.Concurrent (forkIO, ThreadId, killThread)
 import Control.Concurrent.STM
-import Control.Exception (try, SomeException, bracket, finally)
-import Control.Monad (void, when, forever, forM_)
-import Data.Aeson (encode, decode, Value(..), (.:), (.:?))
+import Control.Exception (try, SomeException)
+import Control.Monad (forM_)
+import Data.Aeson (encode, decode, Object, Value(..), (.:), (.:?))
 import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
-import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
-import Data.IORef
+import Data.CaseInsensitive (original)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Text.Encoding (decodeUtf8)
 import Data.Time (getCurrentTime, diffUTCTime)
 import Data.Word (Word64)
 import Network.HTTP.Types
 import Network.Wai
-import Network.Wai.Handler.Warp (run, defaultSettings, setPort)
+import Network.Wai.Handler.Warp (run)
 import System.Directory (createDirectoryIfMissing)
-import System.IO (Handle, IOMode(..), withFile, hPutStrLn)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
@@ -112,6 +110,7 @@ proxyApp state manager logFile req respond = do
 handleHttp :: ProxyState -> HC.Manager -> FilePath -> Application
 handleHttp state manager logFile req respond = do
   startTime <- getCurrentTime
+  let method = requestMethod req
   
   -- Extract session ID from header (injected by sandbox)
   let sessionId = fromMaybe "unknown" $ 
@@ -131,12 +130,16 @@ handleHttp state manager logFile req respond = do
                  else Nothing
   
   -- Build outbound request
-  let url = T.unpack $ decodeUtf8 $ rawPathInfo req <> rawQueryString req
-      host = fromMaybe "unknown" $ decodeUtf8 <$> requestHeaderHost req
+  -- For proxy requests, reconstruct full URL from Host header + path
+  let host = fromMaybe "unknown" $ decodeUtf8 <$> requestHeaderHost req
+      path = rawPathInfo req <> rawQueryString req
+      url = if "http" `BS.isPrefixOf` path
+            then T.unpack $ decodeUtf8 path  -- Already full URL
+            else "http://" <> T.unpack host <> T.unpack (decodeUtf8 path)
   
   -- Log request
   let reqLog = RequestLog
-        { rlHeaders = Map.fromList [(decodeUtf8 k, decodeUtf8 v) | (k, v) <- requestHeaders req]
+        { rlHeaders = Map.fromList [(decodeUtf8 (original k), decodeUtf8 v) | (k, v) <- requestHeaders req]
         , rlBody = bodyText
         , rlSize = fromIntegral $ LBS.length body
         }
@@ -191,7 +194,7 @@ handleHttp state manager logFile req respond = do
       -- Log response
       let respLog = ResponseLog
             { rsStatus = statusCode respStatus
-            , rsHeaders = Map.fromList [(decodeUtf8 k, decodeUtf8 v) | (k, v) <- respHeaders]
+            , rsHeaders = Map.fromList [(decodeUtf8 (original k), decodeUtf8 v) | (k, v) <- respHeaders]
             , rsBody = Just $ decodeUtf8 $ LBS.toStrict $
                        LBS.take (fromIntegral $ pcMaxBodyLog $ psConfig state) respBody
             , rsSize = fromIntegral $ LBS.length respBody
@@ -254,40 +257,42 @@ parseTokenUsage host body = do
     Just json -> pure $ parseTokensFromJson host json
 
 parseTokensFromJson :: Text -> Value -> Maybe TokenUsage
-parseTokensFromJson host json = flip parseMaybe json $ \obj -> do
-  -- Try Anthropic format
-  if "anthropic" `T.isInfixOf` host
-    then do
-      usage <- obj .: "usage"
-      inputTokens <- usage .: "input_tokens"
-      outputTokens <- usage .: "output_tokens"
-      cacheRead <- usage .:? "cache_read_input_tokens"
-      cacheWrite <- usage .:? "cache_creation_input_tokens"
-      model <- obj .: "model"
-      pure TokenUsage
-        { tuProvider = "anthropic"
-        , tuModel = model
-        , tuInputTokens = inputTokens
-        , tuOutputTokens = outputTokens
-        , tuCacheRead = cacheRead
-        , tuCacheWrite = cacheWrite
-        }
-    -- Try OpenAI format
-    else if "openai" `T.isInfixOf` host
-    then do
-      usage <- obj .: "usage"
-      inputTokens <- usage .: "prompt_tokens"
-      outputTokens <- usage .: "completion_tokens"
-      model <- obj .: "model"
-      pure TokenUsage
-        { tuProvider = "openai"
-        , tuModel = model
-        , tuInputTokens = inputTokens
-        , tuOutputTokens = outputTokens
-        , tuCacheRead = Nothing
-        , tuCacheWrite = Nothing
-        }
-    else fail "Unknown provider"
+parseTokensFromJson host json = flip parseMaybe json $ \case
+  Object obj -> do
+    -- Try Anthropic format
+    if "anthropic" `T.isInfixOf` host
+      then do
+        usage <- obj .: "usage"
+        inputTokens <- usage .: "input_tokens"
+        outputTokens <- usage .: "output_tokens"
+        cacheRead <- usage .:? "cache_read_input_tokens"
+        cacheWrite <- usage .:? "cache_creation_input_tokens"
+        model <- obj .: "model"
+        pure TokenUsage
+          { tuProvider = "anthropic"
+          , tuModel = model
+          , tuInputTokens = inputTokens
+          , tuOutputTokens = outputTokens
+          , tuCacheRead = cacheRead
+          , tuCacheWrite = cacheWrite
+          }
+      -- Try OpenAI format
+      else if "openai" `T.isInfixOf` host
+      then do
+        usage <- obj .: "usage"
+        inputTokens <- usage .: "prompt_tokens"
+        outputTokens <- usage .: "completion_tokens"
+        model <- obj .: "model"
+        pure TokenUsage
+          { tuProvider = "openai"
+          , tuModel = model
+          , tuInputTokens = inputTokens
+          , tuOutputTokens = outputTokens
+          , tuCacheRead = Nothing
+          , tuCacheWrite = Nothing
+          }
+      else fail "Unknown provider"
+  _ -> fail "Not an object"
 
 -- | Add token counts
 addTokens :: TokenUsage -> TokenUsage -> TokenUsage

@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
 
 module Handlers where
 
@@ -7,6 +9,7 @@ import Servant
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent.STM
 import Data.Text (Text, pack, unpack)
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Maybe (fromMaybe)
 import Data.Time.Clock (getCurrentTime)
@@ -17,8 +20,10 @@ import Control.Monad (forM, forM_)
 import Control.Concurrent (forkIO, threadDelay)
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Map.Strict as Map
-import Control.Exception (catch)
+import Control.Exception (catch, SomeException, try)
+import System.IO (hFlush, stdout)
 
 import Api
 import State
@@ -32,6 +37,10 @@ import qualified Agent.Agent as Agent
 import qualified Agent.Types as AT
 import qualified Config.Config as Config
 import qualified Config.Types as CT
+import qualified Pty.Pty as Pty
+import qualified Pty.Types as PtyT
+import qualified LLM.OpenRouter as LLM
+import System.Environment (lookupEnv)
 
 -- Helper to resolve paths
 resolvePath :: Maybe Text -> Text -> IO FilePath
@@ -130,7 +139,7 @@ providerAuthHandler st = liftIO $ do
 
 configHandler :: AppState -> Handler Value
 configHandler st = liftIO $ do
-  cfg <- Config.get (stDirectory st)
+  cfg <- Config.get (unpack (stDirectory st))
   return $ Data.Aeson.toJSON cfg
 
 commandHandler :: Handler [Value]
@@ -177,41 +186,180 @@ sessionMessageCreateHandler st sid input = liftIO $ do
   let msgTime = SessionTime t t Nothing
   
   -- 1. User Message
-  let uMsgId = fromMaybe ("msg_" ++ show (round t :: Integer)) (cmiMessageId input)
+  let uMsgId = fromMaybe (pack ("msg_" ++ show (round t :: Integer))) (cmiMessageId input)
   let uMsg = Message
-        { msgInfo = MessageInfo (pack uMsgId) sid "user" msgTime
+        { msgInfo = MessageInfo uMsgId sid "user" msgTime
         , msgParts = cmiParts input
         }
   
-  -- 2. Assistant Message
-  let aMsgId = "msg_" ++ show (round t + 1 :: Integer)
+  -- 2. Assistant Message (incomplete initially)
+  let aMsgId = pack ("msg_" ++ show (round t + 1 :: Integer))
+  let partId = pack ("part_" ++ show (round t :: Integer))
   let aMsg = Message
-        { msgInfo = MessageInfo (pack aMsgId) sid "assistant" msgTime
+        { msgInfo = MessageInfo aMsgId sid "assistant" msgTime
         , msgParts = []
         }
   
   -- Write to storage
-  Storage.write (stStorage st) ["message", sid, pack uMsgId] uMsg
-  Storage.write (stStorage st) ["message", sid, pack aMsgId] aMsg
+  Storage.write (stStorage st) ["message", sid, uMsgId] uMsg
+  Storage.write (stStorage st) ["message", sid, aMsgId] aMsg
   
-  -- Publish events
-  Bus.publish (stBus st) "message.updated" (object ["info" .= uMsg])
-  Bus.publish (stBus st) "message.updated" (object ["info" .= aMsg])
-
-  -- Mock streaming response
-  _ <- forkIO $ do
-    let words' = ["This", " ", "is", " ", "a", " ", "simulated", " ", "streaming", " ", "response", " ", "from", " ", "Haskell!"]
-    forM_ (zip [0..] words') $ \(i, w) -> do
-        threadDelay 100000 -- 100ms
-        let partEvent = object
-              [ "id" .= pack aMsgId
+  -- Publish user message event (send just info, not full message)
+  let userInfo = object
+        [ "id" .= uMsgId
+        , "sessionID" .= sid
+        , "role" .= ("user" :: Text)
+        , "time" .= object ["created" .= t]
+        , "parentID" .= (Nothing :: Maybe Text)
+        ]
+  Bus.publish (stBus st) "message.updated" (object ["info" .= userInfo])
+  
+  -- Publish assistant message (incomplete - no time.completed)
+  let assistantInfo = object
+        [ "id" .= aMsgId
+        , "sessionID" .= sid
+        , "role" .= ("assistant" :: Text)
+        , "time" .= object ["created" .= t]
+        , "parentID" .= uMsgId
+        , "modelID" .= ("anthropic/claude-sonnet-4" :: Text)
+        , "providerID" .= ("openrouter" :: Text)
+        , "mode" .= ("build" :: Text)
+        , "agent" .= ("build" :: Text)
+        , "path" .= object ["cwd" .= stDirectory st, "root" .= stDirectory st]
+        , "cost" .= (0 :: Double)
+        , "tokens" .= object
+            [ "input" .= (0 :: Int)
+            , "output" .= (0 :: Int)
+            , "reasoning" .= (0 :: Int)
+            , "cache" .= object ["read" .= (0 :: Int), "write" .= (0 :: Int)]
+            ]
+        ]
+  Bus.publish (stBus st) "message.updated" (object ["info" .= assistantInfo])
+  
+  -- Extract user text from parts
+  let userText = extractUserText (cmiParts input)
+  
+  -- Spawn LLM streaming task
+  _ <- forkIO $ (do
+    apiKey <- lookupEnv "OPENROUTER_API_KEY"
+    case apiKey of
+      Nothing -> do
+        -- No API key - send error
+        let errPart = object
+              [ "id" .= partId
               , "sessionID" .= sid
-              , "partIndex" .= (i :: Int)
-              , "content" .= (w :: String)
+              , "messageID" .= aMsgId
+              , "type" .= ("text" :: Text)
+              , "text" .= ("Error: OPENROUTER_API_KEY not set" :: Text)
               ]
-        Bus.publish (stBus st) "message.part.updated" partEvent
+        Bus.publish (stBus st) "message.part.updated" (object ["part" .= errPart])
+        putStrLn "[LLM] Published error part"
+        completeMessage st sid aMsgId t
+        putStrLn "[LLM] Completed message"
+        
+      Just key -> do
+        putStrLn "[LLM] Creating client..."
+        hFlush stdout
+        client <- LLM.newClient (pack key)
+        putStrLn "[LLM] Starting stream..."
+        hFlush stdout
+        textRef <- newTVarIO ("" :: Text)
+        
+        let req = LLM.ChatRequest
+              { LLM.crModel = "anthropic/claude-sonnet-4"
+              , LLM.crMessages = [LLM.Message LLM.User userText]
+              , LLM.crMaxTokens = Just 4096
+              , LLM.crTemperature = Nothing
+              , LLM.crStream = True
+              }
+        
+        putStrLn $ "[LLM] Calling chatStream with user text: " ++ take 50 (T.unpack userText)
+        hFlush stdout
+        result <- LLM.chatStream client req $ \delta -> do
+          putStrLn $ "[LLM] Got delta: " ++ take 30 (T.unpack delta)
+          hFlush stdout
+          -- Accumulate text
+          atomically $ modifyTVar' textRef (<> delta)
+          fullText <- readTVarIO textRef
+          
+          -- Publish text part update with accumulated text
+          let textPart = object
+                [ "id" .= partId
+                , "sessionID" .= sid
+                , "messageID" .= aMsgId
+                , "type" .= ("text" :: Text)
+                , "text" .= fullText
+                ]
+          Bus.publish (stBus st) "message.part.updated" (object ["part" .= textPart, "delta" .= delta])
+        
+        putStrLn $ "[LLM] chatStream returned: " ++ either T.unpack (const "Right ()") result
+        hFlush stdout
+        case result of
+          Left err -> do
+            -- Publish error
+            putStrLn $ "[LLM] Error: " ++ T.unpack err
+            hFlush stdout
+            fullText <- readTVarIO textRef
+            let errText = fullText <> "\n\n[Error: " <> err <> "]"
+            let textPart = object
+                  [ "id" .= partId
+                  , "sessionID" .= sid
+                  , "messageID" .= aMsgId
+                  , "type" .= ("text" :: Text)
+                  , "text" .= errText
+                  ]
+            Bus.publish (stBus st) "message.part.updated" (object ["part" .= textPart])
+          Right () -> pure ()
+        
+        completeMessage st sid aMsgId t
+    ) `catch` \(e :: SomeException) -> do
+      putStrLn $ "[LLM] Exception in background task: " ++ show e
+      hFlush stdout
         
   return aMsg
+
+-- | Extract text content from user message parts
+extractUserText :: [Value] -> Text
+extractUserText parts = T.intercalate "\n" $ concatMap extractText parts
+  where
+    extractText (Object obj) = case KM.lookup "type" obj of
+      Just (String "text") -> case KM.lookup "text" obj of
+        Just (String txt) -> [txt]
+        _ -> []
+      _ -> []
+    extractText _ = []
+
+-- | Mark message as complete and publish idle event
+completeMessage :: AppState -> Text -> Text -> Double -> IO ()
+completeMessage st sid msgId startTime = do
+  now <- getCurrentTime
+  let endTime = realToFrac (utcTimeToPOSIXSeconds now) * 1000 :: Double
+  
+  -- Publish completed message info
+  let completedInfo = object
+        [ "id" .= msgId
+        , "sessionID" .= sid
+        , "role" .= ("assistant" :: Text)
+        , "time" .= object ["created" .= startTime, "completed" .= endTime]
+        , "parentID" .= (msgId :: Text)  -- TODO: actual parent
+        , "modelID" .= ("anthropic/claude-sonnet-4" :: Text)
+        , "providerID" .= ("openrouter" :: Text)
+        , "mode" .= ("build" :: Text)
+        , "agent" .= ("build" :: Text)
+        , "path" .= object ["cwd" .= stDirectory st, "root" .= stDirectory st]
+        , "cost" .= (0 :: Double)
+        , "tokens" .= object
+            [ "input" .= (0 :: Int)
+            , "output" .= (0 :: Int)
+            , "reasoning" .= (0 :: Int)
+            , "cache" .= object ["read" .= (0 :: Int), "write" .= (0 :: Int)]
+            ]
+        , "finish" .= ("end_turn" :: Text)
+        ]
+  Bus.publish (stBus st) "message.updated" (object ["info" .= completedInfo])
+  
+  -- Publish session idle
+  Bus.publish (stBus st) "session.idle" (object ["sessionID" .= sid])
 
 -- * File Handlers
 
@@ -258,3 +406,113 @@ permissionHandler = return []
 
 questionHandler :: Handler [Value]
 questionHandler = return []
+
+-- * PTY Handlers (sandboxed terminals)
+
+ptyListHandler :: AppState -> Handler [Value]
+ptyListHandler st = liftIO $ do
+  sessions <- Pty.list (stPtyManager st)
+  return $ map Data.Aeson.toJSON sessions
+
+ptyCreateHandler :: AppState -> Value -> Handler Value
+ptyCreateHandler st input = liftIO $ do
+  -- Parse input
+  let parseInput = case Data.Aeson.fromJSON input of
+        Data.Aeson.Success i -> Just i
+        Data.Aeson.Error _ -> Nothing
+  
+  let ptyInput = case parseInput of
+        Just i -> i
+        Nothing -> PtyT.CreatePtyInput Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+  
+  result <- Pty.create (stPtyManager st) ptyInput
+  case result of
+    Left err -> return $ object ["error" .= err]
+    Right info -> do
+      -- Publish event
+      Bus.publish (stBus st) "pty.created" (object ["info" .= info])
+      return $ Data.Aeson.toJSON info
+
+ptyGetHandler :: AppState -> Text -> Handler Value
+ptyGetHandler st ptyId = liftIO $ do
+  mInfo <- Pty.get (stPtyManager st) ptyId
+  case mInfo of
+    Nothing -> return $ object ["error" .= ("PTY not found" :: Text)]
+    Just info -> return $ Data.Aeson.toJSON info
+
+ptyUpdateHandler :: AppState -> Text -> Value -> Handler Value
+ptyUpdateHandler st ptyId input = liftIO $ do
+  let parseInput = case Data.Aeson.fromJSON input of
+        Data.Aeson.Success i -> Just i
+        Data.Aeson.Error _ -> Nothing
+  
+  case parseInput of
+    Nothing -> return $ object ["error" .= ("Invalid input" :: Text)]
+    Just updateInput -> do
+      mInfo <- Pty.update (stPtyManager st) ptyId updateInput
+      case mInfo of
+        Nothing -> return $ object ["error" .= ("PTY not found" :: Text)]
+        Just info -> do
+          Bus.publish (stBus st) "pty.updated" (object ["info" .= info])
+          return $ Data.Aeson.toJSON info
+
+ptyDeleteHandler :: AppState -> Text -> Handler Bool
+ptyDeleteHandler st ptyId = liftIO $ do
+  success <- Pty.remove (stPtyManager st) ptyId
+  when success $
+    Bus.publish (stBus st) "pty.deleted" (object ["id" .= ptyId])
+  return success
+  where
+    when True action = action
+    when False _ = return ()
+
+-- | Commit sandbox changes to real filesystem
+ptyCommitHandler :: AppState -> Text -> Handler Value
+ptyCommitHandler st ptyId = liftIO $ do
+  result <- Pty.commitChanges (stPtyManager st) ptyId
+  case result of
+    Left err -> return $ object ["error" .= err]
+    Right () -> do
+      Bus.publish (stBus st) "pty.committed" (object ["id" .= ptyId])
+      return $ object ["success" .= True, "id" .= ptyId]
+
+-- | Get list of changed files in sandbox
+ptyChangesHandler :: AppState -> Text -> Handler Value
+ptyChangesHandler st ptyId = liftIO $ do
+  result <- Pty.getChangedFiles (stPtyManager st) ptyId
+  case result of
+    Left err -> return $ object ["error" .= err]
+    Right files -> return $ object ["id" .= ptyId, "changes" .= map pack files]
+
+-- * LLM Handlers
+
+-- | Simple chat completion handler for testing LLM integration
+chatHandler :: AppState -> ChatInput -> Handler Value
+chatHandler _st input = liftIO $ do
+  -- Get API key from environment
+  apiKey <- lookupEnv "OPENROUTER_API_KEY"
+  case apiKey of
+    Nothing -> return $ object ["error" .= ("OPENROUTER_API_KEY not set" :: Text)]
+    Just key -> do
+      client <- LLM.newClient (pack key)
+      let model = fromMaybe "anthropic/claude-sonnet-4" (ciModel input)
+          req = LLM.ChatRequest
+            { LLM.crModel = model
+            , LLM.crMessages = [LLM.Message LLM.User (ciMessage input)]
+            , LLM.crMaxTokens = Just 1024
+            , LLM.crTemperature = Nothing
+            , LLM.crStream = False
+            }
+      result <- LLM.chat client req
+      case result of
+        Left err -> return $ object ["error" .= err]
+        Right resp -> do
+          let content = case LLM.respChoices resp of
+                (c:_) -> LLM.msgContent (LLM.choiceMessage c)
+                [] -> ""
+          return $ object
+            [ "id" .= LLM.respId resp
+            , "model" .= LLM.respModel resp
+            , "content" .= content
+            , "usage" .= LLM.respUsage resp
+            ]

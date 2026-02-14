@@ -23,6 +23,15 @@ executable opencode-server
     Provider.Provider
     Agent.Types
     Agent.Agent
+    Sandbox.Types
+    Sandbox.Sandbox
+    Pty.Types
+    Pty.Pty
+    Proxy.Types
+    Proxy.Proxy
+    LLM.Types
+    LLM.Anthropic
+    LLM.OpenRouter
   hs-source-dirs:   src
   default-language: GHC2021
   ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -33,7 +42,12 @@ executable opencode-server
     servant-server >= 0.20,
     warp >= 3.3,
     wai >= 3.2,
+    wai-websockets >= 3.0,
+    websockets >= 0.12,
     http-types >= 0.12,
+    http-client >= 0.7,
+    http-client-tls >= 0.3,
+    case-insensitive >= 1.2,
     text >= 2.0,
     bytestring >= 0.11,
     containers >= 0.6,
@@ -41,7 +55,10 @@ executable opencode-server
     directory >= 1.3,
     filepath >= 1.4,
     time >= 1.12,
-    random >= 1.2
+    random >= 1.2,
+    process >= 1.6,
+    unix >= 2.8,
+    posix-pty >= 0.2
   default-extensions:
     DataKinds
     TypeOperators

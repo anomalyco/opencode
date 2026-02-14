@@ -38,17 +38,22 @@ module Sandbox.Sandbox
   ( -- * Sandbox lifecycle
     create
   , destroy
+  , destroyDir
   , buildBwrapArgs
+    -- * Commit / Changes
+  , commit
+  , getChanges
   ) where
 
 import Control.Exception (try, SomeException)
-import Control.Monad (void)
+import Control.Monad (void, forM)
+import Control.Concurrent (threadDelay)
 import Data.Text (Text)
 import System.Directory
+import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import System.Posix.Signals (signalProcess, sigKILL, sigTERM)
 import System.Process
-import Control.Concurrent (threadDelay)
 
 import qualified Data.Text as T
 
@@ -114,11 +119,13 @@ buildBwrapArgs SandboxConfig{..} =
     , ["--ro-bind", "/", "/"]
     
       -- Make specific paths writable via tmpfs overlay
+      -- Note: Don't tmpfs /run on NixOS - it contains /run/current-system/sw/bin
     , ["--tmpfs", "/tmp"]
-    , ["--tmpfs", "/home"]
-    , ["--tmpfs", "/root"]
     , ["--tmpfs", "/var/tmp"]
-    , ["--tmpfs", "/run"]
+    
+      -- Bind-mount workdir (read-write) AFTER root is set up
+      -- This allows access to the project directory
+    , ["--bind", scWorkdir, scWorkdir]
     
       -- Additional user-specified mounts
     , concatMap mountToArgs scMounts
@@ -147,11 +154,17 @@ defaultEnv =
   [ "--setenv", "HOME", "/root"
   , "--setenv", "USER", "root"
   , "--setenv", "SHELL", "/bin/sh"
-  , "--setenv", "PATH", "/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin"
+    -- NixOS-compatible PATH (includes /run/current-system/sw/bin)
+  , "--setenv", "PATH", "/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin"
   , "--setenv", "TERM", "xterm-256color"
   , "--setenv", "OPENCODE_SANDBOX", "1"
   , "--setenv", "LANG", "C.UTF-8"
   , "--setenv", "LC_ALL", "C.UTF-8"
+    -- Route all HTTP traffic through MITM proxy for surveillance
+  , "--setenv", "HTTP_PROXY", "http://127.0.0.1:8888"
+  , "--setenv", "HTTPS_PROXY", "http://127.0.0.1:8888"
+  , "--setenv", "http_proxy", "http://127.0.0.1:8888"
+  , "--setenv", "https_proxy", "http://127.0.0.1:8888"
   ]
 
 -- | Convert a mount spec to bwrap arguments
@@ -177,3 +190,56 @@ destroy overlayDir ph = do
   
   -- Cleanup overlay directory
   void $ try @SomeException $ removeDirectoryRecursive overlayDir
+
+-- | Destroy just the sandbox directory (process already terminated)
+destroyDir :: FilePath -> IO ()
+destroyDir overlayDir = do
+  void $ try @SomeException $ removeDirectoryRecursive overlayDir
+
+-- | Commit sandbox changes to real filesystem
+-- Copies files from overlay upper dir to the original workdir
+commit :: FilePath -> FilePath -> IO (Either Text ())
+commit overlayDir workdir = do
+  let upperDir = overlayDir </> "upper"
+  
+  -- Check if upper dir exists and has changes
+  exists <- doesDirectoryExist upperDir
+  if not exists
+    then pure $ Left "Overlay upper dir not found"
+    else do
+      -- Use rsync to copy changes
+      -- -a: archive mode (preserves permissions, etc)
+      -- -v: verbose
+      -- --delete: remove files in dest that don't exist in source (optional, disabled for safety)
+      let rsyncArgs = ["-a", upperDir <> "/", workdir <> "/"]
+      
+      result <- try @SomeException $ do
+        (_, _, _, ph) <- createProcess (proc "rsync" rsyncArgs)
+        exitCode <- waitForProcess ph
+        pure exitCode
+      
+      case result of
+        Left e -> pure $ Left $ "rsync failed: " <> T.pack (show e)
+        Right ExitSuccess -> pure $ Right ()
+        Right (ExitFailure n) -> pure $ Left $ "rsync exited with code " <> T.pack (show n)
+
+-- | Get list of changed files in sandbox
+getChanges :: FilePath -> IO [FilePath]
+getChanges overlayDir = do
+  let upperDir = overlayDir </> "upper"
+  exists <- doesDirectoryExist upperDir
+  if not exists
+    then pure []
+    else listDirectoryRecursive upperDir
+
+-- | List all files recursively in a directory
+listDirectoryRecursive :: FilePath -> IO [FilePath]
+listDirectoryRecursive dir = do
+  entries <- listDirectory dir
+  paths <- forM entries $ \entry -> do
+    let path = dir </> entry
+    isDir <- doesDirectoryExist path
+    if isDir
+      then listDirectoryRecursive path
+      else pure [path]
+  pure $ concat paths

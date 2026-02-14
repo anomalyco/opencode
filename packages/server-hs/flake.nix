@@ -37,6 +37,7 @@
             haskellPackages.cabal-install
             haskellPackages.haskell-language-server
             zlib
+            bubblewrap
           ];
 
           inputsFrom = [ opencode-server.env ];

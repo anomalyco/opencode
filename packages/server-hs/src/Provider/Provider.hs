@@ -21,7 +21,8 @@ module Provider.Provider
   , builtinProviders
   ) where
 
-import Control.Exception (catch)
+import qualified Control.Exception
+import Data.Aeson (Value)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 
@@ -134,16 +135,14 @@ authStatus storage = do
 checkAuth :: Storage.StorageConfig -> Provider -> IO ProviderAuth
 checkAuth storage provider = do
   -- Check if we have stored auth
-  hasAuth <- (Storage.read storage ["auth", providerId provider] >> pure True)
-    `catch` \(Storage.NotFoundError _) -> pure False
+  hasAuth <- Control.Exception.catch
+    ((Storage.read storage ["auth", providerId provider] :: IO Value) >> pure True)
+    (\(Storage.NotFoundError _) -> pure False)
   pure $ ProviderAuth
     { paProviderID = providerId provider
     , paAuthenticated = hasAuth
     , paMethod = if hasAuth then Just "api_key" else Nothing
     }
-  where
-    catch :: IO a -> (Storage.NotFoundError -> IO a) -> IO a
-    catch = flip Control.Exception.catch
 
 -- | Set auth for a provider
 setAuth :: Storage.StorageConfig -> Text -> Text -> IO ()

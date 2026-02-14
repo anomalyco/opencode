@@ -20,8 +20,7 @@ module Proxy.Types
   ) where
 
 import Control.Concurrent.STM (TVar)
-import Data.Aeson
-import Data.ByteString (ByteString)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.:), (.:?), object, (.=), withObject)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time (UTCTime)
@@ -56,6 +55,19 @@ instance ToJSON LogEntry where
     , "duration"   .= leDuration
     ]
 
+instance FromJSON LogEntry where
+  parseJSON = withObject "LogEntry" $ \v -> LogEntry
+    <$> v .: "ts"
+    <*> v .: "session"
+    <*> v .: "request_id"
+    <*> v .: "method"
+    <*> v .: "url"
+    <*> v .: "host"
+    <*> v .: "request"
+    <*> v .:? "response"
+    <*> v .:? "tokens"
+    <*> v .: "duration"
+
 -- | Logged request details
 data RequestLog = RequestLog
   { rlHeaders :: Map Text Text
@@ -69,6 +81,12 @@ instance ToJSON RequestLog where
     , "body"    .= rlBody
     , "size"    .= rlSize
     ]
+
+instance FromJSON RequestLog where
+  parseJSON = withObject "RequestLog" $ \v -> RequestLog
+    <$> v .: "headers"
+    <*> v .:? "body"
+    <*> v .: "size"
 
 -- | Logged response details
 data ResponseLog = ResponseLog
@@ -87,6 +105,14 @@ instance ToJSON ResponseLog where
     , "size"    .= rsSize
     , "stream"  .= rsStream
     ]
+
+instance FromJSON ResponseLog where
+  parseJSON = withObject "ResponseLog" $ \v -> ResponseLog
+    <$> v .: "status"
+    <*> v .: "headers"
+    <*> v .:? "body"
+    <*> v .: "size"
+    <*> v .: "stream"
 
 -- | Token usage from LLM API responses
 data TokenUsage = TokenUsage
@@ -107,6 +133,15 @@ instance ToJSON TokenUsage where
     , "cache_read"    .= tuCacheRead
     , "cache_write"   .= tuCacheWrite
     ]
+
+instance FromJSON TokenUsage where
+  parseJSON = withObject "TokenUsage" $ \v -> TokenUsage
+    <$> v .: "provider"
+    <*> v .: "model"
+    <*> v .: "input_tokens"
+    <*> v .: "output_tokens"
+    <*> v .:? "cache_read"
+    <*> v .:? "cache_write"
 
 -- | Proxy configuration
 data ProxyConfig = ProxyConfig
