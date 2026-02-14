@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-02-14
+
+### Added
+- Windows build support — path normalization and GNU toolchain for cross-platform desktop builds
+
+### Fixed
+- Disable onboarding/local-setup dialog — no longer shown on remote deployments
+- Compact prompt dock now visible on all review tabs, auto-restores messages on review close
+- SSE event stream uses platform.fetch for non-loopback URLs
+
 ## [0.0.3] - 2026-02-14
 
 ### Added
@@ -52,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Context scope issues between app-scope and directory-scope providers
 - Terminal state persistence across workspace navigation
 
-[Unreleased]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.3...HEAD
+[Unreleased]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.4...HEAD
+[0.0.4]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.3...claxedo-v0.0.4
 [0.0.3]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.2...claxedo-v0.0.3
 [0.0.2]: https://github.com/kyashrathore/opencode/releases/tag/claxedo-v0.0.2
 [0.0.1]: https://github.com/kyashrathore/opencode/releases/tag/claxedo-v0.0.1
