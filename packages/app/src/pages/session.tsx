@@ -649,6 +649,11 @@ export default function Page() {
     if (!hasReview()) return true
     return sync.data.session_diff[id] !== undefined
   })
+  const reviewEmptyKey = createMemo(() => {
+    const project = sync.project
+    if (!project || project.vcs) return "session.review.empty"
+    return "session.review.noVcs"
+  })
 
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
@@ -1028,7 +1033,7 @@ export default function Page() {
             ) : (
               <div class={input.emptyClass}>
                 <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
               </div>
             )
           }
