@@ -80,11 +80,8 @@ const cli = yargs(hideBin(process.argv))
     })
 
     const marker = path.join(Global.Path.data, "migration.json")
-    const cmd = opts._[0]
-    // skip migration for commands that may be called programmatically
-    // migration progress should only be shown to interactive users
-    const skipMigration = ["serve", "acp", "run", "mcp", "export", "import", "completion", "upgrade"].includes(cmd as string)
-    if (!skipMigration && !(await Bun.file(marker).exists())) {
+    // only run migration in interactive terminals where user can see progress
+    if (process.stdout.isTTY && !(await Bun.file(marker).exists())) {
       console.log("Performing one time database migration, may take a few minutes...")
       const tty = process.stdout.isTTY
       const width = 36
