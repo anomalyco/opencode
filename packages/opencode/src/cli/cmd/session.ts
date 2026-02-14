@@ -54,6 +54,12 @@ export const SessionDeleteCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      try {
+        await Session.get(args.sessionID)
+      } catch {
+        console.error(`Session not found: ${args.sessionID}`)
+        process.exit(1)
+      }
       await Session.remove(args.sessionID)
       console.log(`Session ${args.sessionID} deleted`)
     })
