@@ -80,6 +80,37 @@ describe("Patch namespace", () => {
       }
     })
 
+    test("should parse paths containing colons (Windows drive letters)", () => {
+      const patchText = `*** Begin Patch
+*** Add File: C:\\Users\\user\\project\\new.txt
++content
+*** Delete File: D:\\repos\\project\\old.txt
+*** Update File: E:\\work\\src\\main.ts
+*** Move to: E:\\work\\src\\renamed.ts
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      expect(result.hunks).toHaveLength(3)
+
+      const add = result.hunks[0]
+      expect(add.type).toBe("add")
+      expect(add.path).toBe("C:\\Users\\user\\project\\new.txt")
+
+      const del = result.hunks[1]
+      expect(del.type).toBe("delete")
+      expect(del.path).toBe("D:\\repos\\project\\old.txt")
+
+      const update = result.hunks[2]
+      expect(update.type).toBe("update")
+      expect(update.path).toBe("E:\\work\\src\\main.ts")
+      if (update.type === "update") {
+        expect(update.move_path).toBe("E:\\work\\src\\renamed.ts")
+      }
+    })
+
     test("should throw error for invalid patch format", () => {
       const invalidPatch = `This is not a valid patch`
 
