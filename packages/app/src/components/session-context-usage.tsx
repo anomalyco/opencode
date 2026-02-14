@@ -44,10 +44,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all, sync.data))
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+    const agent = usd().format(metrics().ownCost)
+    const total = usd().format(metrics().totalCost)
+    const value = `(current agent ${agent}; total ${total})`
+    return metrics().missing.length > 0 ? `${value}${language.t("context.stats.loaded")}` : value
   })
 
   const openContext = () => {

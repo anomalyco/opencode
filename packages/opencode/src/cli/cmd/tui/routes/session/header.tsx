@@ -1,6 +1,7 @@
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { costs } from "@opencode-ai/util/cost"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -23,7 +24,7 @@ const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Acces
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
+        {props.context()} {props.cost()}
       </text>
     </Show>
   )
@@ -36,14 +37,15 @@ export function Header() {
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
   const cost = createMemo(() => {
-    const total = pipe(
-      messages(),
-      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
-    )
-    return new Intl.NumberFormat("en-US", {
+    const result = costs(route.sessionID, sync.data)
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(total)
+    })
+    const agent = formatter.format(result.own)
+    const total = formatter.format(result.total)
+    const formatted = `(current agent ${agent}; total ${total})`
+    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
   })
 
   const context = createMemo(() => {

@@ -361,7 +361,13 @@ export const dict = {
   "context.stats.cacheTokens": "Токены кэша (чтение/запись)",
   "context.stats.userMessages": "Сообщения пользователя",
   "context.stats.assistantMessages": "Сообщения ассистента",
+  "context.stats.ownCost": "Стоимость сессии",
+  "context.stats.ownCost": "Стоимость сессии",
   "context.stats.totalCost": "Общая стоимость",
+  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
+  "context.stats.loaded": " (загружено)",
+  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
+  "context.stats.loaded": " (загружено)",
   "context.stats.sessionCreated": "Сессия создана",
   "context.stats.lastActivity": "Последняя активность",
 

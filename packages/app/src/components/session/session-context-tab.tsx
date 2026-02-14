@@ -104,12 +104,13 @@ export function SessionContextTab(props: SessionContextTabProps) {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(props.messages(), sync.data.provider.all))
+  const metrics = createMemo(() => getSessionContextMetrics(props.messages(), sync.data.provider.all, sync.data))
   const ctx = createMemo(() => metrics().context)
   const formatter = createMemo(() => createSessionContextFormatter(language.locale()))
 
   const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+    const value = usd().format(metrics().totalCost)
+    return metrics().missing.length > 0 ? `${value}${language.t("context.stats.loaded")}` : value
   })
 
   const counts = createMemo(() => {
@@ -185,6 +186,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
     },
     { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.locale()) },
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.locale()) },
+    { label: "context.stats.ownCost", value: () => formatter().currency(metrics().ownCost) },
     { label: "context.stats.totalCost", value: cost },
     { label: "context.stats.sessionCreated", value: () => formatter().time(props.info()?.time.created) },
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },

@@ -45,6 +45,7 @@ import { ImagePreview } from "./image-preview"
 import { findLast } from "@opencode-ai/util/array"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { costs } from "@opencode-ai/util/cost"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
@@ -921,6 +922,44 @@ ToolRegistry.register({
       }, 50)
     }
 
+    const stats = createMemo(() => {
+      const sid = childSessionId()
+      if (!sid) return undefined
+      const messages = data.store.message[sid]
+      if (!messages || messages.length === 0) return undefined
+
+      const last = findLast(
+        messages,
+        (m) =>
+          m.role === "assistant" &&
+          (m as AssistantMessage).tokens.input +
+            (m as AssistantMessage).tokens.output +
+            (m as AssistantMessage).tokens.reasoning >
+            0,
+      ) as AssistantMessage | undefined
+      if (!last) return undefined
+
+      const tokens =
+        last.tokens.input +
+        last.tokens.output +
+        last.tokens.reasoning +
+        last.tokens.cache.read +
+        last.tokens.cache.write
+      const limit = (data.store as any).provider?.all
+        ? (() => {
+            const providers = (data.store as any).provider.all as {
+              id: string
+              models: Record<string, { limit: { context: number } } | undefined>
+            }[]
+            const p = providers.find((item) => item.id === last.providerID)
+            return p?.models[last.modelID]?.limit.context
+          })()
+        : undefined
+      const usage = limit ? Math.round((tokens / limit) * 100) : undefined
+      const result = costs(sid, data.store)
+      return { tokens, usage, own: result.own, total: result.total, missing: result.missing }
+    })
+
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
@@ -940,6 +979,16 @@ ToolRegistry.register({
                 <span data-slot="basic-tool-tool-subtitle">{props.input.description}</span>
               </Match>
             </Switch>
+          </Show>
+          <Show when={stats()}>
+            {(s) => (
+              <span data-slot="basic-tool-tool-subtitle">
+                {s().tokens.toLocaleString() + " tokens"}
+                {s().usage !== undefined ? ` (${s().usage}%)` : ""}
+                {` ($${s().total.toFixed(2)})`}
+                {s().missing.length > 0 ? i18n.t("ui.messagePart.loaded") : ""}
+              </span>
+            )}
           </Show>
         </div>
       </div>

@@ -15,6 +15,7 @@ import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { costs } from "@opencode-ai/util/cost"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
@@ -1879,6 +1880,20 @@ function Task(props: ToolProps<typeof TaskTool>) {
             <text style={{ fg: theme.textMuted }}>
               {props.input.description} ({tools().length} toolcalls)
             </text>
+            <Show when={props.metadata.sessionId}>
+              {(sessionId) => {
+                const result = costs(sessionId(), sync.data)
+                const total = new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                }).format(result.total)
+                return (
+                  <text style={{ fg: theme.textMuted }}>
+                    ({total}){result.missing.length > 0 ? " (loaded)" : ""}
+                  </text>
+                )
+              }}
+            </Show>
             <Show when={current()}>
               {(item) => {
                 const title = item().state.status === "completed" ? (item().state as any).title : ""

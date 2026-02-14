@@ -8,9 +8,11 @@ const assistant = (
   cost: number,
   providerID = "openai",
   modelID = "gpt-4.1",
+  sessionID = "s1",
 ) => {
   return {
     id,
+    sessionID,
     role: "assistant",
     providerID,
     modelID,
@@ -28,9 +30,10 @@ const assistant = (
   } as unknown as Message
 }
 
-const user = (id: string) => {
+const user = (id: string, sessionID = "s1") => {
   return {
     id,
+    sessionID,
     role: "user",
     cost: 0,
     time: { created: 1 },
@@ -97,5 +100,45 @@ describe("getSessionContextMetrics", () => {
 
     expect(metrics.totalCost).toBe(0)
     expect(metrics.context).toBeUndefined()
+  })
+
+  test("computes costs with store including sub-agents", () => {
+    const messages = [
+      assistant("a1", { input: 10, output: 10, reasoning: 0, read: 0, write: 0 }, 0.5, "openai", "gpt-4.1", "s1"),
+    ]
+    const store = {
+      message: {
+        s1: [{ id: "a1", role: "assistant", cost: 0.5 }],
+        s2: [{ id: "a2", role: "assistant", cost: 1.0 }],
+      },
+      part: {
+        a1: [{ type: "tool", tool: "task", state: { metadata: { sessionId: "s2" } } }],
+      },
+    }
+
+    const metrics = getSessionContextMetrics(messages, [], store)
+
+    expect(metrics.totalCost).toBe(1.5)
+    expect(metrics.ownCost).toBe(0.5)
+    expect(metrics.missing).toEqual([])
+  })
+
+  test("identifies missing child sessions in store", () => {
+    const messages = [
+      assistant("a1", { input: 10, output: 10, reasoning: 0, read: 0, write: 0 }, 0.5, "openai", "gpt-4.1", "s1"),
+    ]
+    const store = {
+      message: {
+        s1: [{ id: "a1", role: "assistant", cost: 0.5 }],
+      },
+      part: {
+        a1: [{ type: "tool", tool: "task", state: { metadata: { sessionId: "s2" } } }],
+      },
+    }
+
+    const metrics = getSessionContextMetrics(messages, [], store)
+
+    expect(metrics.totalCost).toBe(0.5)
+    expect(metrics.missing).toEqual(["s2"])
   })
 })

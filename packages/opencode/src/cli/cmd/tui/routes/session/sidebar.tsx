@@ -1,4 +1,5 @@
 import { useSync } from "@tui/context/sync"
+import { costs } from "@opencode-ai/util/cost"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
@@ -41,11 +42,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const cost = createMemo(() => {
-    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
+    const result = costs(props.sessionID, sync.data)
+    const formatted = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(total)
+    }).format(result.total)
+    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
   })
 
   const context = createMemo(() => {

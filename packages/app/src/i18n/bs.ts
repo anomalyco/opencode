@@ -361,7 +361,10 @@ export const dict = {
   "context.stats.cacheTokens": "Cache tokeni (čitanje/pisanje)",
   "context.stats.userMessages": "Korisničke poruke",
   "context.stats.assistantMessages": "Poruke asistenta",
+  "context.stats.ownCost": "Trošak sesije",
   "context.stats.totalCost": "Ukupni trošak",
+  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
+  "context.stats.loaded": " (učitano)",
   "context.stats.sessionCreated": "Sesija kreirana",
   "context.stats.lastActivity": "Posljednja aktivnost",
 
