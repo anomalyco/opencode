@@ -138,6 +138,24 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     createEffect(() => {
       if (!ready()) return
+      const projects = store.projects
+      const cleaned: Record<string, StoredProject[]> = {}
+      let foundCorrupt = false
+      for (const [key, list] of Object.entries(projects)) {
+        const valid = list?.filter((p) => p?.worktree)
+        if (valid?.length !== list?.length) {
+          foundCorrupt = true
+          console.warn(`Migrating: Removed ${list.length - valid.length} corrupt projects from ${key}`)
+          cleaned[key] = valid
+        }
+      }
+      if (foundCorrupt) {
+        setStore("projects", cleaned)
+      }
+    })
+
+    createEffect(() => {
+      if (!ready()) return
       if (state.active) return
       reconcileStartup()
     })
@@ -178,6 +196,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       projects: {
         list: projectsList,
         open(directory: string) {
+          if (!directory) {
+            console.error("server.projects.open called with undefined directory")
+            return
+          }
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []

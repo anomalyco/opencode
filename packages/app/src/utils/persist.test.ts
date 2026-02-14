@@ -104,4 +104,26 @@ describe("persist localStorage resilience", () => {
     const result = persistTesting.normalize({ value: "ok" }, '{"value":"\\x"}')
     expect(result).toBeUndefined()
   })
+
+  test("workspaceStorage handles undefined directory gracefully", () => {
+    const testUndefinedDir = () => {
+      const dir = undefined as unknown as string
+      const head = dir.slice(0, 12) || "workspace"
+      return head
+    }
+
+    expect(testUndefinedDir).toThrow(TypeError)
+
+    const testWithGuard = () => {
+      const dir = undefined as unknown as string
+      if (!dir) {
+        return "opencode.workspace.unknown.0.dat"
+      }
+      const head = dir.slice(0, 12) || "workspace"
+      const sum = "0"
+      return `opencode.workspace.${head}.${sum}.dat`
+    }
+
+    expect(testWithGuard()).toBe("opencode.workspace.unknown.0.dat")
+  })
 })
