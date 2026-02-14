@@ -11,6 +11,29 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { applyPath, backPath, forwardPath } from "./titlebar-history"
+
+type TauriDesktopWindow = {
+  startDragging?: () => Promise<void>
+  toggleMaximize?: () => Promise<void>
+}
+
+type TauriThemeWindow = {
+  setTheme?: (theme?: "light" | "dark" | null) => Promise<void>
+}
+
+type TauriApi = {
+  window?: {
+    getCurrentWindow?: () => TauriDesktopWindow
+  }
+  webviewWindow?: {
+    getCurrentWebviewWindow?: () => TauriThemeWindow
+  }
+}
+
+const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
+const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
+const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
 
 export function Titlebar() {
   const layout = useLayout()
@@ -24,6 +47,8 @@ export function Titlebar() {
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const web = createMemo(() => platform.platform === "web")
+  const zoom = () => platform.webviewZoom?.() ?? 1
+  const minHeight = () => (mac() ? `${40 / zoom()}px` : undefined)
 
   const [history, setHistory] = createStore({
     stack: [] as string[],
@@ -37,25 +62,9 @@ export function Titlebar() {
     const current = path()
 
     untrack(() => {
-      if (!history.stack.length) {
-        const stack = current === "/" ? ["/"] : ["/", current]
-        setHistory({ stack, index: stack.length - 1 })
-        return
-      }
-
-      const active = history.stack[history.index]
-      if (current === active) {
-        if (history.action) setHistory("action", undefined)
-        return
-      }
-
-      if (history.action) {
-        setHistory("action", undefined)
-        return
-      }
-
-      const next = history.stack.slice(0, history.index + 1).concat(current)
-      setHistory({ stack: next, index: next.length - 1 })
+      const next = applyPath(history, current)
+      if (next === history) return
+      setHistory(next)
     })
   })
 
@@ -63,34 +72,39 @@ export function Titlebar() {
   const canForward = createMemo(() => history.index < history.stack.length - 1)
 
   const back = () => {
-    if (!canBack()) return
-    const index = history.index - 1
-    const to = history.stack[index]
-    if (!to) return
-    setHistory({ index, action: "back" })
-    navigate(to)
+    const next = backPath(history)
+    if (!next) return
+    setHistory(next.state)
+    navigate(next.to)
   }
 
   const forward = () => {
-    if (!canForward()) return
-    const index = history.index + 1
-    const to = history.stack[index]
-    if (!to) return
-    setHistory({ index, action: "forward" })
-    navigate(to)
+    const next = forwardPath(history)
+    if (!next) return
+    setHistory(next.state)
+    navigate(next.to)
   }
+
+  command.register(() => [
+    {
+      id: "common.goBack",
+      title: language.t("common.goBack"),
+      category: language.t("command.category.view"),
+      keybind: "mod+[",
+      onSelect: back,
+    },
+    {
+      id: "common.goForward",
+      title: language.t("common.goForward"),
+      category: language.t("command.category.view"),
+      keybind: "mod+]",
+      onSelect: forward,
+    },
+  ])
 
   const getWin = () => {
     if (platform.platform !== "desktop") return
-
-    const tauri = (
-      window as unknown as {
-        __TAURI__?: { window?: { getCurrentWindow?: () => { startDragging?: () => Promise<void> } } }
-      }
-    ).__TAURI__
-    if (!tauri?.window?.getCurrentWindow) return
-
-    return tauri.window.getCurrentWindow()
+    return currentDesktopWindow()
   }
 
   createEffect(() => {
@@ -99,13 +113,8 @@ export function Titlebar() {
     const scheme = theme.colorScheme()
     const value = scheme === "system" ? null : scheme
 
-    const tauri = (window as unknown as { __TAURI__?: { webviewWindow?: { getCurrentWebviewWindow?: () => unknown } } })
-      .__TAURI__
-    const get = tauri?.webviewWindow?.getCurrentWebviewWindow
-    if (!get) return
-
-    const win = get() as { setTheme?: (theme?: "light" | "dark" | null) => Promise<void> }
-    if (!win.setTheme) return
+    const win = currentThemeWindow()
+    if (!win?.setTheme) return
 
     void win.setTheme(value).catch(() => undefined)
   })
@@ -131,21 +140,33 @@ export function Titlebar() {
     void win.startDragging().catch(() => undefined)
   }
 
+  const maximize = (e: MouseEvent) => {
+    if (platform.platform !== "desktop") return
+    if (interactive(e.target)) return
+    if (e.target instanceof Element && e.target.closest("[data-tauri-decorum-tb]")) return
+
+    const win = getWin()
+    if (!win?.toggleMaximize) return
+
+    e.preventDefault()
+    void win.toggleMaximize().catch(() => undefined)
+  }
+
   return (
     <header
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
-      data-tauri-drag-region
+      style={{ "min-height": minHeight() }}
+      onMouseDown={drag}
+      onDblClick={maximize}
     >
       <div
         classList={{
           "flex items-center min-w-0": true,
           "pl-2": !mac(),
         }}
-        onMouseDown={drag}
-        data-tauri-drag-region
       >
         <Show when={mac()}>
-          <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
+          <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
           <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
             <IconButton
               icon="menu"
@@ -219,13 +240,10 @@ export function Titlebar() {
             </Tooltip>
           </div>
         </div>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" data-tauri-drag-region />
+        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
-      <div
-        class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center"
-        data-tauri-drag-region
-      >
+      <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
         <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
       </div>
 
@@ -235,9 +253,8 @@ export function Titlebar() {
           "pr-6": !windows(),
         }}
         onMouseDown={drag}
-        data-tauri-drag-region
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" data-tauri-drag-region />
+        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />

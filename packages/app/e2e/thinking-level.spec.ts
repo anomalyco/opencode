@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures"
-import { modelVariantCycleSelector } from "./utils"
+import { modelVariantCycleSelector } from "./selectors"
 
 test("smoke model variant cycle updates label", async ({ page, gotoSession }) => {
   await gotoSession()

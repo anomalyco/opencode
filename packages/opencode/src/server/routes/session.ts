@@ -276,18 +276,15 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
 
-        const updatedSession = await Session.update(
-          sessionID,
-          (session) => {
-            if (updates.title !== undefined) {
-              session.title = updates.title
-            }
-            if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
-          },
-          { touch: false },
-        )
+        let session = await Session.get(sessionID)
+        if (updates.title !== undefined) {
+          session = await Session.setTitle({ sessionID, title: updates.title })
+        }
+        if (updates.time?.archived !== undefined) {
+          session = await Session.setArchived({ sessionID, time: updates.time.archived })
+        }
 
-        return c.json(updatedSession)
+        return c.json(session)
       },
     )
     .post(
@@ -539,7 +536,7 @@ export const SessionRoutes = lazy(() =>
           },
           auto: body.auto,
         })
-        await SessionPrompt.loop(sessionID)
+        await SessionPrompt.loop({ sessionID })
         return c.json(true)
       },
     )

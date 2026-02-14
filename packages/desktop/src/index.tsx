@@ -1,13 +1,20 @@
 // @refresh reload
-import "./webview-zoom"
+import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  useCommand,
+  handleNotificationClick,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
-import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
@@ -16,12 +23,15 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -29,17 +39,6 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 void initI18n()
-
-// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
-// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
-const originalGetComputedStyle = window.getComputedStyle
-window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
-  if (!(elt instanceof Element)) {
-    // Fall back to a safe element when a non-element is passed.
-    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
-  }
-  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
-}) as typeof window.getComputedStyle
 
 let update: Update | null = null
 
@@ -59,300 +58,381 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const createPlatform = (password: Accessor<string | null>): Platform => ({
-  platform: "desktop",
-  os: (() => {
+const createPlatform = (password: Accessor<string | null>): Platform => {
+  const os = (() => {
     const type = ostype()
     if (type === "macos" || type === "windows" || type === "linux") return type
     return undefined
-  })(),
-  version: pkg.version,
+  })()
 
-  async openDirectoryPickerDialog(opts) {
-    const result = await open({
-      directory: true,
-      multiple: opts?.multiple ?? false,
-      title: opts?.title ?? t("desktop.dialog.chooseFolder"),
-    })
-    return result
-  },
+  const wslHome = async () => {
+    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
+    return commands.wslPath("~", "windows").catch(() => undefined)
+  }
 
-  async openFilePickerDialog(opts) {
-    const result = await open({
-      directory: false,
-      multiple: opts?.multiple ?? false,
-      title: opts?.title ?? t("desktop.dialog.chooseFile"),
-    })
-    return result
-  },
-
-  async saveFilePickerDialog(opts) {
-    const result = await save({
-      title: opts?.title ?? t("desktop.dialog.saveFile"),
-      defaultPath: opts?.defaultPath,
-    })
-    return result
-  },
-
-  openLink(url: string) {
-    void shellOpen(url).catch(() => undefined)
-  },
-
-  back() {
-    window.history.back()
-  },
-
-  forward() {
-    window.history.forward()
-  },
-
-  storage: (() => {
-    type StoreLike = {
-      get(key: string): Promise<string | null | undefined>
-      set(key: string, value: string): Promise<unknown>
-      delete(key: string): Promise<unknown>
-      clear(): Promise<unknown>
-      keys(): Promise<string[]>
-      length(): Promise<number>
+  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
+    if (!result || !window.__OPENCODE__?.wsl) return result
+    if (Array.isArray(result)) {
+      return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
     }
+    return commands.wslPath(result, "linux").catch(() => result) as any
+  }
 
-    const WRITE_DEBOUNCE_MS = 250
+  return {
+    platform: "desktop",
+    os,
+    version: pkg.version,
 
-    const storeCache = new Map<string, Promise<StoreLike>>()
-    const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
-    const memoryCache = new Map<string, StoreLike>()
+    async openDirectoryPickerDialog(opts) {
+      const defaultPath = await wslHome()
+      const result = await open({
+        directory: true,
+        multiple: opts?.multiple ?? false,
+        title: opts?.title ?? t("desktop.dialog.chooseFolder"),
+        defaultPath,
+      })
+      return await handleWslPicker(result)
+    },
 
-    const flushAll = async () => {
-      const apis = Array.from(apiCache.values())
-      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
-    }
+    async openFilePickerDialog(opts) {
+      const result = await open({
+        directory: false,
+        multiple: opts?.multiple ?? false,
+        title: opts?.title ?? t("desktop.dialog.chooseFile"),
+      })
+      return handleWslPicker(result)
+    },
 
-    if ("addEventListener" in globalThis) {
-      const handleVisibility = () => {
-        if (document.visibilityState !== "hidden") return
-        void flushAll()
+    async saveFilePickerDialog(opts) {
+      const result = await save({
+        title: opts?.title ?? t("desktop.dialog.saveFile"),
+        defaultPath: opts?.defaultPath,
+      })
+      return handleWslPicker(result)
+    },
+
+    openLink(url: string) {
+      void shellOpen(url).catch(() => undefined)
+    },
+    async openPath(path: string, app?: string) {
+      const os = ostype()
+      if (os === "windows") {
+        const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
+        const resolvedPath = await (async () => {
+          if (window.__OPENCODE__?.wsl) {
+            const converted = await commands.wslPath(path, "windows").catch(() => null)
+            if (converted) return converted
+          }
+
+          return path
+        })()
+        return openerOpenPath(resolvedPath, resolvedApp)
+      }
+      return openerOpenPath(path, app)
+    },
+
+    back() {
+      window.history.back()
+    },
+
+    forward() {
+      window.history.forward()
+    },
+
+    storage: (() => {
+      type StoreLike = {
+        get(key: string): Promise<string | null | undefined>
+        set(key: string, value: string): Promise<unknown>
+        delete(key: string): Promise<unknown>
+        clear(): Promise<unknown>
+        keys(): Promise<string[]>
+        length(): Promise<number>
       }
 
-      window.addEventListener("pagehide", () => void flushAll())
-      document.addEventListener("visibilitychange", handleVisibility)
-    }
+      const WRITE_DEBOUNCE_MS = 250
 
-    const createMemoryStore = () => {
-      const data = new Map<string, string>()
-      const store: StoreLike = {
-        get: async (key) => data.get(key),
-        set: async (key, value) => {
-          data.set(key, value)
-        },
-        delete: async (key) => {
-          data.delete(key)
-        },
-        clear: async () => {
-          data.clear()
-        },
-        keys: async () => Array.from(data.keys()),
-        length: async () => data.size,
+      const storeCache = new Map<string, Promise<StoreLike>>()
+      const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
+      const memoryCache = new Map<string, StoreLike>()
+
+      const flushAll = async () => {
+        const apis = Array.from(apiCache.values())
+        await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
       }
-      return store
-    }
 
-    const getStore = (name: string) => {
-      const cached = storeCache.get(name)
-      if (cached) return cached
+      if ("addEventListener" in globalThis) {
+        const handleVisibility = () => {
+          if (document.visibilityState !== "hidden") return
+          void flushAll()
+        }
 
-      const store = Store.load(name).catch(() => {
-        const cached = memoryCache.get(name)
+        window.addEventListener("pagehide", () => void flushAll())
+        document.addEventListener("visibilitychange", handleVisibility)
+      }
+
+      const createMemoryStore = () => {
+        const data = new Map<string, string>()
+        const store: StoreLike = {
+          get: async (key) => data.get(key),
+          set: async (key, value) => {
+            data.set(key, value)
+          },
+          delete: async (key) => {
+            data.delete(key)
+          },
+          clear: async () => {
+            data.clear()
+          },
+          keys: async () => Array.from(data.keys()),
+          length: async () => data.size,
+        }
+        return store
+      }
+
+      const getStore = (name: string) => {
+        const cached = storeCache.get(name)
         if (cached) return cached
 
-        const memory = createMemoryStore()
-        memoryCache.set(name, memory)
-        return memory
-      })
+        const store = Store.load(name).catch(() => {
+          const cached = memoryCache.get(name)
+          if (cached) return cached
 
-      storeCache.set(name, store)
-      return store
-    }
+          const memory = createMemoryStore()
+          memoryCache.set(name, memory)
+          return memory
+        })
 
-    const createStorage = (name: string) => {
-      const pending = new Map<string, string | null>()
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let flushing: Promise<void> | undefined
+        storeCache.set(name, store)
+        return store
+      }
 
-      const flush = async () => {
-        if (flushing) return flushing
+      const createStorage = (name: string) => {
+        const pending = new Map<string, string | null>()
+        let timer: ReturnType<typeof setTimeout> | undefined
+        let flushing: Promise<void> | undefined
 
-        flushing = (async () => {
-          const store = await getStore(name)
-          while (pending.size > 0) {
-            const batch = Array.from(pending.entries())
-            pending.clear()
-            for (const [key, value] of batch) {
-              if (value === null) {
-                await store.delete(key).catch(() => undefined)
-              } else {
-                await store.set(key, value).catch(() => undefined)
+        const flush = async () => {
+          if (flushing) return flushing
+
+          flushing = (async () => {
+            const store = await getStore(name)
+            while (pending.size > 0) {
+              const batch = Array.from(pending.entries())
+              pending.clear()
+              for (const [key, value] of batch) {
+                if (value === null) {
+                  await store.delete(key).catch(() => undefined)
+                } else {
+                  await store.set(key, value).catch(() => undefined)
+                }
               }
             }
-          }
-        })().finally(() => {
-          flushing = undefined
-        })
+          })().finally(() => {
+            flushing = undefined
+          })
 
-        return flushing
-      }
-
-      const schedule = () => {
-        if (timer) return
-        timer = setTimeout(() => {
-          timer = undefined
-          void flush()
-        }, WRITE_DEBOUNCE_MS)
-      }
-
-      const api: AsyncStorage & { flush: () => Promise<void> } = {
-        flush,
-        getItem: async (key: string) => {
-          const next = pending.get(key)
-          if (next !== undefined) return next
-
-          const store = await getStore(name)
-          const value = await store.get(key).catch(() => null)
-          if (value === undefined) return null
-          return value
-        },
-        setItem: async (key: string, value: string) => {
-          pending.set(key, value)
-          schedule()
-        },
-        removeItem: async (key: string) => {
-          pending.set(key, null)
-          schedule()
-        },
-        clear: async () => {
-          pending.clear()
-          const store = await getStore(name)
-          await store.clear().catch(() => undefined)
-        },
-        key: async (index: number) => {
-          const store = await getStore(name)
-          return (await store.keys().catch(() => []))[index]
-        },
-        getLength: async () => {
-          const store = await getStore(name)
-          return await store.length().catch(() => 0)
-        },
-        get length() {
-          return api.getLength()
-        },
-      }
-
-      return api
-    }
-
-    return (name = "default.dat") => {
-      const cached = apiCache.get(name)
-      if (cached) return cached
-
-      const api = createStorage(name)
-      apiCache.set(name, api)
-      return api
-    }
-  })(),
-
-  checkUpdate: async () => {
-    if (!UPDATER_ENABLED) return { updateAvailable: false }
-    const next = await check().catch(() => null)
-    if (!next) return { updateAvailable: false }
-    const ok = await next
-      .download()
-      .then(() => true)
-      .catch(() => false)
-    if (!ok) return { updateAvailable: false }
-    update = next
-    return { updateAvailable: true, version: next.version }
-  },
-
-  update: async () => {
-    if (!UPDATER_ENABLED || !update) return
-    if (ostype() === "windows") await invoke("kill_sidecar").catch(() => undefined)
-    await update.install().catch(() => undefined)
-  },
-
-  restart: async () => {
-    await invoke("kill_sidecar").catch(() => undefined)
-    await relaunch()
-  },
-
-  notify: async (title, description, href) => {
-    const granted = await isPermissionGranted().catch(() => false)
-    const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
-    if (permission !== "granted") return
-
-    const win = getCurrentWindow()
-    const focused = await win.isFocused().catch(() => document.hasFocus())
-    if (focused) return
-
-    await Promise.resolve()
-      .then(() => {
-        const notification = new Notification(title, {
-          body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v3.png",
-        })
-        notification.onclick = () => {
-          const win = getCurrentWindow()
-          void win.show().catch(() => undefined)
-          void win.unminimize().catch(() => undefined)
-          void win.setFocus().catch(() => undefined)
-          if (href) {
-            window.history.pushState(null, "", href)
-            window.dispatchEvent(new PopStateEvent("popstate"))
-          }
-          notification.close()
+          return flushing
         }
+
+        const schedule = () => {
+          if (timer) return
+          timer = setTimeout(() => {
+            timer = undefined
+            void flush()
+          }, WRITE_DEBOUNCE_MS)
+        }
+
+        const api: AsyncStorage & { flush: () => Promise<void> } = {
+          flush,
+          getItem: async (key: string) => {
+            const next = pending.get(key)
+            if (next !== undefined) return next
+
+            const store = await getStore(name)
+            const value = await store.get(key).catch(() => null)
+            if (value === undefined) return null
+            return value
+          },
+          setItem: async (key: string, value: string) => {
+            pending.set(key, value)
+            schedule()
+          },
+          removeItem: async (key: string) => {
+            pending.set(key, null)
+            schedule()
+          },
+          clear: async () => {
+            pending.clear()
+            const store = await getStore(name)
+            await store.clear().catch(() => undefined)
+          },
+          key: async (index: number) => {
+            const store = await getStore(name)
+            return (await store.keys().catch(() => []))[index]
+          },
+          getLength: async () => {
+            const store = await getStore(name)
+            return await store.length().catch(() => 0)
+          },
+          get length() {
+            return api.getLength()
+          },
+        }
+
+        return api
+      }
+
+      return (name = "default.dat") => {
+        const cached = apiCache.get(name)
+        if (cached) return cached
+
+        const api = createStorage(name)
+        apiCache.set(name, api)
+        return api
+      }
+    })(),
+
+    checkUpdate: async () => {
+      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      const next = await check().catch(() => null)
+      if (!next) return { updateAvailable: false }
+      const ok = await next
+        .download()
+        .then(() => true)
+        .catch(() => false)
+      if (!ok) return { updateAvailable: false }
+      update = next
+      return { updateAvailable: true, version: next.version }
+    },
+
+    update: async () => {
+      if (!UPDATER_ENABLED || !update) return
+      if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
+      await update.install().catch(() => undefined)
+    },
+
+    restart: async () => {
+      await commands.killSidecar().catch(() => undefined)
+      await relaunch()
+    },
+
+    notify: async (title, description, href) => {
+      const granted = await isPermissionGranted().catch(() => false)
+      const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
+      if (permission !== "granted") return
+
+      const win = getCurrentWindow()
+      const focused = await win.isFocused().catch(() => document.hasFocus())
+      if (focused) return
+
+      await Promise.resolve()
+        .then(() => {
+          const notification = new Notification(title, {
+            body: description ?? "",
+            icon: "https://opencode.ai/favicon-96x96-v3.png",
+          })
+          notification.onclick = () => {
+            const win = getCurrentWindow()
+            void win.show().catch(() => undefined)
+            void win.unminimize().catch(() => undefined)
+            void win.setFocus().catch(() => undefined)
+            handleNotificationClick(href)
+            notification.close()
+          }
+        })
+        .catch(() => undefined)
+    },
+
+    fetch: (input, init) => {
+      const pw = password()
+
+      const addHeader = (headers: Headers, password: string) => {
+        headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+      }
+
+      if (input instanceof Request) {
+        if (pw) addHeader(input.headers, pw)
+        return tauriFetch(input)
+      } else {
+        const headers = new Headers(init?.headers)
+        if (pw) addHeader(headers, pw)
+        return tauriFetch(input, {
+          ...(init as any),
+          headers: headers,
+        })
+      }
+    },
+
+    getWslEnabled: async () => {
+      const next = await commands.getWslConfig().catch(() => null)
+      if (next) return next.enabled
+      return window.__OPENCODE__!.wsl ?? false
+    },
+
+    setWslEnabled: async (enabled) => {
+      await commands.setWslConfig({ enabled })
+    },
+
+    getDefaultServerUrl: async () => {
+      const result = await commands.getDefaultServerUrl().catch(() => null)
+      return result
+    },
+
+    setDefaultServerUrl: async (url: string | null) => {
+      await commands.setDefaultServerUrl(url)
+    },
+
+    getDisplayBackend: async () => {
+      const result = await commands.getDisplayBackend().catch(() => null)
+      return result
+    },
+
+    setDisplayBackend: async (backend) => {
+      await commands.setDisplayBackend(backend)
+    },
+
+    parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
+
+    webviewZoom,
+
+    checkAppExists: async (appName: string) => {
+      return commands.checkAppExists(appName)
+    },
+
+    async readClipboardImage() {
+      const image = await readImage().catch(() => null)
+      if (!image) return null
+      const bytes = await image.rgba().catch(() => null)
+      if (!bytes || bytes.length === 0) return null
+      const size = await image.size().catch(() => null)
+      if (!size) return null
+      const canvas = document.createElement("canvas")
+      canvas.width = size.width
+      canvas.height = size.height
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      const imageData = ctx.createImageData(size.width, size.height)
+      imageData.data.set(bytes)
+      ctx.putImageData(imageData, 0, 0)
+      return new Promise<File | null>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(null)
+          resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+        }, "image/png")
       })
-      .catch(() => undefined)
-  },
+    },
+  }
+}
 
-  // @ts-expect-error
-  fetch: (input, init) => {
-    const pw = password()
-
-    const addHeader = (headers: Headers, password: string) => {
-      headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
-    }
-
-    if (input instanceof Request) {
-      if (pw) addHeader(input.headers, pw)
-      return tauriFetch(input)
-    } else {
-      const headers = new Headers(init?.headers)
-      if (pw) addHeader(headers, pw)
-      return tauriFetch(input, {
-        ...(init as any),
-        headers: headers,
-      })
-    }
-  },
-
-  getDefaultServerUrl: async () => {
-    const result = await invoke<string | null>("get_default_server_url").catch(() => null)
-    return result
-  },
-
-  setDefaultServerUrl: async (url: string | null) => {
-    await invoke("set_default_server_url", { url })
-  },
-
-  parseMarkdown: async (markdown: string) => {
-    return invoke<string>("parse_markdown_command", { markdown })
-  },
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
 })
-
-createMenu()
 void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
+
   const platform = createPlatform(() => serverPassword())
 
   function handleClick(e: MouseEvent) {
@@ -379,7 +459,19 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-            return <AppInterface defaultUrl={data().url} />
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url} isSidecar>
+                <Inner />
+              </AppInterface>
+            )
           }}
         </ServerGate>
       </AppBaseProviders>
@@ -391,56 +483,20 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() =>
-    invoke("ensure_server_ready").then((v) => {
-      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
-    }),
-  )
-
-  const errorMessage = () => {
-    const error = serverData.error
-    if (!error) return t("error.chain.unknown")
-    if (typeof error === "string") return error
-    if (error instanceof Error) return error.message
-    return String(error)
-  }
-
-  const restartApp = async () => {
-    await invoke("kill_sidecar").catch(() => undefined)
-    await relaunch().catch(() => undefined)
-  }
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+  if (serverData.state === "errored") throw serverData.error
 
   return (
-    // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state === "errored"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
-        <Show
-          when={serverData.state !== "pending" && serverData()}
-          fallback={
-            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-              <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-            </div>
-          }
-        >
-          {(data) => props.children(data)}
-        </Show>
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+        </div>
       }
     >
-      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
-        <div class="text-16-semibold">{t("desktop.error.serverStartFailed.title")}</div>
-        <div class="text-12-regular opacity-70 text-center max-w-xl">
-          {t("desktop.error.serverStartFailed.description")}
-        </div>
-        <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
-          <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
-        </div>
-        <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
-          {t("error.page.action.restart")}
-        </button>
-        <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-      </div>
+      {(data) => props.children(data)}
     </Show>
   )
 }

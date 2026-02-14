@@ -1,0 +1,330 @@
+---
+title: Modalità
+description: Modalita diverse per casi d'uso diversi.
+---
+
+:::caution
+Le modalita ora si configurano tramite l'opzione `agent` nella configurazione di opencode. L'opzione
+`mode` e ora deprecata. [Scopri di piu](/docs/agents).
+:::
+
+Le modalita in opencode ti permettono di personalizzare comportamento, strumenti e prompt per casi d'uso diversi.
+
+Include due modalita integrate: **build** e **plan**. Puoi personalizzarle oppure configurarne di tue tramite la configurazione di opencode.
+
+Puoi passare da una modalita all'altra durante una sessione oppure configurarle nel file di configurazione.
+
+---
+
+## Integrate
+
+opencode include due modalita integrate.
+
+---
+
+### Build
+
+Build e la modalita **predefinita** con tutti gli strumenti abilitati. E la modalita standard per il lavoro di sviluppo quando ti serve accesso completo alle operazioni sui file e ai comandi di sistema.
+
+---
+
+### Plan
+
+Una modalita limitata pensata per pianificazione e analisi. In modalita plan, i seguenti strumenti sono disabilitati per impostazione predefinita:
+
+- `write` - Non puo creare nuovi file
+- `edit` - Non puo modificare file esistenti, tranne i file in `.opencode/plans/*.md` per dettagliare il piano
+- `patch` - Non puo applicare patch
+- `bash` - Non puo eseguire comandi shell
+
+Questa modalita e utile quando vuoi che l'AI analizzi il codice, suggerisca modifiche o crei piani senza apportare modifiche effettive alla codebase.
+
+---
+
+## Cambiare modalità
+
+Puoi cambiare modalita durante una sessione usando il tasto _Tab_. In alternativa, puoi usare il keybind `switch_mode` che hai configurato.
+
+Vedi anche: [Formatter](/docs/formatters) per informazioni sulla configurazione della formattazione del codice.
+
+---
+
+## Configurazione
+
+Puoi personalizzare le modalita integrate o crearne di tue tramite configurazione. Le modalita si possono configurare in due modi:
+
+### Configurazione JSON
+
+Configura le modalita nel file di configurazione `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+### Configurazione Markdown
+
+Puoi anche definire modalita usando file markdown. Mettili in:
+
+- Globale: `~/.config/opencode/modes/`
+- Progetto: `.opencode/modes/`
+
+```markdown title="~/.config/opencode/modes/review.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Il nome del file markdown diventa il nome della modalita (ad es. `review.md` crea una modalita `review`).
+
+Vediamo queste opzioni di configurazione nel dettaglio.
+
+---
+
+### Modello
+
+Usa la configurazione `model` per sovrascrivere il modello predefinito per questa modalita. E utile per usare modelli diversi ottimizzati per task diversi: per esempio, un modello piu veloce per la pianificazione e uno piu capace per l'implementazione.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+---
+
+### Temperatura
+
+Controlla casualita e creativita delle risposte dell'AI con la configurazione `temperature`. Valori piu bassi rendono le risposte piu focalizzate e deterministiche, mentre valori piu alti aumentano creativita e variabilita.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+I valori di temperatura di solito vanno da 0.0 a 1.0:
+
+- **0.0-0.2**: risposte molto focalizzate e deterministiche, ideali per analisi del codice e pianificazione
+- **0.3-0.5**: risposte bilanciate con un po' di creativita, buone per task di sviluppo generici
+- **0.6-1.0**: risposte piu creative e variabili, utili per brainstorming ed esplorazione
+
+```json title="opencode.json"
+{
+  "mode": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Se non viene specificata alcuna temperatura, opencode usa i default specifici del modello (tipicamente 0 per la maggior parte dei modelli, 0.55 per i modelli Qwen).
+
+---
+
+### Prompt
+
+Specifica un file di prompt di sistema personalizzato per questa modalita con la configurazione `prompt`. Il file dovrebbe contenere istruzioni specifiche per lo scopo della modalita.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Questo percorso e relativo a dove si trova il file di configurazione. Quindi funziona
+sia per la configurazione globale di opencode sia per quella specifica del progetto.
+
+---
+
+### Strumenti
+
+Controlla quali strumenti sono disponibili in questa modalita con la configurazione `tools`. Puoi abilitare o disabilitare strumenti specifici impostandoli a `true` o `false`.
+
+```json
+{
+  "mode": {
+    "readonly": {
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+Se non specifichi gli strumenti, tutti gli strumenti sono abilitati per impostazione predefinita.
+
+---
+
+#### Strumenti disponibili
+
+Ecco tutti gli strumenti che possono essere controllati tramite la configurazione della modalita.
+
+| Strumento   | Descrizione                       |
+| ----------- | --------------------------------- |
+| `bash`      | Esegue comandi shell              |
+| `edit`      | Modifica file esistenti           |
+| `write`     | Crea nuovi file                   |
+| `read`      | Legge contenuti dei file          |
+| `grep`      | Cerca nei contenuti dei file      |
+| `glob`      | Trova file per pattern            |
+| `list`      | Elenca contenuti di una directory |
+| `patch`     | Applica patch ai file             |
+| `todowrite` | Gestisce liste todo               |
+| `todoread`  | Legge liste todo                  |
+| `webfetch`  | Recupera contenuti web            |
+
+---
+
+## Modalità personalizzate
+
+Puoi creare modalita personalizzate aggiungendole alla configurazione. Ecco esempi con entrambi gli approcci:
+
+### Usando la configurazione JSON
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "docs": {
+      "prompt": "{file:./prompts/documentation.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+### Usando file markdown
+
+Crea file di modalita in `.opencode/modes/` per modalita specifiche del progetto oppure in `~/.config/opencode/modes/` per modalita globali:
+
+```markdown title=".opencode/modes/debug.md"
+---
+temperature: 0.1
+tools:
+  bash: true
+  read: true
+  grep: true
+  write: false
+  edit: false
+---
+
+You are in debug mode. Your primary goal is to help investigate and diagnose issues.
+
+Focus on:
+
+- Understanding the problem through careful analysis
+- Using bash commands to inspect system state
+- Reading relevant files and logs
+- Searching for patterns and anomalies
+- Providing clear explanations of findings
+
+Do not make any changes to files. Only investigate and report.
+```
+
+```markdown title="~/.config/opencode/modes/refactor.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.2
+tools:
+  edit: true
+  read: true
+  grep: true
+  glob: true
+---
+
+You are in refactoring mode. Focus on improving code quality without changing functionality.
+
+Priorities:
+
+- Improve code readability and maintainability
+- Apply consistent naming conventions
+- Reduce code duplication
+- Optimize performance where appropriate
+- Ensure all tests continue to pass
+```
+
+---
+
+### Casi d'uso
+
+Ecco alcuni casi d'uso comuni per le diverse modalita.
+
+- **Modalita Build**: sviluppo completo con tutti gli strumenti abilitati
+- **Modalita Plan**: analisi e pianificazione senza apportare modifiche
+- **Modalita Review**: code review con accesso in sola lettura piu strumenti di documentazione
+- **Modalita Debug**: focalizzata sull'investigazione con strumenti bash e read abilitati
+- **Modalita Docs**: scrittura di documentazione con operazioni sui file ma senza comandi di sistema
+
+Potresti anche trovare che modelli diversi funzionano meglio per casi d'uso diversi.

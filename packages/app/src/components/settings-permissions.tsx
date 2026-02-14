@@ -165,12 +165,14 @@ export const SettingsPermissions: Component = () => {
     const nextValue =
       existing && typeof existing === "object" && !Array.isArray(existing) ? { ...existing, "*": action } : action
 
-    globalSync.set("config", "permission", { ...map, [id]: nextValue })
-    globalSync.updateConfig({ permission: { [id]: nextValue } }).catch((err: unknown) => {
+    const rollback = (err: unknown) => {
       globalSync.set("config", "permission", before)
       const message = err instanceof Error ? err.message : String(err)
       showToast({ title: language.t("settings.permissions.toast.updateFailed.title"), description: message })
-    })
+    }
+
+    globalSync.set("config", "permission", { ...map, [id]: nextValue })
+    globalSync.updateConfig({ permission: { [id]: nextValue } }).catch(rollback)
   }
 
   return (
