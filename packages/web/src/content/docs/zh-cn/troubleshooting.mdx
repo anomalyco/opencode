@@ -1,15 +1,15 @@
 ---
 title: 故障排除
-description: 常見問題以及如何解決它們。
+description: 常见问题以及如何解决它们。
 ---
 
-要排除 opencode 的问题，请首先检查其存储在磁碟上的日志和本地数据。
+要排除 opencode 的问题，请首先检查其存储在磁盘上的日志和本地数据。
 
 ---
 
 ## 日志
 
-日誌文件寫入：
+日志文件写入：
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
@@ -51,7 +51,7 @@ opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in th
 
 ### 禁用插件
 
-如果桌面应用程序在启动時崩潰、掛起或行为異常，请首先禁用插件。
+如果桌面应用程序在启动时崩溃、挂起或行为异常，请首先禁用插件。
 
 #### 检查全域性配置
 
@@ -61,7 +61,7 @@ opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in th
 - **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
 
-如果您配置了插件，请通过删除密钥或将其设置为空数组來暂时禁用它們：
+如果您配置了插件，请通过删除密钥或将其设置为空数组来暂时禁用它们：
 
 ```jsonc
 {
@@ -77,10 +77,10 @@ opencode 还可以从磁碟加载本地外挂。暂时将它们移开（或重�
 - **全域性插件**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
   - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
-- **专案插件**（仅当您使用每个专案配置時）
+- **项目插件**（仅当您使用每个项目配置时）
   - `<your-project>/.opencode/plugins/`
 
-如果应用程序再次開始工作，请一次重新启用一个插件，以找出導致問題的插件。
+如果应用程序再次开始工作，请一次重新启用一个插件，以找出导致问题的插件。
 
 ---
 
@@ -99,7 +99,7 @@ opencode 还可以从磁碟加载本地外挂。暂时将它们移开（或重�
 
 ---
 
-### 修復服务器连接問題
+### 修复服务器连接问题
 
 opencode Desktop 可以启动自己的本地服务器（默认配置）或连线到您的服务器 URL。
 
@@ -147,11 +147,11 @@ If you're experiencing slow performance, file access issues, or terminal problem
 opencode 桌面仅在以下情况下显示系统通知：
 
 - 在您的作业系统中设置为 opencode 启用了通知，并且
-- 应用程序視窗未聚焦。
+- 应用程序视窗未聚焦。
 
 ---
 
-### 重置桌面应用程序儲存（最后的手段）
+### 重置桌面应用程序储存（最后的手段）
 
 如果应用程序无法并且启动您无法从 UI 内部清除设置，请重置桌面应用程序的存储状态。
 
@@ -179,9 +179,9 @@ opencode 桌面仅在以下情况下显示系统通知：
 
    [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
-   在建立新問題之前，请搜索現有問題以查看您的問題是否已被報告。
+   在建立新问题之前，请搜索现有问题以查看您的问题是否已被报告。
 
-2. **加入我们的不和諧**
+2. **加入我们的不和谐**
 
    获得实时帮助和社群讨论，请加入我们的Discord服务器：
 
@@ -191,19 +191,19 @@ opencode 桌面仅在以下情况下显示系统通知：
 
 ## 常见问题
 
-以下是一些常見問題以及解決方法。
+以下是一些常见问题以及解决方法。
 
 ---
 
 ### opencode 无法启动
 
-1. 检查日誌中是否有错误消息
+1. 检查日志中是否有错误消息
 2. 尝试使用 `--print-logs` 执行以查看终端中的输出
 3. Ensure you have the latest version with `opencode upgrade`
 
 ---
 
-### 身份验证問題
+### 身份验证问题
 
 1. 尝试使用 TUI 中的 `/connect` 命令重新进行身份验证
 2. 检查您的API 密钥是否有效
@@ -214,12 +214,12 @@ opencode 桌面仅在以下情况下显示系统通知：
 ### 模型不可用
 
 1. 检查您是否已通过提供商的身份验证
-2. 驗證配置中的模型名称是否正确
-3. 某些模型可能需要特定的访问权限或訂閱
+2. 验证配置中的模型名称是否正确
+3. 某些模型可能需要特定的访问权限或订阅
 
 如果您遇到 `ProviderModelNotFoundError` 您很可能是错误的
-在某處引用模型。
-模型应该像这樣引用：`<providerId>/<modelId>`
+在某处引用模型。
+模型应该像这样引用：`<providerId>/<modelId>`
 
 示例：
 
@@ -235,10 +235,10 @@ To figure out what models you have access to, run `opencode models`
 
 如果遇到 ProviderInitError，您的配置可能无效或损坏。
 
-要解決这个問題：
+要解决这个问题：
 
 1. 首先，按照[提供商指南](/docs/providers) 验证您的事业是否已正确设置
-2. 如果問題仍然存在，请嘗試清除儲存的配置：
+2. 如果问题仍然存在，请尝试清除储存的配置：
 
    ```bash
    rm -rf ~/.local/share/opencode
@@ -254,7 +254,7 @@ To figure out what models you have access to, run `opencode models`
 
 如果您遇到 API 呼叫错误，这可能是由于过去提供包造成的。 opencode 根据需要动态安装提供包（OpenAI、Anthropic、Google 等）将其缓存放在本地。
 
-要解決provider 包問題：
+要解决provider 包问题：
 
 1. 清除provider 包缓存：
 
@@ -288,7 +288,7 @@ apt install -y xsel
 apt install -y wl-clipboard
 ```
 
-**对于無頭環境：**
+**对于无头环境：**
 
 ```bash
 apt install -y xvfb
