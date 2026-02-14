@@ -57,6 +57,10 @@ export type Locale =
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
+function cookie(locale: Locale) {
+  return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+}
+
 const LOCALES: readonly Locale[] = [
   "en",
   "zh",
@@ -199,6 +203,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.cookie = cookie(locale())
     })
 
     return {
