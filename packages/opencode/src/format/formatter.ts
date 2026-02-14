@@ -372,11 +372,7 @@ export const googleJavaFormat: Info = {
   async enabled() {
     if (Bun.which("google-java-format")) return true
 
-    const jarNames = ["google-java-format-all-deps.jar", "google-java-format.jar"]
-    for (const jar of jarNames) {
-      const found = await Filesystem.findUp(jar, Instance.directory, Instance.worktree)
-      if (found.length > 0) return true
-    }
-    return false
+    const found = await Filesystem.findUp("google-java-format-all-deps.jar", Instance.directory, Instance.worktree)
+    return found.length > 0
   },
 }
