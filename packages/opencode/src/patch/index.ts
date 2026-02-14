@@ -72,30 +72,35 @@ export namespace Patch {
   }
 
   // Parser implementation
+  const ADD_PREFIX = "*** Add File:"
+  const DELETE_PREFIX = "*** Delete File:"
+  const UPDATE_PREFIX = "*** Update File:"
+  const MOVE_PREFIX = "*** Move to:"
+
   function parsePatchHeader(
     lines: string[],
     startIdx: number,
   ): { filePath: string; movePath?: string; nextIdx: number } | null {
     const line = lines[startIdx]
 
-    if (line.startsWith("*** Add File:")) {
-      const filePath = line.slice("*** Add File:".length).trim()
+    if (line.startsWith(ADD_PREFIX)) {
+      const filePath = line.slice(ADD_PREFIX.length).trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
 
-    if (line.startsWith("*** Delete File:")) {
-      const filePath = line.slice("*** Delete File:".length).trim()
+    if (line.startsWith(DELETE_PREFIX)) {
+      const filePath = line.slice(DELETE_PREFIX.length).trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
 
-    if (line.startsWith("*** Update File:")) {
-      const filePath = line.slice("*** Update File:".length).trim()
+    if (line.startsWith(UPDATE_PREFIX)) {
+      const filePath = line.slice(UPDATE_PREFIX.length).trim()
       let movePath: string | undefined
       let nextIdx = startIdx + 1
 
       // Check for move directive
-      if (nextIdx < lines.length && lines[nextIdx].startsWith("*** Move to:")) {
-        movePath = lines[nextIdx].slice("*** Move to:".length).trim()
+      if (nextIdx < lines.length && lines[nextIdx].startsWith(MOVE_PREFIX)) {
+        movePath = lines[nextIdx].slice(MOVE_PREFIX.length).trim()
         nextIdx++
       }
 
