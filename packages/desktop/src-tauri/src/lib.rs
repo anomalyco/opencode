@@ -566,7 +566,8 @@ async fn initialize(app: AppHandle) {
     // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
     // Then in the loading task, we wait for sqlite migration to complete before
     // starting our health check against the server, otherwise long migrations could result in a timeout.
-    let sqlite_done = !sqlite_file_exists().then(|| {
+    let needs_sqlite_migration = !sqlite_file_exists();
+    let sqlite_done = needs_sqlite_migration.then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
