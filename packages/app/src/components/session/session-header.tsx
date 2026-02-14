@@ -552,7 +552,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden lg:flex items-center gap-3 ml-2 shrink-0">
+              <div class="flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}

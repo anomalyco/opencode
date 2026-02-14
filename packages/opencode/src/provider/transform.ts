@@ -458,6 +458,22 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
+
+        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+          const efforts = ["low", "medium", "high", "max"]
+          return Object.fromEntries(
+            efforts.map((effort) => [
+              effort,
+              {
+                thinking: {
+                  type: "adaptive",
+                },
+                effort,
+              },
+            ]),
+          )
+        }
+
         return {
           high: {
             thinking: {
@@ -475,6 +491,20 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+          const efforts = ["low", "medium", "high", "max"]
+          return Object.fromEntries(
+            efforts.map((effort) => [
+              effort,
+              {
+                reasoningConfig: {
+                  type: "adaptive",
+                  maxReasoningEffort: effort,
+                },
+              },
+            ]),
+          )
+        }
         // For Anthropic models on Bedrock, use reasoningConfig with budgetTokens
         if (model.api.id.includes("anthropic")) {
           return {

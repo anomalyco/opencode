@@ -1,9 +1,26 @@
-import { type FileContents, File, FileOptions, LineAnnotation, type SelectedLineRange } from "@pierre/diffs"
+import {
+  DEFAULT_VIRTUAL_FILE_METRICS,
+  type FileContents,
+  File,
+  FileOptions,
+  LineAnnotation,
+  type SelectedLineRange,
+  type VirtualFileMetrics,
+  VirtualizedFile,
+  Virtualizer,
+} from "@pierre/diffs"
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { getWorkerPool } from "../pierre/worker"
 import { Icon } from "./icon"
+
+const VIRTUALIZE_BYTES = 500_000
+const codeMetrics = {
+  ...DEFAULT_VIRTUAL_FILE_METRICS,
+  lineHeight: 24,
+  fileGap: 0,
+} satisfies Partial<VirtualFileMetrics>
 
 type SelectionSide = "additions" | "deletions"
 
@@ -160,16 +177,28 @@ export function Code<T>(props: CodeProps<T>) {
 
   const [findPos, setFindPos] = createSignal<{ top: number; right: number }>({ top: 8, right: 8 })
 
-  const file = createMemo(
-    () =>
-      new File<T>(
-        {
-          ...createDefaultOptions<T>("unified"),
-          ...others,
-        },
-        getWorkerPool("unified"),
-      ),
-  )
+  let instance: File<T> | VirtualizedFile<T> | undefined
+  let virtualizer: Virtualizer | undefined
+  let virtualRoot: Document | HTMLElement | undefined
+
+  const bytes = createMemo(() => {
+    const value = local.file.contents as unknown
+    if (typeof value === "string") return value.length
+    if (Array.isArray(value)) {
+      return value.reduce(
+        (acc, part) => acc + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
+        0,
+      )
+    }
+    if (value == null) return 0
+    return String(value).length
+  })
+  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
+
+  const options = createMemo(() => ({
+    ...createDefaultOptions<T>("unified"),
+    ...others,
+  }))
 
   const getRoot = () => {
     const host = container.querySelector("diffs-container")
@@ -577,6 +606,14 @@ export function Code<T>(props: CodeProps<T>) {
   }
 
   const applySelection = (range: SelectedLineRange | null) => {
+    const current = instance
+    if (!current) return false
+
+    if (virtual()) {
+      current.setSelectedLines(range)
+      return true
+    }
+
     const root = getRoot()
     if (!root) return false
 
@@ -584,7 +621,7 @@ export function Code<T>(props: CodeProps<T>) {
     if (root.querySelectorAll("[data-line]").length < lines) return false
 
     if (!range) {
-      file().setSelectedLines(null)
+      current.setSelectedLines(null)
       return true
     }
 
@@ -592,12 +629,12 @@ export function Code<T>(props: CodeProps<T>) {
     const end = Math.max(range.start, range.end)
 
     if (start < 1 || end > lines) {
-      file().setSelectedLines(null)
+      current.setSelectedLines(null)
       return true
     }
 
     if (!root.querySelector(`[data-line="${start}"]`) || !root.querySelector(`[data-line="${end}"]`)) {
-      file().setSelectedLines(null)
+      current.setSelectedLines(null)
       return true
     }
 
@@ -608,7 +645,7 @@ export function Code<T>(props: CodeProps<T>) {
       return { start: range.start, end: range.end }
     })()
 
-    file().setSelectedLines(normalized)
+    current.setSelectedLines(normalized)
     return true
   }
 
@@ -619,9 +656,12 @@ export function Code<T>(props: CodeProps<T>) {
 
     const token = renderToken
 
-    const lines = lineCount()
+    const lines = virtual() ? undefined : lineCount()
 
-    const isReady = (root: ShadowRoot) => root.querySelectorAll("[data-line]").length >= lines
+    const isReady = (root: ShadowRoot) =>
+      virtual()
+        ? root.querySelector("[data-line]") != null
+        : root.querySelectorAll("[data-line]").length >= (lines ?? 0)
 
     const notify = () => {
       if (token !== renderToken) return
@@ -844,20 +884,41 @@ export function Code<T>(props: CodeProps<T>) {
   }
 
   createEffect(() => {
-    const current = file()
+    const opts = options()
+    const workerPool = getWorkerPool("unified")
+    const isVirtual = virtual()
 
-    onCleanup(() => {
-      current.cleanUp()
-    })
-  })
-
-  createEffect(() => {
     observer?.disconnect()
     observer = undefined
 
+    instance?.cleanUp()
+    instance = undefined
+
+    if (!isVirtual && virtualizer) {
+      virtualizer.cleanUp()
+      virtualizer = undefined
+      virtualRoot = undefined
+    }
+
+    const v = (() => {
+      if (!isVirtual) return
+      if (typeof document === "undefined") return
+
+      const root = getScrollParent(wrapper) ?? document
+      if (virtualizer && virtualRoot === root) return virtualizer
+
+      virtualizer?.cleanUp()
+      virtualizer = new Virtualizer()
+      virtualRoot = root
+      virtualizer.setup(root, root instanceof Document ? undefined : wrapper)
+      return virtualizer
+    })()
+
+    instance = isVirtual && v ? new VirtualizedFile<T>(opts, v, codeMetrics, workerPool) : new File<T>(opts, workerPool)
+
     container.innerHTML = ""
     const value = text()
-    file().render({
+    instance.render({
       file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents: value },
       lineAnnotations: local.annotations,
       containerWrapper: container,
@@ -909,6 +970,13 @@ export function Code<T>(props: CodeProps<T>) {
 
   onCleanup(() => {
     observer?.disconnect()
+
+    instance?.cleanUp()
+    instance = undefined
+
+    virtualizer?.cleanUp()
+    virtualizer = undefined
+    virtualRoot = undefined
 
     clearOverlayScroll()
     clearOverlay()
