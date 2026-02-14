@@ -1,0 +1,35 @@
+{
+  "name": "@sureshsankaran/opencode-destructive-check",
+  "version": "1.0.1",
+  "description": "OpenCode plugin that checks for destructive commands before any tool/bash call and asks for permission",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "type": "module",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "security",
+    "destructive-commands",
+    "permission",
+    "safety"
+  ],
+  "author": "Suresh Sankaran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode"
+  },
+  "bugs": {
+    "url": "https://github.com/anomalyco/opencode/issues"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.2.2",
+    "typescript": "^5.0.0"
+  }
+}

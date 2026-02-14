@@ -3,7 +3,11 @@
   "instructions": ["STYLE_GUIDE.md"],
   // Ralph Wiggum plugin for iterative development loops
   // Relative path from this config file - works on any OS
-  "plugin": ["../packages/opencode/.opencode/plugins/ralph-wiggum.ts"],
+  "plugin": [
+    "../packages/opencode/.opencode/plugins/ralph-wiggum.ts",
+    // Destructive command check plugin - auto-blocks dangerous operations
+    "../packages/opencode/.opencode/plugins/destructive-check.ts",
+  ],
   "permission": {
     "bash": {
       "ls foo": "ask",
