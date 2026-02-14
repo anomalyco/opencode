@@ -45,7 +45,7 @@ const targetArg = args.find((arg) => arg.startsWith("--target="))
 const platform = platformArg?.split("=")[1] || "current"
 const target = targetArg?.split("=")[1]
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
+const SCRIPT_DIR = import.meta.dir
 const CLAXEDO_DESKTOP_DIR = path.resolve(SCRIPT_DIR, "..")
 const CLAXEDO_APP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../claxedo-app")
 const DESKTOP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../desktop")
@@ -55,16 +55,24 @@ const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string }> = [
   { rustTarget: "aarch64-apple-darwin", ocBinary: "opencode-darwin-arm64" },
   { rustTarget: "x86_64-apple-darwin", ocBinary: "opencode-darwin-x64" },
   { rustTarget: "x86_64-pc-windows-msvc", ocBinary: "opencode-windows-x64" },
+  { rustTarget: "x86_64-pc-windows-gnu", ocBinary: "opencode-windows-x64" },
   { rustTarget: "x86_64-unknown-linux-gnu", ocBinary: "opencode-linux-x64" },
   { rustTarget: "aarch64-unknown-linux-gnu", ocBinary: "opencode-linux-arm64" },
 ]
 
 function getRustTarget(): string {
   // Determine rust target based on current platform or specified target
+  // On Windows, detect whether MSVC or GNU toolchain is active
   if (process.platform === "darwin") {
     if (process.arch === "arm64") return "aarch64-apple-darwin"
     return "x86_64-apple-darwin"
   } else if (process.platform === "win32") {
+    try {
+      const rustcOutput = Bun.spawnSync({ cmd: ["rustc", "-vV"] })
+      const output = new TextDecoder().decode(rustcOutput.stdout)
+      const hostMatch = output.match(/host:\s*(\S+)/)
+      if (hostMatch?.[1]) return hostMatch[1]
+    } catch {}
     return "x86_64-pc-windows-msvc"
   } else {
     if (process.arch === "arm64") return "aarch64-unknown-linux-gnu"
@@ -155,6 +163,18 @@ if (!skipSidecar) {
   await fs.promises.mkdir(sidecarDir, { recursive: true })
   await fs.promises.copyFile(sourceBinary, destBinary)
   await fs.promises.chmod(destBinary, 0o755)
+
+  // On Windows, Tauri's bundler may look for a different target triple than the active Rust toolchain.
+  // Copy sidecar to both GNU and MSVC target names to cover both cases.
+  if (process.platform === "win32") {
+    const altTargets = ["x86_64-pc-windows-msvc", "x86_64-pc-windows-gnu"].filter((t) => t !== rustTarget)
+    for (const alt of altTargets) {
+      const altDest = path.join(sidecarDir, `opencode-cli-${alt}.exe`)
+      await fs.promises.copyFile(sourceBinary, altDest)
+      // eslint-disable-next-line no-console
+      console.log(`[claxedo] Also copied sidecar to ${altDest}`)
+    }
+  }
 
   // eslint-disable-next-line no-console
   console.log(`[claxedo] Sidecar copied to ${destBinary}`)
@@ -260,6 +280,13 @@ const tauriConfigOverride: Record<string, unknown> = {
   // Merge branding: prod overlay takes precedence over dev overlay
   ...devBrandingOverlay,
   ...(isProd ? prodBrandingOverlay : {}),
+}
+
+// When skipping sidecar, override externalBin to empty so Tauri doesn't expect it
+if (skipSidecar) {
+  const bundle = (tauriConfigOverride.bundle as Record<string, unknown>) || {}
+  bundle.externalBin = []
+  tauriConfigOverride.bundle = bundle
 }
 
 // Add updater config for production builds

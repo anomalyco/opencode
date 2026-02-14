@@ -12,7 +12,7 @@ import { file } from "bun"
 import * as path from "path"
 import * as fs from "fs"
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
+const SCRIPT_DIR = import.meta.dir
 const CLAXEDO_DESKTOP_DIR = path.resolve(SCRIPT_DIR, "..")
 const CLAXEDO_APP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../claxedo-app")
 const DESKTOP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../desktop")

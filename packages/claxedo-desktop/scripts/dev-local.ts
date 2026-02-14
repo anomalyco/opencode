@@ -25,7 +25,7 @@ import { tmpdir } from "os"
 const args = process.argv.slice(2)
 const debugMode = args.includes("--debug") || process.env.CLAXEDO_DEBUG === "1"
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
+const SCRIPT_DIR = import.meta.dir
 const CLAXEDO_DESKTOP_DIR = path.resolve(SCRIPT_DIR, "..")
 const CLAXEDO_APP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../claxedo-app")
 const DESKTOP_DIR = path.resolve(CLAXEDO_DESKTOP_DIR, "../desktop")
