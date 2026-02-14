@@ -1,0 +1,369 @@
+---
+title: 主题
+description: 选择内建主题或定义您自己的主题。
+---
+
+使用 opencode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
+
+By default, opencode uses our own `opencode` theme.
+
+---
+
+## 终端要求
+
+为了使主题能够正确显示完整的调色板，您的终端必须支持**真彩色**（24 位颜色）。大多数现代终端默认支持此功能，但您可能需要启用它：
+
+- **检查支持**：执行 `echo $COLORTERM` - 它应该输出 `truecolor` 或 `24bit`
+- **启用真彩色**：在shell配置文件中设置环境变量`COLORTERM=truecolor`
+- **您的终端兼容性**：确保终端模拟器支持24位颜色（大多数现代终端，​​​​如iTerm2、Alacritty、Kitty、Windows终端和最新版本的GNOME终端都支持）
+
+如果没有真彩色支持，主题的颜色精度可能会降低或回落到最接近的 256 色近似值。
+
+---
+
+## 内置主题
+
+opencode 带有几个内建主题。
+
+| 名称                   | 描述                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `system`               | 适应您所处的背景颜色                                                         |
+| `tokyonight`           | Based on the [Tokyonight](https://github.com/folke/tokyonight.nvim) theme    |
+| `everforest`           | Based on the [Everforest](https://github.com/sainnhe/everforest) theme       |
+| `ayu`                  | Based on the [Ayu](https://github.com/ayu-theme) dark theme                  |
+| `catppuccin`           | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
+| `catppuccin-macchiato` | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
+| `gruvbox`              | Based on the [Gruvbox](https://github.com/morhetz/gruvbox) theme             |
+| `kanagawa`             | Based on the [Kanagawa](https://github.com/rebelot/kanagawa.nvim) theme      |
+| `nord`                 | Based on the [Nord](https://github.com/nordtheme/nord) theme                 |
+| `matrix`               | 骇客风格黑底绿主题                                                           |
+| `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
+
+此外，我们还在不断添加新主题。
+
+---
+
+## 系统主题
+
+`system` 主题旨在自动适应您的最终方案。与使用固定颜色的传统主题不同，_system_ 主题：
+
+- **生成灰度**：根据终端的背景颜色建立自定义灰度，确保最佳对比度。
+- **使用 ANSI 颜色**：使用标准 ANSI 颜色 (0-15) 进行语法突出显示和 UI 元素，尊重 Windows 的调色盘。
+- **保留默认设置**：使用 `none` 作为文字和背景颜色以保持本机的外观。
+
+系统主题适合以下用户：
+
+- 希望 opencode 与终端的外观相匹配
+- 使用自定义终端配色方案
+- 希望所有终端应用程序具有一致的外观
+
+---
+
+## 使用主题
+
+您可以通过使用 `/theme` 命令调出主题选择来选择主题。或者您可以在 [config](/docs/config) 中指定它。
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## 自定义主题
+
+opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建和自定义主题。
+
+---
+
+### 优先级
+
+主题按以下顺序从多个目录载入，其中后面的目录覆盖前面的目录：
+
+1. **内建主题** - 这些主题嵌入在二进制文件中
+2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
+4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+
+如果多个目录包含同名主题，则将使用优先顺序较高的目录中的主题。
+
+---
+
+### 创建主题
+
+要创建自定义主题，请在主题目录中创建 JSON 档案。
+
+对于用户范围的主题：
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+以及针对特定项目的主题。
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### JSON 格式
+
+主题使用灵活的 JSON 格式，支持：
+
+- **十六进位制造颜色**： `"#ffffff"`
+- **ANSI 颜色**： `3` (0-255)
+- **颜色参考**： `"primary"` 或自定义定义
+- **深色/light 变体**： `{"dark": "#000", "light": "#fff"}`
+- **无颜色**： `"none"` - 使用终端的默认颜色或透明
+
+---
+
+### 颜色定义
+
+`defs` 部分是可选的，它允许您定义可在主题中引用的可重用颜色。
+
+---
+
+### 终端默认值
+
+特殊值 `"none"` 可用于任何颜色以继承默认的默认颜色。这对于建立与终端方案无缝的融合主题特别有用：
+
+- `"text": "none"` - 使用遥控器的预设前景色
+- `"background": "none"` - 使用桌面的背景颜色
+
+---
+
+### 例子
+
+以下是自定义主题的示例：
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

@@ -14,6 +14,8 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { Global } from "../global"
+import path from "path"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -211,7 +213,12 @@ export namespace Provider {
 
       const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
+      const containerCreds = Boolean(
+        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+      )
+
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+        return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
@@ -624,7 +631,7 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: provider.api!,
+        url: model.provider?.api ?? provider.api!,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -776,7 +783,7 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -1171,8 +1178,32 @@ export namespace Provider {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
-        for (const model of Object.keys(provider.models)) {
-          if (model.includes(item)) return getModel(providerID, model)
+        if (providerID === "amazon-bedrock") {
+          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
+
+          // Model selection priority:
+          // 1. global. prefix (works everywhere)
+          // 2. User's region prefix (us., eu.)
+          // 3. Unprefixed model
+          const globalMatch = candidates.find((m) => m.startsWith("global."))
+          if (globalMatch) return getModel(providerID, globalMatch)
+
+          const region = provider.options?.region
+          if (region) {
+            const regionPrefix = region.split("-")[0]
+            if (regionPrefix === "us" || regionPrefix === "eu") {
+              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return getModel(providerID, regionalMatch)
+            }
+          }
+
+          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
+          if (unprefixed) return getModel(providerID, unprefixed)
+        } else {
+          for (const model of Object.keys(provider.models)) {
+            if (model.includes(item)) return getModel(providerID, model)
+          }
         }
       }
     }
@@ -1200,9 +1231,19 @@ export namespace Provider {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
 
-    const provider = await list()
-      .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
+    const providers = await list()
+    const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
+      .json()
+      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
+      .catch(() => [])) as { providerID: string; modelID: string }[]
+    for (const entry of recent) {
+      const provider = providers[entry.providerID]
+      if (!provider) continue
+      if (!provider.models[entry.modelID]) continue
+      return { providerID: entry.providerID, modelID: entry.modelID }
+    }
+
+    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")

@@ -1,5 +1,4 @@
 // TODO: this file is a fuckfest, will cleanup better soon
-
 import type { APICallError, ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -7,6 +6,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
+import { Flag } from "@/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -19,6 +19,8 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -443,6 +445,8 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
+      case "venice-ai-sdk-provider":
+      // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
       case "@ai-sdk/openai-compatible":
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
@@ -498,6 +502,22 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
+
+        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+          const efforts = ["low", "medium", "high", "max"]
+          return Object.fromEntries(
+            efforts.map((effort) => [
+              effort,
+              {
+                thinking: {
+                  type: "adaptive",
+                },
+                effort,
+              },
+            ]),
+          )
+        }
+
         return {
           high: {
             thinking: {
@@ -515,6 +535,20 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+          const efforts = ["low", "medium", "high", "max"]
+          return Object.fromEntries(
+            efforts.map((effort) => [
+              effort,
+              {
+                reasoningConfig: {
+                  type: "adaptive",
+                  maxReasoningEffort: effort,
+                },
+              },
+            ]),
+          )
+        }
         // For Anthropic models on Bedrock, use reasoningConfig with budgetTokens
         if (model.api.id.includes("anthropic")) {
           return {
@@ -688,9 +722,24 @@ export namespace ProviderTransform {
       }
     }
 
+    // Enable thinking for reasoning models on alibaba-cn (DashScope).
+    // DashScope's OpenAI-compatible API requires `enable_thinking: true` in the request body
+    // to return reasoning_content. Without it, models like kimi-k2.5, qwen-plus, qwen3, qwq,
+    // deepseek-r1, etc. never output thinking/reasoning tokens.
+    // Note: kimi-k2-thinking is excluded as it returns reasoning_content by default.
+    if (
+      input.model.providerID === "alibaba-cn" &&
+      input.model.capabilities.reasoning &&
+      input.model.api.npm === "@ai-sdk/openai-compatible" &&
+      !modelId.includes("kimi-k2-thinking")
+    ) {
+      result["enable_thinking"] = true
+    }
+
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
+        result["reasoningSummary"] = "auto"
       }
 
       // Only set textVerbosity for non-chat gpt-5.x models
@@ -769,29 +818,8 @@ export namespace ProviderTransform {
     }
   }
 
-  export function maxOutputTokens(
-    npm: string,
-    options: Record<string, any>,
-    modelLimit: number,
-    globalLimit: number,
-  ): number {
-    const modelCap = modelLimit || globalLimit
-    const standardLimit = Math.min(modelCap, globalLimit)
-
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-      const thinking = options?.["thinking"]
-      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
-      const enabled = thinking?.["type"] === "enabled"
-      if (enabled && budgetTokens > 0) {
-        // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
-        if (budgetTokens + standardLimit <= modelCap) {
-          return standardLimit
-        }
-        return modelCap - budgetTokens
-      }
-    }
-
-    return standardLimit
+  export function maxOutputTokens(model: Provider.Model): number {
+    return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
@@ -869,20 +897,5 @@ export namespace ProviderTransform {
     }
 
     return schema as JSONSchema7
-  }
-
-  export function error(providerID: string, error: APICallError) {
-    let message = error.message
-    if (providerID.includes("github-copilot") && error.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
-    }
-    if (providerID.includes("github-copilot") && message.includes("The requested model is not supported")) {
-      return (
-        message +
-        "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
-      )
-    }
-
-    return message
   }
 }

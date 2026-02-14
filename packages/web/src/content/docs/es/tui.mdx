@@ -1,0 +1,390 @@
+---
+title: TUI
+description: Usando la interfaz de usuario del terminal OpenCode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode proporciona una interfaz de terminal interactiva o TUI para trabajar en sus proyectos con un LLM.
+
+Al ejecutar OpenCode se inicia TUI para el directorio actual.
+
+```bash
+opencode
+```
+
+O puede iniciarlo para un directorio de trabajo específico.
+
+```bash
+opencode /path/to/project
+```
+
+Una vez que esté en TUI, puede indicarlo con un mensaje.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## Referencias de archivos
+
+Puede hacer referencia a archivos en sus mensajes usando `@`. Esto realiza una búsqueda difusa de archivos en el directorio de trabajo actual.
+
+:::tip
+También puede utilizar `@` para hacer referencia a archivos en sus mensajes.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+El contenido del archivo se agrega a la conversación automáticamente.
+
+---
+
+## Comandos bash
+
+Inicie un mensaje con `!` para ejecutar un comando de shell.
+
+```bash frame="none"
+!ls -la
+```
+
+El resultado del comando se agrega a la conversación como resultado de la herramienta.
+
+---
+
+## Comandos
+
+Cuando utilice OpenCode TUI, puede escribir `/` seguido de un nombre de comando para ejecutar acciones rápidamente. Por ejemplo:
+
+```bash frame="none"
+/help
+```
+
+La mayoría de los comandos también tienen una combinación de teclas que utiliza `ctrl+x` como tecla principal, donde `ctrl+x` es la tecla principal predeterminada. [Más información](/docs/keybinds).
+
+Aquí están todos los comandos de barra diagonal disponibles:
+
+---
+
+### connect
+
+Agregue un proveedor a OpenCode. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Compacta la sesión actual. _Alias_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Combinación de teclas:** `ctrl+x c`
+
+---
+
+### details
+
+Alternar detalles de ejecución de la herramienta.
+
+```bash frame="none"
+/details
+```
+
+**Combinación de teclas:** `ctrl+x d`
+
+---
+
+### editor
+
+Abra un editor externo para redactar mensajes. Utiliza el editor configurado en su variable de entorno `EDITOR`. [Más información](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Combinación de teclas:** `ctrl+x e`
+
+---
+
+### exit
+
+Salga de OpenCode. _Alias_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Combinación de teclas:** `ctrl+x q`
+
+---
+
+### export
+
+Exporte la conversación actual a Markdown y ábrala en su editor predeterminado. Utiliza el editor configurado en su variable de entorno `EDITOR`. [Más información](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Combinación de teclas:** `ctrl+x x`
+
+---
+
+### help
+
+Muestra el cuadro de diálogo de ayuda.
+
+```bash frame="none"
+/help
+```
+
+**Combinación de teclas:** `ctrl+x h`
+
+---
+
+### init
+
+Cree o actualice el archivo `AGENTS.md`. [Más información](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Combinación de teclas:** `ctrl+x i`
+
+---
+
+### models
+
+Listar modelos disponibles.
+
+```bash frame="none"
+/models
+```
+
+**Combinación de teclas:** `ctrl+x m`
+
+---
+
+### new
+
+Iniciar una nueva sesión. _Alias_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Combinación de teclas:** `ctrl+x n`
+
+---
+
+### redo
+
+Rehacer un mensaje previamente deshecho. Solo disponible después de usar `/undo`.
+
+:::tip
+También se restaurarán todos los cambios en el archivo.
+:::
+
+Internamente, esto utiliza Git para gestionar los cambios de archivos. Entonces tu proyecto **necesita
+ser un repositorio Git**.
+
+```bash frame="none"
+/redo
+```
+
+**Combinación de teclas:** `ctrl+x r`
+
+---
+
+### sessions
+
+Enumere y cambie entre sesiones. _Alias_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Combinación de teclas:** `ctrl+x l`
+
+---
+
+### share
+
+Compartir la sesión actual. [Más información](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Combinación de teclas:** `ctrl+x s`
+
+---
+
+### theme
+
+Listar temas disponibles.
+
+```bash frame="none"
+/theme
+```
+
+**Combinación de teclas:** `ctrl+x t`
+
+---
+
+### thinking
+
+Alterna la visibilidad de los bloques de pensamiento/razonamiento en la conversación. Cuando está habilitado, puede ver el proceso de razonamiento del modelo para los modelos que admiten el pensamiento extendido.
+
+:::note
+Este comando solo controla si se **muestran** los bloques de pensamiento; no habilita ni deshabilita las capacidades de razonamiento del modelo. Para alternar las capacidades de razonamiento reales, use `ctrl+t` para recorrer las variantes del modelo.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Deshacer el último mensaje de la conversación. Elimina el mensaje de usuario más reciente, todas las respuestas posteriores y cualquier cambio de archivo.
+
+:::tip
+Cualquier cambio de archivo realizado también se revertirá.
+:::
+
+Internamente, esto utiliza Git para gestionar los cambios de archivos. Entonces tu proyecto **necesita
+ser un repositorio Git**.
+
+```bash frame="none"
+/undo
+```
+
+**Combinación de teclas:** `ctrl+x u`
+
+---
+
+### unshare
+
+Dejar de compartir la sesión actual. [Más información](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Configuración del editor
+
+Tanto el comando `/editor` como el `/export` usan el editor especificado en su variable de entorno `EDITOR`.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    Para hacerlo permanente, agréguelo a su perfil de shell;
+    `~/.bashrc`, `~/.zshrc`, etc.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    Para hacerlo permanente, use **Propiedades del sistema** > **Entorno
+    Variables**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    Para hacerlo permanente, agréguelo a su perfil de PowerShell.
+
+  </TabItem>
+</Tabs>
+
+Las opciones de editor populares incluyen:
+
+- `code` - Código de Visual Studio
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Editor Neovim
+- `vim` - Editor Vim
+- `nano` - Nanoeditor
+- `notepad` - Windows Bloc de notas
+- `subl` - Texto sublime
+
+:::note
+Algunos editores como VS Code deben iniciarse con el indicador `--wait`.
+:::
+
+Algunos editores necesitan argumentos de línea de comandos para ejecutarse en modo de bloqueo. El indicador `--wait` hace que el proceso del editor se bloquee hasta que se cierre.
+
+---
+
+## Configurar
+
+Puede personalizar el comportamiento de TUI a través de su archivo de configuración OpenCode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Opciones
+
+- `scroll_acceleration`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
+- `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `1`). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
+
+---
+
+## Personalización
+
+Puede personalizar varios aspectos de la vista TUI usando la paleta de comandos (`ctrl+x h` o `/help`). Estas configuraciones persisten después de los reinicios.
+
+---
+
+#### Visualización del nombre de usuario
+
+Alterna si tu nombre de usuario aparece en los mensajes de chat. Accede a este a través de:
+
+- Paleta de comandos: busque "nombre de usuario" u "ocultar nombre de usuario"
+- La configuración persiste automáticamente y se recordará en TUI sesiones
