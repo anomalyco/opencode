@@ -140,6 +140,13 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     setStore("editing", false)
   }
 
+  const handleCustomInputKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== "Enter" || e.isComposing) return
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return
+    e.preventDefault()
+    handleCustomSubmit(e)
+  }
+
   return (
     <div data-component="question-prompt" data-collapsed={store.collapsed}>
       <Show when={!single()}>
@@ -225,18 +232,20 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
               </button>
               <Show when={store.editing}>
                 <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                  <input
+                  <textarea
                     ref={(el) => setTimeout(() => el.focus(), 0)}
-                    type="text"
                     data-slot="custom-input"
+                    style={{ "font-family": "var(--font-family-mono)" }}
                     placeholder={language.t("ui.question.custom.placeholder")}
                     value={input()}
+                    rows={3}
                     disabled={store.sending}
                     onInput={(e) => {
                       const inputs = [...store.custom]
                       inputs[store.tab] = e.currentTarget.value
                       setStore("custom", inputs)
                     }}
+                    onKeyDown={handleCustomInputKeyDown}
                   />
                   <Button type="submit" variant="primary" size="small" disabled={store.sending}>
                     {multi() ? language.t("ui.common.add") : language.t("ui.common.submit")}
@@ -289,16 +298,18 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
             </button>
             <Show when={store.editing}>
               <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <input
+                <textarea
                   ref={(el) => setTimeout(() => el.focus(), 0)}
-                  type="text"
                   data-slot="custom-input"
+                  style={{ "font-family": "var(--font-family-mono)" }}
                   placeholder={language.t("ui.question.custom.placeholder")}
                   value={input()}
+                  rows={3}
                   disabled={store.sending}
                   onInput={(e) => {
                     setStore("custom", store.tab, e.currentTarget.value)
                   }}
+                  onKeyDown={handleCustomInputKeyDown}
                 />
                 <Button type="submit" variant="primary" size="small" disabled={store.sending}>
                   {multi() ? language.t("ui.common.add") : language.t("ui.common.submit")}
