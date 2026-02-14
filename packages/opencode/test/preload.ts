@@ -14,13 +14,14 @@ afterAll(async () => {
   // Database.Client is a lazy singleton that holds file locks on the
   // .db, .db-shm, and .db-wal files inside XDG_DATA_HOME. On Windows
   // these locks prevent rmSync from cleaning up the test data directory.
-  try {
-    const { Database } = await import("../src/storage/db")
-    const client = Database.Client()
-    if (client.$client && typeof client.$client.close === "function") {
-      client.$client.close()
-    }
-  } catch {}
+  await import("../src/storage/db")
+    .then(({ Database }) => {
+      const client = Database.Client()
+      if (client.$client && typeof client.$client.close === "function") {
+        client.$client.close()
+      }
+    })
+    .catch(() => {})
   fsSync.rmSync(dir, { recursive: true, force: true })
 })
 
