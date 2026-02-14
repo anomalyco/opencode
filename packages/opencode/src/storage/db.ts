@@ -74,6 +74,7 @@ export namespace Database {
     sqlite.run("PRAGMA busy_timeout = 5000")
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
+    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     const db = drizzle({ client: sqlite, schema })
 
