@@ -20,6 +20,7 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
 | clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
 | ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                            |
+| google-java-format   | .java                                                                                                    | `google-java-format` command available or `google-java-format-all-deps.jar` in project root           |
 | ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
 | rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
 | cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
@@ -39,6 +40,30 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
 
 So if your project has `prettier` in your `package.json`, OpenCode will automatically use it.
+
+### Google Java Format
+
+Google Java Format requires either:
+
+1. **`google-java-format` command in PATH** - Install via [releases](https://github.com/google/google-java-format/releases)
+2. **`google-java-format-all-deps.jar` in project root** - Download from [releases](https://github.com/google/google-java-format/releases)
+
+Example project structure:
+
+```
+my-java-project/
+├── src/
+│   └── Main.java
+└── google-java-format-all-deps.jar
+```
+
+When the JAR is in your project root, OpenCode will automatically run:
+
+```bash
+java -jar google-java-format-all-deps.jar $FILE
+```
+
+If you prefer a different location, you can configure it:
 
 ---
 
@@ -128,3 +153,16 @@ You can override the built-in formatters or add new ones by specifying the comma
 ```
 
 The **`$FILE` placeholder** in the command will be replaced with the path to the file being formatted.
+
+For example, to use a custom JAR location:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "google-java-format": {
+      "command": ["java", "-jar", "C:\\tools\\google-java-format-all-deps.jar", "$FILE"]
+    }
+  }
+}
+```
