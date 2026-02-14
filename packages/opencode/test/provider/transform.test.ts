@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 
 const OUTPUT_TOKEN_MAX = 32000
@@ -370,6 +371,54 @@ describe("ProviderTransform.providerOptions", () => {
     expect(ProviderTransform.providerOptions(model, { reasoningFormat: "parsed" })).toEqual({
       groq: { reasoningFormat: "parsed" },
     })
+  })
+})
+
+describe("ProviderTransform.options - nvidia glm thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (apiID: string) =>
+    ({
+      id: `nvidia/${apiID}`,
+      providerID: "nvidia",
+      api: {
+        id: apiID,
+        url: "https://integrate.api.nvidia.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: apiID,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 204800, output: 131072 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2025-01-01",
+    }) satisfies Provider.Model
+
+  test("adds chat_template_kwargs for z-ai/glm models", () => {
+    const model = createModel("z-ai/glm5")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+
+    expect(result.chat_template_kwargs).toEqual({
+      enable_thinking: true,
+      clear_thinking: false,
+    })
+  })
+
+  test("does not add chat_template_kwargs for non glm models", () => {
+    const model = createModel("nvidia/nemotron-3-nano-30b-a3b")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+
+    expect(result.chat_template_kwargs).toBeUndefined()
   })
 })
 

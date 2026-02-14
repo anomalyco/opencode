@@ -663,6 +663,7 @@ export namespace ProviderTransform {
     providerOptions?: Record<string, any>
   }): Record<string, any> {
     const result: Record<string, any> = {}
+    const modelId = input.model.api.id.toLowerCase()
 
     // openai and providers using openai package should set store to false by default.
     if (
@@ -696,6 +697,17 @@ export namespace ProviderTransform {
       }
     }
 
+    if (
+      input.model.providerID === "nvidia" &&
+      input.model.api.npm === "@ai-sdk/openai-compatible" &&
+      modelId.startsWith("z-ai/glm")
+    ) {
+      result["chat_template_kwargs"] = {
+        enable_thinking: true,
+        clear_thinking: false,
+      }
+    }
+
     if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
     }
@@ -710,7 +722,6 @@ export namespace ProviderTransform {
     }
 
     // Enable thinking by default for kimi-k2.5/k2p5 models using anthropic SDK
-    const modelId = input.model.api.id.toLowerCase()
     if (
       (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
       (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))

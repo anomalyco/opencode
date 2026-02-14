@@ -323,6 +323,94 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends chat_template_kwargs for nvidia glm models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "nvidia"
+    const modelID = "z-ai/glm4.7"
+    const source = await loadFixture(providerID, modelID)
+    const model = source.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, model.id)
+        const sessionID = "session-test-nvidia-glm"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-nvidia-glm",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+
+        expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
+        expect(body.model).toBe(resolved.api.id)
+        expect(body.chat_template_kwargs).toEqual({
+          enable_thinking: true,
+          clear_thinking: false,
+        })
+      },
+    })
+  })
+
   test("sends responses API payload for OpenAI models", async () => {
     const server = state.server
     if (!server) {
