@@ -16,6 +16,27 @@ import { git } from "../util/git"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
+
+  function gitpath(cwd: string, name: string) {
+    if (!name) return cwd
+    // git output includes trailing newlines; keep path whitespace intact.
+    name = name.replace(/[\r\n]+$/, "")
+    if (!name) return cwd
+
+    if (process.platform === "win32") {
+      name = name
+        // Git Bash for Windows paths are typically /<drive>/...
+        .replace(/^\/([a-zA-Z])\//, (_, drive) => `${drive.toUpperCase()}:/`)
+        // Cygwin git paths are typically /cygdrive/<drive>/...
+        .replace(/^\/cygdrive\/([a-zA-Z])\//, (_, drive) => `${drive.toUpperCase()}:/`)
+        // WSL paths are typically /mnt/<drive>/...
+        .replace(/^\/mnt\/([a-zA-Z])\//, (_, drive) => `${drive.toUpperCase()}:/`)
+    }
+
+    if (path.isAbsolute(name)) return path.normalize(name)
+    return path.resolve(cwd, name)
+  }
+
   export const Info = z
     .object({
       id: z.string(),
@@ -143,7 +164,7 @@ export namespace Project {
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+          .then(async (result) => gitpath(sandbox, await result.text()))
           .catch(() => undefined)
 
         if (!top) {
@@ -161,9 +182,9 @@ export namespace Project {
           cwd: sandbox,
         })
           .then(async (result) => {
-            const dirname = path.dirname((await result.text()).trim())
-            if (dirname === ".") return sandbox
-            return dirname
+            const common = gitpath(sandbox, await result.text())
+            // Avoid going to parent of sandbox when git-common-dir is empty.
+            return common === sandbox ? sandbox : path.dirname(common)
           })
           .catch(() => undefined)
 
