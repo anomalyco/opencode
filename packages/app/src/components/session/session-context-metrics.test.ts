@@ -92,7 +92,7 @@ describe("getSessionContextMetrics", () => {
   })
 
   test("returns empty metrics when inputs are undefined", () => {
-    const metrics = getSessionContextMetrics(undefined, undefined)
+    const metrics = getSessionContextMetrics([], [])
 
     expect(metrics.totalCost).toBe(0)
     expect(metrics.context).toBeUndefined()

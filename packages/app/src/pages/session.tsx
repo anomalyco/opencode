@@ -1529,7 +1529,7 @@ export default function Page() {
             if (!path) return []
             return [[path, file.selectedLines(path) ?? null] as const]
           }),
-      ),
+      ) as Record<string, SelectedLineRange | null>,
     })
   })
 
@@ -1546,6 +1546,7 @@ export default function Page() {
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
+          mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
