@@ -585,9 +585,14 @@ function ClaxedoLayoutContent(props: ParentProps) {
   const handleNewSession = (workspaceDir: string) => {
     // Navigate to new session
     navigate(`/${base64Encode(workspaceDir)}/session`)
-    // Add a new session tab
-    const id = claxedo.topTabs.addSession(workspaceDir, "new", "New Session")
-    if (id) claxedo.topTabs.setActive(id)
+    // Find the group whose worktree matches workspaceDir, falling back to focused group.
+    // This ensures sidebar-triggered sessions land in the correct split panel.
+    const targetGroup = claxedo.split.groups().find(
+      (g) => claxedo.groupWorktree(g.id).default() === workspaceDir,
+    )
+    const tabs = targetGroup ? claxedo.groupTabs(targetGroup.id) : claxedo.topTabs
+    const id = tabs.addSession(workspaceDir, "new", "New Session")
+    if (id) tabs.setActive(id)
   }
 
   const handleDeleteSession = (sessionItem: SessionItem) => {
@@ -790,12 +795,14 @@ function ClaxedoLayoutContent(props: ParentProps) {
     }
   }
 
-  const handleNewTerminal = (command?: string, title?: string) => {
-    // Request terminal creation via claxedo context
-    // TerminalContentWrapper (at directory level) will handle the actual creation
-    const dir = activeWorkspaceId()
-    if (!dir) return
-    claxedo.terminal.requestCreate(dir, command, title, claxedo.split.focusedId())
+  const handleNewTerminal = (workspaceDir: string, command?: string, title?: string) => {
+    // Navigate to the workspace so the route-level TerminalProvider (and its
+    // TerminalContentWrapperInner) has sdk.directory === workspaceDir.
+    // Without this, the pending-create check (pendingDir !== dir) silently
+    // drops the request when the workspace bar selected a different worktree
+    // than the one in the URL.
+    navigate(`/${base64Encode(workspaceDir)}/session`)
+    claxedo.terminal.requestCreate(workspaceDir, command, title, claxedo.split.focusedId())
   }
 
   const handleTabSelect = (tab: TabItem) => {
