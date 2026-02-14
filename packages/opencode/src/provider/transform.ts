@@ -318,7 +318,7 @@ export namespace ProviderTransform {
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
     if (id.includes("minimax-m2")) {
-      if (id.includes("m2.") || id.includes("m25") || id.includes("m21")) return 40 // m2.1 and m2.5
+      if (["m2.", "m25", "m21"].some((s) => id.includes(s))) return 40
       return 20
     }
     if (id.includes("gemini")) return 64
