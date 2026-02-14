@@ -1,5 +1,4 @@
-// TODO: this file is a fuckfest, will cleanup better soon
-import type { APICallError, ModelMessage } from "ai"
+import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -409,7 +408,6 @@ export namespace ProviderTransform {
             ]),
           )
         }
-
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
@@ -803,28 +801,8 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-    if (model.api.npm !== "@ai-sdk/gateway") {
-      const key = sdkKey(model.api.npm) ?? model.providerID
-      return { [key]: options }
-    }
-
-    const key = iife(() => {
-      if (model.api.id.includes("/")) return model.api.id.split("/")[0]
-      if (model.id.includes("/")) return model.id.split("/")[0]
-      return sdkKey(model.api.npm) ?? model.providerID
-    })
-
-    const rest = { ...options }
-    const gate = rest.gateway
-    delete rest.gateway
-    if (Object.keys(rest).length === 0) {
-      return { gateway: gate }
-    }
-
-    return {
-      gateway: gate,
-      [key]: rest,
-    }
+    const key = sdkKey(model.api.npm) ?? model.providerID
+    return { [key]: options }
   }
 
   export function maxOutputTokens(model: Provider.Model): number {
