@@ -86,6 +86,7 @@ export const dict = {
   "ui.common.question.other": "个问题",
 
   "ui.common.add": "添加",
+  "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "确认",
   "ui.common.dismiss": "忽略",
@@ -112,6 +113,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(无答案)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(可多选)",
+  "ui.question.multiHint": "可多选",
+  "ui.question.singleHint": "选择一个答案",
   "ui.question.custom.placeholder": "输入你的答案...",
 } satisfies Partial<Record<Keys, string>>

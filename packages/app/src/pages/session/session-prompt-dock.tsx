@@ -5,7 +5,6 @@ import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { SessionTodoDock } from "@/components/session-todo-dock"
-import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
 
 export function SessionPromptDock(props: {
   centered: boolean
@@ -109,18 +108,8 @@ export function SessionPromptDock(props: {
       >
         <Show when={props.questionRequest()} keyed>
           {(req) => {
-            const subtitle = questionSubtitle(req.questions.length, (key) => props.t(key))
             return (
-              <div data-component="tool-part-wrapper" data-question="true" class="mb-3">
-                <BasicTool
-                  icon="bubble-5"
-                  locked
-                  defaultOpen
-                  trigger={{
-                    title: props.t("ui.tool.questions"),
-                    subtitle,
-                  }}
-                />
+              <div class="mb-3">
                 <QuestionDock request={req} />
               </div>
             )

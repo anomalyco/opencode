@@ -85,6 +85,7 @@ export const dict = {
   "ui.common.question.other": "Fragen",
 
   "ui.common.add": "Hinzufügen",
+  "ui.common.back": "Zurück",
   "ui.common.cancel": "Abbrechen",
   "ui.common.confirm": "Bestätigen",
   "ui.common.dismiss": "Verwerfen",
@@ -111,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} beantwortet",
   "ui.question.answer.none": "(keine Antwort)",
   "ui.question.review.notAnswered": "(nicht beantwortet)",
-  "ui.question.multiHint": "(alle zutreffenden auswählen)",
+  "ui.question.multiHint": "Alle zutreffenden auswählen",
+  "ui.question.singleHint": "Eine Antwort auswählen",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
 } satisfies Partial<Record<Keys, string>>

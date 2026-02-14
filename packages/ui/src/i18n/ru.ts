@@ -81,6 +81,7 @@ export const dict = {
   "ui.common.question.other": "вопросов",
 
   "ui.common.add": "Добавить",
+  "ui.common.back": "Назад",
   "ui.common.cancel": "Отмена",
   "ui.common.confirm": "Подтвердить",
   "ui.common.dismiss": "Закрыть",
@@ -107,6 +108,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} отвечено",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
-  "ui.question.multiHint": "(выберите все подходящие)",
+  "ui.question.multiHint": "Выберите все подходящие",
+  "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
 }
