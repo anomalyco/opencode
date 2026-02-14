@@ -341,6 +341,36 @@ describe("ProviderTransform.providerOptions", () => {
       gateway: { reasoningEffort: "high" },
     })
   })
+
+  test("maps amazon slug to bedrock for provider options", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "amazon/nova-2-lite",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningConfig: { type: "enabled" } })).toEqual({
+      bedrock: { reasoningConfig: { type: "enabled" } },
+    })
+  })
+
+  test("uses groq slug for groq models", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "groq/llama-3.3-70b-versatile",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningFormat: "parsed" })).toEqual({
+      groq: { reasoningFormat: "parsed" },
+    })
+  })
 })
 
 describe("ProviderTransform.schema - gemini array items", () => {
