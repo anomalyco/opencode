@@ -335,6 +335,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Se ejecuta después de crear un nuevo espacio de trabajo (árbol de trabajo).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ej. bun install",
+  "dialog.project.edit.worktree.baseBranch": "Rama base por defecto",
+  "dialog.project.edit.worktree.baseBranch.description":
+    "La rama por defecto desde la cual crear nuevos árboles de trabajo.",
+  "dialog.project.edit.worktree.baseBranch.placeholder": "p. ej. main",
+  "dialog.project.edit.worktree.symlinks": "Enlaces simbólicos",
+  "dialog.project.edit.worktree.symlinks.description":
+    "Archivos o directorios para enlazar simbólicamente desde la raíz del proyecto.",
+  "dialog.project.edit.worktree.symlinks.placeholder": ".env\nconfig/secrets.json",
+  "dialog.project.edit.worktree.copies": "Copias",
+  "dialog.project.edit.worktree.copies.description": "Archivos o directorios para copiar desde la raíz del proyecto.",
+  "dialog.project.edit.worktree.copies.placeholder": "data/seeds\nlocal-config.json",
 
   "context.breakdown.title": "Desglose de Contexto",
   "context.breakdown.note":
@@ -785,6 +796,14 @@ export const dict = {
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Fallo al crear espacio de trabajo",
+  "workspace.create.failed.invalidReference": "Rama o referencia no encontrada: {{ref}}",
+  "dialog.workspace.create.title": "Crear nuevo espacio de trabajo",
+  "dialog.workspace.create.name": "Nombre del espacio de trabajo",
+  "dialog.workspace.create.name.placeholder": "Opcional (generado aleatoriamente)",
+  "dialog.workspace.create.branch": "Nombre de la rama",
+  "dialog.workspace.create.branch.placeholder": "Opcional (por defecto opencode/<nombre>)",
+  "dialog.workspace.create.baseBranch": "Rama base",
+  "dialog.workspace.create.baseBranch.placeholder": "Opcional (por defecto la configuración del proyecto o main)",
   "workspace.delete.failed.title": "Fallo al eliminar espacio de trabajo",
   "workspace.resetting.title": "Restableciendo espacio de trabajo",
   "workspace.resetting.description": "Esto puede tomar un minuto.",
