@@ -1,5 +1,5 @@
 ---
-title: 網路
+title: Web
 description: 在浏览器中使用opencode。
 ---
 
@@ -7,7 +7,7 @@ opencode 可以在浏览器中作为 Web 应用程序执行，消耗终端可以
 
 ![opencode Web - New Session](../../../assets/web/web-homepage-new-session.png)
 
-## 入門
+## 入门
 
 绕过执行以下命令启动 Web 简介：
 
@@ -29,7 +29,7 @@ For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather
 
 ## 配置
 
-您可以使用命令列标志或在[config file](/docs/config).conf 中配置Web服务器。
+您可以使用命令行标志或在[config file](/docs/config).conf 中配置Web服务器。
 
 ### 端口
 
@@ -39,9 +39,9 @@ For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather
 opencode web --port 4096
 ```
 
-### 主機名
+### 主机名
 
-情况默认下，服务器系结到`127.0.0.1`（仅限本地主机）。要使opencode在您的网路上可访问：
+默认情况下，服务器绑定到`127.0.0.1`（仅限本地主机）。要使opencode在您的网路上可访问：
 
 ```bash
 opencode web --hostname 0.0.0.0
@@ -78,9 +78,9 @@ opencode web --mdns --mdns-domain myproject.local
 opencode web --cors https://example.com
 ```
 
-### 驗證
+### 验证
 
-要保护访问，请使用 `OPENCODE_SERVER_PASSWORD` 环境变数设置密码：
+要保护访问，请使用 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
 
 ```bash
 OPENCODE_SERVER_PASSWORD=secret opencode web
@@ -90,19 +90,19 @@ The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USE
 
 ---
 
-## 使用网络界面
+## 使用web界面
 
-启动后，网路界面将提供对您的 opencode 会话的访问。
+启动后，web界面将提供对您的 opencode 会话的访问。
 
 ### 会话
 
-從主頁查看和管理您的会话。您可以查看活动会话并開始新会话。
+从主页查看和管理您的会话。您可以查看活动会话并开始新会话。
 
 ![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
-### 服务器狀態
+### 服务器状态
 
-单击“查看服务器”可查看连接的服务器及其狀態。
+单击“查看服务器”可查看连接的服务器及其状态。
 
 ![opencode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
 
