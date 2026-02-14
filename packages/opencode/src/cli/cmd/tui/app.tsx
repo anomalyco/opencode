@@ -1,9 +1,9 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
-import { MouseButton, TextAttributes } from "@opentui/core"
+import { MouseButton, PasteEvent, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, onCleanup, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
@@ -210,6 +210,89 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  onMount(() => {
+    // Avoid pathological slowdowns in Bun.stripANSI() on large/control-heavy pastes by
+    // scrubbing ANSI/control sequences ourselves before emitting a PasteEvent.
+    const clean = (text: string) => {
+      const out: string[] = []
+      let i = 0
+      while (i < text.length) {
+        const ch = text.charCodeAt(i)
+
+        // ESC (7-bit) sequences: CSI / OSC / other
+        if (ch === 0x1b) {
+          const next = text.charCodeAt(i + 1)
+
+          // CSI: ESC [ ... <final>
+          if (next === 0x5b) {
+            i += 2
+            while (i < text.length) {
+              const c = text.charCodeAt(i)
+              i++
+              if (c >= 0x40 && c <= 0x7e) break
+            }
+            continue
+          }
+
+          // OSC: ESC ] ... (BEL | ST)
+          if (next === 0x5d) {
+            i += 2
+            while (i < text.length) {
+              const c = text.charCodeAt(i)
+              if (c === 0x07) {
+                i++
+                break
+              }
+              if (c === 0x1b && text.charCodeAt(i + 1) === 0x5c) {
+                i += 2
+                break
+              }
+              i++
+            }
+            continue
+          }
+
+          // Other ESC sequences: skip ESC + 1 byte
+          i += 2
+          continue
+        }
+
+        // CSI (8-bit): 0x9b ... <final>
+        if (ch === 0x9b) {
+          i++
+          while (i < text.length) {
+            const c = text.charCodeAt(i)
+            i++
+            if (c >= 0x40 && c <= 0x7e) break
+          }
+          continue
+        }
+
+        // Strip control chars but preserve newline/tab
+        if ((ch < 0x20 || ch === 0x7f) && ch !== 0x0a && ch !== 0x09) {
+          i++
+          continue
+        }
+
+        out.push(text[i]!)
+        i++
+      }
+      return out.join("")
+    }
+
+    const key = renderer.keyInput as unknown as { processPaste?: (data: string) => void; emit?: (e: string, v: unknown) => void }
+    const origPaste = typeof key.processPaste === "function" ? key.processPaste.bind(key) : undefined
+    if (origPaste && typeof key.emit === "function") {
+      const patched = (data: string) => {
+        key.emit!("paste", new PasteEvent(clean(data)))
+      }
+      key.processPaste = patched
+      onCleanup(() => {
+        if (key.processPaste === patched) key.processPaste = origPaste
+      })
+    }
+  })
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
