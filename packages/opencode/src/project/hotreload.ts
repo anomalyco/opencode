@@ -177,16 +177,20 @@ export namespace HotReload {
         queued = false
         latest = undefined
         last = now
-        log.info("hot reload triggered", { file: hit.file, event: hit.event, reason })
-        void reload()
-          .then(() =>
-            Bus.publish(Event.Applied, {
+        const directory = Instance.directory
+        log.info("hot reload triggered", { directory, file: hit.file, event: hit.event, reason })
+        void Instance.provide({
+          directory,
+          async fn() {
+            await reload()
+            await Bus.publish(Event.Applied, {
               file: hit.file,
               event: hit.event,
-            }),
-          )
+            })
+          },
+        })
           .catch((error) => {
-            log.error("hot reload failed", { error, file: hit.file, event: hit.event })
+            log.error("hot reload failed", { error, directory, file: hit.file, event: hit.event })
           })
           .finally(() => {
             busy = false
