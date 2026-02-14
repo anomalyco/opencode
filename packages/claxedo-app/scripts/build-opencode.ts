@@ -15,8 +15,9 @@
 import { $ } from "bun"
 import * as fs from "fs"
 import * as path from "path"
+import { fileURLToPath } from "url"
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const CLAXEDO_APP_DIR = path.resolve(SCRIPT_DIR, "..")
 const OPENCODE_DIR = path.resolve(CLAXEDO_APP_DIR, "../opencode")
 const PATCHES_DIR = path.resolve(CLAXEDO_APP_DIR, "src/opencode-patches")

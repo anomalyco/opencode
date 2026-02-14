@@ -5,6 +5,8 @@ import { readdirSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 
+const normalizePath = (p: string) => p.replace(/\\/g, "/")
+
 function list(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const p = path.join(dir, e.name)
@@ -23,14 +25,14 @@ function overrides() {
     // Use exact-match regex so that e.g. "@/pages/layout" does NOT
     // prefix-match "@/pages/layout/deep-links" (which lives in upstream).
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    return { find: new RegExp(`^${escaped}$`), replacement: p }
+    return { find: new RegExp(`^${escaped}$`), replacement: normalizePath(p) }
   })
 }
 
 const enabled = process.env.CLAXEDO_OVERRIDES !== "0"
 
-const overridesRoot = fileURLToPath(new URL("./src/overrides/", import.meta.url))
-const upstreamRoot = fileURLToPath(new URL("../app/src/", import.meta.url))
+const overridesRoot = normalizePath(fileURLToPath(new URL("./src/overrides/", import.meta.url)))
+const upstreamRoot = normalizePath(fileURLToPath(new URL("../app/src/", import.meta.url)))
 
 /**
  * Vite plugin that intercepts relative imports from upstream files and
@@ -54,16 +56,16 @@ function overrideResolver(): Plugin {
     enforce: "pre",
     async resolveId(source, importer, options) {
       if (overrideMap.size === 0) return null
-      if (!importer?.startsWith(upstreamRoot)) return null
+      if (!importer || !normalizePath(importer).startsWith(upstreamRoot)) return null
       if (!source.startsWith("./") && !source.startsWith("../")) return null
 
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true })
       if (!resolved) return null
-      if (!resolved.id.startsWith(upstreamRoot)) return null
+      const resolvedId = normalizePath(resolved.id)
+      if (!resolvedId.startsWith(upstreamRoot)) return null
 
-      const key = path
-        .relative(upstreamRoot, resolved.id)
-        .replace(/\\/g, "/")
+      const key = resolvedId
+        .slice(upstreamRoot.length)
         .replace(/\.(ts|tsx)$/, "")
 
       return overrideMap.get(key) ?? null
@@ -120,14 +122,14 @@ export default defineConfig({
       // Terminal backend swap (build-time, zero runtime overhead)
       {
         find: "#terminal-backend",
-        replacement: new URL("./src/overrides/terminal/backend/xterm.ts", import.meta.url).pathname,
+        replacement: normalizePath(fileURLToPath(new URL("./src/overrides/terminal/backend/xterm.ts", import.meta.url))),
       },
       // Override files (specific aliases take precedence)
       ...(enabled ? overrides() : []),
       // Resolve claxedo-specific paths
-      { find: "@claxedo/", replacement: new URL("./src/", import.meta.url).pathname },
+      { find: "@claxedo/", replacement: normalizePath(fileURLToPath(new URL("./src/", import.meta.url))) },
       // General @/ alias (lowest priority)
-      { find: "@/", replacement: new URL("../app/src/", import.meta.url).pathname },
+      { find: "@/", replacement: normalizePath(fileURLToPath(new URL("../app/src/", import.meta.url))) },
     ],
   },
 })

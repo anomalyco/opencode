@@ -7,16 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-02-14
+
+### Added
+- Compact prompt dock overlays the review panel when the session column is narrow — auto-collapses messages but keeps chat accessible without leaving code review
+- RadioGroup-based diff style switcher replaces icon-button toggles in session review toolbar
+
+### Fixed
+- Windows crash: override resolver Vite plugin failed on Windows due to backslash vs forward-slash path mismatch, causing duplicate SolidJS contexts and "Server context must be used within a context provider" error
+- Windows path bugs: replaced all `URL.pathname` usage with `fileURLToPath()` across Vite configs and build scripts to avoid `/C:/...` leading-slash issues on Windows
+- Session messages panel no longer hides on new/empty sessions when review panel is open
+- Minimum session panel width reduced from 450px to 280px to support compact mode
+
 ## [0.0.2] - 2026-02-14
 
 ### Added
+- Compact prompt dock that floats over the review panel — messages auto-collapse behind a certain size but you can still chat without leaving code review
 
-### Changed
-
-### Fixed
-
-
-### Added
+  ![Compact prompt dock](./assets/changelog/code-review-comments.png)
 
 ### Changed
 
@@ -44,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Context scope issues between app-scope and directory-scope providers
 - Terminal state persistence across workspace navigation
 
-[Unreleased]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.2...HEAD
+[Unreleased]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.3...HEAD
+[0.0.3]: https://github.com/kyashrathore/opencode/compare/claxedo-v0.0.2...claxedo-v0.0.3
 [0.0.2]: https://github.com/kyashrathore/opencode/releases/tag/claxedo-v0.0.2
 [0.0.1]: https://github.com/kyashrathore/opencode/releases/tag/claxedo-v0.0.1

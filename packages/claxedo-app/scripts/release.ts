@@ -14,6 +14,7 @@
 
 import { file } from "bun"
 import { $ } from "bun"
+import { fileURLToPath } from "url"
 
 // Parse arguments
 const args = Bun.argv.slice(2)
@@ -37,7 +38,7 @@ if (!bumpType) {
   process.exit(1)
 }
 
-const claxedoAppDir = new URL("..", import.meta.url).pathname
+const claxedoAppDir = fileURLToPath(new URL("..", import.meta.url))
 
 // eslint-disable-next-line no-console
 console.log(`[release] Starting release process...`)

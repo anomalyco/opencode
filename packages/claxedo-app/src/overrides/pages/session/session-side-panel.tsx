@@ -76,6 +76,7 @@ export function SessionSidePanel(props: {
   kinds: Map<string, "add" | "del" | "mix">
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  compactPrompt?: JSX.Element
 }) {
   const fileTreeChangesMode = () => props.layout.fileTree.opened() && props.fileTreeTab() === "changes"
 
@@ -95,24 +96,30 @@ export function SessionSidePanel(props: {
         <div
           classList={{
             "flex-1 min-w-0 h-full": true,
-            "hidden": !props.reviewOpen,
+            hidden: !props.reviewOpen,
           }}
         >
           {/* Direct review mode (when file tree is open with changes tab) */}
           <div
             classList={{
-              "h-full": true,
-              "hidden": !fileTreeChangesMode(),
+              "relative h-full": true,
+              hidden: !fileTreeChangesMode(),
             }}
           >
             {props.reviewPanel()}
+            {/* Compact mode floating prompt */}
+            <Show when={props.compactPrompt}>
+              <div class="absolute inset-x-0 bottom-0 z-50 p-4 bg-gradient-to-t from-background-base via-background-base/80 to-transparent flex justify-center">
+                {props.compactPrompt}
+              </div>
+            </Show>
           </div>
 
           {/* Tabbed mode (when file tree is closed or on non-changes tab) */}
           <div
             classList={{
-              "h-full": true,
-              "hidden": fileTreeChangesMode(),
+              "relative h-full": true,
+              hidden: fileTreeChangesMode(),
             }}
           >
             <DragDropProvider
@@ -192,8 +199,14 @@ export function SessionSidePanel(props: {
                 </div>
 
                 <Show when={props.reviewTab}>
-                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
+                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict relative">
                     <Show when={props.activeTab() === "review"}>{props.reviewPanel()}</Show>
+                    {/* Compact mode floating prompt */}
+                    <Show when={props.compactPrompt}>
+                      <div class="absolute inset-x-0 bottom-0 z-50 p-4 bg-gradient-to-t from-background-base via-background-base/80 to-transparent flex justify-center">
+                        {props.compactPrompt}
+                      </div>
+                    </Show>
                   </Tabs.Content>
                 </Show>
 
@@ -263,7 +276,7 @@ export function SessionSidePanel(props: {
           id="file-tree-panel"
           classList={{
             "relative shrink-0 h-full": true,
-            "hidden": !props.layout.fileTree.opened(),
+            hidden: !props.layout.fileTree.opened(),
           }}
           style={{ width: `${props.layout.fileTree.width()}px` }}
         >

@@ -59,6 +59,8 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { useSessionParams } from "@claxedo/claxedo-ui/context/session-params"
 import { useClaxedoLayout } from "@claxedo/claxedo-ui/context/claxedo-layout"
+import { CompactPromptDock } from "@claxedo/claxedo-ui/components/compact-prompt-dock"
+import { SessionTurn } from "@opencode-ai/ui/session-turn"
 
 type HandoffSession = {
   prompt: string
@@ -94,8 +96,16 @@ export default function Page() {
   // (no SessionParamsProvider) is mounted in a hidden div and must NOT render.
   let sessionParams: ReturnType<typeof useSessionParams> | undefined
   let claxedoLayout: ReturnType<typeof useClaxedoLayout> | undefined
-  try { sessionParams = useSessionParams() } catch { /* not in split mode */ }
-  try { claxedoLayout = useClaxedoLayout() } catch { /* not in claxedo mode */ }
+  try {
+    sessionParams = useSessionParams()
+  } catch {
+    /* not in split mode */
+  }
+  try {
+    claxedoLayout = useClaxedoLayout()
+  } catch {
+    /* not in claxedo mode */
+  }
 
   if (claxedoLayout && !sessionParams) {
     return <div />
@@ -126,8 +136,12 @@ export default function Page() {
 
   // Backward-compatible params proxy
   const params = {
-    get id() { return sessionID() },
-    get dir() { return dirEncoded() },
+    get id() {
+      return sessionID()
+    },
+    get dir() {
+      return dirEncoded()
+    },
   }
 
   // Cloud: group-aware navigation helper
@@ -286,6 +300,7 @@ export default function Page() {
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
 
+  const SESSION_COMPACT_THRESHOLD = 420
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
@@ -295,8 +310,21 @@ export default function Page() {
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
+  const isCompact = createMemo(() => desktopReviewOpen() && layout.session.width() < SESSION_COMPACT_THRESHOLD)
   const messagesHidden = createMemo(() => layout.session.panelMode() === 5)
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+
+  // Auto-toggle compact mode based on width
+  createEffect(
+    on(
+      () => isCompact(),
+      (compact) => {
+        if (compact && layout.session.panelMode() !== 5) {
+          layout.session.setPanelMode(5)
+        }
+      },
+    ),
+  )
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -728,26 +756,30 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(on(
-    () => [sdk.directory, params.id] as const,
-    ([, id]) => {
-      if (!id || id === "new") return
-      sync.session.sync(id)
-    },
-  ))
+  createEffect(
+    on(
+      () => [sdk.directory, params.id] as const,
+      ([, id]) => {
+        if (!id || id === "new") return
+        sync.session.sync(id)
+      },
+    ),
+  )
 
-  createEffect(on(
-    () => [view().terminal.opened(), terminal.ready(), terminal.all().length, ui.autoCreated] as const,
-    ([opened, ready, count, created]) => {
-      if (!opened) {
-        setUi("autoCreated", false)
-        return
-      }
-      if (!ready || count !== 0 || created) return
-      terminal.new()
-      setUi("autoCreated", true)
-    },
-  ))
+  createEffect(
+    on(
+      () => [view().terminal.opened(), terminal.ready(), terminal.all().length, ui.autoCreated] as const,
+      ([opened, ready, count, created]) => {
+        if (!opened) {
+          setUi("autoCreated", false)
+          return
+        }
+        if (!ready || count !== 0 || created) return
+        terminal.new()
+        setUi("autoCreated", true)
+      },
+    ),
+  )
 
   createEffect(
     on(
@@ -814,13 +846,15 @@ export default function Page() {
     ),
   )
 
-  createEffect(on(
-    () => [lastUserMessage()?.id, status().type] as const,
-    ([id, statusType]) => {
-      if (!id) return
-      setStore("expanded", id, statusType !== "idle")
-    },
-  ))
+  createEffect(
+    on(
+      () => [lastUserMessage()?.id, status().type] as const,
+      ([id, statusType]) => {
+        if (!id) return
+        setStore("expanded", id, statusType !== "idle")
+      },
+    ),
+  )
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -1273,21 +1307,29 @@ export default function Page() {
     if (contextOpen()) tabs().setActive("context")
   })
 
-  createEffect(on(
-    () => [params.id, isDesktop(), view().reviewPanel.opened(), layout.fileTree.opened(), activeTab(), store.mobileTab] as const,
-    ([id, desktop, _reviewOpened, treeOpened, active, mobileTab]) => {
-      if (!id || id === "new") return
+  createEffect(
+    on(
+      () =>
+        [
+          params.id,
+          isDesktop(),
+          view().reviewPanel.opened(),
+          layout.fileTree.opened(),
+          activeTab(),
+          store.mobileTab,
+        ] as const,
+      ([id, desktop, _reviewOpened, treeOpened, active, mobileTab]) => {
+        if (!id || id === "new") return
 
-      const wants = desktop
-        ? treeOpened || (desktopReviewOpen() && active === "review")
-        : mobileTab === "changes"
-      if (!wants) return
-      if (sync.data.session_diff[id] !== undefined) return
-      if (sync.status === "loading") return
+        const wants = desktop ? treeOpened || (desktopReviewOpen() && active === "review") : mobileTab === "changes"
+        if (!wants) return
+        if (sync.data.session_diff[id] !== undefined) return
+        if (sync.status === "loading") return
 
-      void sync.session.diff(id)
-    },
-  ))
+        void sync.session.diff(id)
+      },
+    ),
+  )
 
   let treeDir: string | undefined
   createEffect(() => {
@@ -1612,7 +1654,7 @@ export default function Page() {
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
             "md:flex-none": desktopSidePanelOpen(),
-            "!hidden": messagesHidden(),
+            "!hidden": !!params.id && params.id !== "new" && messagesHidden(),
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1621,7 +1663,7 @@ export default function Page() {
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
-              <Match when={params.id}>
+              <Match when={params.id && params.id !== "new"}>
                 <Show when={activeMessage()}>
                   <MessageTimeline
                     mobileChanges={mobileChanges()}
@@ -1720,33 +1762,35 @@ export default function Page() {
             </Switch>
           </div>
 
-          <SessionPromptDock
-            centered={centered()}
-            questionRequest={questionRequest}
-            permissionRequest={permRequest}
-            blocked={blocked()}
-            promptReady={prompt.ready()}
-            handoffPrompt={handoff.session.get(sessionKey())?.prompt}
-            t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
-            responding={ui.responding}
-            onDecide={decide}
-            inputRef={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            setPromptDockRef={(el) => (promptDock = el)}
-          />
+          <Show when={!messagesHidden()}>
+            <SessionPromptDock
+              centered={centered()}
+              questionRequest={questionRequest}
+              permissionRequest={permRequest}
+              blocked={blocked()}
+              promptReady={prompt.ready()}
+              handoffPrompt={handoff.session.get(sessionKey())?.prompt}
+              t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
+              responding={ui.responding}
+              onDecide={decide}
+              inputRef={(el) => {
+                inputRef = el
+              }}
+              newSessionWorktree={newSessionWorktree()}
+              onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+              onSubmit={() => {
+                comments.clear()
+                resumeScroll()
+              }}
+              setPromptDockRef={(el) => (promptDock = el)}
+            />
+          </Show>
 
           <Show when={desktopSidePanelOpen()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
-              min={450}
+              min={280}
               max={window.innerWidth * 0.45}
               onResize={layout.session.resize}
             />
@@ -1756,8 +1800,8 @@ export default function Page() {
         {/* CSS visibility instead of <Show> to avoid expensive unmount/remount of diffs */}
         <div
           classList={{
-            "contents": desktopSidePanelOpen(),
-            "hidden": !desktopSidePanelOpen(),
+            contents: desktopSidePanelOpen(),
+            hidden: !desktopSidePanelOpen(),
           }}
         >
           <SessionSidePanel
@@ -1799,6 +1843,52 @@ export default function Page() {
             kinds={kinds()}
             activeDiff={tree.activeDiff}
             focusReviewDiff={focusReviewDiff}
+            compactPrompt={
+              messagesHidden() && params.id && params.id !== "new" ? (
+                <CompactPromptDock
+                  title={info()?.title}
+                  onToggle={() => layout.session.setPanelMode(0)}
+                  t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
+                  questionRequest={questionRequest}
+                  permissionRequest={permRequest}
+                  blocked={blocked()}
+                  promptReady={prompt.ready()}
+                  handoffPrompt={handoff.session.get(sessionKey())?.prompt}
+                  responding={ui.responding}
+                  onDecide={decide}
+                  inputRef={(el: HTMLDivElement) => {
+                    inputRef = el
+                  }}
+                  newSessionWorktree={newSessionWorktree()}
+                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                  onSubmit={() => {
+                    comments.clear()
+                    resumeScroll()
+                  }}
+                  setPromptDockRef={(el: HTMLDivElement) => (promptDock = el)}
+                  messages={
+                    <div class="overflow-y-auto">
+                      <For each={visibleUserMessages()}>
+                        {(msg) => (
+                          <SessionTurn
+                            sessionID={params.id!}
+                            messageID={msg.id}
+                            lastUserMessageID={lastUserMessage()?.id}
+                            stepsExpanded={store.expanded[msg.id] ?? false}
+                            onStepsExpandedToggle={() => setStore("expanded", msg.id, (open: boolean | undefined) => !open)}
+                            classes={{
+                              root: "min-w-0 w-full relative",
+                              content: "flex flex-col justify-between !overflow-visible",
+                              container: "w-full px-4",
+                            }}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  }
+                />
+              ) : undefined
+            }
           />
         </div>
       </div>

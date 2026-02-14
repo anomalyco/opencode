@@ -88,7 +88,7 @@
     },
     "packages/claxedo-app": {
       "name": "@opencode-ai/claxedo-app",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@clerk/clerk-js": "^5.35.0",
         "@opencode-ai/app": "workspace:*",
@@ -157,7 +157,7 @@
     },
     "packages/claxedo-desktop": {
       "name": "@opencode-ai/claxedo-desktop",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@opencode-ai/claxedo-app": "workspace:*",
         "@opencode-ai/desktop": "workspace:*",

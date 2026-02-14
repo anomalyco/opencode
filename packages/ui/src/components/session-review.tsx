@@ -1,12 +1,11 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
+import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { IconButton } from "./icon-button"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { Tooltip } from "./tooltip"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -314,37 +313,23 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
-            <div class="flex items-center gap-0.5 p-0.5 bg-surface-base rounded-md">
-              <Tooltip value={i18n.t("ui.sessionReview.diffStyle.unified")}>
-                <IconButton
-                  icon="code-lines"
-                  variant={diffStyle() === "unified" ? "secondary" : "ghost"}
-                  size="normal"
-                  onClick={() => props.onDiffStyleChange?.("unified")}
-                  aria-label={i18n.t("ui.sessionReview.diffStyle.unified")}
-                />
-              </Tooltip>
-              <Tooltip value={i18n.t("ui.sessionReview.diffStyle.split")}>
-                <IconButton
-                  icon="layout-right"
-                  variant={diffStyle() === "split" ? "secondary" : "ghost"}
-                  size="normal"
-                  onClick={() => props.onDiffStyleChange?.("split")}
-                  aria-label={i18n.t("ui.sessionReview.diffStyle.split")}
-                />
-              </Tooltip>
-            </div>
+            <RadioGroup
+              options={["unified", "split"] as const}
+              current={diffStyle()}
+              value={(style) => style}
+              label={(style) =>
+                i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
+              }
+              onSelect={(style) => style && props.onDiffStyleChange?.(style)}
+            />
           </Show>
           <Show when={hasDiffs()}>
-            <Tooltip value={open().length > 0 ? i18n.t("ui.sessionReview.collapseAll") : i18n.t("ui.sessionReview.expandAll")}>
-              <IconButton
-                icon="chevron-grabber-vertical"
-                variant="ghost"
-                size="normal"
-                onClick={handleExpandOrCollapseAll}
-                aria-label={open().length > 0 ? i18n.t("ui.sessionReview.collapseAll") : i18n.t("ui.sessionReview.expandAll")}
-              />
-            </Tooltip>
+            <Button size="normal" icon="chevron-grabber-vertical" onClick={handleExpandOrCollapseAll}>
+              <Switch>
+                <Match when={open().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
+                <Match when={true}>{i18n.t("ui.sessionReview.expandAll")}</Match>
+              </Switch>
+            </Button>
           </Show>
           {props.actions}
         </div>
