@@ -563,22 +563,30 @@ export namespace Session {
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     const time_created = msg.role === "user" ? msg.time.created : msg.time.created
     const { id, sessionID, ...data } = msg
-    Database.use((db) => {
-      db.insert(MessageTable)
-        .values({
-          id,
-          session_id: sessionID,
-          time_created,
-          data,
-        })
-        .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
-        .run()
-      Database.effect(() =>
-        Bus.publish(MessageV2.Event.Updated, {
-          info: msg,
-        }),
-      )
-    })
+    try {
+      Database.use((db) => {
+        db.insert(MessageTable)
+          .values({
+            id,
+            session_id: sessionID,
+            time_created,
+            data,
+          })
+          .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
+          .run()
+        Database.effect(() =>
+          Bus.publish(MessageV2.Event.Updated, {
+            info: msg,
+          }),
+        )
+      })
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("FOREIGN KEY constraint failed")) {
+        log.warn("ignoring message update for missing session", { sessionID, messageID: id })
+        return msg
+      }
+      throw e
+    }
     return msg
   })
 
@@ -628,23 +636,31 @@ export namespace Session {
   export const updatePart = fn(UpdatePartInput, async (part) => {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
-    Database.use((db) => {
-      db.insert(PartTable)
-        .values({
-          id,
-          message_id: messageID,
-          session_id: sessionID,
-          time_created: time,
-          data,
-        })
-        .onConflictDoUpdate({ target: PartTable.id, set: { data } })
-        .run()
-      Database.effect(() =>
-        Bus.publish(MessageV2.Event.PartUpdated, {
-          part,
-        }),
-      )
-    })
+    try {
+      Database.use((db) => {
+        db.insert(PartTable)
+          .values({
+            id,
+            message_id: messageID,
+            session_id: sessionID,
+            time_created: time,
+            data,
+          })
+          .onConflictDoUpdate({ target: PartTable.id, set: { data } })
+          .run()
+        Database.effect(() =>
+          Bus.publish(MessageV2.Event.PartUpdated, {
+            part,
+          }),
+        )
+      })
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("FOREIGN KEY constraint failed")) {
+        log.warn("ignoring part update for missing message/session", { sessionID, messageID, partID: id })
+        return part
+      }
+      throw e
+    }
     return part
   })
 

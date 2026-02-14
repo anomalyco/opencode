@@ -1,6 +1,10 @@
 import { DateTime } from "luxon"
 
 export function createSessionContextFormatter(locale: string) {
+  const usd = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+  })
   return {
     number(value: number | null | undefined) {
       if (value === undefined) return "—"
@@ -11,6 +15,11 @@ export function createSessionContextFormatter(locale: string) {
       if (value === undefined) return "—"
       if (value === null) return "—"
       return value.toLocaleString(locale) + "%"
+    },
+    currency(value: number | null | undefined) {
+      if (value === undefined) return "—"
+      if (value === null) return "—"
+      return usd.format(value)
     },
     time(value: number | undefined) {
       if (!value) return "—"

@@ -46,6 +46,8 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
   "ui.messagePart.diagnostic.error": "错误",
+  "ui.messagePart.costBreakdown": "(智能体 {{agentCost}}; 总计 {{totalCost}})",
+  "ui.messagePart.loaded": " (已加载)",
   "ui.messagePart.title.edit": "编辑",
   "ui.messagePart.title.write": "写入",
   "ui.messagePart.option.typeOwnAnswer": "输入自己的答案",
