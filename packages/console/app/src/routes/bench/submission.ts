@@ -1,7 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { Database } from "@opencode-ai/console-core/drizzle/index.js"
-import { BenchmarkTable } from "@opencode-ai/console-core/schema/benchmark.sql.js"
-import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { Database } from "@weapon-ai/console-core/drizzle/index.js"
+import { BenchmarkTable } from "@weapon-ai/console-core/schema/benchmark.sql.js"
+import { Identifier } from "@weapon-ai/console-core/identifier.js"
 
 interface SubmissionBody {
   model: string

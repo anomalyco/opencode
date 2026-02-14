@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "question.rejected"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "requestID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionID",
+        "requestID"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

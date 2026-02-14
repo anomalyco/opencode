@@ -1,9 +1,9 @@
 ---
 title: Özel Araçlar
-description: LLM'un opencode'da çağırabileceği araçları birleştirebilir.
+description: LLM'un weapon'da çağırabileceği araçları birleştirebilir.
 ---
 
-Özel araçlar, LLM'un konuşmalar sırasında arayabileceği, oluşturduğunuz işlevlerdir. opencode'un [built-in tools](/docs/tools) ile birlikte `read`, `write` ve `bash` gibi çalışırlar.
+Özel araçlar, LLM'un konuşmalar sırasında arayabileceği, oluşturduğunuz işlevlerdir. weapon'un [built-in tools](/docs/tools) ile birlikte `read`, `write` ve `bash` gibi çalışırlar.
 
 ---
 
@@ -17,8 +17,8 @@ Araçlar **TypeScript** veya **JavaScript** dosyaları olarak tanımlanır. Anca
 
 Bunlar tanımlanabilir:
 
-- Yerel olarak bunları projenizin `.opencode/tools/` dizinine yerleştirerek.
-- Veya küresel olarak bunları `~/.config/opencode/tools/` içine yerleştirerek.
+- Yerel olarak bunları projenizin `.weapon/tools/` dizinine yerleştirerek.
+- Veya küresel olarak bunları `~/.config/weapon/tools/` içine yerleştirerek.
 
 ---
 
@@ -26,8 +26,8 @@ Bunlar tanımlanabilir:
 
 Araç oluşturmanın en kolay yolu, tür güvenliği ve doğrulama sağlayan `tool()` yardımcısını kullanmaktır.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 Ayrıca tek bir dosyadan birden fazla aracı dışa aktarabilirsiniz. Her dışa aktarma, **`<filename>_<exportname>`** adıyla **ayrı bir araç** haline gelir:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 Araçlar geçerli oturumla ilgili bağlamı alır:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ Araçlarınızı dilediğiniz dilde yazabilirsiniz. İşte Python kullanarak iki
 
 Öncelikle aracı bir Python betiği olarak oluşturun:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 Ardından onu çağıran araç tanımını oluşturun:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

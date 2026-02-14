@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "env",
+        "config",
+        "custom",
+        "api"
+      ]
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "key": {
+      "type": "string"
+    },
+    "options": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "models": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "./Model.json"
+      }
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "source",
+    "env",
+    "options",
+    "models"
+  ]
+}

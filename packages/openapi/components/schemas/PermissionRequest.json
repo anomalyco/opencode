@@ -1,0 +1,58 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^per.*"
+    },
+    "sessionID": {
+      "type": "string",
+      "pattern": "^ses.*"
+    },
+    "permission": {
+      "type": "string"
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "always": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "messageID": {
+          "type": "string"
+        },
+        "callID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageID",
+        "callID"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "permission",
+    "patterns",
+    "metadata",
+    "always"
+  ]
+}

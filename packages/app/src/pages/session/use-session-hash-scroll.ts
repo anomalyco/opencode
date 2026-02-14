@@ -1,5 +1,5 @@
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import { UserMessage } from "@weapon-ai/sdk/v2"
 
 export const messageIdFromHash = (hash: string) => {
   const value = hash.startsWith("#") ? hash.slice(1) : hash

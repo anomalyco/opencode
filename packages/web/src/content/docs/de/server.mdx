@@ -1,20 +1,20 @@
 ---
 title: Server
-description: Nutze den opencode-Server ueber HTTP.
+description: Nutze den weapon-Server ueber HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Der Befehl `opencode serve` startet einen headless HTTP-Server.
-Er stellt einen OpenAPI-Endpunkt bereit, den ein opencode-Client nutzen kann.
+Der Befehl `weapon serve` startet einen headless HTTP-Server.
+Er stellt einen OpenAPI-Endpunkt bereit, den ein weapon-Client nutzen kann.
 
 ---
 
 ### Nutzung
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Optionen
@@ -24,41 +24,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port to listen on                   | `4096`           |
 | `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
 | `--mdns`        | Enable mDNS discovery               | `false`          |
-| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--mdns-domain` | Custom domain name for mDNS service | `weapon.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
 
 `--cors` kann mehrfach angegeben werden:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Authentifizierung
 
-Setze `OPENCODE_SERVER_PASSWORD`, um den Server mit HTTP Basic Auth zu schuetzen.
-Der Benutzername ist standardmaessig `opencode`, kann aber mit `OPENCODE_SERVER_USERNAME` ueberschrieben werden. Das gilt fuer `opencode serve` und `opencode web`.
+Setze `WEAPON_SERVER_PASSWORD`, um den Server mit HTTP Basic Auth zu schuetzen.
+Der Benutzername ist standardmaessig `weapon`, kann aber mit `WEAPON_SERVER_USERNAME` ueberschrieben werden. Das gilt fuer `weapon serve` und `weapon web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### Funktionsweise
 
-Wenn du `opencode` startest, werden TUI und Server gestartet.
+Wenn du `weapon` startest, werden TUI und Server gestartet.
 Die TUI ist dabei der Client, der mit dem Server spricht; dessen OpenAPI-3.1-Endpunkt dient auch zur Generierung des [SDK](/docs/sdk).
 
 :::tip
-Nutze den opencode-Server, um opencode programmatisch anzusteuern.
+Nutze den weapon-Server, um weapon programmatisch anzusteuern.
 :::
 
 Diese Architektur erlaubt mehrere Clients und programmatische Nutzung.
 
-Mit `opencode serve` startest du einen eigenstaendigen Server.
-Laeuft bereits eine TUI, startet `opencode serve` trotzdem eine neue Serverinstanz.
+Mit `weapon serve` startest du einen eigenstaendigen Server.
+Laeuft bereits eine TUI, startet `weapon serve` trotzdem eine neue Serverinstanz.
 
 ---
 
@@ -68,7 +68,7 @@ Beim TUI-Start werden Port und Hostname zufaellig gewaehlt.
 Alternativ gibst du `--hostname` und `--port` als [Flags](/docs/cli) vor und verbindest dich dann gezielt damit.
 
 Der Endpunkt [`/tui`](#tui) kann die TUI ueber den Server steuern, etwa zum Vorbelegen oder Abschicken von Prompts.
-Dieses Muster nutzen auch die OpenCode-[IDE](/docs/ide)-Plugins.
+Dieses Muster nutzen auch die Weapon-[IDE](/docs/ide)-Plugins.
 
 ---
 
@@ -87,7 +87,7 @@ Nutze die Spec zum Generieren von Clients, zum Pruefen von Request/Response-Type
 
 ## APIs
 
-Der opencode-Server stellt folgende APIs bereit.
+Der weapon-Server stellt folgende APIs bereit.
 
 ---
 

@@ -1,15 +1,15 @@
 ---
 title: LSP Servers
-description: OpenCode integrates with your LSP servers.
+description: Weapon integrates with your LSP servers.
 ---
 
-OpenCode integrates with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
+Weapon integrates with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
 
 ---
 
 ## Built-in
 
-OpenCode comes with several built-in LSP servers for popular languages:
+Weapon comes with several built-in LSP servers for popular languages:
 
 | LSP Server         | Extensions                                                          | Requirements                                                 |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -49,14 +49,14 @@ OpenCode comes with several built-in LSP servers for popular languages:
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 
 :::note
-You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
+You can disable automatic LSP server downloads by setting the `WEAPON_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
 :::
 
 ---
 
 ## How It Works
 
-When opencode opens a file, it:
+When weapon opens a file, it:
 
 1. Checks the file extension against all enabled LSP servers.
 2. Starts the appropriate LSP server if not already running.
@@ -65,11 +65,11 @@ When opencode opens a file, it:
 
 ## Configure
 
-You can customize LSP servers through the `lsp` section in your opencode config.
+You can customize LSP servers through the `lsp` section in your weapon config.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {}
 }
 ```
@@ -92,9 +92,9 @@ Let's look at some examples.
 
 Use the `env` property to set environment variables when starting the LSP server:
 
-```json title="opencode.json" {5-7}
+```json title="weapon.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -111,9 +111,9 @@ Use the `env` property to set environment variables when starting the LSP server
 
 Use the `initialization` property to pass initialization options to the LSP server. These are server-specific settings sent during the LSP `initialize` request:
 
-```json title="opencode.json" {5-9}
+```json title="weapon.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -136,18 +136,18 @@ Initialization options vary by LSP server. Check your LSP server's documentation
 
 To disable **all** LSP servers globally, set `lsp` to `false`:
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": false
 }
 ```
 
 To disable a **specific** LSP server, set `disabled` to `true`:
 
-```json title="opencode.json" {5}
+```json title="weapon.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -162,9 +162,9 @@ To disable a **specific** LSP server, set `disabled` to `true`:
 
 You can add custom LSP servers by specifying the command and file extensions:
 
-```json title="opencode.json" {4-7}
+```json title="weapon.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

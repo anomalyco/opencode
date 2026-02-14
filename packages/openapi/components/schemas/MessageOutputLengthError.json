@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "MessageOutputLengthError"
+    },
+    "data": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "required": [
+    "name",
+    "data"
+  ]
+}

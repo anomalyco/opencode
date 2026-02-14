@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "tui.session.select"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "description": "Session ID to navigate to",
+          "type": "string",
+          "pattern": "^ses"
+        }
+      },
+      "required": [
+        "sessionID"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "$ref": "./FilePartSourceText.json"
+    },
+    "type": {
+      "type": "string",
+      "const": "symbol"
+    },
+    "path": {
+      "type": "string"
+    },
+    "range": {
+      "$ref": "./Range.json"
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "text",
+    "type",
+    "path",
+    "range",
+    "name",
+    "kind"
+  ]
+}

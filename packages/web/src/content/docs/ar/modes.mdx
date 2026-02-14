@@ -4,14 +4,14 @@ description: أوضاع مختلفة لحالات استخدام مختلفة.
 ---
 
 :::caution
-يتم الآن ضبط الأوضاع عبر خيار `agent` في إعدادات opencode. أصبح خيار
+يتم الآن ضبط الأوضاع عبر خيار `agent` في إعدادات weapon. أصبح خيار
 `mode` مُهمَلًا الآن. [اعرف المزيد](/docs/agents).
 :::
 
-تتيح لك الأوضاع في opencode تخصيص السلوك والأدوات والمطالبات لحالات استخدام مختلفة.
+تتيح لك الأوضاع في weapon تخصيص السلوك والأدوات والمطالبات لحالات استخدام مختلفة.
 
 يأتي مع وضعين مدمجين: **build** و **plan**. يمكنك تخصيصهما أو إعداد
-أوضاعك الخاصة عبر إعدادات opencode.
+أوضاعك الخاصة عبر إعدادات weapon.
 
 يمكنك التبديل بين الأوضاع أثناء الجلسة أو إعدادها في ملف الإعدادات لديك.
 
@@ -19,7 +19,7 @@ description: أوضاع مختلفة لحالات استخدام مختلفة.
 
 ## الأوضاع المدمجة
 
-يأتي opencode مع وضعين مدمجين.
+يأتي weapon مع وضعين مدمجين.
 
 ---
 
@@ -34,7 +34,7 @@ description: أوضاع مختلفة لحالات استخدام مختلفة.
 وضع مقيَّد مُصمَّم للتخطيط والتحليل. في وضع plan، تكون الأدوات التالية مُعطَّلة افتراضيًا:
 
 - `write` - لا يمكن إنشاء ملفات جديدة
-- `edit` - لا يمكن تعديل الملفات الموجودة، باستثناء الملفات الموجودة في `.opencode/plans/*.md` لتفصيل الخطة نفسها
+- `edit` - لا يمكن تعديل الملفات الموجودة، باستثناء الملفات الموجودة في `.weapon/plans/*.md` لتفصيل الخطة نفسها
 - `patch` - لا يمكن تطبيق التصحيحات
 - `bash` - لا يمكن تنفيذ أوامر shell
 
@@ -56,11 +56,11 @@ description: أوضاع مختلفة لحالات استخدام مختلفة.
 
 ### إعدادات JSON
 
-قم بإعداد الأوضاع في ملف الإعدادات `opencode.json` لديك:
+قم بإعداد الأوضاع في ملف الإعدادات `weapon.json` لديك:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ description: أوضاع مختلفة لحالات استخدام مختلفة.
 
 يمكنك أيضًا تعريف الأوضاع باستخدام ملفات markdown. ضعها في:
 
-- عالمي: `~/.config/opencode/modes/`
-- للمشروع: `.opencode/modes/`
+- عالمي: `~/.config/weapon/modes/`
+- للمشروع: `.weapon/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/weapon/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Provide constructive feedback without making direct changes.
 
 استخدم إعداد `model` لتجاوز النموذج الافتراضي لهذا الوضع. يفيد ذلك عند استخدام نماذج مختلفة مُحسَّنة لمهام مختلفة؛ مثل نموذج أسرع للتخطيط ونموذج أكثر قدرة للتنفيذ.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Provide constructive feedback without making direct changes.
 
 تحكَّم في العشوائية والإبداع في ردود الذكاء الاصطناعي عبر إعداد `temperature`. القيم الأقل تجعل الردود أكثر تركيزًا وحتمية، بينما تزيد القيم الأعلى الإبداع والتنوّع.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Provide constructive feedback without making direct changes.
 - **0.3-0.5**: ردود متوازنة مع قدر من الإبداع، مناسبة لمهام التطوير العامة
 - **0.6-1.0**: ردود أكثر إبداعًا وتنوّعًا، مفيدة للعصف الذهني والاستكشاف
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-إذا لم يتم تحديد درجة الحرارة، يستخدم opencode القيم الافتراضية الخاصة بكل نموذج (عادةً 0 لمعظم النماذج و 0.55 لنماذج Qwen).
+إذا لم يتم تحديد درجة الحرارة، يستخدم weapon القيم الافتراضية الخاصة بكل نموذج (عادةً 0 لمعظم النماذج و 0.55 لنماذج Qwen).
 
 ---
 
@@ -181,7 +181,7 @@ Provide constructive feedback without making direct changes.
 
 حدِّد ملف موجّه نظام (system prompt) مخصص لهذا الوضع عبر إعداد `prompt`. ينبغي أن يحتوي ملف الموجّه على تعليمات مرتبطة بهدف هذا الوضع.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ Provide constructive feedback without making direct changes.
 ```
 
 هذا المسار نسبي بالنسبة لموقع ملف الإعدادات. لذلك يعمل مع
-إعدادات opencode العالمية وكذلك إعدادات المشروع.
+إعدادات weapon العالمية وكذلك إعدادات المشروع.
 
 ---
 
@@ -247,9 +247,9 @@ Provide constructive feedback without making direct changes.
 
 ### باستخدام إعدادات JSON
 
-```json title="opencode.json" {4-14}
+```json title="weapon.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -268,9 +268,9 @@ Provide constructive feedback without making direct changes.
 
 ### باستخدام ملفات markdown
 
-أنشئ ملفات الأوضاع في `.opencode/modes/` لأوضاع خاصة بالمشروع أو في `~/.config/opencode/modes/` لأوضاع عالمية:
+أنشئ ملفات الأوضاع في `.weapon/modes/` لأوضاع خاصة بالمشروع أو في `~/.config/weapon/modes/` لأوضاع عالمية:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".weapon/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/weapon/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

@@ -1,9 +1,9 @@
 ---
 title: Teilen
-description: Teile OpenCode-Unterhaltungen per oeffentlichem Link.
+description: Teile Weapon-Unterhaltungen per oeffentlichem Link.
 ---
 
-Mit der Share-Funktion erstellst du oeffentliche Links zu OpenCode-Unterhaltungen.
+Mit der Share-Funktion erstellst du oeffentliche Links zu Weapon-Unterhaltungen.
 So kannst du einfacher mit dem Team zusammenarbeiten oder Hilfe einholen.
 
 :::note
@@ -14,7 +14,7 @@ Geteilte Unterhaltungen sind fuer alle mit dem Link oeffentlich zugaenglich.
 
 ## Funktionsweise
 
-Wenn du eine Unterhaltung teilst, macht OpenCode Folgendes:
+Wenn du eine Unterhaltung teilst, macht Weapon Folgendes:
 
 1. Erstellt eine eindeutige oeffentliche URL fuer deine Sitzung
 2. Synchronisiert den Verlauf auf unsere Server
@@ -24,13 +24,13 @@ Wenn du eine Unterhaltung teilst, macht OpenCode Folgendes:
 
 ## Teilen
 
-OpenCode hat drei Modi, die das Teilen steuern:
+Weapon hat drei Modi, die das Teilen steuern:
 
 ---
 
 ### Manuell (Standard)
 
-Standardmaessig nutzt OpenCode den manuellen Modus.
+Standardmaessig nutzt Weapon den manuellen Modus.
 Sitzungen werden nicht automatisch geteilt, du kannst sie aber mit `/share` veroeffentlichen:
 
 ```
@@ -41,7 +41,7 @@ Dabei wird eine eindeutige URL erzeugt und in die Zwischenablage kopiert.
 
 Um den manuellen Modus explizit in der [Konfiguration](/docs/config) zu setzen:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -54,7 +54,7 @@ Um den manuellen Modus explizit in der [Konfiguration](/docs/config) zu setzen:
 
 Du kannst automatisches Teilen fuer neue Unterhaltungen aktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"auto"` setzt:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -69,14 +69,14 @@ Mit aktiviertem Auto-Share wird jede neue Unterhaltung automatisch geteilt und e
 
 Du kannst Teilen komplett deaktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"disabled"` setzt:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`opencode.json` fest und committe die Datei.
+Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`weapon.json` fest und committe die Datei.
 
 ---
 
@@ -127,4 +127,4 @@ In Enterprise-Umgebungen kann die Share-Funktion:
 - Auf **SSO-authentifizierte** Nutzer eingeschraenkt werden
 - **Self-hosted** auf eigener Infrastruktur betrieben werden
 
-[Mehr dazu](/docs/enterprise), wie du opencode in deiner Organisation einsetzt.
+[Mehr dazu](/docs/enterprise), wie du weapon in deiner Organisation einsetzt.

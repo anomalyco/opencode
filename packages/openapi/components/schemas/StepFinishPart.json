@@ -1,0 +1,74 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "step-finish"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "snapshot": {
+      "type": "string"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "input": {
+          "type": "number"
+        },
+        "output": {
+          "type": "number"
+        },
+        "reasoning": {
+          "type": "number"
+        },
+        "cache": {
+          "type": "object",
+          "properties": {
+            "read": {
+              "type": "number"
+            },
+            "write": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "read",
+            "write"
+          ]
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "reasoning",
+        "cache"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "reason",
+    "cost",
+    "tokens"
+  ]
+}

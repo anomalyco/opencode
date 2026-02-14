@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://opencode.ai/desktop-theme.json",
-  "title": "OpenCode Desktop Theme",
-  "description": "A theme definition for the OpenCode desktop application",
+  "$id": "https://weapon.ai/desktop-theme.json",
+  "title": "Weapon Desktop Theme",
+  "description": "A theme definition for the Weapon desktop application",
   "type": "object",
   "required": ["name", "id", "light", "dark"],
   "properties": {

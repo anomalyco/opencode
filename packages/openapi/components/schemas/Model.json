@@ -1,0 +1,272 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "providerID": {
+      "type": "string"
+    },
+    "api": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "npm": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "npm"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "boolean"
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "attachment": {
+          "type": "boolean"
+        },
+        "toolcall": {
+          "type": "boolean"
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "boolean"
+            },
+            "audio": {
+              "type": "boolean"
+            },
+            "image": {
+              "type": "boolean"
+            },
+            "video": {
+              "type": "boolean"
+            },
+            "pdf": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "text",
+            "audio",
+            "image",
+            "video",
+            "pdf"
+          ]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "boolean"
+            },
+            "audio": {
+              "type": "boolean"
+            },
+            "image": {
+              "type": "boolean"
+            },
+            "video": {
+              "type": "boolean"
+            },
+            "pdf": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "text",
+            "audio",
+            "image",
+            "video",
+            "pdf"
+          ]
+        },
+        "interleaved": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "reasoning_content",
+                    "reasoning_details"
+                  ]
+                }
+              },
+              "required": [
+                "field"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "temperature",
+        "reasoning",
+        "attachment",
+        "toolcall",
+        "input",
+        "output",
+        "interleaved"
+      ]
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "number"
+        },
+        "output": {
+          "type": "number"
+        },
+        "cache": {
+          "type": "object",
+          "properties": {
+            "read": {
+              "type": "number"
+            },
+            "write": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "read",
+            "write"
+          ]
+        },
+        "experimentalOver200K": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "number"
+            },
+            "output": {
+              "type": "number"
+            },
+            "cache": {
+              "type": "object",
+              "properties": {
+                "read": {
+                  "type": "number"
+                },
+                "write": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "read",
+                "write"
+              ]
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "cache"
+          ]
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "cache"
+      ]
+    },
+    "limit": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "number"
+        },
+        "input": {
+          "type": "number"
+        },
+        "output": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "context",
+        "output"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "alpha",
+        "beta",
+        "deprecated",
+        "active"
+      ]
+    },
+    "options": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "headers": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "release_date": {
+      "type": "string"
+    },
+    "variants": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "id",
+    "providerID",
+    "api",
+    "name",
+    "capabilities",
+    "cost",
+    "limit",
+    "status",
+    "options",
+    "headers",
+    "release_date"
+  ]
+}

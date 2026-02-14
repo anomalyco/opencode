@@ -1,0 +1,89 @@
+{
+  "get": {
+    "operationId": "config.get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get configuration",
+    "description": "Retrieve the current OpenCode configuration settings and preferences.",
+    "responses": {
+      "200": {
+        "description": "Get config info",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Config.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/config/get.js"
+        }
+      }
+    ]
+  },
+  "patch": {
+    "operationId": "config.update",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Update configuration",
+    "description": "Update OpenCode configuration settings and preferences.",
+    "responses": {
+      "200": {
+        "description": "Successfully updated config",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Config.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "../components/schemas/Config.json"
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/config/patch.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,21 +1,21 @@
 ---
 title: 구성
-description: OpenCode JSON 구성을 사용합니다.
+description: Weapon JSON 구성을 사용합니다.
 ---
 
-JSON 구성 파일을 사용하여 OpenCode를 구성할 수 있습니다.
+JSON 구성 파일을 사용하여 Weapon를 구성할 수 있습니다.
 
 ---
 
 ## 형식
 
-OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합니다.
+Weapon는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합니다.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "weapon",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -33,7 +33,7 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 구성 파일은 함께 병합되며 대체되지 않습니다. 다음 구성 위치의 설정이 결합됩니다. 나중의 구성은 충돌하는 키에 대해 이전 구성을 덮어씁니다. 모든 구성의 설정이 보존됩니다.
 
-예를 들어, 전역 구성이 `theme: "opencode"` 및 `autoupdate: true`를 설정하고 프로젝트 구성이 `model: "anthropic/claude-sonnet-4-5"`를 설정하면 최종 구성에는 세 가지 설정이 모두 포함됩니다.
+예를 들어, 전역 구성이 `theme: "weapon"` 및 `autoupdate: true`를 설정하고 프로젝트 구성이 `model: "anthropic/claude-sonnet-4-5"`를 설정하면 최종 구성에는 세 가지 설정이 모두 포함됩니다.
 
 ---
 
@@ -41,30 +41,30 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 구성 소스는 다음 순서로 로드됩니다 (나중 소스가 이전 소스를 덮어씀):
 
-1. **원격 구성** (`.well-known/opencode`에서) - 조직 기본값
-2. **전역 구성** (`~/.config/opencode/opencode.json`) - 사용자 환경설정
-3. **사용자 정의 구성** (`OPENCODE_CONFIG` 환경 변수) - 사용자 정의 재정의
-4. **프로젝트별 구성** (`opencode.json`) - 프로젝트별 설정
-5. **`.opencode` 디렉토리** - 에이전트, 명령, 플러그인
-6. **인라인 구성** (`OPENCODE_CONFIG_CONTENT` 환경 변수) - 런타임 재정의
+1. **원격 구성** (`.well-known/weapon`에서) - 조직 기본값
+2. **전역 구성** (`~/.config/weapon/weapon.json`) - 사용자 환경설정
+3. **사용자 정의 구성** (`WEAPON_CONFIG` 환경 변수) - 사용자 정의 재정의
+4. **프로젝트별 구성** (`weapon.json`) - 프로젝트별 설정
+5. **`.weapon` 디렉토리** - 에이전트, 명령, 플러그인
+6. **인라인 구성** (`WEAPON_CONFIG_CONTENT` 환경 변수) - 런타임 재정의
 
 이것은 프로젝트 구성이 전역 기본값을 덮어쓸 수 있고, 전역 구성이 원격 조직 기본값을 덮어쓸 수 있음을 의미합니다.
 
 :::note
-`.opencode`와 `~/.config/opencode` 디렉토리는 하위 디렉토리에 대해 **복수형 이름**을 사용합니다: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, 그리고 `themes/`. 단수형 이름(예: `agent/`)도 하위 호환성을 위해 지원됩니다.
+`.weapon`와 `~/.config/weapon` 디렉토리는 하위 디렉토리에 대해 **복수형 이름**을 사용합니다: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, 그리고 `themes/`. 단수형 이름(예: `agent/`)도 하위 호환성을 위해 지원됩니다.
 :::
 
 ---
 
 ### 원격
 
-조직은 `.well-known/opencode` 엔드포인트를 통해 기본 구성을 제공할 수 있습니다. 이를 지원하는 공급자로 인증할 때 자동으로 가져옵니다.
+조직은 `.well-known/weapon` 엔드포인트를 통해 기본 구성을 제공할 수 있습니다. 이를 지원하는 공급자로 인증할 때 자동으로 가져옵니다.
 
 원격 구성은 기본 레이어로 가장 먼저 로드됩니다. 다른 구성 소스(전역, 프로젝트)는 이러한 기본값을 무시(override)할 수 있습니다.
 
 예를 들어, 조직이 기본적으로 비활성화된 MCP 서버를 제공하는 경우:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/weapon"
 {
   "mcp": {
     "jira": {
@@ -78,7 +78,7 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 로컬 설정에서 특정 서버를 활성화할 수 있습니다:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mcp": {
     "jira": {
@@ -94,7 +94,7 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 ## 전역
 
-`~/.config/opencode/opencode.json`에 전역 OpenCode 구성을 배치합니다. 테마, 공급자, 키바인드와 같은 사용자 전체 기본 설정에 전역 구성을 사용하십시오.
+`~/.config/weapon/weapon.json`에 전역 Weapon 구성을 배치합니다. 테마, 공급자, 키바인드와 같은 사용자 전체 기본 설정에 전역 구성을 사용하십시오.
 
 전역 구성은 원격 조직 기본값을 덮어씁니다.
 
@@ -102,13 +102,13 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 ## 프로젝트별
 
-프로젝트 루트에 `opencode.json`을 추가합니다. 프로젝트 구성은 표준 구성 파일 중 가장 높은 우선순위를 가집니다. 이는 전역 및 원격 구성을 모두 덮어씁니다.
+프로젝트 루트에 `weapon.json`을 추가합니다. 프로젝트 구성은 표준 구성 파일 중 가장 높은 우선순위를 가집니다. 이는 전역 및 원격 구성을 모두 덮어씁니다.
 
 :::tip
 프로젝트의 루트에 특정 설정을 둡니다.
 :::
 
-OpenCode가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가까운 Git 디렉토리를 찾습니다.
+Weapon가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가까운 Git 디렉토리를 찾습니다.
 
 이것은 Git으로 관리되며 전역 구성과 동일한 스키마를 사용합니다.
 
@@ -116,11 +116,11 @@ OpenCode가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가
 
 ### 사용자 정의 경로
 
-`OPENCODE_CONFIG` 환경 변수를 사용하여 사용자 정의 구성 파일 경로를 지정합니다.
+`WEAPON_CONFIG` 환경 변수를 사용하여 사용자 정의 구성 파일 경로를 지정합니다.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export WEAPON_CONFIG=/path/to/my/custom-config.json
+weapon run "Hello world"
 ```
 
 사용자 정의 구성은 우선 순위에서 전역 구성과 프로젝트 구성 사이에 로드됩니다.
@@ -129,20 +129,20 @@ opencode run "Hello world"
 
 ## 사용자 정의 디렉토리
 
-`OPENCODE_CONFIG_DIR` 환경 변수를 사용하여 사용자 정의 구성 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.opencode` 디렉토리와 마찬가지로 에이전트, 명령, 모드 및 플러그인을 검색하며 동일한 구조를 따라야 합니다.
+`WEAPON_CONFIG_DIR` 환경 변수를 사용하여 사용자 정의 구성 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.weapon` 디렉토리와 마찬가지로 에이전트, 명령, 모드 및 플러그인을 검색하며 동일한 구조를 따라야 합니다.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export WEAPON_CONFIG_DIR=/path/to/my/config-directory
+weapon run "Hello world"
 ```
 
-사용자 정의 디렉토리는 전역 구성 이후 및 `.opencode` 디렉토리 이전에 로드됩니다.
+사용자 정의 디렉토리는 전역 구성 이후 및 `.weapon` 디렉토리 이전에 로드됩니다.
 
 ---
 
 ## 스키마
 
-구성 파일에는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의된 스키마가 있습니다.
+구성 파일에는 [**`weapon.ai/config.json`**](https://weapon.ai/config.json)에 정의된 스키마가 있습니다.
 
 편집기는 스키마에 따라 유효성 검사 및 자동 완성을 제공해야 합니다.
 
@@ -152,9 +152,9 @@ opencode run "Hello world"
 
 `tui` 옵션을 통해 TUI 관련 설정을 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -177,11 +177,11 @@ opencode run "Hello world"
 
 ## 서버
 
-`opencode serve` 및 `opencode web` 명령에 대한 서버 설정을 구성할 수 있습니다.
+`weapon serve` 및 `weapon web` 명령에 대한 서버 설정을 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -196,8 +196,8 @@ opencode run "Hello world"
 
 - `port` - 리스닝 포트.
 - `hostname` - 리스닝 호스트 이름. `mdns`가 활성화되고 hostname이 설정되지 않으면 `0.0.0.0`이 기본값이 됩니다.
-- `mdns` - mDNS 서비스 발견 활성화. 로컬 네트워크의 다른 장치가 OpenCode 서버를 찾을 수 있습니다.
-- `mdnsDomain` - mDNS 서비스를 위한 사용자 정의 도메인 이름. 기본값은 `opencode.local`입니다. 동일한 네트워크에서 여러 인스턴스를 실행할 때 유용합니다.
+- `mdns` - mDNS 서비스 발견 활성화. 로컬 네트워크의 다른 장치가 Weapon 서버를 찾을 수 있습니다.
+- `mdnsDomain` - mDNS 서비스를 위한 사용자 정의 도메인 이름. 기본값은 `weapon.local`입니다. 동일한 네트워크에서 여러 인스턴스를 실행할 때 유용합니다.
 - `cors` - 브라우저 기반 클라이언트에서 HTTP 서버를 사용할 때 CORS를 허용할 추가 출처(Origin). 값은 전체 출처(스킴 + 호스트 + 선택적 포트)여야 합니다. 예: `https://app.example.com`.
 
 [서버에 대해 더 알아보기](/docs/server).
@@ -208,9 +208,9 @@ opencode run "Hello world"
 
 `tools` 옵션을 통해 LLM이 사용할 수 있는 도구를 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -224,24 +224,24 @@ opencode run "Hello world"
 
 ## 모델
 
-`provider`, `model`, `small_model` 옵션을 통해 OpenCode 구성에서 사용할 공급자와 모델을 구성할 수 있습니다.
+`provider`, `model`, `small_model` 옵션을 통해 Weapon 구성에서 사용할 공급자와 모델을 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-`small_model` 옵션은 제목 생성과 같은 가벼운 작업을 위한 별도의 모델을 구성합니다. 기본적으로, OpenCode는 공급자에게서 사용 가능한 더 저렴한 모델이 있다면 그것을 사용하고, 그렇지 않으면 주 모델로 돌아갑니다.
+`small_model` 옵션은 제목 생성과 같은 가벼운 작업을 위한 별도의 모델을 구성합니다. 기본적으로, Weapon는 공급자에게서 사용 가능한 더 저렴한 모델이 있다면 그것을 사용하고, 그렇지 않으면 주 모델로 돌아갑니다.
 
 공급자 옵션은 `timeout`과 `setCacheKey`를 포함할 수 있습니다:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -268,9 +268,9 @@ opencode run "Hello world"
 
 Amazon Bedrock는 AWS 관련 구성을 지원합니다:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -297,11 +297,11 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 ## 테마
 
-`theme` 옵션을 통해 OpenCode 구성에서 사용할 테마를 설정할 수 있습니다.
+`theme` 옵션을 통해 Weapon 구성에서 사용할 테마를 설정할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": ""
 }
 ```
@@ -314,9 +314,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 `agent` 옵션을 통해 특정 작업을 전문으로 하는 에이전트를 구성할 수 있습니다.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -332,7 +332,7 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-`~/.config/opencode/agents/` 또는 `.opencode/agents/`에서 Markdown 파일을 사용하여 에이전트를 정의할 수도 있습니다. [더 알아보기](/docs/agents).
+`~/.config/weapon/agents/` 또는 `.weapon/agents/`에서 Markdown 파일을 사용하여 에이전트를 정의할 수도 있습니다. [더 알아보기](/docs/agents).
 
 ---
 
@@ -340,16 +340,16 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 `default_agent` 옵션을 사용하여 기본 에이전트를 설정할 수 있습니다. 명시적으로 지정되지 않았을 때 어떤 에이전트가 사용될지 결정합니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "default_agent": "plan"
 }
 ```
 
-기본 에이전트는 기본(primary) 에이전트여야 합니다(서브 에이전트 불가). `"build"` 또는 `"plan"`과 같은 내장 에이전트이거나 정의된 [사용자 정의 에이전트](./agents)일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, OpenCode는 경고와 함께 `"build"`로 돌아갑니다.
+기본 에이전트는 기본(primary) 에이전트여야 합니다(서브 에이전트 불가). `"build"` 또는 `"plan"`과 같은 내장 에이전트이거나 정의된 [사용자 정의 에이전트](./agents)일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, Weapon는 경고와 함께 `"build"`로 돌아갑니다.
 
-이 설정은 모든 인터페이스에 적용됩니다: TUI, CLI (`opencode run`), 데스크톱 앱 및 GitHub Action.
+이 설정은 모든 인터페이스에 적용됩니다: TUI, CLI (`weapon run`), 데스크톱 앱 및 GitHub Action.
 
 ---
 
@@ -357,9 +357,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 `share` 옵션을 통해 [공유](/docs/share) 기능을 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "share": "manual"
 }
 ```
@@ -378,9 +378,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 `command` 옵션을 통해 반복 작업을 위한 사용자 정의 명령을 구성할 수 있습니다.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -398,7 +398,7 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-`~/.config/opencode/commands/` 또는 `.opencode/commands/`에서 Markdown 파일을 사용하여 명령을 정의할 수도 있습니다. [더 알아보기](/docs/commands).
+`~/.config/weapon/commands/` 또는 `.weapon/commands/`에서 Markdown 파일을 사용하여 명령을 정의할 수도 있습니다. [더 알아보기](/docs/commands).
 
 ---
 
@@ -406,9 +406,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 `keybinds` 옵션을 통해 키바인드를 사용자 정의할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {}
 }
 ```
@@ -419,11 +419,11 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 ## 자동 업데이트
 
-OpenCode는 시작될 때 자동으로 새로운 업데이트를 다운로드합니다. `autoupdate` 옵션으로 이를 비활성화할 수 있습니다.
+Weapon는 시작될 때 자동으로 새로운 업데이트를 다운로드합니다. `autoupdate` 옵션으로 이를 비활성화할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "autoupdate": false
 }
 ```
@@ -437,9 +437,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `formatter` 옵션을 통해 코드 포매터를 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -461,13 +461,13 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 ## 권한
 
-기본적으로, OpenCode는 **명시적 승인 없이 모든 작업을 허용**합니다. `permission` 옵션을 사용하여 이를 변경할 수 있습니다.
+기본적으로, Weapon는 **명시적 승인 없이 모든 작업을 허용**합니다. `permission` 옵션을 사용하여 이를 변경할 수 있습니다.
 
 예를 들어, `edit` 및 `bash` 도구가 사용자 승인을 요구하도록 설정하려면:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -483,9 +483,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `compaction` 옵션을 통해 컨텍스트 압축 동작을 제어할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -502,9 +502,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `watcher` 옵션을 통해 파일 감시자가 무시할 패턴을 설정할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -519,9 +519,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `mcp` 옵션을 통해 사용하려는 MCP 서버를 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mcp": {}
 }
 ```
@@ -532,14 +532,14 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 ### 플러그인
 
-[플러그인](/docs/plugins)은 사용자 정의 도구, 훅(hook), 통합으로 OpenCode를 확장합니다.
+[플러그인](/docs/plugins)은 사용자 정의 도구, 훅(hook), 통합으로 Weapon를 확장합니다.
 
-`.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 플러그인 파일을 배치하십시오. `plugin` 옵션을 통해 npm에서 플러그인을 로드할 수 있습니다.
+`.weapon/plugins/` 또는 `~/.config/weapon/plugins/`에 플러그인 파일을 배치하십시오. `plugin` 옵션을 통해 npm에서 플러그인을 로드할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -551,9 +551,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `instructions` 옵션을 통해 모델에 대한 지침(Rules)을 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -566,9 +566,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `disabled_providers` 옵션을 통해 자동으로 로드되는 공급자를 비활성화할 수 있습니다. 자격 증명이 유효하더라도 특정 공급자가 로드되는 것을 방지할 때 유용합니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -589,14 +589,14 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 `enabled_providers` 옵션을 통해 허용할 공급자를 지정할 수 있습니다. 설정하면 지정된 공급자만 활성화되고 다른 모든 공급자는 무시됩니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합니다.
+Weapon를 제한하여 특정 공급자만 사용하도록 할 때 유용합니다.
 
 :::note
 `disabled_providers`는 `enabled_providers`보다 우선합니다.
@@ -610,9 +610,9 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 
 `experimental` 키는 활발히 개발 중인 옵션을 포함합니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "experimental": {}
 }
 ```
@@ -633,10 +633,10 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 
 `{env:VARIABLE_NAME}`을 사용하여 환경 변수를 대체합니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://weapon.ai/config.json",
+  "model": "{env:WEAPON_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -656,9 +656,9 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 
 `{file:path/to/file}`를 사용하여 파일의 내용을 대체합니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

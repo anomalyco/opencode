@@ -1,15 +1,15 @@
 ---
 title: LSP เซิร์ฟเวอร์
-description: OpenCode ทำงานร่วมกับเซิร์ฟเวอร์ LSP ของคุณ
+description: Weapon ทำงานร่วมกับเซิร์ฟเวอร์ LSP ของคุณ
 ---
 
-OpenCode ทำงานร่วมกับ Language Server Protocol (LSP) เพื่อช่วยให้ LLM โต้ตอบกับโค้ดเบสของคุณ ใช้การวินิจฉัยเพื่อให้ข้อเสนอแนะไปยัง LLM
+Weapon ทำงานร่วมกับ Language Server Protocol (LSP) เพื่อช่วยให้ LLM โต้ตอบกับโค้ดเบสของคุณ ใช้การวินิจฉัยเพื่อให้ข้อเสนอแนะไปยัง LLM
 
 ---
 
 ## บิวท์อิน
 
-OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ในตัวหลายตัวสำหรับภาษายอดนิยม:
+Weapon มาพร้อมกับเซิร์ฟเวอร์ LSP ในตัวหลายตัวสำหรับภาษายอดนิยม:
 
 | LSP เซิร์ฟเวอร์      | ส่วนขยาย                                                            | ความต้องการ                                             |
 | -------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -49,14 +49,14 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 เซิร์ฟเวอร์ LSP จะถูกเปิดใช้งานโดยอัตโนมัติเมื่อตรวจพบนามสกุลไฟล์ใดนามสกุลหนึ่งข้างต้นและเป็นไปตามข้อกำหนด
 
 :::note
-คุณสามารถปิดใช้งานการดาวน์โหลดเซิร์ฟเวอร์ LSP อัตโนมัติได้โดยตั้งค่าตัวแปรสภาพแวดล้อม `OPENCODE_DISABLE_LSP_DOWNLOAD` เป็น `true`
+คุณสามารถปิดใช้งานการดาวน์โหลดเซิร์ฟเวอร์ LSP อัตโนมัติได้โดยตั้งค่าตัวแปรสภาพแวดล้อม `WEAPON_DISABLE_LSP_DOWNLOAD` เป็น `true`
 :::
 
 ---
 
 ## มันทำงานอย่างไร
 
-เมื่อ opencode เปิดไฟล์ มันจะ:
+เมื่อ weapon เปิดไฟล์ มันจะ:
 
 1. ตรวจสอบนามสกุลไฟล์กับเซิร์ฟเวอร์ LSP ที่เปิดใช้งานทั้งหมด
 2. เริ่มเซิร์ฟเวอร์ LSP ที่เหมาะสมหากยังไม่ได้ทำงาน
@@ -65,11 +65,11 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 
 ## กำหนดค่า
 
-You can customize LSP servers through the `lsp` section in your opencode config.
+You can customize LSP servers through the `lsp` section in your weapon config.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {}
 }
 ```
@@ -92,9 +92,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 ใช้คุณสมบัติ `env` เพื่อตั้งค่าตัวแปรสภาพแวดล้อมเมื่อเริ่มต้นเซิร์ฟเวอร์ LSP:
 
-```json title="opencode.json" {5-7}
+```json title="weapon.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -111,9 +111,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 ใช้คุณสมบัติ `initialization` เพื่อส่งตัวเลือกการเริ่มต้นไปยังเซิร์ฟเวอร์ LSP นี่คือการตั้งค่าเฉพาะเซิร์ฟเวอร์ที่ส่งระหว่างคำขอ LSP `initialize`:
 
-```json title="opencode.json" {5-9}
+```json title="weapon.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -136,18 +136,18 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **ทั้งหมด** LSP ทั่วโลก ให้ตั้งค่า `lsp` เป็น `false`:
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": false
 }
 ```
 
 หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **เฉพาะ** LSP ให้ตั้งค่า `disabled` เป็น `true`:
 
-```json title="opencode.json" {5}
+```json title="weapon.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -162,9 +162,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 คุณสามารถเพิ่มเซิร์ฟเวอร์ LSP แบบกำหนดเองได้โดยระบุคำสั่งและนามสกุลไฟล์:
 
-```json title="opencode.json" {4-7}
+```json title="weapon.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

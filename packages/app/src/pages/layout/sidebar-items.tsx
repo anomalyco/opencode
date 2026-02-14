@@ -3,21 +3,21 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/util/path"
-import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
+import { base64Encode } from "@weapon-ai/util/encode"
+import { Avatar } from "@weapon-ai/ui/avatar"
+import { DiffChanges } from "@weapon-ai/ui/diff-changes"
+import { HoverCard } from "@weapon-ai/ui/hover-card"
+import { Icon } from "@weapon-ai/ui/icon"
+import { IconButton } from "@weapon-ai/ui/icon-button"
+import { MessageNav } from "@weapon-ai/ui/message-nav"
+import { Spinner } from "@weapon-ai/ui/spinner"
+import { Tooltip } from "@weapon-ai/ui/tooltip"
+import { getFilename } from "@weapon-ai/util/path"
+import { type Message, type Session, type TextPart, type UserMessage } from "@weapon-ai/sdk/v2/client"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+const WEAPON_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
@@ -33,7 +33,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
         <Avatar
           fallback={name()}
           src={
-            props.project.id === OPENCODE_PROJECT_ID ? "https://opencode.ai/favicon.svg" : props.project.icon?.override
+            props.project.id === WEAPON_PROJECT_ID ? "https://weapon.ai/favicon.svg" : props.project.icon?.override
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"

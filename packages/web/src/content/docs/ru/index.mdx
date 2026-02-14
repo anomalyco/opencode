@@ -1,15 +1,15 @@
 ---
 title: Введение
-description: Начните работу с opencode.
+description: Начните работу с weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) — это агент кодирования искусственного интеллекта с открытым исходным кодом. Он доступен в виде интерфейса на базе терминала, настольного приложения или расширения IDE.
+[**weapon**](/) — это агент кодирования искусственного интеллекта с открытым исходным кодом. Он доступен в виде интерфейса на базе терминала, настольного приложения или расширения IDE.
 
-![opencode TUI с темой opencode](../../../assets/lander/screenshot.png)
+![weapon TUI с темой weapon](../../../assets/lander/screenshot.png)
 
 Давайте начнем.
 
@@ -17,7 +17,7 @@ export const console = config.console
 
 #### Системные требования
 
-Чтобы использовать opencode в вашем терминале, вам понадобится:
+Чтобы использовать weapon в вашем терминале, вам понадобится:
 
 1. Современный эмулятор терминала, например:
    - [WezTerm](https://wezterm.org), кроссплатформенный
@@ -31,10 +31,10 @@ export const console = config.console
 
 ## Установка
 
-Самый простой способ установить opencode — через сценарий установки.
+Самый простой способ установить weapon — через сценарий установки.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://weapon.ai/install | bash
 ```
 
 Вы также можете установить его с помощью следующих команд:
@@ -45,28 +45,28 @@ curl -fsSL https://opencode.ai/install | bash
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g weapon-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add weapon-ai
         ```
 
       </TabItem>
@@ -76,68 +76,68 @@ curl -fsSL https://opencode.ai/install | bash
 - **Использование Homebrew в macOS и Linux**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install anomalyco/tap/weapon
   ```
 
-  > Мы рекомендуем использовать tap opencode для получения самых последних версий. Официальная формула `brew install opencode` поддерживается командой Homebrew и обновляется реже.
+  > Мы рекомендуем использовать tap weapon для получения самых последних версий. Официальная формула `brew install weapon` поддерживается командой Homebrew и обновляется реже.
 
 - **Использование Paru в Arch Linux**
 
   ```bash
-  paru -S opencode-bin
+  paru -S weapon-bin
   ```
 
 #### Windows
 
 :::tip[Рекомендуется: используйте WSL]
-Для наилучшей работы в Windows мы рекомендуем использовать [Подсистема Windows для Linux (WSL)](/docs/windows-wsl). Он обеспечивает лучшую производительность и полную совместимость с функциями opencode.
+Для наилучшей работы в Windows мы рекомендуем использовать [Подсистема Windows для Linux (WSL)](/docs/windows-wsl). Он обеспечивает лучшую производительность и полную совместимость с функциями weapon.
 :::
 
 - **Используя Chocolatey**
 
   ```bash
-  choco install opencode
+  choco install weapon
   ```
 
 - **Использование Scoop**
 
   ```bash
-  scoop install opencode
+  scoop install weapon
   ```
 
 - **Использование NPM**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g weapon-ai
   ```
 
 - **Использование Mise**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:anomalyco/weapon
   ```
 
 - **Использование Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/anomalyco/weapon
   ```
 
-В настоящее время добавляется поддержка установки opencode в Windows с помощью Bun.
+В настоящее время добавляется поддержка установки weapon в Windows с помощью Bun.
 
-Вы также можете получить двоичный файл из файла [Releases](https://github.com/anomalyco/opencode/releases).
+Вы также можете получить двоичный файл из файла [Releases](https://github.com/anomalyco/weapon/releases).
 
 ---
 
 ## Настроить
 
-С opencode вы можете использовать любого поставщика LLM, настроив его ключи API.
+С weapon вы можете использовать любого поставщика LLM, настроив его ключи API.
 
-Если вы новичок в использовании поставщиков LLM, мы рекомендуем использовать [OpenCode Zen](/docs/zen).
-Это тщательно подобранный список моделей, протестированных и проверенных opencode.
+Если вы новичок в использовании поставщиков LLM, мы рекомендуем использовать [Weapon Zen](/docs/zen).
+Это тщательно подобранный список моделей, протестированных и проверенных weapon.
 команда.
 
-1. Запустите команду `/connect` в TUI, выберите opencode и перейдите по адресу [opencode.ai/auth](https://opencode.ai/auth).
+1. Запустите команду `/connect` в TUI, выберите weapon и перейдите по адресу [weapon.ai/auth](https://weapon.ai/auth).
 
    ```txt
    /connect
@@ -167,33 +167,33 @@ curl -fsSL https://opencode.ai/install | bash
 cd /path/to/project
 ```
 
-И запустите opencode.
+И запустите weapon.
 
 ```bash
-opencode
+weapon
 ```
 
-Затем инициализируйте opencode для проекта, выполнив следующую команду.
+Затем инициализируйте weapon для проекта, выполнив следующую команду.
 
 ```bash frame="none"
 /init
 ```
 
-Это позволит opencode проанализировать ваш проект и создать файл `AGENTS.md` в
+Это позволит weapon проанализировать ваш проект и создать файл `AGENTS.md` в
 корень проекта.
 
 :::tip
 Вам следует зафиксировать файл `AGENTS.md` вашего проекта в Git.
 :::
 
-Это помогает opencode понять структуру проекта и шаблоны кодирования.
+Это помогает weapon понять структуру проекта и шаблоны кодирования.
 использовал.
 
 ---
 
 ## Использование
 
-Теперь вы готовы использовать opencode для работы над своим проектом. Не стесняйтесь спрашивать о чем угодно!
+Теперь вы готовы использовать weapon для работы над своим проектом. Не стесняйтесь спрашивать о чем угодно!
 
 Если вы новичок в использовании агента кодирования ИИ, вот несколько примеров, которые могут вам помочь.
 помощь.
@@ -202,7 +202,7 @@ opencode
 
 ### Задавайте вопросы
 
-Вы можете попросить opencode объяснить вам кодовую базу.
+Вы можете попросить weapon объяснить вам кодовую базу.
 
 :::tip
 Используйте ключ `@` для нечеткого поиска файлов в проекте.
@@ -218,11 +218,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### Добавление функций
 
-Вы можете попросить opencode добавить новые функции в ваш проект. Хотя мы сначала рекомендуем попросить его создать план.
+Вы можете попросить weapon добавить новые функции в ваш проект. Хотя мы сначала рекомендуем попросить его создать план.
 
 1. **Составьте план**
 
-   opencode имеет _режим планирования_, который отключает возможность вносить изменения и
+   weapon имеет _режим планирования_, который отключает возможность вносить изменения и
    вместо этого предложите _как_ реализовать эту функцию.
 
    Переключитесь на него с помощью клавиши **Tab**. Вы увидите индикатор этого в правом нижнем углу.
@@ -239,11 +239,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   Вы хотите предоставить opencode достаточно подробностей, чтобы понять, чего вы хотите. Это помогает
+   Вы хотите предоставить weapon достаточно подробностей, чтобы понять, чего вы хотите. Это помогает
    поговорить с ним так, как будто вы разговариваете с младшим разработчиком в своей команде.
 
    :::tip
-   Дайте opencode много контекста и примеров, чтобы помочь ему понять, что вы
+   Дайте weapon много контекста и примеров, чтобы помочь ему понять, что вы
    хотеть.
    :::
 
@@ -260,7 +260,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    Перетащите изображения в терминал, чтобы добавить их в подсказку.
    :::
 
-   opencode может сканировать любые изображения, которые вы ему предоставляете, и добавлять их в командную строку. Ты можешь
+   weapon может сканировать любые изображения, которые вы ему предоставляете, и добавлять их в командную строку. Ты можешь
    сделайте это, перетащив изображение в терминал.
 
 3. **Создайте функцию**
@@ -282,7 +282,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### Внесение изменений
 
-Для более простых изменений вы можете попросить opencode создать его напрямую.
+Для более простых изменений вы можете попросить weapon создать его напрямую.
 без необходимости предварительного рассмотрения плана.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -291,14 +291,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Вы хотите убедиться, что вы предоставляете достаточно деталей, чтобы opencode сделал правильный выбор.
+Вы хотите убедиться, что вы предоставляете достаточно деталей, чтобы weapon сделал правильный выбор.
 изменения.
 
 ---
 
 ### Отмена изменений
 
-Допустим, вы просите opencode внести некоторые изменения.
+Допустим, вы просите weapon внести некоторые изменения.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -311,14 +311,14 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-opencode теперь отменит внесенные вами изменения и покажет исходное сообщение.
+weapon теперь отменит внесенные вами изменения и покажет исходное сообщение.
 снова.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Отсюда вы можете настроить подсказку и попросить opencode повторить попытку.
+Отсюда вы можете настроить подсказку и попросить weapon повторить попытку.
 
 :::tip
 Вы можете запустить `/undo` несколько раз, чтобы отменить несколько изменений.
@@ -334,7 +334,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## Общий доступ
 
-Разговоры, которые вы ведете с opencode, можно [поделиться с вашим
+Разговоры, которые вы ведете с weapon, можно [поделиться с вашим
 команда](/docs/share).
 
 ```bash frame="none"
@@ -347,12 +347,12 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 По умолчанию общий доступ к беседам не предоставляется.
 :::
 
-Вот [пример диалога](https://opencode.ai/s/4XP1fce5) с opencode.
+Вот [пример диалога](https://weapon.ai/s/4XP1fce5) с weapon.
 
 ---
 
 ## Настроить
 
-И все! Теперь вы профессионал в использовании opencode.
+И все! Теперь вы профессионал в использовании weapon.
 
-Чтобы создать свою собственную, мы рекомендуем [выбрать тему](/docs/themes), [настроить привязки клавиш](/docs/keybinds), [настроить средства форматирования кода](/docs/formatters), [создать собственные команды](/docs/commands) или поиграться с файлом [opencode config](/docs/config).
+Чтобы создать свою собственную, мы рекомендуем [выбрать тему](/docs/themes), [настроить привязки клавиш](/docs/keybinds), [настроить средства форматирования кода](/docs/formatters), [создать собственные команды](/docs/commands) или поиграться с файлом [weapon config](/docs/config).

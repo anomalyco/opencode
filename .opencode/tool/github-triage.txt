@@ -25,16 +25,16 @@ Always try to assign an issue, if in doubt, assign rekram1-node to it.
 
 Dax is responsible for managing core parts of the application, for large feature requests, api changes, or things that require significant changes to the codebase assign him.
 
-This relates to OpenCode server primarily but has overlap with just about anything
+This relates to Weapon server primarily but has overlap with just about anything
 
 ### adamdotdevin
 
-Adam is responsible for managing the Desktop/Web app. If there is an issue relating to the desktop app or `opencode web` command. Assign him.
+Adam is responsible for managing the Desktop/Web app. If there is an issue relating to the desktop app or `weapon web` command. Assign him.
 
 
 ### fwang
 
-Frank is responsible for managing Zen, if you see complaints about OpenCode Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
+Frank is responsible for managing Zen, if you see complaints about Weapon Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
 
 ### jayair
 
@@ -42,7 +42,7 @@ Jay is responsible for documentation. If there is an issue relating to documenta
 
 ### kommander
 
-Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenCode's TUI is built with OpenTUI. If there are issues about:
+Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). Weapon's TUI is built with OpenTUI. If there are issues about:
 - random characters on screen
 - keybinds not working on different terminals
 - general terminal stuff
@@ -73,11 +73,11 @@ Anything related to slow performance, high ram, high cpu usage, or any other per
 
 ### desktop
 
-Anything related to `opencode web` command or the desktop app should have a desktop label. Never add this label for anything terminal/tui related
+Anything related to `weapon web` command or the desktop app should have a desktop label. Never add this label for anything terminal/tui related
 
 ### zen
 
-Anything related to OpenCode Zen, billing, or model quality from Zen should have a zen label
+Anything related to Weapon Zen, billing, or model quality from Zen should have a zen label
 
 ### docs
 

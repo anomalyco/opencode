@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Verwenden Sie OpenCode in GitHub-Problemen und Pull-Requests.
+description: Verwenden Sie Weapon in GitHub-Problemen und Pull-Requests.
 ---
 
-OpenCode lässt sich in Ihren GitHub-Workflow integrieren. Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar, und OpenCode führt Aufgaben in Ihrem GitHub Actions-Runner aus.
+Weapon lässt sich in Ihren GitHub-Workflow integrieren. Erwähnen Sie `/weapon` oder `/oc` in Ihrem Kommentar, und Weapon führt Aufgaben in Ihrem GitHub Actions-Runner aus.
 
 ---
 
 ## Funktionen
 
-- **Issue Triage**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
-- **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren. Und es funktioniert in einem neuen Branch und sendet ein PR mit allen Änderungen.
-- **Sicher**: OpenCode läuft in den Runners Ihres GitHub.
+- **Issue Triage**: Bitten Sie Weapon, ein Problem zu untersuchen und es Ihnen zu erklären.
+- **Reparieren und implementieren**: Bitten Sie Weapon, ein Problem zu beheben oder eine Funktion zu implementieren. Und es funktioniert in einem neuen Branch und sendet ein PR mit allen Änderungen.
+- **Sicher**: Weapon läuft in den Runners Ihres GitHub.
 
 ---
 
@@ -20,7 +20,7 @@ OpenCode lässt sich in Ihren GitHub-Workflow integrieren. Erwähnen Sie `/openc
 Führen Sie den folgenden Befehl in einem Projekt aus, das sich in einem GitHub-Repository befindet:
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 Dies führt Sie durch die Installation der GitHub-App, das Erstellen des Workflows und das Einrichten von Secrets.
@@ -33,14 +33,14 @@ Oder Sie können es manuell einrichten.
 
 1. **Installieren Sie die GitHub-App**
 
-   Gehen Sie zu [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Stellen Sie sicher, dass es im Ziel-Repository installiert ist.
+   Gehen Sie zu [**github.com/apps/weapon-agent**](https://github.com/apps/weapon-agent). Stellen Sie sicher, dass es im Ziel-Repository installiert ist.
 
 2. **Den Workflow hinzufügen**
 
-   Fügen Sie die folgende Workflowdatei zu `.github/workflows/opencode.yml` in Ihrem Repository hinzu. Stellen Sie sicher, dass Sie in `env` die passenden Werte für `model` und `api_key` setzen.
+   Fügen Sie die folgende Workflowdatei zu `.github/workflows/weapon.yml` in Ihrem Repository hinzu. Stellen Sie sicher, dass Sie in `env` die passenden Werte für `model` und `api_key` setzen.
 
-   ```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+   ```yml title=".github/workflows/weapon.yml" {24,26}
+   name: weapon
 
    on:
      issue_comment:
@@ -49,10 +49,10 @@ Oder Sie können es manuell einrichten.
        types: [created]
 
    jobs:
-     opencode:
+     weapon:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/weapon')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -63,8 +63,8 @@ Oder Sie können es manuell einrichten.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+          - name: Run Weapon
+           uses: anomalyco/weapon/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -81,13 +81,13 @@ Oder Sie können es manuell einrichten.
 
 ## Konfiguration
 
-- `model`: Das mit OpenCode zu verwendende Modell. Nimmt das Format `provider/model` an. Dies ist **erforderlich**.
+- `model`: Das mit Weapon zu verwendende Modell. Nimmt das Format `provider/model` an. Dies ist **erforderlich**.
 - `agent`: Der zu verwendende Agent. Muss ein Hauptagent sein. Fällt aus der Konfiguration auf `default_agent` oder `"build"` zurück, wenn es nicht gefunden wird.
-- `share`: Ob die OpenCode-Sitzung geteilt werden soll. Der Standardwert ist **true** für öffentliche Repositorys.
-- `prompt`: Optionale benutzerdefinierte Eingabeaufforderung zum Überschreiben des Standardverhaltens. Verwenden Sie dies, um anzupassen, wie OpenCode Anfragen verarbeitet.
-- `token`: Optionales GitHub-Zugriffstoken zum Ausführen von Vorgängen wie dem Erstellen von Kommentaren, dem Festschreiben von Änderungen und dem Öffnen von Pull Requests. Standardmäßig verwendet OpenCode das Installation Access Token der OpenCode GitHub-App, sodass Commits, Kommentare und Pull Requests so aussehen, als würden sie von der App kommen.
+- `share`: Ob die Weapon-Sitzung geteilt werden soll. Der Standardwert ist **true** für öffentliche Repositorys.
+- `prompt`: Optionale benutzerdefinierte Eingabeaufforderung zum Überschreiben des Standardverhaltens. Verwenden Sie dies, um anzupassen, wie Weapon Anfragen verarbeitet.
+- `token`: Optionales GitHub-Zugriffstoken zum Ausführen von Vorgängen wie dem Erstellen von Kommentaren, dem Festschreiben von Änderungen und dem Öffnen von Pull Requests. Standardmäßig verwendet Weapon das Installation Access Token der Weapon GitHub-App, sodass Commits, Kommentare und Pull Requests so aussehen, als würden sie von der App kommen.
 
-  Alternativ können Sie [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) des GitHub Action Runners verwenden, ohne die OpenCode GitHub App zu installieren. Stellen Sie einfach sicher, dass Sie in Ihrem Workflow die erforderlichen Berechtigungen erteilen:
+  Alternativ können Sie [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) des GitHub Action Runners verwenden, ohne die Weapon GitHub App zu installieren. Stellen Sie einfach sicher, dass Sie in Ihrem Workflow die erforderlichen Berechtigungen erteilen:
 
   ```yaml
   permissions:
@@ -103,30 +103,30 @@ Oder Sie können es manuell einrichten.
 
 ## Unterstützte Events
 
-OpenCode kann durch die folgenden GitHub-Events ausgelöst werden:
+Weapon kann durch die folgenden GitHub-Events ausgelöst werden:
 
 | Ereignistyp                   | Ausgelöst durch                                   | Einzelheiten                                                                                                                                        |
 | ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Kommentieren Sie ein Problem oder PR              | Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar. OpenCode liest den Kontext und kann Branches erstellen, PRs öffnen oder antworten.          |
-| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/opencode` oder `/oc` beim Überprüfen des Codes. OpenCode empfängt Dateipfad, Zeilennummern und Diff Context.                         |
-| `issues`                      | Problem geöffnet oder bearbeitet                  | Lösen Sie OpenCode automatisch aus, wenn Probleme erstellt oder geändert werden. Erfordert `prompt`-Eingabe.                                        |
-| `pull_request`                | PR geöffnet oder aktualisiert                     | Lösen Sie OpenCode automatisch aus, wenn PRs geöffnet, synchronisiert oder erneut geöffnet werden. Nützlich für automatisierte Bewertungen.         |
-| `schedule`                    | Cron-basierter Zeitplan                           | Führen Sie OpenCode nach einem Zeitplan aus. Erfordert `prompt`-Eingabe. Die Ausgabe geht an Protokolle und PRs (kein Kommentar zu diesem Problem). |
-| `workflow_dispatch`           | Manueller Trigger von GitHub UI                   | Lösen Sie OpenCode bei Bedarf über die Actions Tab aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.                      |
+| `issue_comment`               | Kommentieren Sie ein Problem oder PR              | Erwähnen Sie `/weapon` oder `/oc` in Ihrem Kommentar. Weapon liest den Kontext und kann Branches erstellen, PRs öffnen oder antworten.          |
+| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/weapon` oder `/oc` beim Überprüfen des Codes. Weapon empfängt Dateipfad, Zeilennummern und Diff Context.                         |
+| `issues`                      | Problem geöffnet oder bearbeitet                  | Lösen Sie Weapon automatisch aus, wenn Probleme erstellt oder geändert werden. Erfordert `prompt`-Eingabe.                                        |
+| `pull_request`                | PR geöffnet oder aktualisiert                     | Lösen Sie Weapon automatisch aus, wenn PRs geöffnet, synchronisiert oder erneut geöffnet werden. Nützlich für automatisierte Bewertungen.         |
+| `schedule`                    | Cron-basierter Zeitplan                           | Führen Sie Weapon nach einem Zeitplan aus. Erfordert `prompt`-Eingabe. Die Ausgabe geht an Protokolle und PRs (kein Kommentar zu diesem Problem). |
+| `workflow_dispatch`           | Manueller Trigger von GitHub UI                   | Lösen Sie Weapon bei Bedarf über die Actions Tab aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.                      |
 
 ### Beispiel für einen Zeitplan
 
-Führen Sie OpenCode nach einem Zeitplan aus, um automatisierte Aufgaben auszuführen:
+Führen Sie Weapon nach einem Zeitplan aus, um automatisierte Aufgaben auszuführen:
 
-```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+```yaml title=".github/workflows/weapon-scheduled.yml"
+name: Scheduled Weapon Task
 
 on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
 
 jobs:
-  opencode:
+  weapon:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -139,8 +139,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+      - name: Run Weapon
+        uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-Für geplante Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen Kommentar gibt, aus dem Anweisungen extrahiert werden können. Geplante Workflows werden ohne Benutzerkontext zur Berechtigungsprüfung ausgeführt. Daher muss der Workflow `contents: write` und `pull-requests: write` gewähren, wenn Sie erwarten, dass OpenCode Branches oder PRs erstellt.
+Für geplante Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen Kommentar gibt, aus dem Anweisungen extrahiert werden können. Geplante Workflows werden ohne Benutzerkontext zur Berechtigungsprüfung ausgeführt. Daher muss der Workflow `contents: write` und `pull-requests: write` gewähren, wenn Sie erwarten, dass Weapon Branches oder PRs erstellt.
 
 ---
 
@@ -158,8 +158,8 @@ Für geplante Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen
 
 Überprüfen Sie PRs automatisch, wenn sie geöffnet oder aktualisiert werden:
 
-```yaml title=".github/workflows/opencode-review.yml"
-name: opencode-review
+```yaml title=".github/workflows/weapon-review.yml"
+name: weapon-review
 
 on:
   pull_request:
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-Wenn für `pull_request`-Ereignisse kein `prompt` bereitgestellt wird, überprüft OpenCode standardmäßig die Pull-Anfrage.
+Wenn für `pull_request`-Ereignisse kein `prompt` bereitgestellt wird, überprüft Weapon standardmäßig die Pull-Anfrage.
 
 ---
 
@@ -199,7 +199,7 @@ Wenn für `pull_request`-Ereignisse kein `prompt` bereitgestellt wird, überprü
 
 Neue Probleme automatisch selektieren. In diesem Beispiel wird nach Konten gefiltert, die älter als 30 Tage sind, um Spam zu reduzieren:
 
-```yaml title=".github/workflows/opencode-triage.yml"
+```yaml title=".github/workflows/weapon-triage.yml"
 name: Issue Triage
 
 on:
@@ -233,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,10 +252,10 @@ Für `issues`-Ereignisse ist die Eingabe `prompt` **erforderlich**, da es keinen
 
 ## Benutzerdefinierte Prompts
 
-Überschreiben Sie die Standardaufforderung, um das Verhalten von OpenCode für Ihren Workflow anzupassen.
+Überschreiben Sie die Standardaufforderung, um das Verhalten von Weapon für Ihren Workflow anzupassen.
 
-```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+```yaml title=".github/workflows/weapon.yml"
+- uses: anomalyco/weapon/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |
@@ -271,27 +271,27 @@ Dies ist nützlich, um bestimmte Prüfkriterien, Kodierungsstandards oder Schwer
 
 ## Beispiele
 
-Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
+Hier sind einige Beispiele, wie Sie Weapon in GitHub verwenden können.
 
 - **Erklären Sie ein Problem**
 
   Fügen Sie diesen Kommentar in einer GitHub-Ausgabe hinzu.
 
   ```
-  /opencode explain this issue
+  /weapon explain this issue
   ```
 
-  OpenCode liest den gesamten Thread, einschließlich aller Kommentare, und antwortet mit einer klaren Erklärung.
+  Weapon liest den gesamten Thread, einschließlich aller Kommentare, und antwortet mit einer klaren Erklärung.
 
 - **Ein Problem beheben**
 
   Sagen Sie in einer GitHub-Ausgabe:
 
   ```
-  /opencode fix this
+  /weapon fix this
   ```
 
-  Und OpenCode erstellt einen neuen Branch, implementiert die Änderungen und öffnet ein PR mit den Änderungen.
+  Und Weapon erstellt einen neuen Branch, implementiert die Änderungen und öffnet ein PR mit den Änderungen.
 
 - **PRs überprüfen und Änderungen vornehmen**
 
@@ -301,18 +301,18 @@ Hier sind einige Beispiele, wie Sie OpenCode in GitHub verwenden können.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  OpenCode implementiert die angeforderte Änderung und schreibt sie an denselben PR fest.
+  Weapon implementiert die angeforderte Änderung und schreibt sie an denselben PR fest.
 
 - **Überprüfen Sie bestimmte Codezeilen**
 
-  Hinterlassen Sie einen Kommentar direkt zu den Codezeilen auf der Files Tab von PR. OpenCode erkennt automatisch die Datei, Zeilennummern und den Diff Context, um präzise Antworten bereitzustellen.
+  Hinterlassen Sie einen Kommentar direkt zu den Codezeilen auf der Files Tab von PR. Weapon erkennt automatisch die Datei, Zeilennummern und den Diff Context, um präzise Antworten bereitzustellen.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  Beim Kommentieren bestimmter Zeilen erhält OpenCode:
+  Beim Kommentieren bestimmter Zeilen erhält Weapon:
   - Die genaue Datei, die überprüft wird
   - Die spezifischen Codezeilen
   - Der umgebende Diff Context

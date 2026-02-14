@@ -1,0 +1,149 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "const": "assistant"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "number"
+        },
+        "completed": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "created"
+      ]
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "./ProviderAuthError.json"
+        },
+        {
+          "$ref": "./UnknownError.json"
+        },
+        {
+          "$ref": "./MessageOutputLengthError.json"
+        },
+        {
+          "$ref": "./MessageAbortedError.json"
+        },
+        {
+          "$ref": "./StructuredOutputError.json"
+        },
+        {
+          "$ref": "./ContextOverflowError.json"
+        },
+        {
+          "$ref": "./APIError.json"
+        }
+      ]
+    },
+    "parentID": {
+      "type": "string"
+    },
+    "modelID": {
+      "type": "string"
+    },
+    "providerID": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "agent": {
+      "type": "string"
+    },
+    "path": {
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "root"
+      ]
+    },
+    "summary": {
+      "type": "boolean"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "input": {
+          "type": "number"
+        },
+        "output": {
+          "type": "number"
+        },
+        "reasoning": {
+          "type": "number"
+        },
+        "cache": {
+          "type": "object",
+          "properties": {
+            "read": {
+              "type": "number"
+            },
+            "write": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "read",
+            "write"
+          ]
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "reasoning",
+        "cache"
+      ]
+    },
+    "structured": {},
+    "variant": {
+      "type": "string"
+    },
+    "finish": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "role",
+    "time",
+    "parentID",
+    "modelID",
+    "providerID",
+    "mode",
+    "agent",
+    "path",
+    "cost",
+    "tokens"
+  ]
+}

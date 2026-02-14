@@ -3,13 +3,13 @@ title: Modeller
 description: LLM sağlayıcılarını ve model seçimlerini yapılandırın.
 ---
 
-opencode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
+weapon, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
 
 ---
 
 ## Sağlayıcılar
 
-Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar opencode'u başlattığınızda kullanılabilir olacaktır.
+Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar weapon'u başlattığınızda kullanılabilir olacaktır.
 
 [Sağlayıcılar](/docs/providers) hakkında daha fazla bilgi edinin.
 
@@ -35,7 +35,7 @@ Piyasada pek çok model var ve her hafta yeni modeller çıkıyor.
 
 Ancak, hem kod oluşturmada hem de araç çağırmada iyi olan yalnızca birkaçı var.
 
-Burada, opencode ile belirli bir sıraya göre iyi çalışan birkaç model yer almaktadır. (Bu kapsamlı bir liste değildir ve mutlaka güncel olması da gerekmez):
+Burada, weapon ile belirli bir sıraya göre iyi çalışan birkaç model yer almaktadır. (Bu kapsamlı bir liste değildir ve mutlaka güncel olması da gerekmez):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,16 +49,16 @@ Burada, opencode ile belirli bir sıraya göre iyi çalışan birkaç model yer 
 ## Varsayılan ayarlama
 
 Bunlardan birini varsayılan model olarak ayarlamak için `model` anahtarınızı telefonunuzudan ayarlayabilirsiniz.
-opencode yapılandırması
+weapon yapılandırması
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [Weapon Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `weapon/gpt-5.1-codex` kullanırsınız.
 
 Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_id`, performansınızın `provider` bölümünden gelen anahtardır ve `model_id`, `provider.models`'den gelen anahtardır.
 
@@ -68,9 +68,9 @@ Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_
 
 Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılandırabilirsiniz.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="weapon.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsini
 
 Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsiniz. Varyantlar, yinelenen girişler oluşturmadan aynı model için farklı ayarları yapılandırmanıza olanak tanır:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="weapon.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
-    "opencode": {
+    "weapon": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsin
 
 ## Varyantlar
 
-Birçok model, farklı konfigürasyonlara sahip birden fazla kapasiteye sahip. opencode, popüler sağlayıcılar için sunulan değişkenlerle birlikte gelir.
+Birçok model, farklı konfigürasyonlara sahip birden fazla kapasiteye sahip. weapon, popüler sağlayıcılar için sunulan değişkenlerle birlikte gelir.
 
 ### Yerleşik çeşitler
 
-opencode birçok sağlayıcı için varsayılan değişkenlerle birlikte gelir:
+weapon birçok sağlayıcı için varsayılan değişkenlerle birlikte gelir:
 
 **Antropik**:
 
@@ -172,9 +172,9 @@ Bu liste kapsamlı değildir. Diğer birçok sağlayıcının da yerleşik varsa
 
 Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="weapon.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
 
 ## Modelleri yükleme
 
-opencode başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
+weapon başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
 
 1. `--model` veya `-m` komut satırı bayrağı. Biçim, yapılandırma dosyasındakiyle aynıdır: `provider_id/model_id`.
 
-2. opencode yapılandırmasındaki model listesi.
+2. weapon yapılandırmasındaki model listesi.
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

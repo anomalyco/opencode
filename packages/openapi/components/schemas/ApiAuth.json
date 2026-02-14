@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "api"
+    },
+    "key": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "key"
+  ]
+}

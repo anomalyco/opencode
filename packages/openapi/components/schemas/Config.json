@@ -1,0 +1,424 @@
+{
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "JSON schema reference for configuration validation",
+      "type": "string"
+    },
+    "theme": {
+      "description": "Theme name to use for the interface",
+      "type": "string"
+    },
+    "keybinds": {
+      "$ref": "./KeybindsConfig.json"
+    },
+    "logLevel": {
+      "$ref": "./LogLevel.json"
+    },
+    "tui": {
+      "description": "TUI specific settings",
+      "type": "object",
+      "properties": {
+        "scroll_speed": {
+          "description": "TUI scroll speed",
+          "type": "number",
+          "minimum": 0.001
+        },
+        "scroll_acceleration": {
+          "description": "Scroll acceleration settings",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Enable scroll acceleration",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ]
+        },
+        "diff_style": {
+          "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
+          "type": "string",
+          "enum": [
+            "auto",
+            "stacked"
+          ]
+        }
+      }
+    },
+    "server": {
+      "$ref": "./ServerConfig.json"
+    },
+    "command": {
+      "description": "Command configuration, see https://opencode.ai/docs/commands",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "subtask": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "template"
+        ]
+      }
+    },
+    "skills": {
+      "description": "Additional skill folder paths",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "description": "Additional paths to skill folders",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "urls": {
+          "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "watcher": {
+      "type": "object",
+      "properties": {
+        "ignore": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "plugin": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "snapshot": {
+      "type": "boolean"
+    },
+    "share": {
+      "description": "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+      "type": "string",
+      "enum": [
+        "manual",
+        "auto",
+        "disabled"
+      ]
+    },
+    "autoshare": {
+      "description": "@deprecated Use 'share' field instead. Share newly created sessions automatically",
+      "type": "boolean"
+    },
+    "autoupdate": {
+      "description": "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "const": "notify"
+        }
+      ]
+    },
+    "disabled_providers": {
+      "description": "Disable providers that are loaded automatically",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "enabled_providers": {
+      "description": "When set, ONLY these providers will be enabled. All other providers will be ignored",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "model": {
+      "description": "Model to use in the format of provider/model, eg anthropic/claude-2",
+      "type": "string"
+    },
+    "small_model": {
+      "description": "Small model to use for tasks like title generation in the format of provider/model",
+      "type": "string"
+    },
+    "default_agent": {
+      "description": "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+      "type": "string"
+    },
+    "username": {
+      "description": "Custom username to display in conversations instead of system username",
+      "type": "string"
+    },
+    "mode": {
+      "description": "@deprecated Use `agent` field instead.",
+      "type": "object",
+      "properties": {
+        "build": {
+          "$ref": "./AgentConfig.json"
+        },
+        "plan": {
+          "$ref": "./AgentConfig.json"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "./AgentConfig.json"
+      }
+    },
+    "agent": {
+      "description": "Agent configuration, see https://opencode.ai/docs/agents",
+      "type": "object",
+      "properties": {
+        "plan": {
+          "$ref": "./AgentConfig.json"
+        },
+        "build": {
+          "$ref": "./AgentConfig.json"
+        },
+        "general": {
+          "$ref": "./AgentConfig.json"
+        },
+        "explore": {
+          "$ref": "./AgentConfig.json"
+        },
+        "title": {
+          "$ref": "./AgentConfig.json"
+        },
+        "summary": {
+          "$ref": "./AgentConfig.json"
+        },
+        "compaction": {
+          "$ref": "./AgentConfig.json"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "./AgentConfig.json"
+      }
+    },
+    "provider": {
+      "description": "Custom provider configurations and model overrides",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "./ProviderConfig.json"
+      }
+    },
+    "formatter": {
+      "anyOf": [
+        {
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "command": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "environment": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "extensions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lsp": {
+      "anyOf": [
+        {
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "disabled": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "disabled"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "extensions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "disabled": {
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "initialization": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "instructions": {
+      "description": "Additional instruction files or patterns to include",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "layout": {
+      "$ref": "./LayoutConfig.json"
+    },
+    "permission": {
+      "$ref": "./PermissionConfig.json"
+    },
+    "tools": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "enterprise": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Enterprise URL",
+          "type": "string"
+        }
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "properties": {
+        "auto": {
+          "description": "Enable automatic compaction when context is full (default: true)",
+          "type": "boolean"
+        },
+        "prune": {
+          "description": "Enable pruning of old tool outputs (default: true)",
+          "type": "boolean"
+        },
+        "reserved": {
+          "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "experimental": {
+      "type": "object",
+      "properties": {
+        "disable_paste_summary": {
+          "type": "boolean"
+        },
+        "batch_tool": {
+          "description": "Enable the batch tool",
+          "type": "boolean"
+        },
+        "openTelemetry": {
+          "description": "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+          "type": "boolean"
+        },
+        "primary_tools": {
+          "description": "Tools that should only be available to primary agents.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "continue_loop_on_deny": {
+          "description": "Continue the agent loop when a tool call is denied",
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,4 +1,4 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { createWeaponClient } from "@weapon-ai/sdk/v2/client"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -67,7 +67,7 @@ export async function checkServerHealth(
       .catch(() => ({ healthy: false }))
   }
   const attempt = (count: number): Promise<ServerHealth> =>
-    createOpencodeClient({
+    createWeaponClient({
       baseUrl: url,
       fetch,
       signal,

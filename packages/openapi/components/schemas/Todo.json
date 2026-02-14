@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "content": {
+      "description": "Brief description of the task",
+      "type": "string"
+    },
+    "status": {
+      "description": "Current status of the task: pending, in_progress, completed, cancelled",
+      "type": "string"
+    },
+    "priority": {
+      "description": "Priority level of the task: high, medium, low",
+      "type": "string"
+    },
+    "id": {
+      "description": "Unique identifier for the todo item",
+      "type": "string"
+    }
+  },
+  "required": [
+    "content",
+    "status",
+    "priority",
+    "id"
+  ]
+}

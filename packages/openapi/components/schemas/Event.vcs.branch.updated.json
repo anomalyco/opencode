@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "vcs.branch.updated"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

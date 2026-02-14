@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "description": "Complete question",
+      "type": "string"
+    },
+    "header": {
+      "description": "Very short label (max 30 chars)",
+      "type": "string"
+    },
+    "options": {
+      "description": "Available choices",
+      "type": "array",
+      "items": {
+        "$ref": "./QuestionOption.json"
+      }
+    },
+    "multiple": {
+      "description": "Allow selecting multiple choices",
+      "type": "boolean"
+    },
+    "custom": {
+      "description": "Allow typing a custom answer (default: true)",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "question",
+    "header",
+    "options"
+  ]
+}

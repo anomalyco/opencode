@@ -1,0 +1,16 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./ToolStatePending.json"
+    },
+    {
+      "$ref": "./ToolStateRunning.json"
+    },
+    {
+      "$ref": "./ToolStateCompleted.json"
+    },
+    {
+      "$ref": "./ToolStateError.json"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "oauth"
+    },
+    "refresh": {
+      "type": "string"
+    },
+    "access": {
+      "type": "string"
+    },
+    "expires": {
+      "type": "number"
+    },
+    "accountId": {
+      "type": "string"
+    },
+    "enterpriseUrl": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "refresh",
+    "access",
+    "expires"
+  ]
+}

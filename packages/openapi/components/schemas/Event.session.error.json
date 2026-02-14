@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session.error"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "./ProviderAuthError.json"
+            },
+            {
+              "$ref": "./UnknownError.json"
+            },
+            {
+              "$ref": "./MessageOutputLengthError.json"
+            },
+            {
+              "$ref": "./MessageAbortedError.json"
+            },
+            {
+              "$ref": "./StructuredOutputError.json"
+            },
+            {
+              "$ref": "./ContextOverflowError.json"
+            },
+            {
+              "$ref": "./APIError.json"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

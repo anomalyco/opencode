@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "properties": {
+    "start": {
+      "type": "object",
+      "properties": {
+        "line": {
+          "type": "number"
+        },
+        "character": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "line",
+        "character"
+      ]
+    },
+    "end": {
+      "type": "object",
+      "properties": {
+        "line": {
+          "type": "number"
+        },
+        "character": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "line",
+        "character"
+      ]
+    }
+  },
+  "required": [
+    "start",
+    "end"
+  ]
+}

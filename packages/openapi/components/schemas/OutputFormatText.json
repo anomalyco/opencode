@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "text"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

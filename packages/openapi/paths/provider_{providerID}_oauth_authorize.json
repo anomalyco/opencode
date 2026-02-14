@@ -1,0 +1,73 @@
+{
+  "post": {
+    "operationId": "provider.oauth.authorize",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "providerID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Provider ID"
+      }
+    ],
+    "summary": "OAuth authorize",
+    "description": "Initiate OAuth authorization for a specific AI provider to get an authorization URL.",
+    "responses": {
+      "200": {
+        "description": "Authorization URL and method",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/ProviderAuthAuthorization.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "description": "Auth method index",
+                "type": "number"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/provider_{providerID}_oauth_authorize/post.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "step-start"
+    },
+    "snapshot": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type"
+  ]
+}

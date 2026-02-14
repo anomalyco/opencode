@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: Параметры и команда opencode CLI.
+description: Параметры и команда weapon CLI.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-CLI opencode по умолчанию запускает [TUI](/docs/tui) при запуске без каких-либо аргументов.
+CLI weapon по умолчанию запускает [TUI](/docs/tui) при запуске без каких-либо аргументов.
 
 ```bash
-opencode
+weapon
 ```
 
-Но он также принимает команды, описанные на этой странице. Это позволяет вам программно взаимодействовать с opencode.
+Но он также принимает команды, описанные на этой странице. Это позволяет вам программно взаимодействовать с weapon.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+weapon run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Запустите TUI opencode.
+Запустите TUI weapon.
 
 ```bash
-opencode [project]
+weapon [project]
 ```
 
 #### Флаги
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Команды
 
-CLI opencode также имеет следующие команды.
+CLI weapon также имеет следующие команды.
 
 ---
 
 ### agent
 
-Управляйте агентами для opencode.
+Управляйте агентами для weapon.
 
 ```bash
-opencode agent [command]
+weapon agent [command]
 ```
 
 ---
 
 ### attach
 
-Подключите терминал к уже работающему внутреннему серверу opencode, запущенному с помощью команд `serve` или `web`.
+Подключите терминал к уже работающему внутреннему серверу weapon, запущенному с помощью команд `serve` или `web`.
 
 ```bash
-opencode attach [url]
+weapon attach [url]
 ```
 
-Это позволяет использовать TUI с удаленным сервером opencode. Например:
+Это позволяет использовать TUI с удаленным сервером weapon. Например:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+weapon web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+weapon attach http://10.20.30.40:4096
 ```
 
 #### Флаги
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Создайте нового агента с пользовательской конфигурацией.
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 Эта команда поможет вам создать новый агент с настраиваемой системной подсказкой и настройкой инструмента.
@@ -102,7 +102,7 @@ opencode agent create
 Перечислите всех доступных агентов.
 
 ```bash
-opencode agent list
+weapon agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Команда для управления учетными данными и входом в систему для провайдеров.
 
 ```bash
-opencode auth [command]
+weapon auth [command]
 ```
 
 ---
 
 #### login
 
-opencode использует список провайдеров с [Models.dev](https://models.dev), поэтому вы можете использовать `opencode auth login` для настройки ключей API для любого поставщика, которого вы хотите использовать. Это хранится в `~/.local/share/opencode/auth.json`.
+weapon использует список провайдеров с [Models.dev](https://models.dev), поэтому вы можете использовать `weapon auth login` для настройки ключей API для любого поставщика, которого вы хотите использовать. Это хранится в `~/.local/share/weapon/auth.json`.
 
 ```bash
-opencode auth login
+weapon auth login
 ```
 
-Когда opencode запускается, он загружает поставщиков из файла учетных данных. И если в ваших средах определены какие-либо ключи или файл `.env` в вашем проекте.
+Когда weapon запускается, он загружает поставщиков из файла учетных данных. И если в ваших средах определены какие-либо ключи или файл `.env` в вашем проекте.
 
 ---
 
@@ -134,13 +134,13 @@ opencode auth login
 Перечисляет всех проверенных поставщиков, которые хранятся в файле учетных данных.
 
 ```bash
-opencode auth list
+weapon auth list
 ```
 
 Или короткая версия.
 
 ```bash
-opencode auth ls
+weapon auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Выключает вас из провайдера, удаляя его из файла учетных данных.
 
 ```bash
-opencode auth logout
+weapon auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Управляйте агентом GitHub для автоматизации репозитория.
 
 ```bash
-opencode github [command]
+weapon github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Установите агент GitHub в свой репозиторий.
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 Это настроит необходимый рабочий процесс GitHub Actions и проведет вас через процесс настройки. [Подробнее](/docs/github).
@@ -182,7 +182,7 @@ opencode github install
 Запустите агент GitHub. Обычно это используется в действиях GitHub.
 
 ```bash
-opencode github run
+weapon github run
 ```
 
 ##### Флаги
@@ -199,7 +199,7 @@ opencode github run
 Управляйте серверами протокола контекста модели.
 
 ```bash
-opencode mcp [command]
+weapon mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Добавьте сервер MCP в свою конфигурацию.
 
 ```bash
-opencode mcp add
+weapon mcp add
 ```
 
 Эта команда поможет вам добавить локальный или удаленный сервер MCP.
@@ -221,13 +221,13 @@ opencode mcp add
 Перечислите все настроенные серверы MCP и состояние их подключения.
 
 ```bash
-opencode mcp list
+weapon mcp list
 ```
 
 Или используйте короткую версию.
 
 ```bash
-opencode mcp ls
+weapon mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Аутентификация с помощью сервера MCP с поддержкой OAuth.
 
 ```bash
-opencode mcp auth [name]
+weapon mcp auth [name]
 ```
 
 Если вы не укажете имя сервера, вам будет предложено выбрать один из доступных серверов с поддержкой OAuth.
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 Вы также можете перечислить серверы с поддержкой OAuth и их статус аутентификации.
 
 ```bash
-opencode mcp auth list
+weapon mcp auth list
 ```
 
 Или используйте короткую версию.
 
 ```bash
-opencode mcp auth ls
+weapon mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Удалите учетные данные OAuth для сервера MCP.
 
 ```bash
-opencode mcp logout [name]
+weapon mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Отладка проблем с подключением OAuth для сервера MCP.
 
 ```bash
-opencode mcp debug <name>
+weapon mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 Перечислите все доступные модели от настроенных поставщиков.
 
 ```bash
-opencode models [provider]
+weapon models [provider]
 ```
 
 Эта команда отображает все модели, доступные у настроенных вами поставщиков, в формате `provider/model`.
@@ -291,7 +291,7 @@ opencode models [provider]
 При желании вы можете передать идентификатор поставщика, чтобы фильтровать модели по этому поставщику.
 
 ```bash
-opencode models anthropic
+weapon models anthropic
 ```
 
 #### Флаги
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Обновите кеш моделей на сайте models.dev.                                         |
 | `--verbose` | Используйте более подробный вывод модели (включая метаданные, такие как затраты). |
 
-Используйте флаг `--refresh` для обновления списка кэшированных моделей. Это полезно, когда к поставщику добавлены новые модели и вы хотите увидеть их в opencode.
+Используйте флаг `--refresh` для обновления списка кэшированных моделей. Это полезно, когда к поставщику добавлены новые модели и вы хотите увидеть их в weapon.
 
 ```bash
-opencode models --refresh
+weapon models --refresh
 ```
 
 ---
 
 ### run
 
-Запустите opencode в неинтерактивном режиме, передав приглашение напрямую.
+Запустите weapon в неинтерактивном режиме, передав приглашение напрямую.
 
 ```bash
-opencode run [message..]
+weapon run [message..]
 ```
 
 Это полезно для создания сценариев, автоматизации или когда вам нужен быстрый ответ без запуска полного TUI. Например.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "weapon run"
+weapon run Explain the use of context in Go
 ```
 
-Вы также можете подключиться к работающему экземпляру `opencode serve`, чтобы избежать холодной загрузки сервера MCP при каждом запуске:
+Вы также можете подключиться к работающему экземпляру `weapon serve`, чтобы избежать холодной загрузки сервера MCP при каждом запуске:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+weapon serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+weapon run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Флаги
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`     | Файл(ы) для прикрепления к сообщению                                             |
 | `--format`   |          | Формат: по умолчанию (отформатированный) или json (необработанные события JSON). |
 | `--title`    |          | Название сеанса (использует усеченное приглашение, если значение не указано)     |
-| `--attach`   |          | Подключитесь к работающему серверу opencode (например, http://localhost:4096)    |
+| `--attach`   |          | Подключитесь к работающему серверу weapon (например, http://localhost:4096)    |
 | `--port`     |          | Порт локального сервера (по умолчанию случайный порт)                            |
 
 ---
 
 ### serve
 
-Запустите автономный сервер opencode для доступа к API. Полный HTTP-интерфейс можно найти в [server docs](/docs/server).
+Запустите автономный сервер weapon для доступа к API. Полный HTTP-интерфейс можно найти в [server docs](/docs/server).
 
 ```bash
-opencode serve
+weapon serve
 ```
 
-При этом запускается HTTP-сервер, который обеспечивает доступ API к функциям opencode без интерфейса TUI. Установите `OPENCODE_SERVER_PASSWORD`, чтобы включить базовую аутентификацию HTTP (имя пользователя по умолчанию — `opencode`).
+При этом запускается HTTP-сервер, который обеспечивает доступ API к функциям weapon без интерфейса TUI. Установите `WEAPON_SERVER_PASSWORD`, чтобы включить базовую аутентификацию HTTP (имя пользователя по умолчанию — `weapon`).
 
 #### Флаги
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-Управляйте сессиями opencode.
+Управляйте сессиями weapon.
 
 ```bash
-opencode session [command]
+weapon session [command]
 ```
 
 ---
 
 #### list
 
-Перечислите все сеансы opencode.
+Перечислите все сеансы weapon.
 
 ```bash
-opencode session list
+weapon session list
 ```
 
 ##### Флаги
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Покажите статистику использования токенов и затрат для ваших сеансов opencode.
+Покажите статистику использования токенов и затрат для ваших сеансов weapon.
 
 ```bash
-opencode stats
+weapon stats
 ```
 
 #### Флаги
@@ -424,7 +424,7 @@ opencode stats
 Экспортируйте данные сеанса в формате JSON.
 
 ```bash
-opencode export [sessionID]
+weapon export [sessionID]
 ```
 
 Если вы не укажете идентификатор сеанса, вам будет предложено выбрать один из доступных сеансов.
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-Импортируйте данные сеанса из файла JSON или URL-адреса общего ресурса opencode.
+Импортируйте данные сеанса из файла JSON или URL-адреса общего ресурса weapon.
 
 ```bash
-opencode import <file>
+weapon import <file>
 ```
 
-Вы можете импортировать из локального файла или URL-адреса общего ресурса opencode.
+Вы можете импортировать из локального файла или URL-адреса общего ресурса weapon.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+weapon import session.json
+weapon import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Запустите автономный сервер opencode с веб-интерфейсом.
+Запустите автономный сервер weapon с веб-интерфейсом.
 
 ```bash
-opencode web
+weapon web
 ```
 
-При этом запускается HTTP-сервер и открывается веб-браузер для доступа к opencode через веб-интерфейс. Установите `OPENCODE_SERVER_PASSWORD`, чтобы включить базовую аутентификацию HTTP (имя пользователя по умолчанию — `opencode`).
+При этом запускается HTTP-сервер и открывается веб-браузер для доступа к weapon через веб-интерфейс. Установите `WEAPON_SERVER_PASSWORD`, чтобы включить базовую аутентификацию HTTP (имя пользователя по умолчанию — `weapon`).
 
 #### Флаги
 
@@ -474,7 +474,7 @@ opencode web
 Запустите сервер ACP (агент-клиентский протокол).
 
 ```bash
-opencode acp
+weapon acp
 ```
 
 Эта команда запускает сервер ACP, который обменивается данными через stdin/stdout с использованием nd-JSON.
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-Удалите opencode и удалите все связанные файлы.
+Удалите weapon и удалите все связанные файлы.
 
 ```bash
-opencode uninstall
+weapon uninstall
 ```
 
 #### Флаги
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Обновляет opencode до последней версии или определенной версии.
+Обновляет weapon до последней версии или определенной версии.
 
 ```bash
-opencode upgrade [target]
+weapon upgrade [target]
 ```
 
 Чтобы обновиться до последней версии.
 
 ```bash
-opencode upgrade
+weapon upgrade
 ```
 
 Для обновления до определенной версии.
 
 ```bash
-opencode upgrade v0.1.48
+weapon upgrade v0.1.48
 ```
 
 #### Флаги
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Глобальные флаги
 
-CLI opencode принимает следующие глобальные флаги.
+CLI weapon принимает следующие глобальные флаги.
 
 | Флаг           | Короткий | Описание                                   |
 | -------------- | -------- | ------------------------------------------ |
@@ -551,34 +551,34 @@ CLI opencode принимает следующие глобальные флаг
 
 ## Переменные среды
 
-opencode можно настроить с помощью переменных среды.
+weapon можно настроить с помощью переменных среды.
 
 | Переменная                            | Тип                 | Описание                                                                         |
 | ------------------------------------- | ------------------- | -------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | логическое значение | Автоматически делиться сеансами                                                  |
-| `OPENCODE_GIT_BASH_PATH`              | строка              | Путь к исполняемому файлу Git Bash в Windows                                     |
-| `OPENCODE_CONFIG`                     | строка              | Путь к файлу конфигурации                                                        |
-| `OPENCODE_CONFIG_DIR`                 | строка              | Путь к каталогу конфигурации                                                     |
-| `OPENCODE_CONFIG_CONTENT`             | строка              | Встроенное содержимое конфигурации json                                          |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | логическое значение | Отключить автоматическую проверку обновлений                                     |
-| `OPENCODE_DISABLE_PRUNE`              | логическое значение | Отключить удаление старых данных                                                 |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | логическое значение | Отключить автоматическое обновление заголовка терминала                          |
-| `OPENCODE_PERMISSION`                 | строка              | Встроенная конфигурация разрешений json                                          |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | логическое значение | Отключить плагины по умолчанию                                                   |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | логическое значение | Отключить автоматическую загрузку LSP-сервера                                    |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | логическое значение | Включить экспериментальные модели                                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | логическое значение | Отключить автоматическое сжатие контекста                                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | логическое значение | Отключить чтение из `.claude` (подсказка + навыки)                               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | логическое значение | Отключить чтение `~/.claude/CLAUDE.md`                                           |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | логическое значение | Отключить загрузку `.claude/skills`                                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | логическое значение | Отключить получение моделей из удаленных источников                              |
-| `OPENCODE_FAKE_VCS`                   | строка              | Поддельный поставщик VCS для целей тестирования                                  |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | логическое значение | Отключить проверку времени файла для оптимизации                                 |
-| `OPENCODE_CLIENT`                     | строка              | Идентификатор клиента (по умолчанию `cli`)                                       |
-| `OPENCODE_ENABLE_EXA`                 | логическое значение | Включить инструменты веб-поиска Exa                                              |
-| `OPENCODE_SERVER_PASSWORD`            | строка              | Включить базовую аутентификацию для `serve`/`web`                                |
-| `OPENCODE_SERVER_USERNAME`            | строка              | Переопределить имя пользователя базовой аутентификации (по умолчанию `opencode`) |
-| `OPENCODE_MODELS_URL`                 | строка              | Пользовательский URL-адрес для получения конфигурации модели                     |
+| `WEAPON_AUTO_SHARE`                 | логическое значение | Автоматически делиться сеансами                                                  |
+| `WEAPON_GIT_BASH_PATH`              | строка              | Путь к исполняемому файлу Git Bash в Windows                                     |
+| `WEAPON_CONFIG`                     | строка              | Путь к файлу конфигурации                                                        |
+| `WEAPON_CONFIG_DIR`                 | строка              | Путь к каталогу конфигурации                                                     |
+| `WEAPON_CONFIG_CONTENT`             | строка              | Встроенное содержимое конфигурации json                                          |
+| `WEAPON_DISABLE_AUTOUPDATE`         | логическое значение | Отключить автоматическую проверку обновлений                                     |
+| `WEAPON_DISABLE_PRUNE`              | логическое значение | Отключить удаление старых данных                                                 |
+| `WEAPON_DISABLE_TERMINAL_TITLE`     | логическое значение | Отключить автоматическое обновление заголовка терминала                          |
+| `WEAPON_PERMISSION`                 | строка              | Встроенная конфигурация разрешений json                                          |
+| `WEAPON_DISABLE_DEFAULT_PLUGINS`    | логическое значение | Отключить плагины по умолчанию                                                   |
+| `WEAPON_DISABLE_LSP_DOWNLOAD`       | логическое значение | Отключить автоматическую загрузку LSP-сервера                                    |
+| `WEAPON_ENABLE_EXPERIMENTAL_MODELS` | логическое значение | Включить экспериментальные модели                                                |
+| `WEAPON_DISABLE_AUTOCOMPACT`        | логическое значение | Отключить автоматическое сжатие контекста                                        |
+| `WEAPON_DISABLE_CLAUDE_CODE`        | логическое значение | Отключить чтение из `.claude` (подсказка + навыки)                               |
+| `WEAPON_DISABLE_CLAUDE_CODE_PROMPT` | логическое значение | Отключить чтение `~/.claude/CLAUDE.md`                                           |
+| `WEAPON_DISABLE_CLAUDE_CODE_SKILLS` | логическое значение | Отключить загрузку `.claude/skills`                                              |
+| `WEAPON_DISABLE_MODELS_FETCH`       | логическое значение | Отключить получение моделей из удаленных источников                              |
+| `WEAPON_FAKE_VCS`                   | строка              | Поддельный поставщик VCS для целей тестирования                                  |
+| `WEAPON_DISABLE_FILETIME_CHECK`     | логическое значение | Отключить проверку времени файла для оптимизации                                 |
+| `WEAPON_CLIENT`                     | строка              | Идентификатор клиента (по умолчанию `cli`)                                       |
+| `WEAPON_ENABLE_EXA`                 | логическое значение | Включить инструменты веб-поиска Exa                                              |
+| `WEAPON_SERVER_PASSWORD`            | строка              | Включить базовую аутентификацию для `serve`/`web`                                |
+| `WEAPON_SERVER_USERNAME`            | строка              | Переопределить имя пользователя базовой аутентификации (по умолчанию `weapon`) |
+| `WEAPON_MODELS_URL`                 | строка              | Пользовательский URL-адрес для получения конфигурации модели                     |
 
 ---
 
@@ -588,16 +588,16 @@ opencode можно настроить с помощью переменных с
 
 | Переменная                                      | Тип                 | Описание                                               |
 | ----------------------------------------------- | ------------------- | ------------------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | логическое значение | Включить все экспериментальные функции                 |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | логическое значение | Включить обнаружение значков                           |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | логическое значение | Отключить копирование при выборе в TUI                 |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | число               | Таймаут по умолчанию для команд bash в мс              |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | число               | Максимальное количество токенов вывода для ответов LLM |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | логическое значение | Включить просмотр файлов для всего каталога            |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | логическое значение | Включить форматтер oxfmt                               |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | логическое значение | Включить экспериментальный инструмент LSP              |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | логическое значение | Отключить просмотрщик файлов                           |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | логическое значение | Включить экспериментальные функции Exa                 |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | логическое значение | Включить экспериментальную проверку типа LSP           |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | логическое значение | Включить экспериментальные функции Markdown            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | логическое значение | Включить режим плана                                   |
+| `WEAPON_EXPERIMENTAL`                         | логическое значение | Включить все экспериментальные функции                 |
+| `WEAPON_EXPERIMENTAL_ICON_DISCOVERY`          | логическое значение | Включить обнаружение значков                           |
+| `WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | логическое значение | Отключить копирование при выборе в TUI                 |
+| `WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | число               | Таймаут по умолчанию для команд bash в мс              |
+| `WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | число               | Максимальное количество токенов вывода для ответов LLM |
+| `WEAPON_EXPERIMENTAL_FILEWATCHER`             | логическое значение | Включить просмотр файлов для всего каталога            |
+| `WEAPON_EXPERIMENTAL_OXFMT`                   | логическое значение | Включить форматтер oxfmt                               |
+| `WEAPON_EXPERIMENTAL_LSP_TOOL`                | логическое значение | Включить экспериментальный инструмент LSP              |
+| `WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER`     | логическое значение | Отключить просмотрщик файлов                           |
+| `WEAPON_EXPERIMENTAL_EXA`                     | логическое значение | Включить экспериментальные функции Exa                 |
+| `WEAPON_EXPERIMENTAL_LSP_TY`                  | логическое значение | Включить экспериментальную проверку типа LSP           |
+| `WEAPON_EXPERIMENTAL_MARKDOWN`                | логическое значение | Включить экспериментальные функции Markdown            |
+| `WEAPON_EXPERIMENTAL_PLAN_MODE`               | логическое значение | Включить режим плана                                   |

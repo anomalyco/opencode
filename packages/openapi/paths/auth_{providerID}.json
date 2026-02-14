@@ -1,0 +1,101 @@
+{
+  "put": {
+    "operationId": "auth.set",
+    "summary": "Set auth credentials",
+    "description": "Set authentication credentials",
+    "responses": {
+      "200": {
+        "description": "Successfully set authentication credentials",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "parameters": [
+      {
+        "in": "path",
+        "name": "providerID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "../components/schemas/Auth.json"
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/auth_{providerID}/put.js"
+        }
+      }
+    ]
+  },
+  "delete": {
+    "operationId": "auth.remove",
+    "summary": "Remove auth credentials",
+    "description": "Remove authentication credentials",
+    "responses": {
+      "200": {
+        "description": "Successfully removed authentication credentials",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "parameters": [
+      {
+        "in": "path",
+        "name": "providerID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/auth_{providerID}/delete.js"
+        }
+      }
+    ]
+  }
+}

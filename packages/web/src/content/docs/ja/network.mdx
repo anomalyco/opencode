@@ -3,13 +3,13 @@ title: ネットワーク
 description: プロキシとカスタム証明書を構成します。
 ---
 
-OpenCode は、エンタープライズネットワーク環境の標準プロキシ環境変数とカスタム証明書をサポートしています。
+Weapon は、エンタープライズネットワーク環境の標準プロキシ環境変数とカスタム証明書をサポートしています。
 
 ---
 
 ## プロキシ
 
-OpenCode は標準のプロキシ環境変数を尊重します。
+Weapon は標準のプロキシ環境変数を尊重します。
 
 ```bash
 # HTTPS proxy (recommended)
@@ -46,7 +46,7 @@ NTLM や Kerberos などの高度な認証を必要とするプロキシの場�
 
 ## カスタム証明書
 
-企業が HTTPS 接続にカスタム CA を使用している場合は、それらを信頼するように OpenCode を構成します。
+企業が HTTPS 接続にカスタム CA を使用している場合は、それらを信頼するように Weapon を構成します。
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

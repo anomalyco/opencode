@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Использование TUI opencode.
+description: Использование TUI weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
+weapon предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
 
-Запуск opencode запускает TUI для текущего каталога.
+Запуск weapon запускает TUI для текущего каталога.
 
 ```bash
-opencode
+weapon
 ```
 
 Или вы можете запустить его для определенного рабочего каталога.
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 Как только вы окажетесь в TUI, вы можете запросить его с помощью сообщения.
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Команды
 
-При использовании opencode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
+При использовании weapon TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
+Добавьте провайдера в weapon. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
+Выйдите из weapon. _Псевдонимы_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -355,11 +355,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Настройка
 
-Вы можете настроить поведение TUI через файл конфигурации opencode.
+Вы можете настроить поведение TUI через файл конфигурации weapon.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

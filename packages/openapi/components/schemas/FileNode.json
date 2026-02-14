@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "absolute": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "file",
+        "directory"
+      ]
+    },
+    "ignored": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "path",
+    "absolute",
+    "type",
+    "ignored"
+  ]
+}

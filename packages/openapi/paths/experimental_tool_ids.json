@@ -1,0 +1,46 @@
+{
+  "get": {
+    "operationId": "tool.ids",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "List tool IDs",
+    "description": "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
+    "responses": {
+      "200": {
+        "description": "Tool IDs",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/ToolIDs.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/experimental_tool_ids/get.js"
+        }
+      }
+    ]
+  }
+}

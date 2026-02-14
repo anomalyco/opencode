@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.part.removed"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "messageID": {
+          "type": "string"
+        },
+        "partID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionID",
+        "messageID",
+        "partID"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

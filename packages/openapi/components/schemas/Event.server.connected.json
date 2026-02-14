@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "server.connected"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

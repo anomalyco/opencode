@@ -1,0 +1,36 @@
+{
+  "post": {
+    "operationId": "tui.openModels",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Open models dialog",
+    "description": "Open the model dialog",
+    "responses": {
+      "200": {
+        "description": "Model dialog opened successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_open-models/post.js"
+        }
+      }
+    ]
+  }
+}

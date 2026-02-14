@@ -1,0 +1,71 @@
+{
+  "post": {
+    "operationId": "tui.showToast",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Show TUI toast",
+    "description": "Show a toast notification in the TUI",
+    "responses": {
+      "200": {
+        "description": "Toast notification shown successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "success",
+                  "warning",
+                  "error"
+                ]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "message",
+              "variant"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_show-toast/post.js"
+        }
+      }
+    ]
+  }
+}

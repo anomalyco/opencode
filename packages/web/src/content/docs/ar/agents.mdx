@@ -15,7 +15,7 @@ description: هيّئ الوكلاء المتخصصين واستخدمهم.
 
 ## الأنواع
 
-يوجد نوعان من الوكلاء في OpenCode: وكلاء أساسيون ووكلاء فرعيون.
+يوجد نوعان من الوكلاء في Weapon: وكلاء أساسيون ووكلاء فرعيون.
 
 ---
 
@@ -27,7 +27,7 @@ description: هيّئ الوكلاء المتخصصين واستخدمهم.
 يمكنك استخدام مفتاح **Tab** للتبديل بين الوكلاء الأساسيين أثناء الجلسة.
 :::
 
-يأتي OpenCode مع وكيلين أساسيين مدمجين: **Build** و **Plan**. سنلقي نظرة عليهما أدناه.
+يأتي Weapon مع وكيلين أساسيين مدمجين: **Build** و **Plan**. سنلقي نظرة عليهما أدناه.
 
 ---
 
@@ -35,13 +35,13 @@ description: هيّئ الوكلاء المتخصصين واستخدمهم.
 
 الوكلاء الفرعيون هم مساعدين متخصصين يمكن للوكلاء الأساسيين استدعاؤهم لمهام محددة. يمكنك أيضا استدعاؤهم يدويا عبر **الإشارة بـ @** في رسائلك.
 
-يأتي OpenCode مع وكيلين فرعيين مدمجين: **General** و **Explore**. سنلقي نظرة على ذلك أدناه.
+يأتي Weapon مع وكيلين فرعيين مدمجين: **General** و **Explore**. سنلقي نظرة على ذلك أدناه.
 
 ---
 
 ## المدمجة
 
-يأتي OpenCode مع وكيلين أساسيين مدمجين ووكيلين فرعيين مدمجين.
+يأتي Weapon مع وكيلين أساسيين مدمجين ووكيلين فرعيين مدمجين.
 
 ---
 
@@ -135,11 +135,11 @@ _الوضع_: `primary`
 
 ### JSON
 
-هيّئ الوكلاء في ملف إعدادات `opencode.json`:
+هيّئ الوكلاء في ملف إعدادات `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -180,10 +180,10 @@ _الوضع_: `primary`
 
 يمكنك أيضا تعريف الوكلاء باستخدام ملفات Markdown. ضعها في:
 
-- عام: `~/.config/opencode/agents/`
-- لكل مشروع: `.opencode/agents/`
+- عام: `~/.config/weapon/agents/`
+- لكل مشروع: `.weapon/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -219,7 +219,7 @@ Provide constructive feedback without making direct changes.
 
 استخدم خيار `description` لتقديم وصف موجز لما يفعله الوكيل ومتى ينبغي استخدامه.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -239,7 +239,7 @@ Provide constructive feedback without making direct changes.
 
 القيم الأقل تجعل الردود أكثر تركيزا وحتمية، بينما تزيد القيم الأعلى من الإبداع والتنوع.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "plan": {
@@ -258,7 +258,7 @@ Provide constructive feedback without making direct changes.
 - **0.3-0.5**: ردود متوازنة مع قدر من الإبداع، مناسبة لمهام التطوير العامة
 - **0.6-1.0**: ردود أكثر إبداعا وتنوعا، مفيدة للعصف الذهني والاستكشاف
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "analyze": {
@@ -276,7 +276,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-إذا لم يتم تحديد temperature، يستخدم OpenCode القيم الافتراضية الخاصة بالنموذج؛ عادة 0 لمعظم النماذج و 0.55 لنماذج Qwen.
+إذا لم يتم تحديد temperature، يستخدم Weapon القيم الافتراضية الخاصة بالنموذج؛ عادة 0 لمعظم النماذج و 0.55 لنماذج Qwen.
 
 ---
 
@@ -286,7 +286,7 @@ Provide constructive feedback without making direct changes.
 
 إذا لم يتم ضبط هذا الخيار، سيستمر الوكيل بالتكرار حتى يقرر النموذج التوقف أو يقاطع المستخدم الجلسة.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "quick-thinker": {
@@ -310,7 +310,7 @@ Provide constructive feedback without making direct changes.
 
 اضبطه على `true` لتعطيل الوكيل.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -326,7 +326,7 @@ Provide constructive feedback without making direct changes.
 
 حدد ملف موجّه نظامي مخصص لهذا الوكيل عبر إعداد `prompt`. يجب أن يحتوي ملف الموجّه على تعليمات خاصة بهدف الوكيل.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -336,7 +336,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-هذا المسار نسبي لمكان وجود ملف الإعدادات. لذلك يعمل هذا لكل من إعدادات OpenCode العامة وإعدادات المشروع.
+هذا المسار نسبي لمكان وجود ملف الإعدادات. لذلك يعمل هذا لكل من إعدادات Weapon العامة وإعدادات المشروع.
 
 ---
 
@@ -348,7 +348,7 @@ Provide constructive feedback without making direct changes.
 إذا لم تحدد نموذجا، يستخدم الوكلاء الأساسيون [النموذج المُهيأ عالميا](/docs/config#models)، بينما يستخدم الوكلاء الفرعيون نموذج الوكيل الأساسي الذي استدعاهم.
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "plan": {
@@ -358,7 +358,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-يستخدم معرّف النموذج في إعدادات OpenCode الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](/docs/zen)، فستستخدم `opencode/gpt-5.1-codex` لـ GPT 5.1 Codex.
+يستخدم معرّف النموذج في إعدادات Weapon الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [Weapon Zen](/docs/zen)، فستستخدم `weapon/gpt-5.1-codex` لـ GPT 5.1 Codex.
 
 ---
 
@@ -366,9 +366,9 @@ Provide constructive feedback without making direct changes.
 
 تحكم في الأدوات المتاحة لهذا الوكيل عبر إعداد `tools`. يمكنك تفعيل أو تعطيل أدوات محددة بضبطها على `true` أو `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="weapon.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -390,9 +390,9 @@ Provide constructive feedback without making direct changes.
 
 يمكنك أيضا استخدام المحارف البديلة (wildcards) للتحكم في عدة أدوات دفعة واحدة. على سبيل المثال، لتعطيل جميع الأدوات القادمة من خادم MCP:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -417,9 +417,9 @@ Provide constructive feedback without making direct changes.
 - `"allow"` — السماح بكل العمليات بدون موافقة
 - `"deny"` — تعطيل الأداة
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -428,9 +428,9 @@ Provide constructive feedback without making direct changes.
 
 يمكنك تجاوز هذه الأذونات لكل وكيل.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="weapon.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -446,7 +446,7 @@ Provide constructive feedback without making direct changes.
 
 يمكنك أيضا ضبط الأذونات في وكلاء Markdown.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -465,9 +465,9 @@ Only analyze code and suggest changes.
 
 يمكنك ضبط الأذونات لأوامر bash محددة.
 
-```json title="opencode.json" {7}
+```json title="weapon.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -483,9 +483,9 @@ Only analyze code and suggest changes.
 
 يمكن لهذا أن يقبل نمط glob.
 
-```json title="opencode.json" {7}
+```json title="weapon.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -501,9 +501,9 @@ Only analyze code and suggest changes.
 ويمكنك أيضا استخدام المحرف البديل `*` لإدارة الأذونات لكل الأوامر.
 وبما أن آخر قاعدة مطابقة لها الأولوية، ضع قاعدة `*` أولا ثم القواعد الأكثر تخصيصا بعدها.
 
-```json title="opencode.json" {8}
+```json title="weapon.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -525,7 +525,7 @@ Only analyze code and suggest changes.
 
 تحكم في وضع الوكيل عبر إعداد `mode`. يُستخدم خيار `mode` لتحديد كيفية استخدام الوكيل.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -543,7 +543,7 @@ Only analyze code and suggest changes.
 
 أخفِ وكيلا فرعيا من قائمة الإكمال التلقائي لـ `@` عبر `hidden: true`. يفيد ذلك للوكلاء الفرعيين الداخليين الذين ينبغي استدعاؤهم برمجيا فقط بواسطة وكلاء آخرين عبر أداة Task.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "internal-helper": {
@@ -566,7 +566,7 @@ Only analyze code and suggest changes.
 
 تحكم في أي الوكلاء الفرعيين يمكن لوكيل استدعاؤهم عبر أداة Task باستخدام `permission.task`. يستخدم أنماط glob لمطابقة مرنة.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "orchestrator": {
@@ -601,7 +601,7 @@ Only analyze code and suggest changes.
 
 استخدم لونا سداسيا صالحا (مثل `#FF5733`) أو لون سمة: `primary` و `secondary` و `accent` و `success` و `warning` و `error` و `info`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "creative": {
@@ -620,7 +620,7 @@ Only analyze code and suggest changes.
 
 تحكم في تنوع الردود عبر خيار `top_p`. بديل عن temperature للتحكم بالعشوائية.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "brainstorm": {
@@ -640,7 +640,7 @@ Only analyze code and suggest changes.
 
 على سبيل المثال، مع نماذج الاستدلال من OpenAI يمكنك التحكم في مجهود الاستدلال:
 
-```json title="opencode.json" {6,7}
+```json title="weapon.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -656,7 +656,7 @@ Only analyze code and suggest changes.
 هذه الخيارات الإضافية تعتمد على النموذج والمزود. راجع توثيق مزودك لمعرفة المعاملات المتاحة.
 
 :::tip
-شغّل `opencode models` لعرض قائمة بالنماذج المتاحة.
+شغّل `weapon models` لعرض قائمة بالنماذج المتاحة.
 :::
 
 ---
@@ -666,7 +666,7 @@ Only analyze code and suggest changes.
 يمكنك إنشاء وكلاء جدد باستخدام الأمر التالي:
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 سيقوم هذا الأمر التفاعلي بما يلي:
@@ -696,14 +696,14 @@ opencode agent create
 فيما يلي بعض أمثلة الوكلاء التي قد تجدها مفيدة.
 
 :::tip
-هل لديك وكيل تود مشاركته؟ [قدّم PR](https://github.com/anomalyco/opencode).
+هل لديك وكيل تود مشاركته؟ [قدّم PR](https://github.com/anomalyco/weapon).
 :::
 
 ---
 
 ### وكيل التوثيق
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/weapon/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -725,7 +725,7 @@ Focus on:
 
 ### مدقق أمني
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/weapon/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

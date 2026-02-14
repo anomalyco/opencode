@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "question.replied"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "requestID": {
+          "type": "string"
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "$ref": "./QuestionAnswer.json"
+          }
+        }
+      },
+      "required": [
+        "sessionID",
+        "requestID",
+        "answers"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

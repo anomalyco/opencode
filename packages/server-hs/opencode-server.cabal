@@ -1,0 +1,50 @@
+cabal-version: 3.0
+name:          opencode-server
+version:       0.1.0.0
+synopsis:      OpenCode Haskell Server
+license:       MIT
+build-type:    Simple
+
+executable opencode-server
+  main-is:          Main.hs
+  other-modules:
+    Api
+    Handlers
+    State
+    Bus.Bus
+    Bus.Event
+    Storage.Storage
+    Session.Types
+    Session.Session
+    Message.Types
+    Config.Types
+    Config.Config
+    Provider.Types
+    Provider.Provider
+    Agent.Types
+    Agent.Agent
+  hs-source-dirs:   src
+  default-language: GHC2021
+  ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    base >= 4.17 && < 5,
+    aeson >= 2.0,
+    servant >= 0.20,
+    servant-server >= 0.20,
+    warp >= 3.3,
+    wai >= 3.2,
+    http-types >= 0.12,
+    text >= 2.0,
+    bytestring >= 0.11,
+    containers >= 0.6,
+    stm >= 2.5,
+    directory >= 1.3,
+    filepath >= 1.4,
+    time >= 1.12,
+    random >= 1.2
+  default-extensions:
+    DataKinds
+    TypeOperators
+    DeriveGeneric
+    OverloadedStrings
+    LambdaCase

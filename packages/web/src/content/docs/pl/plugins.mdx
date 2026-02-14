@@ -1,9 +1,9 @@
 ---
 title: Wtyczki
-description: Napisz własną wtyczkę, aby rozszerzyć opencode.
+description: Napisz własną wtyczkę, aby rozszerzyć weapon.
 ---
 
-Wtyczki umożliwiające wyłączenie opencode poprzez podjęcie różnych zdarzeń i zachowanie. Można utworzyć wtyczkę, aby sprawdzić nowe funkcje, integrować się z usługami lub sprawdzaniem zachowania opencode.
+Wtyczki umożliwiające wyłączenie weapon poprzez podjęcie różnych zdarzeń i zachowanie. Można utworzyć wtyczkę, aby sprawdzić nowe funkcje, integrować się z usługami lub sprawdzaniem zachowania weapon.
 
 Aby znaleźć się z przykładami, przejrzyj [wtyczki](/docs/ecosystem#plugins) utworzone przez społeczność.
 
@@ -19,8 +19,8 @@ Istnieją dwa sposoby ładowania wtyczek.
 
 Miejsce plików JavaScript lub TypeScript w katalogu wtyczki.
 
-- `.opencode/plugins/` - Wtyczki na poziomie projektu
-- `~/.config/opencode/plugins/` - Wtyczki globalne
+- `.weapon/plugins/` - Wtyczki na poziomie projektu
+- `~/.config/weapon/plugins/` - Wtyczki globalne
 
 Pliki w tych katalogach są automatycznie ładowane podczas uruchamiania.
 
@@ -30,10 +30,10 @@ Pliki w tych katalogach są automatycznie ładowane podczas uruchamiania.
 
 szczegółowy pakiet npm w pliku konfiguracyjnym.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "weapon-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ Przeglądaj dostępną wtyczkę w [ekosystemie](/docs/ecosystem#plugins).
 
 ### Sposób instalacji wtyczek
 
-**wtyczki npm** są instalowane automatycznie przy użyciu Bun podczas uruchamiania. Pakiety i ich zależności są buforowane w `~/.cache/opencode/node_modules/`.
+**wtyczki npm** są instalowane automatycznie przy użyciu Bun podczas uruchamiania. Pakiety i ich zależności są buforowane w `~/.cache/weapon/node_modules/`.
 
 **Wtyczki lokalne** są ładowane bezpośrednio z katalogu wtyczek. Aby uzyskać dostęp do zewnętrznych pakietów, musisz zainstalować `package.json` w swoim katalogu konfiguracyjnym (zobacz [Zależności](#dependencies)) lub opublikować wtyczkę w npm i [dodaj ją do swojej konfiguracji](/docs/config#plugins).
 
@@ -55,10 +55,10 @@ Przeglądaj dostępną wtyczkę w [ekosystemie](/docs/ecosystem#plugins).
 
 Wtyczki są ładowane ze wszystkich źródeł, a wszystkie hooki napisane po kolei. Kolejność ładowania do:
 
-1. Konfiguracja globalna (`~/.config/opencode/opencode.json`)
-2. Konfiguracja projektu (`opencode.json`)
-3. Globalny katalog wtyczek (`~/.config/opencode/plugins/`)
-4. Katalog wtyczek projektu (`.opencode/plugins/`)
+1. Konfiguracja globalna (`~/.config/weapon/weapon.json`)
+2. Konfiguracja projektu (`weapon.json`)
+3. Globalny katalog wtyczek (`~/.config/weapon/plugins/`)
+4. Katalog wtyczek projektu (`.weapon/plugins/`)
 
 Zduplikowane pakiety npm o tej samej nazwie i wersji są ładowane raz. Równie ważny jest dostęp lokalny i zewnętrzny npm o dodatkowych nazwach, które są zewnętrzne.
 
@@ -75,7 +75,7 @@ funkcje. dostępna funkcja korzystania z obiektu kontekstu i głównego obiektu 
 
 Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych pakietów npm. Dodaj `package.json` do swojego katalogu konfiguracyjnego z zależnościami.
 
-```json title=".opencode/package.json"
+```json title=".weapon/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych paki
 }
 ```
 
-opencode uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
+weapon uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Podstawowa struktura
 
-```js title=".opencode/plugins/example.js"
+```js title=".weapon/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ Funkcja dostępu do:
 - `project`: Aktualne informacje o projekcie.
 - `directory`: Bieżący katalog roboczy.
 - `worktree`: Ścieżka eksploatacyjna Git.
-- `client`: Klient SDK z opencode do sztucznej inteligencji.
+- `client`: Klient SDK z weapon do sztucznej inteligencji.
 - `$`: [API obudowy](https://bun.com/docs/runtime/shell) Buna do wykonywania oprogramowania.
 
 ---
@@ -128,7 +128,7 @@ Funkcja dostępu do:
 W przypadku wtyczek TypeScript możesz importować typy z pakietu wtyczek:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ Wtyczki mogą subskrybować zdarzenia, jak zastosować poniżej sekcji Przykład
 
 ## Przykłady
 
-Oto kilka dostępnych wtyczek, które można udostępnić do opencode.
+Oto kilka dostępnych wtyczek, które można udostępnić do weapon.
 
 ---
 
@@ -219,13 +219,13 @@ Oto kilka dostępnych wtyczek, które można udostępnić do opencode.
 
 Wysyłaj powiadomienia, gdy wystąpią określone zdarzenia:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".weapon/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "weapon"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Używamy `osascript` do uruchamiania AppleScript na macOS. Tutaj możesz przejść do wysyłania pozostałości.
 
 :::note
-Jeśli korzystasz z aplikacji komputerowej opencode, może ona automatycznie wysłać wiadomość systemową, gdy odpowiedź jest gotowa lub gdy wystąpią błędy sesji.
+Jeśli korzystasz z aplikacji komputerowej weapon, może ona automatycznie wysłać wiadomość systemową, gdy odpowiedź jest gotowa lub gdy wystąpią błędy sesji.
 :::
 
 ---
 
 ### ochrona .env
 
-Zablokuj opencode czytanie plików `.env`:
+Zablokuj weapon czytanie plików `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".weapon/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Wstrzyknij zmienne konsekwencje dla wszystkich wykonań (narzędzia AI i terminale użytkownika):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".weapon/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Niestandardowe narzędzia
 
-Wtyczki mogą również dodawać niestandardowe narzędzia do opencode:
+Wtyczki mogą również dodawać niestandardowe narzędzia do weapon:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@weapon-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,7 +300,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Pomocnik `tool` tworzy narzędzie użytkowe, które może wywołać kod opencode. Pobierane schematu Zoda i narzędzie wyszukiwania za pomocą:
+Pomocnik `tool` tworzy narzędzie użytkowe, które może wywołać kod weapon. Pobierane schematu Zoda i narzędzie wyszukiwania za pomocą:
 
 - `description`: Co robi do narzędzia
 - `args`: Schemat Zoda dla narzędzi argumentów
@@ -314,7 +314,7 @@ Twoje narzędzie będzie dostępne dla otwartego kodu wraz z narzędziami użytk
 
 użyj `client.app.log()` zamiast `console.log` do rejestracji strukturalnego:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Poziomy: `debug`, `info`, `warn`, `error`. Aby uzyskać szczegółowe informacje, zobacz [dokumentację pakietu SDK](https://opencode.ai/docs/sdk).
+Poziomy: `debug`, `info`, `warn`, `error`. Aby uzyskać szczegółowe informacje, zobacz [dokumentację pakietu SDK](https://weapon.ai/docs/sdk).
 
 ---
 
@@ -335,8 +335,8 @@ Poziomy: `debug`, `info`, `warn`, `error`. Aby uzyskać szczegółowe informacje
 
 Dostosuj kontekst dołączony podczas kompaktowania sesji:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Hak `experimental.session.compacting` jest uruchamiany, zanim LLM wygeneruje pod
 
 Można także umieścić kompletny monit o zagęszczenie, ustawiając `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

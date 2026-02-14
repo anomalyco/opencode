@@ -3,11 +3,11 @@ title: Tastebindinger
 description: Tilpas dine nøglebindinger.
 ---
 
-OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem OpenCode-konfigurationen.
+Weapon har en liste over nøglebindinger, som du kan tilpasse gennem Weapon-konfigurationen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem OpenCode-
 
 ## Ledertast
 
-OpenCode bruger en `leader` nøgle til de fleste smagsbindinger. Dette undgår konflikter i din terminal.
+Weapon bruger en `leader` nøgle til de fleste smagsbindinger. Dette undgår konflikter i din terminal.
 
 Som standard er `ctrl+x` ledertasten, og de fleste handlinger kræver, at du først trykker på ledertasten og derefter genvejen. For eksempel, for at starte en ny session, skal du først trykke på `ctrl+x` og derefter trykke på `n`.
 
@@ -119,9 +119,9 @@ Du behøver ikke bruge en ledernøgle til dine nøglebindinger, men vi anbefaler
 
 Du kan deaktivere en nøglebinding ved at tilføje nøglen til din konfiguration med værdien "ingen".
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Du kan deaktivere en nøglebinding ved at tilføje nøglen til din konfiguration
 
 ## Genveje til skrivebordsprompt
 
-OpenCode desktop app prompt input understøtter almindelige Readline/Emacs-style genveje til redigering af tekst. Disse er indbyggede og i øjeblikket ikke konfigurerede via `opencode.json`.
+Weapon desktop app prompt input understøtter almindelige Readline/Emacs-style genveje til redigering af tekst. Disse er indbyggede og i øjeblikket ikke konfigurerede via `weapon.json`.
 
 | Genvej   | Håndtering                                  |
 | -------- | ------------------------------------------- |

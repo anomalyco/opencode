@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "./Event.json"
+    }
+  },
+  "required": [
+    "directory",
+    "payload"
+  ]
+}

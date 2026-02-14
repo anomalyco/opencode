@@ -1,19 +1,19 @@
 ---
 title: Zen
-description: Lista selecionada de modelos fornecidos pelo opencode.
+description: Lista selecionada de modelos fornecidos pelo weapon.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-O OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equipe do opencode.
+O Weapon Zen é uma lista de modelos testados e verificados fornecidos pela equipe do weapon.
 
 :::note
-O OpenCode Zen está atualmente em beta.
+O Weapon Zen está atualmente em beta.
 :::
 
-O Zen funciona como qualquer outro provedor no opencode. Você faz login no OpenCode Zen e obtém sua chave de API. É **completamente opcional** e você não precisa usá-lo para utilizar o opencode.
+O Zen funciona como qualquer outro provedor no weapon. Você faz login no Weapon Zen e obtém sua chave de API. É **completamente opcional** e você não precisa usá-lo para utilizar o weapon.
 
 ---
 
@@ -22,7 +22,7 @@ O Zen funciona como qualquer outro provedor no opencode. Você faz login no Open
 Existe um grande número de modelos disponíveis, mas apenas alguns desses modelos funcionam bem como agentes de codificação. Além disso, a maioria dos provedores é configurada de maneira muito diferente; portanto, você obtém desempenhos e qualidades muito diferentes.
 
 :::tip
-Testamos um grupo selecionado de modelos e provedores que funcionam bem com o opencode.
+Testamos um grupo selecionado de modelos e provedores que funcionam bem com o weapon.
 :::
 
 Portanto, se você estiver usando um modelo através de algo como OpenRouter, você nunca pode ter certeza se está obtendo a melhor versão do modelo que deseja.
@@ -33,16 +33,16 @@ Para resolver isso, fizemos algumas coisas:
 2. Trabalhamos com alguns provedores para garantir que esses modelos estivessem sendo servidos corretamente.
 3. Finalmente, realizamos benchmarks da combinação modelo/provedor e elaboramos uma lista que nos sentimos bem em recomendar.
 
-O OpenCode Zen é um gateway de IA que lhe dá acesso a esses modelos.
+O Weapon Zen é um gateway de IA que lhe dá acesso a esses modelos.
 
 ---
 
 ## Como funciona
 
-O OpenCode Zen funciona como qualquer outro provedor no opencode.
+O Weapon Zen funciona como qualquer outro provedor no weapon.
 
-1. Você faz login no **<a href={console}>OpenCode Zen</a>**, adiciona seus dados de cobrança e copia sua chave de API.
-2. Você executa o comando `/connect` no TUI, seleciona OpenCode Zen e cola sua chave de API.
+1. Você faz login no **<a href={console}>Weapon Zen</a>**, adiciona seus dados de cobrança e copia sua chave de API.
+2. Você executa o comando `/connect` no TUI, seleciona Weapon Zen e cola sua chave de API.
 3. Execute `/models` no TUI para ver a lista de modelos que recomendamos.
 
 Você é cobrado por solicitação e pode adicionar créditos à sua conta.
@@ -55,37 +55,37 @@ Você também pode acessar nossos modelos através dos seguintes endpoints da AP
 
 | Modelo             | ID do Modelo       | Endpoint                                           | Pacote AI SDK               |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
-| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GPT 5.2            | gpt-5.2            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://weapon.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://weapon.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free     | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-O [id do modelo](/docs/config/#models) na sua configuração do opencode usa o formato `opencode/<model-id>`. Por exemplo, para GPT 5.2 Codex, você usaria `opencode/gpt-5.2-codex` na sua configuração.
+O [id do modelo](/docs/config/#models) na sua configuração do weapon usa o formato `weapon/<model-id>`. Por exemplo, para GPT 5.2 Codex, você usaria `weapon/gpt-5.2-codex` na sua configuração.
 
 ---
 
@@ -94,7 +94,7 @@ O [id do modelo](/docs/config/#models) na sua configuração do opencode usa o f
 Você pode buscar a lista completa de modelos disponíveis e seus metadados em:
 
 ```
-https://opencode.ai/zen/v1/models
+https://weapon.ai/zen/v1/models
 ```
 
 ---
@@ -147,10 +147,10 @@ As taxas de cartão de crédito são repassadas ao custo (4,4% + $0,30 por trans
 
 Os modelos gratuitos:
 
-- GLM 4.7 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- Kimi K2.5 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- MiniMax M2.1 Free está disponível no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
-- Big Pickle é um modelo oculto que está gratuito no opencode por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- GLM 4.7 Free está disponível no weapon por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- Kimi K2.5 Free está disponível no weapon por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- MiniMax M2.1 Free está disponível no weapon por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
+- Big Pickle é um modelo oculto que está gratuito no weapon por tempo limitado. A equipe está usando esse tempo para coletar feedback e melhorar o modelo.
 
 <a href={email}>Entre em contato conosco</a> se você tiver alguma dúvida.
 
@@ -228,9 +228,9 @@ Por exemplo, sua organização pode já ter uma chave para OpenAI ou Anthropic e
 
 ## Objetivos
 
-Criamos o OpenCode Zen para:
+Criamos o Weapon Zen para:
 
 1. **Benchmark** os melhores modelos/provedores para agentes de codificação.
 2. Ter acesso às opções de **mais alta qualidade** e não degradar o desempenho ou redirecionar para provedores mais baratos.
 3. Repassar quaisquer **reduções de preço** vendendo ao custo; assim, a única margem é para cobrir nossas taxas de processamento.
-4. Não ter **vinculação** permitindo que você o use com qualquer outro agente de codificação. E sempre permitir que você use qualquer outro provedor com o opencode também.
+4. Não ter **vinculação** permitindo que você o use com qualquer outro agente de codificação. E sempre permitir que você use qualquer outro provedor com o weapon também.

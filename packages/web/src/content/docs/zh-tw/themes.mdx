@@ -3,9 +3,9 @@ title: 主題
 description: 選擇內建主題或定義您自己的主題。
 ---
 
-使用 opencode，您可以從多個內建主題之一中進行選擇，使用適合您的終端機主題的主題，或者定義您自己的自定義主題。
+使用 weapon，您可以從多個內建主題之一中進行選擇，使用適合您的終端機主題的主題，或者定義您自己的自定義主題。
 
-預設情況下，opencode 使用我們自己的 `opencode` 主題。
+預設情況下，weapon 使用我們自己的 `weapon` 主題。
 
 ---
 
@@ -23,7 +23,7 @@ description: 選擇內建主題或定義您自己的主題。
 
 ## 內建主題
 
-opencode 附帶了幾個內建主題。
+weapon 附帶了幾個內建主題。
 
 | 名稱                   | 描述                                                               |
 | ---------------------- | ------------------------------------------------------------------ |
@@ -53,7 +53,7 @@ opencode 附帶了幾個內建主題。
 
 系統主題適合以下使用者：
 
-- 希望 opencode 與其終端機的外觀相匹配
+- 希望 weapon 與其終端機的外觀相匹配
 - 使用自定義終端機配色方案
 - 希望所有終端機應用程式具有一致的外觀
 
@@ -63,9 +63,9 @@ opencode 附帶了幾個內建主題。
 
 您可以透過使用 `/theme` 指令調出主題選擇來選擇主題。或者您可以在 [設定](/docs/config) 中指定它。
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ opencode 附帶了幾個內建主題。
 
 ## 自定義主題
 
-opencode 支援靈活的基於 JSON 的主題系統，允許使用者輕鬆建立和自定義主題。
+weapon 支援靈活的基於 JSON 的主題系統，允許使用者輕鬆建立和自定義主題。
 
 ---
 
@@ -83,9 +83,9 @@ opencode 支援靈活的基於 JSON 的主題系統，允許使用者輕鬆建�
 主題按以下順序從多個目錄載入，其中後面的目錄覆寫前面的目錄：
 
 1. **內建主題** - 這些主題嵌入在二進位檔案中
-2. **使用者設定目錄** - 在 `~/.config/opencode/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json` 中定義
-3. **專案根目錄** - 定義在 `<project-root>/.opencode/themes/*.json`
-4. **當前工作目錄** - 在 `./.opencode/themes/*.json` 中定義
+2. **使用者設定目錄** - 在 `~/.config/weapon/themes/*.json` 或 `$XDG_CONFIG_HOME/weapon/themes/*.json` 中定義
+3. **專案根目錄** - 定義在 `<project-root>/.weapon/themes/*.json`
+4. **當前工作目錄** - 在 `./.weapon/themes/*.json` 中定義
 
 如果多個目錄包含同名主題，則將使用優先順序較高的目錄中的主題。
 
@@ -98,15 +98,15 @@ opencode 支援靈活的基於 JSON 的主題系統，允許使用者輕鬆建�
 對於使用者範圍的主題：
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/weapon/themes
+vim ~/.config/weapon/themes/my-theme.json
 ```
 
 以及針對特定專案的主題。
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .weapon/themes
+vim .weapon/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://weapon.ai/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "startCommand": {
+      "description": "Additional startup script to run after the project's start command",
+      "type": "string"
+    }
+  }
+}

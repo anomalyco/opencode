@@ -1,0 +1,36 @@
+{
+  "get": {
+    "operationId": "vcs.get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get VCS info",
+    "description": "Retrieve version control system (VCS) information for the current project, such as git branch.",
+    "responses": {
+      "200": {
+        "description": "VCS info",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/VcsInfo.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/vcs/get.js"
+        }
+      }
+    ]
+  }
+}

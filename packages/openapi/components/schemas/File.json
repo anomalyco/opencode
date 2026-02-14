@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "added": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "removed": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "added",
+        "deleted",
+        "modified"
+      ]
+    }
+  },
+  "required": [
+    "path",
+    "added",
+    "removed",
+    "status"
+  ]
+}

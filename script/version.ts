@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@weapon-ai/script"
 import { $ } from "bun"
 import { buildNotes, getLatestRelease } from "./changelog"
 
@@ -11,7 +11,7 @@ if (!Script.preview) {
   const notes = await buildNotes(previous, "HEAD")
   const body = notes.join("\n") || "No notable changes"
   const dir = process.env.RUNNER_TEMP ?? "/tmp"
-  const file = `${dir}/opencode-release-notes.txt`
+  const file = `${dir}/weapon-release-notes.txt`
   await Bun.write(file, body)
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes-file ${file}`
   const release = await $`gh release view v${Script.version} --json tagName,databaseId`.json()

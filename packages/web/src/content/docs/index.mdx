@@ -1,15 +1,15 @@
 ---
 title: Intro
-description: Get started with OpenCode.
+description: Get started with Weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) is an open source AI coding agent. It's available as a terminal-based interface, desktop app, or IDE extension.
+[**Weapon**](/) is an open source AI coding agent. It's available as a terminal-based interface, desktop app, or IDE extension.
 
-![OpenCode TUI with the opencode theme](../../assets/lander/screenshot.png)
+![Weapon TUI with the weapon theme](../../assets/lander/screenshot.png)
 
 Let's get started.
 
@@ -17,7 +17,7 @@ Let's get started.
 
 #### Prerequisites
 
-To use OpenCode in your terminal, you'll need:
+To use Weapon in your terminal, you'll need:
 
 1. A modern terminal emulator like:
    - [WezTerm](https://wezterm.org), cross-platform
@@ -31,10 +31,10 @@ To use OpenCode in your terminal, you'll need:
 
 ## Install
 
-The easiest way to install OpenCode is through the install script.
+The easiest way to install Weapon is through the install script.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://weapon.ai/install | bash
 ```
 
 You can also install it with the following commands:
@@ -45,28 +45,28 @@ You can also install it with the following commands:
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g weapon-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add weapon-ai
         ```
 
       </TabItem>
@@ -76,68 +76,68 @@ You can also install it with the following commands:
 - **Using Homebrew on macOS and Linux**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install anomalyco/tap/weapon
   ```
 
-  > We recommend using the OpenCode tap for the most up to date releases. The official `brew install opencode` formula is maintained by the Homebrew team and is updated less frequently.
+  > We recommend using the Weapon tap for the most up to date releases. The official `brew install weapon` formula is maintained by the Homebrew team and is updated less frequently.
 
 - **Using Paru on Arch Linux**
 
   ```bash
-  paru -S opencode-bin
+  paru -S weapon-bin
   ```
 
 #### Windows
 
 :::tip[Recommended: Use WSL]
-For the best experience on Windows, we recommend using [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). It provides better performance and full compatibility with OpenCode's features.
+For the best experience on Windows, we recommend using [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). It provides better performance and full compatibility with Weapon's features.
 :::
 
 - **Using Chocolatey**
 
   ```bash
-  choco install opencode
+  choco install weapon
   ```
 
 - **Using Scoop**
 
   ```bash
-  scoop install opencode
+  scoop install weapon
   ```
 
 - **Using NPM**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g weapon-ai
   ```
 
 - **Using Mise**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:anomalyco/weapon
   ```
 
 - **Using Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/anomalyco/weapon
   ```
 
-Support for installing OpenCode on Windows using Bun is currently in progress.
+Support for installing Weapon on Windows using Bun is currently in progress.
 
-You can also grab the binary from the [Releases](https://github.com/anomalyco/opencode/releases).
+You can also grab the binary from the [Releases](https://github.com/anomalyco/weapon/releases).
 
 ---
 
 ## Configure
 
-With OpenCode you can use any LLM provider by configuring their API keys.
+With Weapon you can use any LLM provider by configuring their API keys.
 
-If you are new to using LLM providers, we recommend using [OpenCode Zen](/docs/zen).
-It's a curated list of models that have been tested and verified by the OpenCode
+If you are new to using LLM providers, we recommend using [Weapon Zen](/docs/zen).
+It's a curated list of models that have been tested and verified by the Weapon
 team.
 
-1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run the `/connect` command in the TUI, select weapon, and head to [weapon.ai/auth](https://weapon.ai/auth).
 
    ```txt
    /connect
@@ -167,33 +167,33 @@ you want to work on.
 cd /path/to/project
 ```
 
-And run OpenCode.
+And run Weapon.
 
 ```bash
-opencode
+weapon
 ```
 
-Next, initialize OpenCode for the project by running the following command.
+Next, initialize Weapon for the project by running the following command.
 
 ```bash frame="none"
 /init
 ```
 
-This will get OpenCode to analyze your project and create an `AGENTS.md` file in
+This will get Weapon to analyze your project and create an `AGENTS.md` file in
 the project root.
 
 :::tip
 You should commit your project's `AGENTS.md` file to Git.
 :::
 
-This helps OpenCode understand the project structure and the coding patterns
+This helps Weapon understand the project structure and the coding patterns
 used.
 
 ---
 
 ## Usage
 
-You are now ready to use OpenCode to work on your project. Feel free to ask it
+You are now ready to use Weapon to work on your project. Feel free to ask it
 anything!
 
 If you are new to using an AI coding agent, here are some examples that might
@@ -203,7 +203,7 @@ help.
 
 ### Ask questions
 
-You can ask OpenCode to explain the codebase to you.
+You can ask Weapon to explain the codebase to you.
 
 :::tip
 Use the `@` key to fuzzy search for files in the project.
@@ -219,11 +219,11 @@ This is helpful if there's a part of the codebase that you didn't work on.
 
 ### Add features
 
-You can ask OpenCode to add new features to your project. Though we first recommend asking it to create a plan.
+You can ask Weapon to add new features to your project. Though we first recommend asking it to create a plan.
 
 1. **Create a plan**
 
-   OpenCode has a _Plan mode_ that disables its ability to make changes and
+   Weapon has a _Plan mode_ that disables its ability to make changes and
    instead suggest _how_ it'll implement the feature.
 
    Switch to it using the **Tab** key. You'll see an indicator for this in the lower right corner.
@@ -240,11 +240,11 @@ You can ask OpenCode to add new features to your project. Though we first recomm
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   You want to give OpenCode enough details to understand what you want. It helps
+   You want to give Weapon enough details to understand what you want. It helps
    to talk to it like you are talking to a junior developer on your team.
 
    :::tip
-   Give OpenCode plenty of context and examples to help it understand what you
+   Give Weapon plenty of context and examples to help it understand what you
    want.
    :::
 
@@ -261,7 +261,7 @@ You can ask OpenCode to add new features to your project. Though we first recomm
    Drag and drop images into the terminal to add them to the prompt.
    :::
 
-   OpenCode can scan any images you give it and add them to the prompt. You can
+   Weapon can scan any images you give it and add them to the prompt. You can
    do this by dragging and dropping an image into the terminal.
 
 3. **Build the feature**
@@ -283,7 +283,7 @@ You can ask OpenCode to add new features to your project. Though we first recomm
 
 ### Make changes
 
-For more straightforward changes, you can ask OpenCode to directly build it
+For more straightforward changes, you can ask Weapon to directly build it
 without having to review the plan first.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -292,14 +292,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-You want to make sure you provide a good amount of detail so OpenCode makes the right
+You want to make sure you provide a good amount of detail so Weapon makes the right
 changes.
 
 ---
 
 ### Undo changes
 
-Let's say you ask OpenCode to make some changes.
+Let's say you ask Weapon to make some changes.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -312,14 +312,14 @@ using the `/undo` command.
 /undo
 ```
 
-OpenCode will now revert the changes you made and show your original message
+Weapon will now revert the changes you made and show your original message
 again.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-From here you can tweak the prompt and ask OpenCode to try again.
+From here you can tweak the prompt and ask Weapon to try again.
 
 :::tip
 You can run `/undo` multiple times to undo multiple changes.
@@ -335,7 +335,7 @@ Or you **can redo** the changes using the `/redo` command.
 
 ## Share
 
-The conversations that you have with OpenCode can be [shared with your
+The conversations that you have with Weapon can be [shared with your
 team](/docs/share).
 
 ```bash frame="none"
@@ -348,12 +348,12 @@ This will create a link to the current conversation and copy it to your clipboar
 Conversations are not shared by default.
 :::
 
-Here's an [example conversation](https://opencode.ai/s/4XP1fce5) with OpenCode.
+Here's an [example conversation](https://weapon.ai/s/4XP1fce5) with Weapon.
 
 ---
 
 ## Customize
 
-And that's it! You are now a pro at using OpenCode.
+And that's it! You are now a pro at using Weapon.
 
-To make it your own, we recommend [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands), or playing around with the [OpenCode config](/docs/config).
+To make it your own, we recommend [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands), or playing around with the [Weapon config](/docs/config).

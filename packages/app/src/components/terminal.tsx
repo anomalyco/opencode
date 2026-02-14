@@ -6,9 +6,9 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@weapon-ai/ui/theme"
 import { useLanguage } from "@/context/language"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@weapon-ai/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -267,9 +267,9 @@ export const Terminal = (props: TerminalProps) => {
       url.searchParams.set("directory", sdk.directory)
       url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      if (window.__OPENCODE__?.serverPassword) {
-        url.username = "opencode"
-        url.password = window.__OPENCODE__?.serverPassword
+      if (window.__WEAPON__?.serverPassword) {
+        url.username = "weapon"
+        url.password = window.__WEAPON__?.serverPassword
       }
       const socket = new WebSocket(url)
       socket.binaryType = "arraybuffer"

@@ -6,13 +6,13 @@ import {
   type ProviderAuthResponse,
   type ProviderListResponse,
   type QuestionRequest,
-  createOpencodeClient,
-} from "@opencode-ai/sdk/v2/client"
+  createWeaponClient,
+} from "@weapon-ai/sdk/v2/client"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import { retry } from "@opencode-ai/util/retry"
-import { getFilename } from "@opencode-ai/util/path"
-import { showToast } from "@opencode-ai/ui/toast"
+import { retry } from "@weapon-ai/util/retry"
+import { getFilename } from "@weapon-ai/util/path"
+import { showToast } from "@weapon-ai/ui/toast"
 import { cmp, normalizeProviderList } from "./utils"
 import type { State, VcsCache } from "./types"
 
@@ -27,7 +27,7 @@ type GlobalStore = {
 }
 
 export async function bootstrapGlobal(input: {
-  globalSDK: ReturnType<typeof createOpencodeClient>
+  globalSDK: ReturnType<typeof createWeaponClient>
   connectErrorTitle: string
   connectErrorDescription: string
   requestFailedTitle: string
@@ -62,7 +62,7 @@ export async function bootstrapGlobal(input: {
       input.globalSDK.project.list().then((x) => {
         const projects = (x.data ?? [])
           .filter((p) => !!p?.id)
-          .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+          .filter((p) => !!p.worktree && !p.worktree.includes("weapon-test"))
           .slice()
           .sort((a, b) => cmp(a.id, b.id))
         input.setGlobalStore("project", projects)
@@ -106,7 +106,7 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 
 export async function bootstrapDirectory(input: {
   directory: string
-  sdk: ReturnType<typeof createOpencodeClient>
+  sdk: ReturnType<typeof createWeaponClient>
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache

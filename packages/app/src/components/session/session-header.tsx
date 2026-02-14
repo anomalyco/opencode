@@ -9,20 +9,20 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@weapon-ai/util/path"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
-import { AppIcon } from "@opencode-ai/ui/app-icon"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Popover } from "@opencode-ai/ui/popover"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Icon } from "@weapon-ai/ui/icon"
+import { IconButton } from "@weapon-ai/ui/icon-button"
+import { Button } from "@weapon-ai/ui/button"
+import { AppIcon } from "@weapon-ai/ui/app-icon"
+import { DropdownMenu } from "@weapon-ai/ui/dropdown-menu"
+import { Tooltip, TooltipKeybind } from "@weapon-ai/ui/tooltip"
+import { Popover } from "@weapon-ai/ui/popover"
+import { TextField } from "@weapon-ai/ui/text-field"
+import { Keybind } from "@weapon-ai/ui/keybind"
+import { showToast } from "@weapon-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -312,9 +312,9 @@ export function SessionHeader() {
   })
 
   const leftMount = createMemo(
-    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
+    () => document.getElementById("weapon-titlebar-left") ?? document.getElementById("weapon-titlebar-center"),
   )
-  const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+  const rightMount = createMemo(() => document.getElementById("weapon-titlebar-right"))
 
   return (
     <>

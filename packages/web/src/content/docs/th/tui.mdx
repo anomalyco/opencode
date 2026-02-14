@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: การใช้อินเทอร์เฟซผู้ใช้ terminal OpenCode
+description: การใช้อินเทอร์เฟซผู้ใช้ terminal Weapon
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode มีอินเทอร์เฟซ terminal แบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
+Weapon มีอินเทอร์เฟซ terminal แบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
 
-การรัน OpenCode จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
+การรัน Weapon จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
 
 ```bash
-opencode
+weapon
 ```
 
 หรือคุณสามารถเริ่มต้นสำหรับไดเร็กทอรีการทำงานเฉพาะได้
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 เมื่อคุณอยู่ใน TUI แล้ว คุณสามารถแจ้งด้วยข้อความได้
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## คำสั่ง
 
-เมื่อใช้ OpenCode TUI คุณสามารถพิมพ์ `/` ตามด้วยชื่อคำสั่งเพื่อดำเนินการอย่างรวดเร็ว ตัวอย่างเช่น:
+เมื่อใช้ Weapon TUI คุณสามารถพิมพ์ `/` ตามด้วยชื่อคำสั่งเพื่อดำเนินการอย่างรวดเร็ว ตัวอย่างเช่น:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-เพิ่มผู้ให้บริการให้กับ OpenCode ให้คุณเลือกจากผู้ให้บริการที่มีอยู่และเพิ่มคีย์ API
+เพิ่มผู้ให้บริการให้กับ Weapon ให้คุณเลือกจากผู้ให้บริการที่มีอยู่และเพิ่มคีย์ API
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-ออกจาก OpenCode _นามแฝง_: `/quit`, `/q`
+ออกจาก Weapon _นามแฝง_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -355,11 +355,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## กำหนดค่า
 
-คุณสามารถปรับแต่งพฤติกรรม TUI ผ่านไฟล์กำหนดค่า OpenCode ของคุณได้
+คุณสามารถปรับแต่งพฤติกรรม TUI ผ่านไฟล์กำหนดค่า Weapon ของคุณได้
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

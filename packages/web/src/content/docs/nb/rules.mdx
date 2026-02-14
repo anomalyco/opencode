@@ -1,21 +1,21 @@
 ---
 title: Regler
-description: Set custom instructions for OpenCode.
+description: Set custom instructions for Weapon.
 ---
 
-Du kan gi tilpassede instruksjoner for å OpenCode ved å opprette en `AGENTS.md`-fil. Dette ligner på Cursors regler. Den inneholder instruksjoner som vil bli inkludert i LLMs kontekst for å tilpasse oppførselen til ditt spesifikke prosjekt.
+Du kan gi tilpassede instruksjoner for å Weapon ved å opprette en `AGENTS.md`-fil. Dette ligner på Cursors regler. Den inneholder instruksjoner som vil bli inkludert i LLMs kontekst for å tilpasse oppførselen til ditt spesifikke prosjekt.
 
 ---
 
 ## Initialisering
 
-For å lage en ny `AGENTS.md` fil, kan du kjøre kommandoen `/init` i OpenCode.
+For å lage en ny `AGENTS.md` fil, kan du kjøre kommandoen `/init` i Weapon.
 
 :::tip
 Du bør sjekke inn prosjektets `AGENTS.md`-fil i Git.
 :::
 
-Dette vil skanne prosjektet og alt dets innhold for å forstå hva prosjektet handler om og generere en `AGENTS.md`-fil med det. Dette hjelper OpenCode å navigere i prosjektet bedre.
+Dette vil skanne prosjektet og alt dets innhold for å forstå hva prosjektet handler om og generere en `AGENTS.md`-fil med det. Dette hjelper Weapon å navigere i prosjektet bedre.
 
 Hvis du har en eksisterende `AGENTS.md`-fil, vil denne prøve å legge til den.
 
@@ -54,7 +54,7 @@ Vi legger til prosjektspesifikke instruksjoner her, og dette vil bli delt på tv
 
 ## Typer
 
-OpenCode støtter også lesing av `AGENTS.md`-filen fra flere steder. Og dette tjener forskjellige formål.
+Weapon støtter også lesing av `AGENTS.md`-filen fra flere steder. Og dette tjener forskjellige formål.
 
 ### Prosjekt
 
@@ -62,58 +62,58 @@ Plasser en `AGENTS.md` i prosjektroten for prosjektspesifikke regler. Disse gjel
 
 ### Globalt
 
-Du kan også ha globale regler i en `~/.config/opencode/AGENTS.md`-fil. Dette blir brukt på alle OpenCode-økter.
+Du kan også ha globale regler i en `~/.config/weapon/AGENTS.md`-fil. Dette blir brukt på alle Weapon-økter.
 
 Siden dette ikke er forpliktet til Git eller delt med teamet ditt, anbefaler vi å bruke dette til å spesifisere eventuelle personlige regler som LLM bør følge.
 
 ### Claude Code-kompatibilitet
 
-For brukere som migrerer fra Claude Code, støtter OpenCode Claude Codes filkonvensjoner som fallbacks:
+For brukere som migrerer fra Claude Code, støtter Weapon Claude Codes filkonvensjoner som fallbacks:
 
 - **Prosjektregler**: `CLAUDE.md` i prosjektkatalogen din (brukes hvis ingen `AGENTS.md` eksisterer)
-- **Globale regler**: `~/.claude/CLAUDE.md` (brukes hvis ingen `~/.config/opencode/AGENTS.md` eksisterer)
+- **Globale regler**: `~/.claude/CLAUDE.md` (brukes hvis ingen `~/.config/weapon/AGENTS.md` eksisterer)
 - **Skills**: `~/.claude/skills/` — se [Agent Skills](/docs/skills/) for detaljer
 
 For å deaktivere Claude Code-kompatibilitet, sett en av disse miljøvariablene:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export WEAPON_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export WEAPON_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export WEAPON_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## Forrang
 
-Når OpenCode starter, ser den etter regelfiler i denne rekkefølgen:
+Når Weapon starter, ser den etter regelfiler i denne rekkefølgen:
 
 1. **Lokale filer** ved å gå opp fra gjeldende katalog (`AGENTS.md`, `CLAUDE.md`)
-2. **Global fil** på `~/.config/opencode/AGENTS.md`
+2. **Global fil** på `~/.config/weapon/AGENTS.md`
 3. **Claude Code-fil** på `~/.claude/CLAUDE.md` (med mindre de er deaktivert)
 
-Den første matchende filen vinner i hver kategori. For eksempel, hvis du har både `AGENTS.md` og `CLAUDE.md`, brukes bare `AGENTS.md`. På samme måte har `~/.config/opencode/AGENTS.md` forrang over `~/.claude/CLAUDE.md`.
+Den første matchende filen vinner i hver kategori. For eksempel, hvis du har både `AGENTS.md` og `CLAUDE.md`, brukes bare `AGENTS.md`. På samme måte har `~/.config/weapon/AGENTS.md` forrang over `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Egendefinerte instruksjoner
 
-Du kan spesifisere egendefinerte instruksjonsfiler i din `opencode.json` eller den globale `~/.config/opencode/opencode.json`. Dette lar deg og teamet ditt gjenbruke eksisterende regler i stedet for å måtte duplisere dem til AGENTS.md.
+Du kan spesifisere egendefinerte instruksjonsfiler i din `weapon.json` eller den globale `~/.config/weapon/weapon.json`. Dette lar deg og teamet ditt gjenbruke eksisterende regler i stedet for å måtte duplisere dem til AGENTS.md.
 
 Eksempel:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 Du kan også bruke eksterne URL-er for å laste instruksjoner fra nettet.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -126,22 +126,22 @@ Alle instruksjonsfilene er kombinert med `AGENTS.md`-filene dine.
 
 ## Referere til eksterne filer
 
-Selv om OpenCode ikke automatisk analyserer filreferanser i `AGENTS.md`, kan du oppnå lignende funksjonalitet på to måter:
+Selv om Weapon ikke automatisk analyserer filreferanser i `AGENTS.md`, kan du oppnå lignende funksjonalitet på to måter:
 
-### Bruker opencode.json
+### Bruker weapon.json
 
-Den anbefalte tilnærmingen er å bruke feltet `instructions` i `opencode.json`:
+Den anbefalte tilnærmingen er å bruke feltet `instructions` i `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### Manuelle instruksjoner i AGENTS.md
 
-Du kan lære OpenCode å lese eksterne filer ved å gi eksplisitte instruksjoner i `AGENTS.md`. Her er et praktisk eksempel:
+Du kan lære Weapon å lese eksterne filer ved å gi eksplisitte instruksjoner i `AGENTS.md`. Her er et praktisk eksempel:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,8 +173,8 @@ Denne tilnærmingen lar deg:
 - Lage modulære, gjenbrukbare regelfiler
 - Dele regler på tvers av prosjekter via symbolkoblinger eller git-undermoduler
 - Holde AGENTS.md kortfattet mens du refererer til detaljerte retningslinjer
-- Sørge for at OpenCode laster filer kun når det er nødvendig for den spesifikke oppgaven
+- Sørge for at Weapon laster filer kun når det er nødvendig for den spesifikke oppgaven
 
 :::tip
-For monorepos eller prosjekter med delte standarder er bruk av `opencode.json` med glob-mønstre (som `packages/*/AGENTS.md`) mer vedlikeholdbart enn manuelle instruksjoner.
+For monorepos eller prosjekter med delte standarder er bruk av `weapon.json` med glob-mønstre (som `packages/*/AGENTS.md`) mer vedlikeholdbart enn manuelle instruksjoner.
 :::

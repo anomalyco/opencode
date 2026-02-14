@@ -1,19 +1,19 @@
 ---
 title: Sunucu
-description: opencode sunucusuyla HTTP uzerinden etkilesin.
+description: weapon sunucusuyla HTTP uzerinden etkilesin.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` komutu, opencode istemcisinin kullanabileceği bir OpenAPI endpoint'i açan headless bir HTTP sunucusu çalıştırır.
+`weapon serve` komutu, weapon istemcisinin kullanabileceği bir OpenAPI endpoint'i açan headless bir HTTP sunucusu çalıştırır.
 
 ---
 
 ### Kullanım
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Seçenekler
@@ -23,39 +23,39 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Dinlenecek bağlantı noktası                    | `4096`           |
 | `--hostname`    | Dinlenecek ana bilgisayar adı                  | `127.0.0.1`      |
 | `--mdns`        | mDNS keşfini etkinleştir                       | `false`          |
-| `--mdns-domain` | mDNS hizmeti için özel alan adı                | `opencode.local` |
+| `--mdns-domain` | mDNS hizmeti için özel alan adı                | `weapon.local` |
 | `--cors`        | İzin verilecek ek tarayıcı kaynakları (origin) | `[]`             |
 
 `--cors` birden fazla kez geçilebilir:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Kimlik Doğrulama
 
-Sunucuyu HTTP temel kimlik doğrulama (basic auth) ile korumak için `OPENCODE_SERVER_PASSWORD` ayarlayın. Kullanıcı adı varsayılan olarak `opencode` değeridir; değiştirmek isterseniz `OPENCODE_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `opencode serve` hem de `opencode web` için geçerlidir.
+Sunucuyu HTTP temel kimlik doğrulama (basic auth) ile korumak için `WEAPON_SERVER_PASSWORD` ayarlayın. Kullanıcı adı varsayılan olarak `weapon` değeridir; değiştirmek isterseniz `WEAPON_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `weapon serve` hem de `weapon web` için geçerlidir.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### Nasıl çalışır
 
-`opencode` çalıştırdığınızda hem TUI hem de sunucu başlar. TUI, sunucuyla konuşan istemci tarafıdır.
+`weapon` çalıştırdığınızda hem TUI hem de sunucu başlar. TUI, sunucuyla konuşan istemci tarafıdır.
 Sunucu bir OpenAPI 3.1 spesifikasyon uç noktası açar. Bu uç nokta [SDK](/docs/sdk) üretiminde de kullanılır.
 
 :::tip
-opencode ile programatik etkileşim için opencode sunucusunu kullanın.
+weapon ile programatik etkileşim için weapon sunucusunu kullanın.
 :::
 
-Bu mimari, opencode'un birden fazla istemciyi desteklemesini ve programatik kullanımları mümkün kılmasını sağlar.
+Bu mimari, weapon'un birden fazla istemciyi desteklemesini ve programatik kullanımları mümkün kılmasını sağlar.
 
-`opencode serve` ile bağımsız bir sunucu başlatabilirsiniz. opencode TUI açıksa, `opencode serve` yeni bir sunucu başlatır.
+`weapon serve` ile bağımsız bir sunucu başlatabilirsiniz. weapon TUI açıksa, `weapon serve` yeni bir sunucu başlatır.
 
 ---
 
@@ -63,7 +63,7 @@ Bu mimari, opencode'un birden fazla istemciyi desteklemesini ve programatik kull
 
 TUI başlarken rastgele bir port ve hostname atanır. Bunun yerine `--hostname` ve `--port` [bayraklarını](/docs/cli) verebilirsiniz.
 
-[`/tui`](#tui) uç noktası sunucu üzerinden TUI'yi sürmek için kullanılabilir. Örneğin bir istemi önceden doldurabilir veya çalıştırabilirsiniz. Bu kurulum opencode [IDE](/docs/ide) eklentileri tarafından kullanılır.
+[`/tui`](#tui) uç noktası sunucu üzerinden TUI'yi sürmek için kullanılabilir. Örneğin bir istemi önceden doldurabilir veya çalıştırabilirsiniz. Bu kurulum weapon [IDE](/docs/ide) eklentileri tarafından kullanılır.
 
 ---
 
@@ -81,7 +81,7 @@ http://<hostname>:<port>/doc
 
 ## API'ler
 
-opencode sunucusu aşağıdaki API'leri sunar.
+weapon sunucusu aşağıdaki API'leri sunar.
 
 ---
 

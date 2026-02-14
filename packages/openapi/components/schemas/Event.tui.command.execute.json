@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "tui.command.execute"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "command",
+                "skill"
+              ]
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

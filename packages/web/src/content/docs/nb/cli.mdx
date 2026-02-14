@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI-alternativer og kommandoer.
+description: Weapon CLI-alternativer og kommandoer.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
+Weapon CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
 
 ```bash
-opencode
+weapon
 ```
 
-Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med OpenCode programmatisk.
+Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med Weapon programmatisk.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+weapon run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Start OpenCode-terminalbrukergrensesnittet.
+Start Weapon-terminalbrukergrensesnittet.
 
 ```bash
-opencode [project]
+weapon [project]
 ```
 
 #### Flagg
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Kommandoer
 
-OpenCode CLI har også følgende kommandoer.
+Weapon CLI har også følgende kommandoer.
 
 ---
 
 ### agent
 
-Administrer agenter for OpenCode.
+Administrer agenter for Weapon.
 
 ```bash
-opencode agent [command]
+weapon agent [command]
 ```
 
 ---
 
 ### attach
 
-Koble en terminal til en allerede kjørende OpenCode-backend-server startet via `serve` eller `web` kommandoer.
+Koble en terminal til en allerede kjørende Weapon-backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
-opencode attach [url]
+weapon attach [url]
 ```
 
-Dette gjør det mulig å bruke TUI med en ekstern OpenCode-backend. For eksempel:
+Dette gjør det mulig å bruke TUI med en ekstern Weapon-backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+weapon web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+weapon attach http://10.20.30.40:4096
 ```
 
 #### Flagg
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Opprett en ny agent med tilpasset konfigurasjon.
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 Denne kommandoen vil veilede deg gjennom å lage en ny agent med en tilpasset systemmelding og verktøykonfigurasjon.
@@ -102,7 +102,7 @@ Denne kommandoen vil veilede deg gjennom å lage en ny agent med en tilpasset sy
 List opp alle tilgjengelige agenter.
 
 ```bash
-opencode agent list
+weapon agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Kommando for administrasjon av påloggingsinformasjon og innlogging for leverandører.
 
 ```bash
-opencode auth [command]
+weapon auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `opencode auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/opencode/auth.json`.
+Weapon drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `weapon auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/weapon/auth.json`.
 
 ```bash
-opencode auth login
+weapon auth login
 ```
 
-Når OpenCode starter opp, laster den leverandørene fra filen med påloggingsinformasjon. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
+Når Weapon starter opp, laster den leverandørene fra filen med påloggingsinformasjon. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
 
 ---
 
@@ -134,13 +134,13 @@ Når OpenCode starter opp, laster den leverandørene fra filen med påloggingsin
 Viser alle de autentiserte leverandørene som er lagret i filen med påloggingsinformasjon.
 
 ```bash
-opencode auth list
+weapon auth list
 ```
 
 Eller bruk kortversjonen.
 
 ```bash
-opencode auth ls
+weapon auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Logger deg ut av en leverandør ved å fjerne den fra filen med påloggingsinformasjon.
 
 ```bash
-opencode auth logout
+weapon auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Administrer GitHub-agenten for depotautomatisering.
 
 ```bash
-opencode github [command]
+weapon github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Installer GitHub-agenten i depotet ditt.
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 Dette setter opp den nødvendige GitHub Actions-arbeidsflyten og veileder deg gjennom konfigurasjonsprosessen. [Finn ut mer](/docs/github).
@@ -182,7 +182,7 @@ Dette setter opp den nødvendige GitHub Actions-arbeidsflyten og veileder deg gj
 Kjør GitHub-agenten. Dette brukes vanligvis i GitHub Actions.
 
 ```bash
-opencode github run
+weapon github run
 ```
 
 ##### Flagg
@@ -199,7 +199,7 @@ opencode github run
 Administrer Model Context Protocol-servere.
 
 ```bash
-opencode mcp [command]
+weapon mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Legg til en MCP-server til konfigurasjonen.
 
 ```bash
-opencode mcp add
+weapon mcp add
 ```
 
 Denne kommandoen vil veilede deg gjennom å legge til enten en lokal eller ekstern MCP-server.
@@ -221,13 +221,13 @@ Denne kommandoen vil veilede deg gjennom å legge til enten en lokal eller ekste
 Liste alle konfigurerte MCP-servere og deres tilkoblingsstatus.
 
 ```bash
-opencode mcp list
+weapon mcp list
 ```
 
 Eller bruk den korte versjonen.
 
 ```bash
-opencode mcp ls
+weapon mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Autentiser med en OAuth-aktivert MCP-server.
 
 ```bash
-opencode mcp auth [name]
+weapon mcp auth [name]
 ```
 
 Hvis du ikke oppgir et servernavn, blir du bedt om å velge blant tilgjengelige OAuth-kompatible servere.
@@ -245,13 +245,13 @@ Hvis du ikke oppgir et servernavn, blir du bedt om å velge blant tilgjengelige 
 Du kan også liste opp OAuth-kompatible servere og deres autentiseringsstatus.
 
 ```bash
-opencode mcp auth list
+weapon mcp auth list
 ```
 
 Eller bruk den korte versjonen.
 
 ```bash
-opencode mcp auth ls
+weapon mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Fjern OAuth-påloggingsinformasjon for en MCP-server.
 
 ```bash
-opencode mcp logout [name]
+weapon mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Feilsøk OAuth-tilkoblingsproblemer for en MCP-server.
 
 ```bash
-opencode mcp debug <name>
+weapon mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 List opp alle tilgjengelige modeller fra konfigurerte leverandører.
 
 ```bash
-opencode models [provider]
+weapon models [provider]
 ```
 
 Denne kommandoen viser alle modeller som er tilgjengelige på tvers av dine konfigurerte leverandører i formatet `provider/model`.
@@ -291,7 +291,7 @@ Dette er nyttig for å finne ut det eksakte modellnavnet som skal brukes i [din 
 Du kan eventuelt sende en leverandør ID for å filtrere modeller etter den leverandøren.
 
 ```bash
-opencode models anthropic
+weapon models anthropic
 ```
 
 #### Flagg
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Oppdater modellbufferen fra models.dev                              |
 | `--verbose` | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
 
-Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i OpenCode.
+Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i Weapon.
 
 ```bash
-opencode models --refresh
+weapon models --refresh
 ```
 
 ---
 
 ### run
 
-Kjør OpenCode i ikke-interaktiv modus ved å sende en melding direkte.
+Kjør Weapon i ikke-interaktiv modus ved å sende en melding direkte.
 
 ```bash
-opencode run [message..]
+weapon run [message..]
 ```
 
 Dette er nyttig for skripting, automatisering eller når du vil ha et raskt svar uten å starte hele TUI. For eksempel.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "weapon run"
+weapon run Explain the use of context in Go
 ```
 
-Du kan også koble til en kjørende `opencode serve`-forekomst for å unngå MCP-serveres kaldstarttid ved hver kjøring:
+Du kan også koble til en kjørende `weapon serve`-forekomst for å unngå MCP-serveres kaldstarttid ved hver kjøring:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+weapon serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+weapon run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flagg
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | Fil(er) som skal legges ved meldingen                                    |
 | `--format`   |      | Format: standard (formatert) eller json (rå JSON hendelser)              |
 | `--title`    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt) |
-| `--attach`   |      | Koble til en kjørende OpenCode-server (f.eks. http://localhost:4096)     |
+| `--attach`   |      | Koble til en kjørende Weapon-server (f.eks. http://localhost:4096)     |
 | `--port`     |      | Port for den lokale serveren (standard til tilfeldig port)               |
 
 ---
 
 ### serve
 
-Start en headless OpenCode-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
+Start en headless Weapon-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
 
 ```bash
-opencode serve
+weapon serve
 ```
 
-Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet uten TUI-grensesnittet. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server som gir API tilgang til Weapon-funksjonalitet uten TUI-grensesnittet. Sett `WEAPON_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `weapon`).
 
 #### Flagg
 
@@ -375,20 +375,20 @@ Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet ute
 
 ### session
 
-Administrer OpenCode-økter.
+Administrer Weapon-økter.
 
 ```bash
-opencode session [command]
+weapon session [command]
 ```
 
 ---
 
 #### list
 
-List opp alle OpenCode-økter.
+List opp alle Weapon-økter.
 
 ```bash
-opencode session list
+weapon session list
 ```
 
 ##### Flagg
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Vis tokenbruk og kostnadsstatistikk for OpenCode-øktene dine.
+Vis tokenbruk og kostnadsstatistikk for Weapon-øktene dine.
 
 ```bash
-opencode stats
+weapon stats
 ```
 
 #### Flagg
@@ -424,7 +424,7 @@ opencode stats
 Eksporter øktdata som JSON.
 
 ```bash
-opencode export [sessionID]
+weapon export [sessionID]
 ```
 
 Hvis du ikke gir en økt ID, blir du bedt om å velge fra tilgjengelige økter.
@@ -433,30 +433,30 @@ Hvis du ikke gir en økt ID, blir du bedt om å velge fra tilgjengelige økter.
 
 ### import
 
-Importer øktdata fra en JSON-fil eller en OpenCode share-URL.
+Importer øktdata fra en JSON-fil eller en Weapon share-URL.
 
 ```bash
-opencode import <file>
+weapon import <file>
 ```
 
-Du kan importere fra en lokal fil eller en OpenCode share-URL.
+Du kan importere fra en lokal fil eller en Weapon share-URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+weapon import session.json
+weapon import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Start en headless OpenCode-server med et webgrensesnitt.
+Start en headless Weapon-server med et webgrensesnitt.
 
 ```bash
-opencode web
+weapon web
 ```
 
-Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenCode via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server og åpner en nettleser for å få tilgang til Weapon via et nettgrensesnitt. Sett `WEAPON_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `weapon`).
 
 #### Flagg
 
@@ -474,7 +474,7 @@ Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenC
 Start en ACP (Agent Client Protocol) server.
 
 ```bash
-opencode acp
+weapon acp
 ```
 
 Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å bruke nd-JSON.
@@ -491,10 +491,10 @@ Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å 
 
 ### uninstall
 
-Avinstaller OpenCode og fjern alle relaterte filer.
+Avinstaller Weapon og fjern alle relaterte filer.
 
 ```bash
-opencode uninstall
+weapon uninstall
 ```
 
 #### Flagg
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Oppdaterer OpenCode til siste versjon eller en spesifikk versjon.
+Oppdaterer Weapon til siste versjon eller en spesifikk versjon.
 
 ```bash
-opencode upgrade [target]
+weapon upgrade [target]
 ```
 
 For å oppgradere til siste versjon.
 
 ```bash
-opencode upgrade
+weapon upgrade
 ```
 
 For å oppgradere til en bestemt versjon.
 
 ```bash
-opencode upgrade v0.1.48
+weapon upgrade v0.1.48
 ```
 
 #### Flagg
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Globale flagg
 
-OpenCode CLI bruker følgende globale flagg.
+Weapon CLI bruker følgende globale flagg.
 
 | Flagg          | Kort | Beskrivelse                         |
 | -------------- | ---- | ----------------------------------- |
@@ -551,34 +551,34 @@ OpenCode CLI bruker følgende globale flagg.
 
 ## Miljøvariabler
 
-OpenCode kan konfigureres ved hjelp av miljøvariabler.
+Weapon kan konfigureres ved hjelp av miljøvariabler.
 
 | Variabel                              | Type   | Beskrivelse                                                           |
 | ------------------------------------- | ------ | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
-| `OPENCODE_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
-| `OPENCODE_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
-| `OPENCODE_CONFIG_DIR`                 | streng | Bane til konfigurasjonskatalog                                        |
-| `OPENCODE_CONFIG_CONTENT`             | streng | Innebygd json-konfigurasjonsinnhold                                   |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolsk | Deaktiver automatiske oppdateringskontroller                          |
-| `OPENCODE_DISABLE_PRUNE`              | boolsk | Deaktiver beskjæring av gamle data                                    |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolsk | Deaktiver automatiske terminaltitteloppdateringer                     |
-| `OPENCODE_PERMISSION`                 | streng | Innebygd json-tillatelseskonfigurasjon                                |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolsk | Deaktiver standard plugins                                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolsk | Deaktiver automatiske LSP servernedlastinger                          |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolsk | Aktiver eksperimentelle modeller                                      |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolsk | Deaktiver automatisk kontekstkomprimering                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolsk | Deaktiver lesing fra `.claude` (spørsmål + ferdigheter)               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolsk | Deaktiver lesing `~/.claude/CLAUDE.md`                                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver innlasting av `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolsk | Deaktiver henting av modeller fra eksterne kilder                     |
-| `OPENCODE_FAKE_VCS`                   | streng | Falsk VCS-leverandør for testformål                                   |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolsk | Deaktiver filtidskontroll for optimalisering                          |
-| `OPENCODE_CLIENT`                     | streng | Klientidentifikator (standard til `cli`)                              |
-| `OPENCODE_ENABLE_EXA`                 | boolsk | Aktiver Exa-nettsøkeverktøy                                           |
-| `OPENCODE_SERVER_PASSWORD`            | streng | Aktiver grunnleggende autentisering for `serve`/`web`                 |
-| `OPENCODE_SERVER_USERNAME`            | streng | Overstyr grunnleggende autentiseringsbrukernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | streng | Egendefinert URL for henting av modellkonfigurasjon                   |
+| `WEAPON_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
+| `WEAPON_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
+| `WEAPON_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
+| `WEAPON_CONFIG_DIR`                 | streng | Bane til konfigurasjonskatalog                                        |
+| `WEAPON_CONFIG_CONTENT`             | streng | Innebygd json-konfigurasjonsinnhold                                   |
+| `WEAPON_DISABLE_AUTOUPDATE`         | boolsk | Deaktiver automatiske oppdateringskontroller                          |
+| `WEAPON_DISABLE_PRUNE`              | boolsk | Deaktiver beskjæring av gamle data                                    |
+| `WEAPON_DISABLE_TERMINAL_TITLE`     | boolsk | Deaktiver automatiske terminaltitteloppdateringer                     |
+| `WEAPON_PERMISSION`                 | streng | Innebygd json-tillatelseskonfigurasjon                                |
+| `WEAPON_DISABLE_DEFAULT_PLUGINS`    | boolsk | Deaktiver standard plugins                                            |
+| `WEAPON_DISABLE_LSP_DOWNLOAD`       | boolsk | Deaktiver automatiske LSP servernedlastinger                          |
+| `WEAPON_ENABLE_EXPERIMENTAL_MODELS` | boolsk | Aktiver eksperimentelle modeller                                      |
+| `WEAPON_DISABLE_AUTOCOMPACT`        | boolsk | Deaktiver automatisk kontekstkomprimering                             |
+| `WEAPON_DISABLE_CLAUDE_CODE`        | boolsk | Deaktiver lesing fra `.claude` (spørsmål + ferdigheter)               |
+| `WEAPON_DISABLE_CLAUDE_CODE_PROMPT` | boolsk | Deaktiver lesing `~/.claude/CLAUDE.md`                                |
+| `WEAPON_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver innlasting av `.claude/skills`                              |
+| `WEAPON_DISABLE_MODELS_FETCH`       | boolsk | Deaktiver henting av modeller fra eksterne kilder                     |
+| `WEAPON_FAKE_VCS`                   | streng | Falsk VCS-leverandør for testformål                                   |
+| `WEAPON_DISABLE_FILETIME_CHECK`     | boolsk | Deaktiver filtidskontroll for optimalisering                          |
+| `WEAPON_CLIENT`                     | streng | Klientidentifikator (standard til `cli`)                              |
+| `WEAPON_ENABLE_EXA`                 | boolsk | Aktiver Exa-nettsøkeverktøy                                           |
+| `WEAPON_SERVER_PASSWORD`            | streng | Aktiver grunnleggende autentisering for `serve`/`web`                 |
+| `WEAPON_SERVER_USERNAME`            | streng | Overstyr grunnleggende autentiseringsbrukernavn (standard `weapon`) |
+| `WEAPON_MODELS_URL`                 | streng | Egendefinert URL for henting av modellkonfigurasjon                   |
 
 ---
 
@@ -588,16 +588,16 @@ Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres elle
 
 | Variabel                                        | Type   | Beskrivelse                                   |
 | ----------------------------------------------- | ------ | --------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funksjoner       |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonoppdagelse                        |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolsk | Deaktiver kopi ved valg i TUI                 |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | tall   | Standard tidsavbrudd for bash-kommandoer i ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | tall   | Maks Output Tokens for LLM-svar               |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolsk | Aktiver filovervåker for hele dir             |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolsk | Aktiver oxfmt formatter                       |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolsk | Aktiver eksperimentelt LSP-verktøy            |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolsk | Deaktiver filovervåking                       |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolsk | Aktiver eksperimentelle Exa-funksjoner        |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver eksperimentell LSP-typekontroll       |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolsk | Aktiver eksperimentelle Markdown-funksjoner   |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver planmodus                             |
+| `WEAPON_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funksjoner       |
+| `WEAPON_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonoppdagelse                        |
+| `WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolsk | Deaktiver kopi ved valg i TUI                 |
+| `WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | tall   | Standard tidsavbrudd for bash-kommandoer i ms |
+| `WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | tall   | Maks Output Tokens for LLM-svar               |
+| `WEAPON_EXPERIMENTAL_FILEWATCHER`             | boolsk | Aktiver filovervåker for hele dir             |
+| `WEAPON_EXPERIMENTAL_OXFMT`                   | boolsk | Aktiver oxfmt formatter                       |
+| `WEAPON_EXPERIMENTAL_LSP_TOOL`                | boolsk | Aktiver eksperimentelt LSP-verktøy            |
+| `WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolsk | Deaktiver filovervåking                       |
+| `WEAPON_EXPERIMENTAL_EXA`                     | boolsk | Aktiver eksperimentelle Exa-funksjoner        |
+| `WEAPON_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver eksperimentell LSP-typekontroll       |
+| `WEAPON_EXPERIMENTAL_MARKDOWN`                | boolsk | Aktiver eksperimentelle Markdown-funksjoner   |
+| `WEAPON_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver planmodus                             |

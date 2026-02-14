@@ -2,12 +2,12 @@ import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, Susp
 import { DateTime } from "luxon"
 import { createStore, reconcile } from "solid-js/store"
 import { IconArrowDown } from "./icons"
-import { IconOpencode } from "./icons/custom"
+import { IconWeapon } from "./icons/custom"
 import { ShareI18nProvider, formatCurrency, formatNumber, normalizeLocale } from "./share/common"
 import styles from "./share.module.css"
-import type { MessageV2 } from "opencode/session/message-v2"
-import type { Message } from "opencode/session/message"
-import type { Session } from "opencode/session/index"
+import type { MessageV2 } from "weapon/session/message-v2"
+import type { Message } from "weapon/session/message"
+import type { Session } from "weapon/session/index"
 import { Part, ProviderIcon } from "./share/part"
 
 type MessageWithParts = MessageV2.Info & { parts: MessageV2.Part[] }
@@ -303,9 +303,9 @@ export default function Share(props: {
             <h1 data-component="header-title">{store.info?.title}</h1>
             <div data-component="header-details">
               <ul data-component="header-stats">
-                <li title={props.messages.opencode_version} data-slot="item">
-                  <div data-slot="icon" title={props.messages.opencode_name}>
-                    <IconOpencode width={16} height={16} />
+                <li title={props.messages.weapon_version} data-slot="item">
+                  <div data-slot="icon" title={props.messages.weapon_name}>
+                    <IconWeapon width={16} height={16} />
                   </div>
                   <Show when={store.info?.version} fallback="v0.0.1">
                     <span>v{store.info?.version}</span>

@@ -3,11 +3,11 @@ title: Combinaciones de teclas
 description: Personaliza tus combinaciones de teclas.
 ---
 
-OpenCode tiene una lista de combinaciones de teclas que puede personalizar a través de la configuración OpenCode.
+Weapon tiene una lista de combinaciones de teclas que puede personalizar a través de la configuración Weapon.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode tiene una lista de combinaciones de teclas que puede personalizar a tra
 
 ## Tecla líder
 
-OpenCode usa una tecla `leader` para la mayoría de las combinaciones de teclas. Esto evita conflictos en tu terminal.
+Weapon usa una tecla `leader` para la mayoría de las combinaciones de teclas. Esto evita conflictos en tu terminal.
 
 De forma predeterminada, `ctrl+x` es la tecla principal y la mayoría de las acciones requieren que primero presione la tecla principal y luego el acceso directo. Por ejemplo, para iniciar una nueva sesión, primero presione `ctrl+x` y luego presione `n`.
 
@@ -119,9 +119,9 @@ No es necesario utilizar una tecla líder para las combinaciones de teclas, pero
 
 Puede deshabilitar una combinación de teclas agregando la clave a su configuración con un valor de "ninguno".
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Puede deshabilitar una combinación de teclas agregando la clave a su configurac
 
 ## Atajos de mensajes de escritorio
 
-La entrada de solicitud de la aplicación de escritorio OpenCode admite atajos comunes de estilo Readline/Emacs para editar texto. Estos están integrados y actualmente no se pueden configurar a través de `opencode.json`.
+La entrada de solicitud de la aplicación de escritorio Weapon admite atajos comunes de estilo Readline/Emacs para editar texto. Estos están integrados y actualmente no se pueden configurar a través de `weapon.json`.
 
 | Atajo    | Acción                                                         |
 | -------- | -------------------------------------------------------------- |

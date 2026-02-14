@@ -15,7 +15,7 @@ Você pode alternar entre agentes durante uma sessão ou invocá-los com a menç
 
 ## Tipos
 
-Existem dois tipos de agentes no opencode; agentes primários e subagentes.
+Existem dois tipos de agentes no weapon; agentes primários e subagentes.
 
 ---
 
@@ -27,7 +27,7 @@ Agentes primários são os principais assistentes com os quais você interage di
 Você pode usar a tecla **Tab** para alternar entre agentes primários durante uma sessão.
 :::
 
-opencode vem com dois agentes primários integrados, **Build** e **Plan**. Vamos
+weapon vem com dois agentes primários integrados, **Build** e **Plan**. Vamos
 ver isso abaixo.
 
 ---
@@ -36,13 +36,13 @@ ver isso abaixo.
 
 Subagentes são assistentes especializados que agentes primários podem invocar para tarefas específicas. Você também pode invocá-los manualmente mencionando-os com **@** em suas mensagens.
 
-opencode vem com dois subagentes integrados, **General** e **Explore**. Vamos ver isso abaixo.
+weapon vem com dois subagentes integrados, **General** e **Explore**. Vamos ver isso abaixo.
 
 ---
 
 ## Integrados
 
-opencode vem com dois agentes primários integrados e dois subagentes integrados.
+weapon vem com dois agentes primários integrados e dois subagentes integrados.
 
 ---
 
@@ -136,11 +136,11 @@ Você pode personalizar os agentes integrados ou criar os seus próprios atravé
 
 ### JSON
 
-Configure os agentes em seu arquivo de configuração `opencode.json`:
+Configure os agentes em seu arquivo de configuração `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -181,10 +181,10 @@ Configure os agentes em seu arquivo de configuração `opencode.json`:
 
 Você também pode definir agentes usando arquivos markdown. Coloque-os em:
 
-- Global: `~/.config/opencode/agents/`
-- Por projeto: `.opencode/agents/`
+- Global: `~/.config/weapon/agents/`
+- Por projeto: `.weapon/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Revisa código para qualidade e melhores práticas
 mode: subagent
@@ -220,7 +220,7 @@ Vamos analisar essas opções de configuração em detalhes.
 
 Use a opção `description` para fornecer uma breve descrição do que o agente faz e quando usá-lo.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -240,7 +240,7 @@ Controle a aleatoriedade e criatividade das respostas do LLM com a configuraçã
 
 Valores mais baixos tornam as respostas mais focadas e determinísticas, enquanto valores mais altos aumentam a criatividade e variabilidade.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "plan": {
@@ -259,7 +259,7 @@ Os valores de temperatura geralmente variam de 0.0 a 1.0:
 - **0.3-0.5**: Respostas equilibradas com alguma criatividade, boas para tarefas de desenvolvimento gerais
 - **0.6-1.0**: Respostas mais criativas e variadas, úteis para brainstorming e exploração
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "analyze": {
@@ -277,7 +277,7 @@ Os valores de temperatura geralmente variam de 0.0 a 1.0:
 }
 ```
 
-Se nenhuma temperatura for especificada, o opencode usa padrões específicos do modelo; tipicamente 0 para a maioria dos modelos, 0.55 para modelos Qwen.
+Se nenhuma temperatura for especificada, o weapon usa padrões específicos do modelo; tipicamente 0 para a maioria dos modelos, 0.55 para modelos Qwen.
 
 ---
 
@@ -287,7 +287,7 @@ Controle o número máximo de iterações que um agente pode realizar antes de s
 
 Se isso não for definido, o agente continuará a iterar até que o modelo decida parar ou o usuário interrompa a sessão.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "quick-thinker": {
@@ -311,7 +311,7 @@ O campo legado `maxSteps` está obsoleto. Use `steps` em vez disso.
 
 Defina como `true` para desativar o agente.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -327,7 +327,7 @@ Defina como `true` para desativar o agente.
 
 Especifique um arquivo de prompt do sistema personalizado para este agente com a configuração `prompt`. O arquivo de prompt deve conter instruções específicas para o propósito do agente.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -337,7 +337,7 @@ Especifique um arquivo de prompt do sistema personalizado para este agente com a
 }
 ```
 
-Este caminho é relativo ao local onde o arquivo de configuração está localizado. Portanto, isso funciona tanto para a configuração global do opencode quanto para a configuração específica do projeto.
+Este caminho é relativo ao local onde o arquivo de configuração está localizado. Portanto, isso funciona tanto para a configuração global do weapon quanto para a configuração específica do projeto.
 
 ---
 
@@ -349,7 +349,7 @@ Use a configuração `model` para substituir o modelo para este agente. Útil pa
 Se você não especificar um modelo, os agentes primários usam o [modelo configurado globalmente](/docs/config#models) enquanto subagentes usarão o modelo do agente primário que invocou o subagente.
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "plan": {
@@ -359,7 +359,7 @@ Se você não especificar um modelo, os agentes primários usam o [modelo config
 }
 ```
 
-O ID do modelo em sua configuração do opencode usa o formato `provider/model-id`. Por exemplo, se você estiver usando [OpenCode Zen](/docs/zen), você usaria `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+O ID do modelo em sua configuração do weapon usa o formato `provider/model-id`. Por exemplo, se você estiver usando [Weapon Zen](/docs/zen), você usaria `weapon/gpt-5.1-codex` para GPT 5.1 Codex.
 
 ---
 
@@ -367,9 +367,9 @@ O ID do modelo em sua configuração do opencode usa o formato `provider/model-i
 
 Controle quais ferramentas estão disponíveis neste agente com a configuração `tools`. Você pode habilitar ou desabilitar ferramentas específicas definindo-as como `true` ou `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="weapon.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -391,9 +391,9 @@ A configuração específica do agente substitui a configuração global.
 
 Você também pode usar curingas para controlar várias ferramentas ao mesmo tempo. Por exemplo, para desativar todas as ferramentas de um servidor MCP:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -418,9 +418,9 @@ Você pode configurar permissões para gerenciar quais ações um agente pode re
 - `"allow"` — Permitir todas as operações sem aprovação
 - `"deny"` — Desativar a ferramenta
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -429,9 +429,9 @@ Você pode configurar permissões para gerenciar quais ações um agente pode re
 
 Você pode substituir essas permissões por agente.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="weapon.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -447,7 +447,7 @@ Você pode substituir essas permissões por agente.
 
 Você também pode definir permissões em agentes Markdown.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Revisão de código sem edições
 mode: subagent
@@ -466,9 +466,9 @@ Apenas analise o código e sugira alterações.
 
 Você pode definir permissões para comandos bash específicos.
 
-```json title="opencode.json" {7}
+```json title="weapon.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -484,9 +484,9 @@ Você pode definir permissões para comandos bash específicos.
 
 Isso pode aceitar um padrão glob.
 
-```json title="opencode.json" {7}
+```json title="weapon.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -502,9 +502,9 @@ Isso pode aceitar um padrão glob.
 E você também pode usar o curinga `*` para gerenciar permissões para todos os comandos.
 Como a última regra correspondente tem precedência, coloque o curinga `*` primeiro e regras específicas depois.
 
-```json title="opencode.json" {8}
+```json title="weapon.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -526,7 +526,7 @@ Como a última regra correspondente tem precedência, coloque o curinga `*` prim
 
 Controle o modo do agente com a configuração `mode`. A opção `mode` é usada para determinar como o agente pode ser usado.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "review": {
@@ -544,7 +544,7 @@ A opção `mode` pode ser definida como `primary`, `subagent` ou `all`. Se nenhu
 
 Oculte um subagente do menu de autocompletar `@` com `hidden: true`. Útil para subagentes internos que devem ser invocados apenas programaticamente por outros agentes através da ferramenta Task.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "internal-helper": {
@@ -567,7 +567,7 @@ Aplica-se apenas a agentes `mode: subagent`.
 
 Controle quais subagentes um agente pode invocar através da ferramenta Task com `permission.task`. Usa padrões globais para correspondência flexível.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "orchestrator": {
@@ -602,7 +602,7 @@ Personalize a aparência visual do agente na interface com a opção `color`. Is
 
 Use uma cor hex válida (por exemplo, `#FF5733`) ou cor de tema: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "creative": {
@@ -621,7 +621,7 @@ Use uma cor hex válida (por exemplo, `#FF5733`) ou cor de tema: `primary`, `sec
 
 Controle a diversidade das respostas com a opção `top_p`. Alternativa à temperatura para controlar a aleatoriedade.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "agent": {
     "brainstorm": {
@@ -641,7 +641,7 @@ Quaisquer outras opções que você especificar em sua configuração de agente 
 
 Por exemplo, com os modelos de raciocínio da OpenAI, você pode controlar o esforço de raciocínio:
 
-```json title="opencode.json" {6,7}
+```json title="weapon.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -657,7 +657,7 @@ Por exemplo, com os modelos de raciocínio da OpenAI, você pode controlar o esf
 Essas opções adicionais são específicas do modelo e do provedor. Verifique a documentação do seu provedor para parâmetros disponíveis.
 
 :::tip
-Execute `opencode models` para ver uma lista dos modelos disponíveis.
+Execute `weapon models` para ver uma lista dos modelos disponíveis.
 :::
 
 ---
@@ -667,7 +667,7 @@ Execute `opencode models` para ver uma lista dos modelos disponíveis.
 Você pode criar novos agentes usando o seguinte comando:
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 Este comando interativo irá:
@@ -697,14 +697,14 @@ Aqui estão alguns casos de uso comuns para diferentes agentes.
 Aqui estão alguns agentes de exemplo que você pode achar úteis.
 
 :::tip
-Você tem um agente que gostaria de compartilhar? [Envie um PR](https://github.com/anomalyco/opencode).
+Você tem um agente que gostaria de compartilhar? [Envie um PR](https://github.com/anomalyco/weapon).
 :::
 
 ---
 
 ### Agente de documentação
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/weapon/agents/docs-writer.md"
 ---
 description: Escreve e mantém a documentação do projeto
 mode: subagent
@@ -726,7 +726,7 @@ Foque em:
 
 ### Auditor de segurança
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/weapon/agents/security-auditor.md"
 ---
 description: Realiza auditorias de segurança e identifica vulnerabilidades
 mode: subagent

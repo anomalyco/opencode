@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "worktree.ready"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "branch"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

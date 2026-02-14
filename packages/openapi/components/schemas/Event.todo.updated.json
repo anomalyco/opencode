@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "todo.updated"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "todos": {
+          "type": "array",
+          "items": {
+            "$ref": "./Todo.json"
+          }
+        }
+      },
+      "required": [
+        "sessionID",
+        "todos"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

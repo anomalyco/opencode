@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "patch"
+    },
+    "hash": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "hash",
+    "files"
+  ]
+}

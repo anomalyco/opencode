@@ -1,30 +1,30 @@
 ---
 title: 공급자
-description: OpenCode에서 LLM 공급자를 사용합니다.
+description: Weapon에서 LLM 공급자를 사용합니다.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75개 이상의 LLM 공급자**를 지원하며 로컬 모델도 실행할 수 있습니다.
+Weapon는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75개 이상의 LLM 공급자**를 지원하며 로컬 모델도 실행할 수 있습니다.
 
 필요한 공급자를 추가하려면:
 
 1. `/connect` 명령을 사용하여 공급자의 API 키를 추가하십시오.
-2. OpenCode 구성에서 공급자를 구성하십시오.
+2. Weapon 구성에서 공급자를 구성하십시오.
 
 ---
 
 ### 자격 증명
 
 `/connect` 명령으로 공급자의 API 키를 추가하면 다음 위치에 저장됩니다:
-`~/.local/share/opencode/auth.json`
+`~/.local/share/weapon/auth.json`
 
 ---
 
 #### 구성
 
-OpenCode 설정의 `provider` 섹션을 통해 공급자를 사용자 정의할 수 있습니다.
+Weapon 설정의 `provider` 섹션을 통해 공급자를 사용자 정의할 수 있습니다.
 
 ---
 
@@ -32,9 +32,9 @@ OpenCode 설정의 `provider` 섹션을 통해 공급자를 사용자 정의할 
 
 `baseURL` 옵션을 설정하여 모든 공급자를 위한 기본 URL을 사용자 정의할 수 있습니다. 프록시 서비스 또는 사용자 정의 엔드포인트를 사용할 때 유용합니다.
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -47,15 +47,15 @@ OpenCode 설정의 `provider` 섹션을 통해 공급자를 사용자 정의할 
 
 ---
 
-## OpenCode Zen
+## Weapon Zen
 
-OpenCode Zen은 OpenCode 팀이 OpenCode와 잘 작동하도록 테스트하고 검증한 모델 목록입니다. [더 알아보기](/docs/zen).
+Weapon Zen은 Weapon 팀이 Weapon와 잘 작동하도록 테스트하고 검증한 모델 목록입니다. [더 알아보기](/docs/zen).
 
 :::tip
-처음이라면 OpenCode Zen으로 시작하는 것이 좋습니다.
+처음이라면 Weapon Zen으로 시작하는 것이 좋습니다.
 :::
 
-1. TUI에서 `/connect` 명령을 실행하고 `opencode`를 선택한 뒤, [opencode.ai/auth](https://opencode.ai/auth)로 이동합니다.
+1. TUI에서 `/connect` 명령을 실행하고 `weapon`를 선택한 뒤, [weapon.ai/auth](https://weapon.ai/auth)로 이동합니다.
 
    ```txt
    /connect
@@ -78,7 +78,7 @@ OpenCode Zen은 OpenCode 팀이 OpenCode와 잘 작동하도록 테스트하고 
    /models
    ```
 
-OpenCode의 다른 공급자처럼 작동하며 사용은 완전히 선택 사항입니다.
+Weapon의 다른 공급자처럼 작동하며 사용은 완전히 선택 사항입니다.
 
 ---
 
@@ -121,7 +121,7 @@ OpenCode의 다른 공급자처럼 작동하며 사용은 완전히 선택 사�
 
 ### Amazon Bedrock
 
-OpenCode로 Amazon Bedrock을 사용하려면:
+Weapon로 Amazon Bedrock을 사용하려면:
 
 1. Amazon Bedrock 콘솔의 **Model catalog**로 이동하여 원하는 모델에 대한 액세스를 요청합니다.
 
@@ -133,17 +133,17 @@ OpenCode로 Amazon Bedrock을 사용하려면:
 
 ### 환경 변수 (빠른 시작)
 
-OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니다:
+Weapon를 실행하는 동안 다음 환경 변수 중 하나를 설정합니다:
 
 ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY weapon
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile weapon
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX weapon
 ```
 
 또는 bash 프로필에 추가합니다:
@@ -155,11 +155,11 @@ OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니�
 
 #### 설정 파일 (권장)
 
-프로젝트별 또는 영구 구성을 위해 `opencode.json`을 사용하십시오.
+프로젝트별 또는 영구 구성을 위해 `weapon.json`을 사용하십시오.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -185,9 +185,9 @@ OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니�
 
 Bedrock의 VPC 엔드포인트를 사용하는 경우:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -231,9 +231,9 @@ Amazon Bedrock은 다음과 같은 인증 우선 순위를 사용합니다.
 :::note
 사용자 정의 추론 프로필(custom inference profiles)의 경우, 키에 모델과 공급자 이름을 사용하고 `id` 속성에 ARN을 설정하십시오. 이렇게 하면 올바른 캐싱이 보장됩니다:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -277,7 +277,7 @@ Amazon Bedrock은 다음과 같은 인증 우선 순위를 사용합니다.
    ```
 
 :::info
-OpenCode에서 Claude Pro/Max 구독을 사용하는 것은 [Anthropic](https://anthropic.com)에서 공식적으로 지원하지 않습니다.
+Weapon에서 Claude Pro/Max 구독을 사용하는 것은 [Anthropic](https://anthropic.com)에서 공식적으로 지원하지 않습니다.
 :::
 
 ##### API 키 사용
@@ -301,7 +301,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 2. [Azure AI Foundry](https://ai.azure.com/)로 이동하여 모델을 배포합니다.
 
    :::note
-   배포 이름은 제대로 작동하려면 OpenCode의 모델 이름과 일치해야 합니다.
+   배포 이름은 제대로 작동하려면 Weapon의 모델 이름과 일치해야 합니다.
    :::
 
 3. `/connect` 명령을 실행하고 **Azure**를 검색하십시오.
@@ -322,7 +322,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 5. 리소스 이름을 환경 변수로 설정:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX weapon
    ```
 
    또는 bash 프로필에 추가:
@@ -348,7 +348,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 2. [Azure AI Foundry](https://ai.azure.com/)로 이동하여 모델을 배포합니다.
 
    :::note
-   배포 이름은 제대로 작동하려면 OpenCode의 모델 이름과 일치해야 합니다.
+   배포 이름은 제대로 작동하려면 Weapon의 모델 이름과 일치해야 합니다.
    :::
 
 3. `/connect` 명령을 실행하고 **Azure Cognitive Services**를 검색하십시오.
@@ -369,7 +369,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 5. 리소스 이름을 환경 변수로 설정:
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX weapon
    ```
 
    또는 bash 프로필에 추가:
@@ -480,11 +480,11 @@ Cloudflare AI Gateway는 OpenAI, Anthropic, Workers AI 등의 모델에 액세�
    /models
    ```
 
-   OpenCode 구성을 통해 모델을 추가할 수 있습니다.
+   Weapon 구성을 통해 모델을 추가할 수 있습니다.
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -661,7 +661,7 @@ GitLab Duo는 GitLab의 Anthropic 프록시를 통해 기본 도구 호출 기�
 
 1. [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)로 이동
 2. 새 토큰 추가
-3. 이름: `OpenCode`, 범위: `api`
+3. 이름: `Weapon`, 범위: `api`
 4. 토큰 복사 (`glpat-`로 시작)
 5. 터미널에 입력하십시오.
 
@@ -679,20 +679,20 @@ GitLab Duo는 GitLab의 Anthropic 프록시를 통해 기본 도구 호출 기�
 
 :::note
 `GITLAB_TOKEN` 환경 변수를 지정할 수도 있습니다.
-OpenCode는 인증 저장소에 토큰을 저장합니다.
+Weapon는 인증 저장소에 토큰을 저장합니다.
 :::
 
 #### 셀프 호스팅 GitLab (Self-Hosted)
 
 :::note[규정 준수 참고 사항]
-OpenCode는 세션 제목 생성과 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
+Weapon는 세션 제목 생성과 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
 기본적으로 Zen에서 호스팅되는 gpt-5-nano를 사용하도록 구성됩니다.
-OpenCode를 자체 호스팅 GitLab 인스턴스만 사용하도록 제한하려면 `opencode.json` 파일에 다음을 추가하십시오.
+Weapon를 자체 호스팅 GitLab 인스턴스만 사용하도록 제한하려면 `weapon.json` 파일에 다음을 추가하십시오.
 세션 공유를 비활성화하는 것도 권장합니다.
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -750,11 +750,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### 구성
 
-`opencode.json`을 통해 사용자 정의:
+`weapon.json`을 통해 사용자 정의:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -773,10 +773,10 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 GitLab 도구(병합 요청, 이슈, 파이프라인, CI/CD 등)에 액세스하려면:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["@gitlab/weapon-gitlab-plugin"]
 }
 ```
 
@@ -786,7 +786,7 @@ GitLab 도구(병합 요청, 이슈, 파이프라인, CI/CD 등)에 액세스하
 
 ### GitHub Copilot
 
-GitHub Copilot 구독을 사용하여 opencode:
+GitHub Copilot 구독을 사용하여 weapon:
 
 :::note
 몇몇 모형은 [Pro+를 필요로 할지도 모릅니다
@@ -823,7 +823,7 @@ GitHub Copilot 구독을 사용하여 opencode:
 
 ### 구글 Vertex AI
 
-opencode로 Google Vertex AI를 사용하려면:
+weapon로 Google Vertex AI를 사용하려면:
 
 1. Google Cloud Console에서 ** Model Garden**을 통해 헤드를 확인하고 확인하십시오.
    당신의 지역에서 유효한 모형.
@@ -840,10 +840,10 @@ opencode로 Google Vertex AI를 사용하려면:
 - `GOOGLE_APPLICATION_CREDENTIALS`: 서비스 계정 JSON 키 파일 경로
 - gcloud CLI를 사용하여 인증 : `gcloud auth application-default login`
 
-opencode를 실행하면서 설정한다.
+weapon를 실행하면서 설정한다.
 
 ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id weapon
 ```
 
 또는 bash 프로파일에 추가하십시오.
@@ -953,13 +953,13 @@ opencode를 실행하면서 설정한다.
 
 #### 선택 사항
 
-이벤트에서 opencode를 통해 자동으로 구성되지 않는 Helicone의 기능 또는 모델을 볼 수 있습니다.
+이벤트에서 weapon를 통해 자동으로 구성되지 않는 Helicone의 기능 또는 모델을 볼 수 있습니다.
 
 여기에 [Helicone의 모델 디렉토리](https://helicone.ai/models), 당신은 당신이 추가 할 모델의 ID를 잡아이 필요.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -985,9 +985,9 @@ opencode를 실행하면서 설정한다.
 
 Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위한 사용자 정의 헤더를 지원합니다. `options.headers`를 사용하여 공급자 구성에 추가하십시오:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -996,7 +996,7 @@ Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위�
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "weapon",
         },
       },
     },
@@ -1006,21 +1006,21 @@ Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위�
 
 ##### 세션 추적
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) 기능으로 그룹 관련 LLM 요청이 가능합니다. [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 플러그인을 사용하여 각 opencode 대화를 Helicone 세션으로 자동 로그인하십시오.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) 기능으로 그룹 관련 LLM 요청이 가능합니다. [weapon-helicone-session](https://github.com/H2Shami/weapon-helicone-session) 플러그인을 사용하여 각 weapon 대화를 Helicone 세션으로 자동 로그인하십시오.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g weapon-helicone-session
 ```
 
 설정에 추가하십시오.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["weapon-helicone-session"]
 }
 ```
 
-플러그인은 `Helicone-Session-Id` 및 `Helicone-Session-Name` 헤더를 귀하의 요청에 주사합니다. Helicone의 세션 페이지에서는 별도의 세션으로 나열된 각 opencode 대화를 볼 수 있습니다.
+플러그인은 `Helicone-Session-Id` 및 `Helicone-Session-Name` 헤더를 귀하의 요청에 주사합니다. Helicone의 세션 페이지에서는 별도의 세션으로 나열된 각 weapon 대화를 볼 수 있습니다.
 
 ###### 공통 Helicone 헤더
 
@@ -1039,9 +1039,9 @@ npm install -g opencode-helicone-session
 
 [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server 유틸리티를 통해 로컬 모델을 사용할 수 있습니다.
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="weapon.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1106,9 +1106,9 @@ IO.NET은 다양한 사용 사례에 최적화된 17개의 모델을 제공합�
 
 LM Studio를 통해 로컬 모델을 사용할 수 있습니다.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="weapon.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1224,12 +1224,12 @@ Moonshot AI에서 Kimi K2 사용 :
 Ollama를 통해 로컬 모델을 사용할 수 있습니다.
 
 :::tip
-Ollama는 opencode를 자동으로 구성할 수 있습니다. 자세한 내용은 [Ollama 통합 문서](https://docs.ollama.com/integrations/opencode)를 참조하십시오.
+Ollama는 weapon를 자동으로 구성할 수 있습니다. 자세한 내용은 [Ollama 통합 문서](https://docs.ollama.com/integrations/weapon)를 참조하십시오.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="weapon.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1263,13 +1263,13 @@ Ollama는 opencode를 자동으로 구성할 수 있습니다. 자세한 내용�
 
 ## Ollama Cloud
 
-opencode로 Ollama Cloud를 사용하려면:
+weapon로 Ollama Cloud를 사용하려면:
 
 1. [https://ollama.com/](https://ollama.com/) 이상 머리와 로그인하거나 계정을 만들 수 있습니다.
 
 2. Navigate to**Settings** > **Keys** 및 click **API Key**를 추가하여 새로운 API 키 생성.
 
-3. opencode에서 사용을 위한 API 열쇠를 복사하십시오.
+3. weapon에서 사용을 위한 API 열쇠를 복사하십시오.
 
 4. `/connect` 명령을 실행하고 ** Ollama Cloud**를 검색하십시오.
 
@@ -1286,7 +1286,7 @@ opencode로 Ollama Cloud를 사용하려면:
    └ enter
    ```
 
-6. ** 중요 **: opencode의 클라우드 모델을 사용하기 전에, 로컬 모델 정보를 끌어야 합니다:
+6. ** 중요 **: weapon의 클라우드 모델을 사용하기 전에, 로컬 모델 정보를 끌어야 합니다:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1333,19 +1333,19 @@ API 키가 이미 있다면 ** 수동으로 API 키**를 입력하고 terminal�
 
 ---
 
-## OpenCode Zen
+## Weapon Zen
 
-OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다. [더 알아보기](/docs/zen).
+Weapon Zen은 weapon 팀에서 제공하는 테스트 및 검증된 모델 목록입니다. [더 알아보기](/docs/zen).
 
-1. 로그인 **<a href={console}>OpenCode Zen</a>** and click**Create API Key**.
+1. 로그인 **<a href={console}>Weapon Zen</a>** and click**Create API Key**.
 
-2. `/connect` 명령을 실행하고 **OpenCode Zen**를 검색하십시오.
+2. `/connect` 명령을 실행하고 **Weapon Zen**를 검색하십시오.
 
    ```txt
    /connect
    ```
 
-3. opencode API 키를 입력하십시오.
+3. weapon API 키를 입력하십시오.
 
    ```txt
    ┌ API key
@@ -1387,11 +1387,11 @@ OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 �
    /models
    ```
 
-opencode config를 통해 추가 모델을 추가할 수 있습니다.
+weapon config를 통해 추가 모델을 추가할 수 있습니다.
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1402,11 +1402,11 @@ opencode config를 통해 추가 모델을 추가할 수 있습니다.
 }
 ```
 
-5. 당신은 또한 당신의 opencode config를 통해 그들을 주문을 받아서 만들 수 있습니다. 공급자 지정의 예입니다.
+5. 당신은 또한 당신의 weapon config를 통해 그들을 주문을 받아서 만들 수 있습니다. 공급자 지정의 예입니다.
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1454,7 +1454,7 @@ SAP AI Core는 OpenAI, Anthropic, Google, Amazon, Meta, Mistral 및 AI21의 40+ 
 또는 `AICORE_SERVICE_KEY` 환경 변수를 설정:
 
 ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' weapon
 ```
 
 또는 bash 프로파일에 추가:
@@ -1466,7 +1466,7 @@ SAP AI Core는 OpenAI, Anthropic, Google, Amazon, Meta, Mistral 및 AI21의 40+ 
 4. 선택적으로 배치 ID 및 자원 그룹:
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group weapon
    ```
 
    :::note
@@ -1510,7 +1510,7 @@ SAP AI Core는 OpenAI, Anthropic, Google, Amazon, Meta, Mistral 및 AI21의 40+ 
 
 ### Scaleway
 
-opencode를 사용하여 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)를 사용하려면:
+weapon를 사용하여 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)를 사용하려면:
 
 1. [Scaleway 콘솔 IAM 설정](https://console.scaleway.com/iam/api-keys)를 통해 새로운 API 키 생성.
 
@@ -1618,11 +1618,11 @@ Vercel AI를 게이트웨이는 OpenAI, Anthropic, Google, xAI 등에서 모델�
    /models
    ```
 
-opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공급자 routing 순서를 지정하는 예입니다.
+weapon config를 통해 모델을 사용자 정의 할 수 있습니다. 공급자 routing 순서를 지정하는 예입니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1728,11 +1728,11 @@ opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공�
    /models
    ```
 
-opencode config를 통해 추가 모델을 추가할 수 있습니다.
+weapon config를 통해 추가 모델을 추가할 수 있습니다.
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "zenmux": {
       "models": {
@@ -1750,7 +1750,7 @@ opencode config를 통해 추가 모델을 추가할 수 있습니다.
 `/connect` 명령에 나열되지 않은 **OpenAI-compatible** 공급자를 추가하려면:
 
 :::tip
-opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 가장 현대적인 AI 제공 업체는 OpenAI 호환 API를 제공합니다.
+weapon를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 가장 현대적인 AI 제공 업체는 OpenAI 호환 API를 제공합니다.
 :::
 
 1. `/connect` 명령을 실행하고 ** 다른**로 스크롤하십시오.
@@ -1789,18 +1789,18 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in weapon.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. 프로젝트 디렉토리에 `opencode.json` 파일을 만들거나 업데이트하십시오.
+4. 프로젝트 디렉토리에 `weapon.json` 파일을 만들거나 업데이트하십시오.
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="weapon.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1836,9 +1836,9 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 
 다음은 `apiKey`, `headers` 및 모델 `limit` 옵션 설정 예입니다.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="weapon.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1870,7 +1870,7 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 - **limit.context**: 모델이 허용하는 최대 Input Tokens.
 - **limit.output**: 모델이 생성할 수 있는 최대 Output Tokens.
 
-`limit` 필드를 사용하면 opencode가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
+`limit` 필드를 사용하면 weapon가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
 
 ---
 
@@ -1878,13 +1878,13 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 
 공급자 구성에 문제가 있는 경우 다음을 확인하십시오.
 
-1. **주의 설정 확인 **: `opencode auth list`를 실행하여 자격 증명을 볼 수 있습니다.
+1. **주의 설정 확인 **: `weapon auth list`를 실행하여 자격 증명을 볼 수 있습니다.
    공급자는 config에 추가됩니다.
 
 이것은 Amazon Bedrock과 같은 공급자에 적용되지 않습니다. 환경 변수에 의존합니다.
 
-2. 주문 공급자를 위해, opencode config를 검사하고:
+2. 주문 공급자를 위해, weapon config를 검사하고:
 
-- `/connect` 명령에 사용되는 공급자 ID가 opencode config에서 ID를 일치시킵니다.
+- `/connect` 명령에 사용되는 공급자 ID가 weapon config에서 ID를 일치시킵니다.
 - 오른쪽 npm 패키지는 공급자에 사용됩니다. 예를 들어 Cerebras의 `@ai-sdk/cerebras`를 사용합니다. 그리고 다른 모든 OpenAI 호환 공급자를 위해, 사용 `@ai-sdk/openai-compatible`.
 - 올바른 API 엔드포인트는 `options.baseURL` 필드에 사용됩니다.

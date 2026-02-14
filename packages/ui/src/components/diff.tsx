@@ -1,4 +1,4 @@
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@weapon-ai/util/encode"
 import { FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"

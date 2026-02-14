@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: opencode CLI 옵션과 명령어.
+description: weapon CLI 옵션과 명령어.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode CLI는 인수 없이 실행하면 기본적으로 [TUI](/docs/tui)를 시작합니다.
+weapon CLI는 인수 없이 실행하면 기본적으로 [TUI](/docs/tui)를 시작합니다.
 
 ```bash
-opencode
+weapon
 ```
 
-이 페이지에 나온 것처럼 명령을 함께 전달할 수도 있습니다. 이를 통해 opencode를 프로그래밍 방식으로 사용할 수 있습니다.
+이 페이지에 나온 것처럼 명령을 함께 전달할 수도 있습니다. 이를 통해 weapon를 프로그래밍 방식으로 사용할 수 있습니다.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+weapon run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-OpenCode 터미널 사용자 인터페이스를 시작합니다.
+Weapon 터미널 사용자 인터페이스를 시작합니다.
 
 ```bash
-opencode [project]
+weapon [project]
 ```
 
 #### 플래그
@@ -44,36 +44,36 @@ opencode [project]
 
 ## 명령어
 
-opencode CLI는 아래 명령들도 제공합니다.
+weapon CLI는 아래 명령들도 제공합니다.
 
 ---
 
 ### agent
 
-opencode용 에이전트를 관리합니다.
+weapon용 에이전트를 관리합니다.
 
 ```bash
-opencode agent [command]
+weapon agent [command]
 ```
 
 ---
 
 ### attach
 
-`serve` 또는 `web` 명령으로 이미 실행 중인 opencode 백엔드 서버에 터미널을 연결합니다.
+`serve` 또는 `web` 명령으로 이미 실행 중인 weapon 백엔드 서버에 터미널을 연결합니다.
 
 ```bash
-opencode attach [url]
+weapon attach [url]
 ```
 
-원격 opencode 백엔드와 TUI를 연결해 사용할 수 있습니다. 예:
+원격 weapon 백엔드와 TUI를 연결해 사용할 수 있습니다. 예:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+weapon web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+weapon attach http://10.20.30.40:4096
 ```
 
 #### 플래그
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 커스텀 설정으로 새 에이전트를 만듭니다.
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 이 명령은 커스텀 시스템 프롬프트와 도구 설정을 사용해 새 에이전트를 만드는 과정을 안내합니다.
@@ -102,7 +102,7 @@ opencode agent create
 사용 가능한 모든 에이전트를 표시합니다.
 
 ```bash
-opencode agent list
+weapon agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 provider 인증 정보와 로그인을 관리합니다.
 
 ```bash
-opencode auth [command]
+weapon auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode는 [Models.dev](https://models.dev)의 provider 목록을 기반으로 동작하므로, `opencode auth login`으로 원하는 provider의 API 키를 설정할 수 있습니다. 인증 정보는 `~/.local/share/opencode/auth.json`에 저장됩니다.
+Weapon는 [Models.dev](https://models.dev)의 provider 목록을 기반으로 동작하므로, `weapon auth login`으로 원하는 provider의 API 키를 설정할 수 있습니다. 인증 정보는 `~/.local/share/weapon/auth.json`에 저장됩니다.
 
 ```bash
-opencode auth login
+weapon auth login
 ```
 
-OpenCode 시작 시 인증 파일에서 provider 정보를 불러오며, 시스템 환경 변수나 프로젝트의 `.env`에 정의된 키도 함께 로드합니다.
+Weapon 시작 시 인증 파일에서 provider 정보를 불러오며, 시스템 환경 변수나 프로젝트의 `.env`에 정의된 키도 함께 로드합니다.
 
 ---
 
@@ -134,13 +134,13 @@ OpenCode 시작 시 인증 파일에서 provider 정보를 불러오며, 시스�
 인증 파일에 저장된 provider 목록을 표시합니다.
 
 ```bash
-opencode auth list
+weapon auth list
 ```
 
 축약형도 사용할 수 있습니다.
 
 ```bash
-opencode auth ls
+weapon auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 인증 파일에서 provider 정보를 제거해 로그아웃합니다.
 
 ```bash
-opencode auth logout
+weapon auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 저장소 자동화를 위한 GitHub 에이전트를 관리합니다.
 
 ```bash
-opencode github [command]
+weapon github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 저장소에 GitHub 에이전트를 설치합니다.
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 필요한 GitHub Actions 워크플로를 설정하고 구성 과정을 안내합니다. [더 알아보기](/docs/github).
@@ -182,7 +182,7 @@ opencode github install
 GitHub 에이전트를 실행합니다. 보통 GitHub Actions에서 사용합니다.
 
 ```bash
-opencode github run
+weapon github run
 ```
 
 ##### 플래그
@@ -199,7 +199,7 @@ opencode github run
 Model Context Protocol 서버를 관리합니다.
 
 ```bash
-opencode mcp [command]
+weapon mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 구성에 MCP 서버를 추가합니다.
 
 ```bash
-opencode mcp add
+weapon mcp add
 ```
 
 이 명령은 로컬 또는 원격 MCP 서버를 추가하는 과정을 안내합니다.
@@ -221,13 +221,13 @@ opencode mcp add
 구성된 MCP 서버와 연결 상태를 표시합니다.
 
 ```bash
-opencode mcp list
+weapon mcp list
 ```
 
 축약형도 사용할 수 있습니다.
 
 ```bash
-opencode mcp ls
+weapon mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 OAuth를 지원하는 MCP 서버를 인증합니다.
 
 ```bash
-opencode mcp auth [name]
+weapon mcp auth [name]
 ```
 
 서버 이름을 입력하지 않으면 OAuth 지원 서버 목록에서 선택하라는 안내가 표시됩니다.
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 OAuth 지원 서버와 인증 상태를 목록으로 볼 수도 있습니다.
 
 ```bash
-opencode mcp auth list
+weapon mcp auth list
 ```
 
 축약형도 사용할 수 있습니다.
 
 ```bash
-opencode mcp auth ls
+weapon mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 MCP 서버의 OAuth 인증 정보를 제거합니다.
 
 ```bash
-opencode mcp logout [name]
+weapon mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 MCP 서버의 OAuth 연결 문제를 디버그합니다.
 
 ```bash
-opencode mcp debug <name>
+weapon mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 구성된 provider에서 사용 가능한 모델 목록을 표시합니다.
 
 ```bash
-opencode models [provider]
+weapon models [provider]
 ```
 
 이 명령은 구성된 provider 전체에서 사용 가능한 모델을 `provider/model` 형식으로 출력합니다.
@@ -291,7 +291,7 @@ opencode models [provider]
 특정 provider ID를 넘겨 해당 provider의 모델만 필터링할 수도 있습니다.
 
 ```bash
-opencode models anthropic
+weapon models anthropic
 ```
 
 #### 플래그
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | models.dev에서 모델 캐시 새로고침                 |
 | `--verbose` | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
 
-`--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 OpenCode에서 바로 확인하고 싶을 때 유용합니다.
+`--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 Weapon에서 바로 확인하고 싶을 때 유용합니다.
 
 ```bash
-opencode models --refresh
+weapon models --refresh
 ```
 
 ---
 
 ### run
 
-프롬프트를 직접 전달해 비대화형 모드로 opencode를 실행합니다.
+프롬프트를 직접 전달해 비대화형 모드로 weapon를 실행합니다.
 
 ```bash
-opencode run [message..]
+weapon run [message..]
 ```
 
 스크립트, 자동화, 또는 전체 TUI를 띄우지 않고 빠른 응답이 필요할 때 유용합니다. 예:
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "weapon run"
+weapon run Explain the use of context in Go
 ```
 
-매번 MCP 서버 콜드 부트가 발생하지 않도록, 실행 중인 `opencode serve` 인스턴스에 붙어서 실행할 수도 있습니다.
+매번 MCP 서버 콜드 부트가 발생하지 않도록, 실행 중인 `weapon serve` 인스턴스에 붙어서 실행할 수도 있습니다.
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+weapon serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+weapon run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### 플래그
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | 메시지에 첨부할 파일                                                   |
 | `--format`   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                 |
 | `--title`    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                       |
-| `--attach`   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)              |
+| `--attach`   |      | 실행 중인 weapon 서버에 연결(예: http://localhost:4096)              |
 | `--port`     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                      |
 
 ---
 
 ### serve
 
-API 접근용 headless OpenCode 서버를 시작합니다. 전체 HTTP 인터페이스는 [server docs](/docs/server)를 참고하세요.
+API 접근용 headless Weapon 서버를 시작합니다. 전체 HTTP 인터페이스는 [server docs](/docs/server)를 참고하세요.
 
 ```bash
-opencode serve
+weapon serve
 ```
 
-이 명령은 TUI 없이 opencode 기능에 접근할 수 있는 HTTP 서버를 시작합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+이 명령은 TUI 없이 weapon 기능에 접근할 수 있는 HTTP 서버를 시작합니다. `WEAPON_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `weapon`).
 
 #### 플래그
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-OpenCode 세션을 관리합니다.
+Weapon 세션을 관리합니다.
 
 ```bash
-opencode session [command]
+weapon session [command]
 ```
 
 ---
 
 #### list
 
-OpenCode 세션 목록을 표시합니다.
+Weapon 세션 목록을 표시합니다.
 
 ```bash
-opencode session list
+weapon session list
 ```
 
 ##### 플래그
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-OpenCode 세션의 토큰 사용량과 비용 통계를 표시합니다.
+Weapon 세션의 토큰 사용량과 비용 통계를 표시합니다.
 
 ```bash
-opencode stats
+weapon stats
 ```
 
 #### 플래그
@@ -424,7 +424,7 @@ opencode stats
 세션 데이터를 JSON으로 내보냅니다.
 
 ```bash
-opencode export [sessionID]
+weapon export [sessionID]
 ```
 
 세션 ID를 지정하지 않으면 사용 가능한 세션에서 선택하라는 안내가 표시됩니다.
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-JSON 파일 또는 OpenCode 공유 URL에서 세션 데이터를 가져옵니다.
+JSON 파일 또는 Weapon 공유 URL에서 세션 데이터를 가져옵니다.
 
 ```bash
-opencode import <file>
+weapon import <file>
 ```
 
-로컬 파일이나 OpenCode 공유 URL에서 가져올 수 있습니다.
+로컬 파일이나 Weapon 공유 URL에서 가져올 수 있습니다.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+weapon import session.json
+weapon import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-웹 인터페이스를 포함한 headless OpenCode 서버를 시작합니다.
+웹 인터페이스를 포함한 headless Weapon 서버를 시작합니다.
 
 ```bash
-opencode web
+weapon web
 ```
 
-이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 Weapon에 접속합니다. `WEAPON_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `weapon`).
 
 #### 플래그
 
@@ -474,7 +474,7 @@ opencode web
 ACP(Agent Client Protocol) 서버를 시작합니다.
 
 ```bash
-opencode acp
+weapon acp
 ```
 
 이 명령은 nd-JSON 형식으로 stdin/stdout을 통해 통신하는 ACP 서버를 시작합니다.
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-OpenCode를 제거하고 관련 파일을 삭제합니다.
+Weapon를 제거하고 관련 파일을 삭제합니다.
 
 ```bash
-opencode uninstall
+weapon uninstall
 ```
 
 #### 플래그
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-opencode를 최신 버전 또는 특정 버전으로 업데이트합니다.
+weapon를 최신 버전 또는 특정 버전으로 업데이트합니다.
 
 ```bash
-opencode upgrade [target]
+weapon upgrade [target]
 ```
 
 최신 버전으로 업그레이드:
 
 ```bash
-opencode upgrade
+weapon upgrade
 ```
 
 특정 버전으로 업그레이드:
 
 ```bash
-opencode upgrade v0.1.48
+weapon upgrade v0.1.48
 ```
 
 #### 플래그
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## 전역 플래그
 
-opencode CLI는 아래 전역 플래그를 지원합니다.
+weapon CLI는 아래 전역 플래그를 지원합니다.
 
 | 플래그         | 축약 | 설명                                |
 | -------------- | ---- | ----------------------------------- |
@@ -551,34 +551,34 @@ opencode CLI는 아래 전역 플래그를 지원합니다.
 
 ## 환경 변수
 
-OpenCode는 환경 변수로도 구성할 수 있습니다.
+Weapon는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                  | 타입    | 설명                                           |
 | ------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
-| `OPENCODE_CONFIG`                     | string  | 설정 파일 경로                                 |
-| `OPENCODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |
-| `OPENCODE_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                          |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                    |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화             |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화             |
-| `OPENCODE_PERMISSION`                 | string  | 인라인 JSON 권한 설정                          |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                         |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                             |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
-| `OPENCODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 최적화를 위한 파일 시간 검사 비활성화          |
-| `OPENCODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
-| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
-| `OPENCODE_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL             |
+| `WEAPON_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
+| `WEAPON_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
+| `WEAPON_CONFIG`                     | string  | 설정 파일 경로                                 |
+| `WEAPON_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |
+| `WEAPON_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                          |
+| `WEAPON_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                    |
+| `WEAPON_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화             |
+| `WEAPON_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화             |
+| `WEAPON_PERMISSION`                 | string  | 인라인 JSON 권한 설정                          |
+| `WEAPON_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                         |
+| `WEAPON_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                |
+| `WEAPON_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                             |
+| `WEAPON_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                  |
+| `WEAPON_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화       |
+| `WEAPON_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화            |
+| `WEAPON_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
+| `WEAPON_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
+| `WEAPON_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
+| `WEAPON_DISABLE_FILETIME_CHECK`     | boolean | 최적화를 위한 파일 시간 검사 비활성화          |
+| `WEAPON_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
+| `WEAPON_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
+| `WEAPON_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
+| `WEAPON_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `weapon`) |
+| `WEAPON_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL             |
 
 ---
 
@@ -588,16 +588,16 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                            | 타입    | 설명                           |
 | ----------------------------------------------- | ------- | ------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화          |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화  |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)    |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화 |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화            |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화         |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 실험적 LSP 타입 검사 활성화    |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화    |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화               |
+| `WEAPON_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화          |
+| `WEAPON_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화             |
+| `WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화  |
+| `WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)    |
+| `WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수     |
+| `WEAPON_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화 |
+| `WEAPON_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화            |
+| `WEAPON_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화         |
+| `WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화             |
+| `WEAPON_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화         |
+| `WEAPON_EXPERIMENTAL_LSP_TY`                  | boolean | 실험적 LSP 타입 검사 활성화    |
+| `WEAPON_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화    |
+| `WEAPON_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화               |

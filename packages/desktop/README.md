@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Weapon Desktop
 
-Native OpenCode desktop app, built with Tauri v2.
+Native Weapon desktop app, built with Tauri v2.
 
 ## Development
 

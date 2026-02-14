@@ -1,0 +1,150 @@
+{
+  "post": {
+    "operationId": "session.command",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Session ID"
+      }
+    ],
+    "summary": "Send command",
+    "description": "Send a new command to a session for execution by the AI assistant.",
+    "responses": {
+      "200": {
+        "description": "Created message",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "info": {
+                  "$ref": "../components/schemas/AssistantMessage.json"
+                },
+                "parts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "../components/schemas/Part.json"
+                  }
+                }
+              },
+              "required": [
+                "info",
+                "parts"
+              ]
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "agent": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              },
+              "parts": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "file"
+                        },
+                        "mime": {
+                          "type": "string"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "$ref": "../components/schemas/FilePartSource.json"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "mime",
+                        "url"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "arguments",
+              "command"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_command/post.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "post": {
+    "operationId": "tui.publish",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Publish TUI event",
+    "description": "Publish a TUI event",
+    "responses": {
+      "200": {
+        "description": "Event published successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "anyOf": [
+              {
+                "$ref": "../components/schemas/Event.tui.prompt.append.json"
+              },
+              {
+                "$ref": "../components/schemas/Event.tui.command.execute.json"
+              },
+              {
+                "$ref": "../components/schemas/Event.tui.toast.show.json"
+              },
+              {
+                "$ref": "../components/schemas/Event.tui.session.select.json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_publish/post.js"
+        }
+      }
+    ]
+  }
+}

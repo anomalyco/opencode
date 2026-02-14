@@ -1,28 +1,28 @@
 ---
 title: Web
-description: Verwenden Sie OpenCode in Ihrem Browser.
+description: Verwenden Sie Weapon in Ihrem Browser.
 ---
 
-OpenCode kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet das gleiche leistungsstarke KI-Codierungserlebnis, ohne dass ein Terminal erforderlich ist.
+Weapon kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet das gleiche leistungsstarke KI-Codierungserlebnis, ohne dass ein Terminal erforderlich ist.
 
-![OpenCode Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
+![Weapon Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
 
 ## Erste Schritte
 
 Starten Sie die Weboberfläche, indem Sie Folgendes ausführen:
 
 ```bash
-opencode web
+weapon web
 ```
 
-Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und OpenCode automatisch in Ihrem Standardbrowser geöffnet.
+Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und Weapon automatisch in Ihrem Standardbrowser geöffnet.
 
 :::caution
-Wenn `OPENCODE_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
+Wenn `WEAPON_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
 :::
 
 :::tip[Windows-Nutzer]
-Um die beste Erfahrung zu erzielen, führen Sie `opencode web` über [WSL](/docs/windows-wsl) und nicht über PowerShell aus. Dies gewährleistet den ordnungsgemäßen Zugriff auf das Dateisystem und die Terminalintegration.
+Um die beste Erfahrung zu erzielen, führen Sie `weapon web` über [WSL](/docs/windows-wsl) und nicht über PowerShell aus. Dies gewährleistet den ordnungsgemäßen Zugriff auf das Dateisystem und die Terminalintegration.
 :::
 
 ---
@@ -33,21 +33,21 @@ Sie können den Webserver mithilfe von Befehlszeilen-Flags oder in Ihrer [Konfig
 
 ### Port
 
-Standardmäßig wählt OpenCode einen verfügbaren Port aus. Sie können einen Port angeben:
+Standardmäßig wählt Weapon einen verfügbaren Port aus. Sie können einen Port angeben:
 
 ```bash
-opencode web --port 4096
+weapon web --port 4096
 ```
 
 ### Hostname
 
-Standardmäßig bindet der Server an `127.0.0.1` (nur localhost). So machen Sie OpenCode in Ihrem Netzwerk zugänglich:
+Standardmäßig bindet der Server an `127.0.0.1` (nur localhost). So machen Sie Weapon in Ihrem Netzwerk zugänglich:
 
 ```bash
-opencode web --hostname 0.0.0.0
+weapon web --hostname 0.0.0.0
 ```
 
-Bei Verwendung von `0.0.0.0` zeigt OpenCode sowohl lokale als auch Netzwerkadressen an:
+Bei Verwendung von `0.0.0.0` zeigt Weapon sowohl lokale als auch Netzwerkadressen an:
 
 ```
   Local access:       http://localhost:4096
@@ -59,15 +59,15 @@ Bei Verwendung von `0.0.0.0` zeigt OpenCode sowohl lokale als auch Netzwerkadres
 Aktivieren Sie mDNS, um Ihren Server im lokalen Netzwerk erkennbar zu machen:
 
 ```bash
-opencode web --mdns
+weapon web --mdns
 ```
 
-Dadurch wird der Hostname automatisch auf `0.0.0.0` gesetzt und der Server als `opencode.local` angekündigt.
+Dadurch wird der Hostname automatisch auf `0.0.0.0` gesetzt und der Server als `weapon.local` angekündigt.
 
 Sie können den mDNS-Domänennamen anpassen, um mehrere Instanzen im selben Netzwerk auszuführen:
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+weapon web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -75,36 +75,36 @@ opencode web --mdns --mdns-domain myproject.local
 So erlauben Sie zusätzliche Domänen für CORS (nützlich für benutzerdefinierte Frontends):
 
 ```bash
-opencode web --cors https://example.com
+weapon web --cors https://example.com
 ```
 
 ### Authentifizierung
 
-Um den Zugriff zu schützen, legen Sie mithilfe der Umgebungsvariablen `OPENCODE_SERVER_PASSWORD` ein Passwort fest:
+Um den Zugriff zu schützen, legen Sie mithilfe der Umgebungsvariablen `WEAPON_SERVER_PASSWORD` ein Passwort fest:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+WEAPON_SERVER_PASSWORD=secret weapon web
 ```
 
-Der Benutzername ist standardmäßig `opencode`, kann aber mit `OPENCODE_SERVER_USERNAME` geändert werden.
+Der Benutzername ist standardmäßig `weapon`, kann aber mit `WEAPON_SERVER_USERNAME` geändert werden.
 
 ---
 
 ## Verwenden der Weboberfläche
 
-Nach dem Start bietet die Weboberfläche Zugriff auf Ihre OpenCode-Sitzungen.
+Nach dem Start bietet die Weboberfläche Zugriff auf Ihre Weapon-Sitzungen.
 
 ### Sitzungen
 
 Zeigen Sie Ihre Sitzungen auf der Startseite an und verwalten Sie sie. Sie können aktive Sitzungen sehen und neue starten.
 
-![OpenCode Web – Aktive Sitzung](../../../assets/web/web-homepage-active-session.png)
+![Weapon Web – Aktive Sitzung](../../../assets/web/web-homepage-active-session.png)
 
 ### Serverstatus
 
 Klicken Sie auf „Server anzeigen“, um verbundene Server und deren Status anzuzeigen.
 
-![OpenCode Web – Siehe Server](../../../assets/web/web-homepage-see-servers.png)
+![Weapon Web – Siehe Server](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -114,10 +114,10 @@ Sie können eine Terminal-TUI an einen laufenden Webserver anschließen:
 
 ```bash
 # Start the web server
-opencode web --port 4096
+weapon web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+weapon attach http://localhost:4096
 ```
 
 Dadurch können Sie sowohl die Weboberfläche als auch das Terminal gleichzeitig verwenden und dieselben Sitzungen und denselben Status teilen.
@@ -126,7 +126,7 @@ Dadurch können Sie sowohl die Weboberfläche als auch das Terminal gleichzeitig
 
 ## Konfigurationsdatei
 
-Sie können Servereinstellungen auch in Ihrer `opencode.json`-Konfigurationsdatei konfigurieren:
+Sie können Servereinstellungen auch in Ihrer `weapon.json`-Konfigurationsdatei konfigurieren:
 
 ```json
 {

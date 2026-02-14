@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "text"
+    },
+    "text": {
+      "type": "string"
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "ignored": {
+      "type": "boolean"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "start"
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "text"
+  ]
+}

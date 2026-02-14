@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: Esegui OpenCode su Windows con WSL per la migliore esperienza.
+description: Esegui Weapon su Windows con WSL per la migliore esperienza.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-Anche se OpenCode puo essere eseguito direttamente su Windows, consigliamo di usare [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) per la migliore esperienza. WSL fornisce un ambiente Linux che funziona in modo ottimale con le funzionalita di OpenCode.
+Anche se Weapon puo essere eseguito direttamente su Windows, consigliamo di usare [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) per la migliore esperienza. WSL fornisce un ambiente Linux che funziona in modo ottimale con le funzionalita di Weapon.
 
 :::tip[Perche WSL?]
-WSL offre prestazioni migliori del file system, supporto completo del terminale e compatibilita con gli strumenti di sviluppo su cui OpenCode fa affidamento.
+WSL offre prestazioni migliori del file system, supporto completo del terminale e compatibilita con gli strumenti di sviluppo su cui Weapon fa affidamento.
 :::
 
 ---
@@ -21,21 +21,21 @@ WSL offre prestazioni migliori del file system, supporto completo del terminale 
 
    Se non l'hai ancora fatto, [installa WSL](https://learn.microsoft.com/en-us/windows/wsl/install) seguendo la guida ufficiale Microsoft.
 
-2. **Installa OpenCode in WSL**
+2. **Installa Weapon in WSL**
 
-   Dopo aver configurato WSL, apri il terminale WSL e installa OpenCode usando uno dei [metodi di installazione](/docs/).
+   Dopo aver configurato WSL, apri il terminale WSL e installa Weapon usando uno dei [metodi di installazione](/docs/).
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://weapon.ai/install | bash
    ```
 
-3. **Usa OpenCode da WSL**
+3. **Usa Weapon da WSL**
 
-   Vai nella directory del progetto (accedi ai file Windows tramite `/mnt/c/`, `/mnt/d/`, ecc.) ed esegui OpenCode.
+   Vai nella directory del progetto (accedi ai file Windows tramite `/mnt/c/`, `/mnt/d/`, ecc.) ed esegui Weapon.
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   weapon
    ```
 
 </Steps>
@@ -44,12 +44,12 @@ WSL offre prestazioni migliori del file system, supporto completo del terminale 
 
 ## App desktop + server WSL
 
-Se preferisci usare l'app desktop di OpenCode ma vuoi eseguire il server in WSL:
+Se preferisci usare l'app desktop di Weapon ma vuoi eseguire il server in WSL:
 
 1. **Avvia il server in WSL** con `--hostname 0.0.0.0` per consentire connessioni esterne:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   weapon serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Collega l'app desktop** a `http://localhost:4096`
@@ -59,10 +59,10 @@ Se `localhost` non funziona nella tua configurazione, usa l'indirizzo IP di WSL 
 :::
 
 :::caution
-Quando usi `--hostname 0.0.0.0`, imposta `OPENCODE_SERVER_PASSWORD` per proteggere il server.
+Quando usi `--hostname 0.0.0.0`, imposta `WEAPON_SERVER_PASSWORD` per proteggere il server.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+WEAPON_SERVER_PASSWORD=your-password weapon serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Per la migliore esperienza web su Windows:
 
-1. **Esegui `opencode web` nel terminale WSL** invece che in PowerShell:
+1. **Esegui `weapon web` nel terminale WSL** invece che in PowerShell:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   weapon web --hostname 0.0.0.0
    ```
 
-2. **Accedi dal browser Windows** su `http://localhost:<port>` (OpenCode stampa l'URL)
+2. **Accedi dal browser Windows** su `http://localhost:<port>` (Weapon stampa l'URL)
 
-Eseguire `opencode web` da WSL garantisce accesso corretto al file system e integrazione del terminale, restando comunque accessibile dal browser Windows.
+Eseguire `weapon web` da WSL garantisce accesso corretto al file system e integrazione del terminale, restando comunque accessibile dal browser Windows.
 
 ---
 
@@ -97,17 +97,17 @@ Esempio:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+weapon
 ```
 
 :::tip
-Per un'esperienza piu fluida, valuta di clonare o copiare il repository nel file system di WSL (per esempio in `~/code/`) ed eseguire OpenCode li.
+Per un'esperienza piu fluida, valuta di clonare o copiare il repository nel file system di WSL (per esempio in `~/code/`) ed eseguire Weapon li.
 :::
 
 ---
 
 ## Suggerimenti
 
-- Tieni OpenCode in esecuzione su WSL per i progetti salvati su unita Windows: l'accesso ai file e immediato
-- Usa l'[estensione WSL di VS Code](https://code.visualstudio.com/docs/remote/wsl) insieme a OpenCode per un flusso di lavoro integrato
-- Configurazione e sessioni di OpenCode sono salvate nell'ambiente WSL in `~/.local/share/opencode/`
+- Tieni Weapon in esecuzione su WSL per i progetti salvati su unita Windows: l'accesso ai file e immediato
+- Usa l'[estensione WSL di VS Code](https://code.visualstudio.com/docs/remote/wsl) insieme a Weapon per un flusso di lavoro integrato
+- Configurazione e sessioni di Weapon sono salvate nell'ambiente WSL in `~/.local/share/weapon/`

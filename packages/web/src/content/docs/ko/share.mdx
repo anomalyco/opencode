@@ -1,9 +1,9 @@
 ---
 title: 공유
-description: OpenCode 대화를 공유하세요.
+description: Weapon 대화를 공유하세요.
 ---
 
-opencode의 공유 기능은 opencode 대화에 대한 공개 링크를 만들 수 있으므로 Teammates와 협업하거나 다른 곳에서 도움을받을 수 있습니다.
+weapon의 공유 기능은 weapon 대화에 대한 공개 링크를 만들 수 있으므로 Teammates와 협업하거나 다른 곳에서 도움을받을 수 있습니다.
 
 :::note
 공유 대화는 링크를 통해 누구나 쉽게 접근할 수 있습니다.
@@ -13,7 +13,7 @@ opencode의 공유 기능은 opencode 대화에 대한 공개 링크를 만들 �
 
 ## 작동 방식
 
-대화를 공유할 때, opencode:
+대화를 공유할 때, weapon:
 
 1. 세션에 대한 독특한 공개 URL 만들기
 2. 우리의 서버에 대화 기록 동기화
@@ -23,13 +23,13 @@ opencode의 공유 기능은 opencode 대화에 대한 공개 링크를 만들 �
 
 ## 공유
 
-opencode는 대화가 공유되는 방법을 제어하는 세 가지 공유 모드를 지원합니다.
+weapon는 대화가 공유되는 방법을 제어하는 세 가지 공유 모드를 지원합니다.
 
 ---
 
 ## 수동 (기본)
 
-기본적으로 opencode는 수동 공유 모드를 사용합니다. 세션은 자동으로 공유되지 않지만 `/share` 명령을 사용하여 수동으로 공유 할 수 있습니다.
+기본적으로 weapon는 수동 공유 모드를 사용합니다. 세션은 자동으로 공유되지 않지만 `/share` 명령을 사용하여 수동으로 공유 할 수 있습니다.
 
 ```
 /share
@@ -39,7 +39,7 @@ opencode는 대화가 공유되는 방법을 제어하는 세 가지 공유 모�
 
 [config 파일](/docs/config)에서 수동 모드를 명시적으로 설정하려면:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ opencode는 대화가 공유되는 방법을 제어하는 세 가지 공유 모�
 
 `share` 옵션을 설정하여 모든 새로운 대화에 대한 자동 공유를 활성화 할 수 있습니다 `"auto"` 당신의 [config 파일](/docs/config):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ opencode는 대화가 공유되는 방법을 제어하는 세 가지 공유 모�
 
 `share` 옵션을 설정하여 완전히 공유할 수 있습니다. `"disabled"`에 [config file](/docs/config):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-주어진 프로젝트를 위해 팀 전반에 걸쳐 이것을 시행하려면 프로젝트에 `opencode.json`에 추가하고 Git로 확인하십시오.
+주어진 프로젝트를 위해 팀 전반에 걸쳐 이것을 시행하려면 프로젝트에 `weapon.json`에 추가하고 Git로 확인하십시오.
 
 ---
 
@@ -125,4 +125,4 @@ opencode는 대화가 공유되는 방법을 제어하는 세 가지 공유 모�
 - **SSO를 통해 인증된 사용자에 대한 제한 **
 - ** 자체 인프라 **
 
-[Learn more](/docs/enterprise) 귀하의 조직에서 opencode를 사용하여.
+[Learn more](/docs/enterprise) 귀하의 조직에서 weapon를 사용하여.

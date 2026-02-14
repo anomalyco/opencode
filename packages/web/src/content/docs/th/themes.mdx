@@ -3,9 +3,9 @@ title: ธีมส์
 description: เลือกธีมในตัวหรือกำหนดธีมของคุณเอง
 ---
 
-ด้วย OpenCode คุณสามารถเลือกจากหนึ่งในธีมที่มีอยู่แล้วภายใน ใช้ธีมที่ปรับให้เข้ากับธีม terminal ของคุณ หรือกำหนดธีมที่คุณกำหนดเองได้
+ด้วย Weapon คุณสามารถเลือกจากหนึ่งในธีมที่มีอยู่แล้วภายใน ใช้ธีมที่ปรับให้เข้ากับธีม terminal ของคุณ หรือกำหนดธีมที่คุณกำหนดเองได้
 
-ตามค่าเริ่มต้น OpenCode จะใช้ธีม `opencode` ของเราเอง
+ตามค่าเริ่มต้น Weapon จะใช้ธีม `weapon` ของเราเอง
 
 ---
 
@@ -23,7 +23,7 @@ description: เลือกธีมในตัวหรือกำหนด�
 
 ## ธีมในตัว
 
-OpenCode มาพร้อมกับธีมในตัวหลายธีม
+Weapon มาพร้อมกับธีมในตัวหลายธีม
 
 | ชื่อ                   | คำอธิบาย                                                            |
 | ---------------------- | ------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ OpenCode มาพร้อมกับธีมในตัวหลายธ�
 
 ธีมของระบบมีไว้สำหรับผู้ใช้ที่:
 
-- ต้องการให้ OpenCode ตรงกับรูปลักษณ์ของ terminal
+- ต้องการให้ Weapon ตรงกับรูปลักษณ์ของ terminal
 - ใช้โครงร่างสี terminal แบบกำหนดเอง
 - ต้องการรูปลักษณ์ที่สอดคล้องกันในแอปพลิเคชัน terminal ทั้งหมด
 
@@ -63,9 +63,9 @@ OpenCode มาพร้อมกับธีมในตัวหลายธ�
 
 คุณสามารถเลือกธีมได้โดยเปิดการเลือกธีมขึ้นมาด้วยคำสั่ง `/theme` หรือคุณสามารถระบุได้ใน [config](/docs/config)
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ OpenCode มาพร้อมกับธีมในตัวหลายธ�
 
 ## ธีมที่กำหนดเอง
 
-OpenCode รองรับระบบธีมที่ใช้ JSON ที่ยืดหยุ่น ซึ่งช่วยให้ผู้ใช้สามารถสร้างและปรับแต่งธีมได้อย่างง่ายดาย
+Weapon รองรับระบบธีมที่ใช้ JSON ที่ยืดหยุ่น ซึ่งช่วยให้ผู้ใช้สามารถสร้างและปรับแต่งธีมได้อย่างง่ายดาย
 
 ---
 
@@ -83,9 +83,9 @@ OpenCode รองรับระบบธีมที่ใช้ JSON ที�
 ธีมจะถูกโหลดจากหลายไดเร็กทอรีตามลำดับต่อไปนี้ โดยไดเร็กทอรีรุ่นหลังจะแทนที่ไดเร็กทอรีก่อนหน้า:
 
 1. **ธีมในตัว** - ธีมเหล่านี้ฝังอยู่ในไบนารี
-2. **ไดเรกทอรีกำหนดค่าผู้ใช้** - กำหนดใน `~/.config/opencode/themes/*.json` หรือ `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **ไดเรกทอรีรากของโครงการ** - กำหนดไว้ใน `<project-root>/.opencode/themes/*.json`
-4. **ไดเร็กทอรีการทำงานปัจจุบัน** - กำหนดใน `./.opencode/themes/*.json`
+2. **ไดเรกทอรีกำหนดค่าผู้ใช้** - กำหนดใน `~/.config/weapon/themes/*.json` หรือ `$XDG_CONFIG_HOME/weapon/themes/*.json`
+3. **ไดเรกทอรีรากของโครงการ** - กำหนดไว้ใน `<project-root>/.weapon/themes/*.json`
+4. **ไดเร็กทอรีการทำงานปัจจุบัน** - กำหนดใน `./.weapon/themes/*.json`
 
 หากหลายไดเร็กทอรีมีธีมที่มีชื่อเดียวกัน ธีมจากไดเร็กทอรีที่มีลำดับความสำคัญสูงกว่าจะถูกนำมาใช้
 
@@ -98,15 +98,15 @@ OpenCode รองรับระบบธีมที่ใช้ JSON ที�
 สำหรับธีมทั้งผู้ใช้:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/weapon/themes
+vim ~/.config/weapon/themes/my-theme.json
 ```
 
 และสำหรับธีมเฉพาะโครงการ
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .weapon/themes
+vim .weapon/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://weapon.ai/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

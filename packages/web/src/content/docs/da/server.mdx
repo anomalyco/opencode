@@ -1,19 +1,19 @@
 ---
 title: Server
-description: Interager med opencode-serveren over HTTP.
+description: Interager med weapon-serveren over HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en opencode-klient kan bruge.
+Kommandoen `weapon serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en weapon-klient kan bruge.
 
 ---
 
 ### Brug
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Indstillinger
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port at lytte på                             | `4096`           |
 | `--hostname`    | Værtsnavn at lytte på                        | `127.0.0.1`      |
 | `--mdns`        | Aktiver mDNS-opdagelse                       | `false`          |
-| `--mdns-domain` | Brugerdefineret domænenavn for mDNS-tjeneste | `opencode.local` |
+| `--mdns-domain` | Brugerdefineret domænenavn for mDNS-tjeneste | `weapon.local` |
 | `--cors`        | Yderligere browseroprindelse for at tillade  | `[]`             |
 
 `--cors` kan angives flere gange:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Godkendelse
 
-Indstil `OPENCODE_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `opencode`, eller indstil `OPENCODE_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `opencode serve` og `opencode web`.
+Indstil `WEAPON_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `weapon`, eller indstil `WEAPON_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `weapon serve` og `weapon web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### Sådan fungerer det
 
-Når du kører `opencode` starter den en TUI og en server. Hvor TUI er
+Når du kører `weapon` starter den en TUI og en server. Hvor TUI er
 klient som taler med serveren. Serveren viser en OpenAPI 3.1-specifikation
 endpoint. Dette endpoint bruges også til at generere en [SDK](/docs/sdk).
 
 :::tip
-Brug opencode-serveren til at interagere med opencode programmatisk.
+Brug weapon-serveren til at interagere med weapon programmatisk.
 :::
 
-Denne arkitektur lader opencode understøtte flere klienter og lader dig interagere med opencode programmatisk.
+Denne arkitektur lader weapon understøtte flere klienter og lader dig interagere med weapon programmatisk.
 
-Du kan køre `opencode serve` for at starte en selvstændig server. Hvis du har
-opencode TUI kørende, vil `opencode serve` starte en ny server.
+Du kan køre `weapon serve` for at starte en selvstændig server. Hvis du har
+weapon TUI kørende, vil `weapon serve` starte en ny server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI kørende, vil `opencode serve` starte en ny server.
 
 Når du starter TUI, tildeler den tilfældigt en port og et værtsnavn. Du kan i stedet sende `--hostname` og `--port` [flagene](/docs/cli). Brug derefter disse til at forbinde til serveren.
 
-[`/tui`](#tui) endpointet kan bruges til at køre TUI gennem serveren. Du kan for eksempel forududfylde eller køre en forespørgsel. Denne opsætning bruges af OpenCode [IDE](/docs/ide) plugins.
+[`/tui`](#tui) endpointet kan bruges til at køre TUI gennem serveren. Du kan for eksempel forududfylde eller køre en forespørgsel. Denne opsætning bruges af Weapon [IDE](/docs/ide) plugins.
 
 ---
 
@@ -83,7 +83,7 @@ For eksempel `http://localhost:4096/doc`. Brug specifikationen til at generere k
 
 ## API'er
 
-OpenCode-serveren viser følgende API'er.
+Weapon-serveren viser følgende API'er.
 
 ---
 

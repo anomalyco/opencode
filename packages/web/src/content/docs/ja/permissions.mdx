@@ -3,7 +3,7 @@ title: 権限
 description: どのアクションの実行に承認が必要かを制御します。
 ---
 
-OpenCode は `permission` 設定を使用して、特定のアクションを自動的に実行するか、プロンプトを表示するか、ブロックするかを決定します。
+Weapon は `permission` 設定を使用して、特定のアクションを自動的に実行するか、プロンプトを表示するか、ブロックするかを決定します。
 
 `v1.1.1` 現在、従来の `tools` ブール値設定は非推奨となり、`permission` にマージされました。古い `tools` 設定は、下位互換性のために引き続きサポートされています。
 
@@ -23,9 +23,9 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 権限をグローバルに (`*` を使用して) 設定し、特定のツールをオーバーライドできます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 すべての権限を一度に設定することもできます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 ほとんどの権限では、オブジェクトを使用して、ツール入力に基づいてさまざまなアクションを適用できます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 ### 外部ディレクトリ
 
-`external_directory` を使用して、OpenCode が開始された作業ディレクトリの外部のパスに触れるツール呼び出しを許可します。これは、パスを入力として受け取るすべてのツール (`read`、`edit`、`list`、`glob`、`grep`、および多くの `bash` コマンドなど) に適用されます。
+`external_directory` を使用して、Weapon が開始された作業ディレクトリの外部のパスに触れるツール呼び出しを許可します。これは、パスを入力として受け取るすべてのツール (`read`、`edit`、`list`、`glob`、`grep`、および多くの `bash` コマンドなど) に適用されます。
 
 ホーム展開 (`~/...` など) は、パターンの記述方法にのみ影響します。外部パスは現在のワークスペースの一部にはならないため、作業ディレクトリの外部のパスも `external_directory` 経由で許可する必要があります。
 
 たとえば、これにより、`~/projects/personal/` の下にあるすべてのものへのアクセスが許可されます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 ここで許可されるディレクトリはすべて、現在のワークスペースと同じデフォルトを継承します。 [`read` のデフォルトは `allow`](#defaults) であるため、オーバーライドされない限り、`external_directory` の下のエントリの読み取りも許可されます。読み取りを保持しながら編集をブロックするなど、ツールをこれらのパスで制限する必要がある場合は、明示的なルールを追加します。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 ## 利用可能な権限
 
-OpenCode の権限は、ツール名に加えて、いくつかの安全対策によってキー化されます。
+Weapon の権限は、ツール名に加えて、いくつかの安全対策によってキー化されます。
 
 - `read` — ファイルの読み取り (ファイルパスと一致)
 - `edit` — すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit` をカバー)
@@ -148,13 +148,13 @@ OpenCode の権限は、ツール名に加えて、いくつかの安全対策�
 
 ## デフォルト
 
-何も指定しない場合、OpenCode は許容的なデフォルトから開始します。
+何も指定しない場合、Weapon は許容的なデフォルトから開始します。
 
 - ほとんどの権限はデフォルトで `"allow"` に設定されます。
 - `doom_loop` と `external_directory` のデフォルトは `"ask"` です。
 - `read` は `"allow"` ですが、`.env` ファイルはデフォルトで拒否されます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ OpenCode の権限は、ツール名に加えて、いくつかの安全対策�
 
 ## 承認の要求
 
-OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つの結果を提供します。
+Weapon が承認を求めるプロンプトを表示すると、UI は 3 つの結果を提供します。
 
 - `once` — このリクエストのみを承認します
-- `always` — 提案されたパターンに一致する今後のリクエストを承認します（現在の OpenCode セッションの残りの部分）
+- `always` — 提案されたパターンに一致する今後のリクエストを承認します（現在の Weapon セッションの残りの部分）
 - `reject` — リクエストを拒否します
 
 `always` が承認するパターンのセットは、ツールによって提供されます (たとえば、bash の承認では通常、`git status*` のような安全なコマンドプレフィックスがホワイトリストに登録されます)。
@@ -189,9 +189,9 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
 パターンマッチングの詳細な例については、上記の[詳細なルール (オブジェクト構文)](#detailed-rules-object-syntax)セクションを参照してください。
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
 
 Markdown でエージェントの権限を構成することもできます。
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -236,9 +236,9 @@ Only analyze code and suggest changes.
 引数のあるコマンドにはパターンマッチングを使用します。 `"grep *"` は `grep pattern file.txt` を許可しますが、`"grep"` だけではブロックされます。 `git status` のようなコマンドはデフォルトの動作で機能しますが、引数を渡すときに明示的な許可 (`"git status *"` など) が必要です。
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -266,7 +266,7 @@ Only analyze code and suggest changes.
 
 Markdownでエージェントの権限を構成することもできます。
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

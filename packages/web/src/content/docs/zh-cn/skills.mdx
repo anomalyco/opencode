@@ -3,7 +3,7 @@ title: 《代理技巧》
 description: “贯穿 SKILL.md 定义可重用行为”
 ---
 
-代理让 opencode 技能从您的存储库或主目录中找到可重用的指令。
+代理让 weapon 技能从您的存储库或主目录中找到可重用的指令。
 技能贯穿本机 `skill` 工具输入导入 - 代理可以查看可用技能并可以在需要时加载完整内容。
 
 ---
@@ -11,10 +11,10 @@ description: “贯穿 SKILL.md 定义可重用行为”
 ## 放置文件
 
 为每个技能名称建立一个资料夹，并在其中放入`SKILL.md`。
-opencode 搜索这些位置：
+weapon 搜索这些位置：
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.weapon/skills/<name>/SKILL.md`
+- Global config: `~/.config/weapon/skills/<name>/SKILL.md`
 - 专案Claude兼容：`.claude/skills/<name>/SKILL.md`
 - 全域性 Claude 兼容： `~/.claude/skills/<name>/SKILL.md`
 - 专案代理兼容：`.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ opencode 搜索这些位置：
 
 ## 了解发现
 
-对于专案本地路径， opencode 从当前工作目录向上走，直到到达 git 工作树。
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+对于专案本地路径， weapon 从当前工作目录向上走，直到到达 git 工作树。
+It loads any matching `skills/*/SKILL.md` in `.weapon/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
+Global definitions are also loaded from `~/.config/weapon/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 
 ## 使用一个例子
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Create `.weapon/skills/git-release/SKILL.md` like this:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 识别工具说明
 
-opencode 列出了 `skill` 工具描述中的可用技能。
+weapon 列出了 `skill` 工具描述中的可用技能。
 每个条目都包含技能名称和描述：
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 配置权限
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Control which skills agents can access using pattern-based permissions in `weapon.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**For built-in agents** (in `weapon.json`):
 
 ```json
 {

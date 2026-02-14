@@ -1,0 +1,215 @@
+{
+  "get": {
+    "operationId": "session.get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string",
+          "pattern": "^ses.*"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Get session",
+    "description": "Retrieve detailed information about a specific OpenCode session.",
+    "tags": [
+      "Session"
+    ],
+    "responses": {
+      "200": {
+        "description": "Get session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Session.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}/get.js"
+        }
+      }
+    ]
+  },
+  "delete": {
+    "operationId": "session.delete",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string",
+          "pattern": "^ses.*"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Delete session",
+    "description": "Delete a session and permanently remove all associated data, including messages and history.",
+    "responses": {
+      "200": {
+        "description": "Successfully deleted session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}/delete.js"
+        }
+      }
+    ]
+  },
+  "patch": {
+    "operationId": "session.update",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Update session",
+    "description": "Update properties of an existing session, such as title or other metadata.",
+    "responses": {
+      "200": {
+        "description": "Successfully updated session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Session.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "archived": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}/patch.js"
+        }
+      }
+    ]
+  }
+}

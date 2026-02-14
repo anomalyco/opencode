@@ -1,11 +1,11 @@
 import { Component, Show } from "solid-js"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@weapon-ai/ui/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Tag } from "@opencode-ai/ui/tag"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iconNames, type IconName } from "@opencode-ai/ui/icons/provider"
+import { Dialog } from "@weapon-ai/ui/dialog"
+import { List } from "@weapon-ai/ui/list"
+import { Tag } from "@weapon-ai/ui/tag"
+import { ProviderIcon } from "@weapon-ai/ui/provider-icon"
+import { iconNames, type IconName } from "@weapon-ai/ui/icons/provider"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -73,7 +73,7 @@ export const DialogSelectProvider: Component = () => {
             <Show when={i.id === CUSTOM_ID}>
               <Tag>{language.t("settings.providers.tag.custom")}</Tag>
             </Show>
-            <Show when={i.id === "opencode"}>
+            <Show when={i.id === "weapon"}>
               <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
             </Show>
             <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>

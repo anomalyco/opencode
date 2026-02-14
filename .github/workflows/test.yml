@@ -24,8 +24,8 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+          git config --global user.email "bot@weapon.ai"
+          git config --global user.name "weapon"
 
       - name: Run unit tests
         run: bun turbo test

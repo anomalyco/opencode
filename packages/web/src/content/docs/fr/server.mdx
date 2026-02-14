@@ -1,19 +1,19 @@
 ---
 title: Serveur
-description: Interagissez avec le serveur opencode via HTTP.
+description: Interagissez avec le serveur weapon via HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-La commande `opencode serve` exécute un serveur HTTP sans tête qui expose un point de terminaison OpenAPI qu'un client opencode peut utiliser.
+La commande `weapon serve` exécute un serveur HTTP sans tête qui expose un point de terminaison OpenAPI qu'un client weapon peut utiliser.
 
 ---
 
 ### Usage
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Options
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port à écouter sur                                 | `4096`           |
 | `--hostname`    | Nom d'hôte sur lequel écouter                      | `127.0.0.1`      |
 | `--mdns`        | Activer la découverte mDNS                         | `false`          |
-| `--mdns-domain` | Nom de domaine personnalisé pour le service mDNS   | `opencode.local` |
+| `--mdns-domain` | Nom de domaine personnalisé pour le service mDNS   | `weapon.local` |
 | `--cors`        | Origines de navigateur supplémentaires à autoriser | `[]`             |
 
 `--cors` peut être transmis plusieurs fois :
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Authentification
 
-Définissez `OPENCODE_SERVER_PASSWORD` pour protéger le serveur avec l'authentification de base HTTP. Le nom d'utilisateur est par défaut `opencode`, ou définissez `OPENCODE_SERVER_USERNAME` pour le remplacer. Cela s’applique à la fois à `opencode serve` et à `opencode web`.
+Définissez `WEAPON_SERVER_PASSWORD` pour protéger le serveur avec l'authentification de base HTTP. Le nom d'utilisateur est par défaut `weapon`, ou définissez `WEAPON_SERVER_USERNAME` pour le remplacer. Cela s’applique à la fois à `weapon serve` et à `weapon web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### Comment ça marche
 
-Lorsque vous exécutez `opencode`, il démarre un TUI et un serveur. Où le TUI est le
+Lorsque vous exécutez `weapon`, il démarre un TUI et un serveur. Où le TUI est le
 client qui parle au serveur. Le serveur expose une spécification OpenAPI 3.1
 point final. Ce point de terminaison est également utilisé pour générer un [SDK](/docs/sdk).
 
 :::tip
-Utilisez le serveur opencode pour interagir avec opencode par programmation.
+Utilisez le serveur weapon pour interagir avec weapon par programmation.
 :::
 
-Cette architecture permet à opencode de prendre en charge plusieurs clients et vous permet d'interagir avec opencode par programme.
+Cette architecture permet à weapon de prendre en charge plusieurs clients et vous permet d'interagir avec weapon par programme.
 
-Vous pouvez exécuter `opencode serve` pour démarrer un serveur autonome. Si vous avez le
-opencode TUI en cours d'exécution, `opencode serve` démarrera un nouveau serveur.
+Vous pouvez exécuter `weapon serve` pour démarrer un serveur autonome. Si vous avez le
+weapon TUI en cours d'exécution, `weapon serve` démarrera un nouveau serveur.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI en cours d'exécution, `opencode serve` démarrera un nouveau serve
 
 Lorsque vous démarrez le TUI, il attribue de manière aléatoire un port et un nom d'hôte. Vous pouvez à la place transmettre les `--hostname` et `--port` [flags](/docs/cli). Utilisez-le ensuite pour vous connecter à son serveur.
 
-Le point de terminaison [`/tui`](#tui) peut être utilisé pour piloter le TUI via le serveur. Par exemple, vous pouvez pré-remplir ou exécuter une invite. Cette configuration est utilisée par les plugins OpenCode [IDE](/docs/ide).
+Le point de terminaison [`/tui`](#tui) peut être utilisé pour piloter le TUI via le serveur. Par exemple, vous pouvez pré-remplir ou exécuter une invite. Cette configuration est utilisée par les plugins Weapon [IDE](/docs/ide).
 
 ---
 
@@ -83,7 +83,7 @@ Par exemple, `http://localhost:4096/doc`. Utilisez la spécification pour géné
 
 ## APIs
 
-Le serveur opencode expose les API suivantes.
+Le serveur weapon expose les API suivantes.
 
 ---
 

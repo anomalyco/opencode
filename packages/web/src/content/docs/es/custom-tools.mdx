@@ -1,9 +1,9 @@
 ---
 title: Herramientas personalizadas
-description: Cree herramientas que LLM pueda llamar en opencode.
+description: Cree herramientas que LLM pueda llamar en weapon.
 ---
 
-Las herramientas personalizadas son funciones que usted crea y que el LLM puede llamar durante las conversaciones. Trabajan junto con las [herramientas integradas](/docs/tools) de opencode como `read`, `write` y `bash`.
+Las herramientas personalizadas son funciones que usted crea y que el LLM puede llamar durante las conversaciones. Trabajan junto con las [herramientas integradas](/docs/tools) de weapon como `read`, `write` y `bash`.
 
 ---
 
@@ -17,8 +17,8 @@ Las herramientas se definen como archivos **TypeScript** o **JavaScript**. Sin e
 
 Se pueden definir:
 
-- Localmente colocándolos en el directorio `.opencode/tools/` de tu proyecto.
-- O de forma global, colocándolos en `~/.config/opencode/tools/`.
+- Localmente colocándolos en el directorio `.weapon/tools/` de tu proyecto.
+- O de forma global, colocándolos en `~/.config/weapon/tools/`.
 
 ---
 
@@ -26,8 +26,8 @@ Se pueden definir:
 
 La forma más sencilla de crear herramientas es utilizar el asistente `tool()` que proporciona seguridad de tipos y validación.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ El **nombre de archivo** se convierte en el **nombre de la herramienta**. Lo ant
 
 También puede exportar varias herramientas desde un solo archivo. Cada exportación se convierte en **una herramienta independiente** con el nombre **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 Las herramientas reciben contexto sobre la sesión actual:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ Puede escribir sus herramientas en cualquier idioma que desee. Aquí hay un ejem
 
 Primero, cree la herramienta como un script de Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 Luego cree la definición de herramienta que la invoca:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

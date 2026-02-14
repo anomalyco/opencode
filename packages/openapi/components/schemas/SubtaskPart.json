@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "subtask"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "agent": {
+      "type": "string"
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "providerID": {
+          "type": "string"
+        },
+        "modelID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerID",
+        "modelID"
+      ]
+    },
+    "command": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "prompt",
+    "description",
+    "agent"
+  ]
+}

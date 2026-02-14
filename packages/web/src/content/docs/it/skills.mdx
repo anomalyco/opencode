@@ -3,7 +3,7 @@ title: "Competenze dell'agente"
 description: "Definisci comportamenti riutilizzabili tramite definizioni in SKILL.md"
 ---
 
-Le skill degli agenti permettono a OpenCode di individuare istruzioni riutilizzabili dal tuo repo o dalla home directory.
+Le skill degli agenti permettono a Weapon di individuare istruzioni riutilizzabili dal tuo repo o dalla home directory.
 Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli agenti vedono le skill disponibili e possono caricarne il contenuto completo quando serve.
 
 ---
@@ -11,10 +11,10 @@ Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli age
 ## Posizione dei file
 
 Crea una cartella per ogni nome di skill e metti un `SKILL.md` al suo interno.
-OpenCode cerca in queste posizioni:
+Weapon cerca in queste posizioni:
 
-- Config di progetto: `.opencode/skills/<name>/SKILL.md`
-- Config globale: `~/.config/opencode/skills/<name>/SKILL.md`
+- Config di progetto: `.weapon/skills/<name>/SKILL.md`
+- Config globale: `~/.config/weapon/skills/<name>/SKILL.md`
 - Progetto compatibile con Claude: `.claude/skills/<name>/SKILL.md`
 - Globale compatibile con Claude: `~/.claude/skills/<name>/SKILL.md`
 - Progetto compatibile con agent: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode cerca in queste posizioni:
 
 ## Discovery
 
-Per i percorsi locali al progetto, OpenCode risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
-Carica qualsiasi `skills/*/SKILL.md` corrispondente in `.opencode/` e qualsiasi `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` corrispondente lungo il percorso.
+Per i percorsi locali al progetto, Weapon risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
+Carica qualsiasi `skills/*/SKILL.md` corrispondente in `.weapon/` e qualsiasi `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` corrispondente lungo il percorso.
 
-Le definizioni globali vengono caricate anche da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
+Le definizioni globali vengono caricate anche da `~/.config/weapon/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Tieni la descrizione abbastanza specifica da permettere all'agente di scegliere 
 
 ## Esempio
 
-Crea `.opencode/skills/git-release/SKILL.md` cosi':
+Crea `.weapon/skills/git-release/SKILL.md` cosi':
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Descrizione strumento
 
-OpenCode elenca le skill disponibili nella descrizione dello strumento `skill`.
+Weapon elenca le skill disponibili nella descrizione dello strumento `skill`.
 Ogni voce include il nome della skill e la descrizione:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Permessi
 
-Controlla a quali skill gli agenti possono accedere usando permessi basati su pattern in `opencode.json`:
+Controlla a quali skill gli agenti possono accedere usando permessi basati su pattern in `weapon.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Per agenti integrati** (in `opencode.json`):
+**Per agenti integrati** (in `weapon.json`):
 
 ```json
 {

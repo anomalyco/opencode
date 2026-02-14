@@ -1,0 +1,114 @@
+{
+  "get": {
+    "operationId": "find.text",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "pattern",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Find text",
+    "description": "Search for text patterns across files in the project using ripgrep.",
+    "responses": {
+      "200": {
+        "description": "Matches",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  },
+                  "line_number": {
+                    "type": "number"
+                  },
+                  "absolute_offset": {
+                    "type": "number"
+                  },
+                  "submatches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "match": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        },
+                        "start": {
+                          "type": "number"
+                        },
+                        "end": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "match",
+                        "start",
+                        "end"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "lines",
+                  "line_number",
+                  "absolute_offset",
+                  "submatches"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/find/get.js"
+        }
+      }
+    ]
+  }
+}

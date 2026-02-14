@@ -1,9 +1,9 @@
 ---
 title: الإضافات
-description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
+description: اكتب إضافاتك الخاصة لتوسيع Weapon.
 ---
 
-تتيح لك الإضافات توسيع OpenCode عبر ربطها بأحداث مختلفة وتخصيص السلوك. يمكنك إنشاء إضافات لإضافة ميزات جديدة، أو التكامل مع خدمات خارجية، أو تعديل السلوك الافتراضي لـ OpenCode.
+تتيح لك الإضافات توسيع Weapon عبر ربطها بأحداث مختلفة وتخصيص السلوك. يمكنك إنشاء إضافات لإضافة ميزات جديدة، أو التكامل مع خدمات خارجية، أو تعديل السلوك الافتراضي لـ Weapon.
 
 للاطلاع على أمثلة، راجع [الإضافات](/docs/ecosystem#plugins) التي أنشأها المجتمع.
 
@@ -19,8 +19,8 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 ضع ملفات JavaScript أو TypeScript في دليل الإضافات.
 
-- `.opencode/plugins/` - إضافات على مستوى المشروع
-- `~/.config/opencode/plugins/` - إضافات عامة
+- `.weapon/plugins/` - إضافات على مستوى المشروع
+- `~/.config/weapon/plugins/` - إضافات عامة
 
 تُحمَّل الملفات في هذه الأدلة تلقائيا عند بدء التشغيل.
 
@@ -30,10 +30,10 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 حدّد حزم npm في ملف الإعدادات.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "weapon-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 ### كيفية تثبيت الإضافات
 
-**إضافات npm** تُثبَّت تلقائيا باستخدام Bun عند بدء التشغيل. تُخزَّن الحزم واعتمادياتها مؤقتا في `~/.cache/opencode/node_modules/`.
+**إضافات npm** تُثبَّت تلقائيا باستخدام Bun عند بدء التشغيل. تُخزَّن الحزم واعتمادياتها مؤقتا في `~/.cache/weapon/node_modules/`.
 
 **الإضافات المحلية** تُحمَّل مباشرة من دليل الإضافات. لاستخدام حزم خارجية، يجب إنشاء `package.json` داخل دليل الإعدادات لديك (راجع [الاعتماديات](#dependencies))، أو نشر الإضافة على npm ثم [إضافتها إلى إعداداتك](/docs/config#plugins).
 
@@ -55,10 +55,10 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 تُحمَّل الإضافات من جميع المصادر وتعمل جميع الخطافات بالتتابع. ترتيب التحميل هو:
 
-1. إعدادات عامة (`~/.config/opencode/opencode.json`)
-2. إعدادات المشروع (`opencode.json`)
-3. دليل الإضافات العام (`~/.config/opencode/plugins/`)
-4. دليل إضافات المشروع (`.opencode/plugins/`)
+1. إعدادات عامة (`~/.config/weapon/weapon.json`)
+2. إعدادات المشروع (`weapon.json`)
+3. دليل الإضافات العام (`~/.config/weapon/plugins/`)
+4. دليل إضافات المشروع (`.weapon/plugins/`)
 
 تُحمَّل حزم npm المكررة ذات الاسم والإصدار نفسيهما مرة واحدة. ومع ذلك، تُحمَّل الإضافة المحلية وإضافة npm ذات الاسم المشابه كلتاهما بشكل مستقل.
 
@@ -75,7 +75,7 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 يمكن للإضافات المحلية والأدوات المخصصة استخدام حزم npm خارجية. أضف `package.json` إلى دليل الإعدادات لديك متضمنا الاعتماديات التي تحتاجها.
 
-```json title=".opencode/package.json"
+```json title=".weapon/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 }
 ```
 
-يشغّل OpenCode الأمر `bun install` عند بدء التشغيل لتثبيتها. بعد ذلك يمكن لإضافاتك وأدواتك استيرادها.
+يشغّل Weapon الأمر `bun install` عند بدء التشغيل لتثبيتها. بعد ذلك يمكن لإضافاتك وأدواتك استيرادها.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### البنية الأساسية
 
-```js title=".opencode/plugins/example.js"
+```js title=".weapon/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: معلومات المشروع الحالي.
 - `directory`: دليل العمل الحالي.
 - `worktree`: مسار git worktree.
-- `client`: عميل SDK لـ opencode للتفاعل مع الذكاء الاصطناعي.
+- `client`: عميل SDK لـ weapon للتفاعل مع الذكاء الاصطناعي.
 - `$`: واجهة [shell API](https://bun.com/docs/runtime/shell) الخاصة بـ Bun لتنفيذ الأوامر.
 
 ---
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 بالنسبة لإضافات TypeScript، يمكنك استيراد الأنواع من حزمة الإضافة:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## أمثلة
 
-فيما يلي بعض أمثلة الإضافات التي يمكنك استخدامها لتوسيع opencode.
+فيما يلي بعض أمثلة الإضافات التي يمكنك استخدامها لتوسيع weapon.
 
 ---
 
@@ -219,13 +219,13 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 أرسل إشعارات عند وقوع أحداث معينة:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".weapon/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "weapon"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 نستخدم `osascript` لتشغيل AppleScript على macOS. هنا نستخدمه لإرسال إشعارات.
 
 :::note
-إذا كنت تستخدم تطبيق OpenCode لسطح المكتب، فيمكنه إرسال إشعارات النظام تلقائيا عند جاهزية الرد أو عند حدوث خطأ في جلسة.
+إذا كنت تستخدم تطبيق Weapon لسطح المكتب، فيمكنه إرسال إشعارات النظام تلقائيا عند جاهزية الرد أو عند حدوث خطأ في جلسة.
 :::
 
 ---
 
 ### حماية .env
 
-امنع opencode من قراءة ملفات `.env`:
+امنع weapon من قراءة ملفات `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".weapon/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 احقن متغيرات البيئة في جميع عمليات تنفيذ shell (أدوات الذكاء الاصطناعي وterminal المستخدم):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".weapon/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### أدوات مخصصة
 
-يمكن للإضافات أيضا إضافة أدوات مخصصة إلى opencode:
+يمكن للإضافات أيضا إضافة أدوات مخصصة إلى weapon:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@weapon-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-تقوم الدالة المساعدة `tool` بإنشاء أداة مخصصة يمكن لـ opencode استدعاؤها. تأخذ دالة مخطط Zod وتعيد تعريف أداة يتضمن:
+تقوم الدالة المساعدة `tool` بإنشاء أداة مخصصة يمكن لـ weapon استدعاؤها. تأخذ دالة مخطط Zod وتعيد تعريف أداة يتضمن:
 
 - `description`: ما الذي تفعله الأداة
 - `args`: مخطط Zod لوسائط الأداة
 - `execute`: الدالة التي تُشغَّل عند استدعاء الأداة
 
-ستكون أدواتك المخصصة متاحة لـ opencode إلى جانب الأدوات المضمنة.
+ستكون أدواتك المخصصة متاحة لـ weapon إلى جانب الأدوات المضمنة.
 
 ---
 
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 استخدم `client.app.log()` بدلا من `console.log` للتسجيل البنيوي:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-المستويات: `debug`, `info`, `warn`, `error`. راجع [توثيق SDK](https://opencode.ai/docs/sdk) للتفاصيل.
+المستويات: `debug`, `info`, `warn`, `error`. راجع [توثيق SDK](https://weapon.ai/docs/sdk) للتفاصيل.
 
 ---
 
@@ -335,8 +335,8 @@ export const MyPlugin = async ({ client }) => {
 
 خصّص السياق الذي يتم تضمينه عند ضغط جلسة:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 يمكنك أيضا استبدال موجّه الضغط بالكامل عبر ضبط `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

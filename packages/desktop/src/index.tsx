@@ -1,7 +1,7 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@weapon-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
@@ -14,7 +14,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Splash } from "@opencode-ai/ui/logo"
+import { Splash } from "@weapon-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
@@ -35,13 +35,13 @@ void initI18n()
 
 let update: Update | null = null
 
-const deepLinkEvent = "opencode:deep-link"
+const deepLinkEvent = "weapon:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  const pending = window.__OPENCODE__.deepLinks ?? []
-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.__WEAPON__ ??= {}
+  const pending = window.__WEAPON__.deepLinks ?? []
+  window.__WEAPON__.deepLinks = [...pending, ...urls]
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
@@ -59,12 +59,12 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
   })()
 
   const wslHome = async () => {
-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
+    if (os !== "windows" || !window.__WEAPON__?.wsl) return undefined
     return commands.wslPath("~", "windows").catch(() => undefined)
   }
 
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !window.__OPENCODE__?.wsl) return result
+    if (!result || !window.__WEAPON__?.wsl) return result
     if (Array.isArray(result)) {
       return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
     }
@@ -112,7 +112,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
       if (os === "windows") {
         const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
         const resolvedPath = await (async () => {
-          if (window.__OPENCODE__?.wsl) {
+          if (window.__WEAPON__?.wsl) {
             const converted = await commands.wslPath(path, "windows").catch(() => null)
             if (converted) return converted
           }
@@ -322,7 +322,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
         .then(() => {
           const notification = new Notification(title, {
             body: description ?? "",
-            icon: "https://opencode.ai/favicon-96x96-v3.png",
+            icon: "https://weapon.ai/favicon-96x96-v3.png",
           })
           notification.onclick = () => {
             const win = getCurrentWindow()
@@ -343,7 +343,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
       const pw = password()
 
       const addHeader = (headers: Headers, password: string) => {
-        headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+        headers.append("Authorization", `Basic ${btoa(`weapon:${password}`)}`)
       }
 
       if (input instanceof Request) {
@@ -362,7 +362,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
     getWslEnabled: async () => {
       const next = await commands.getWslConfig().catch(() => null)
       if (next) return next.enabled
-      return window.__OPENCODE__!.wsl ?? false
+      return window.__WEAPON__!.wsl ?? false
     },
 
     setWslEnabled: async (enabled) => {
@@ -452,8 +452,8 @@ render(() => {
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)
-            window.__OPENCODE__ ??= {}
-            window.__OPENCODE__.serverPassword = data().password ?? undefined
+            window.__WEAPON__ ??= {}
+            window.__WEAPON__.serverPassword = data().password ?? undefined
 
             function Inner() {
               const cmd = useCommand()

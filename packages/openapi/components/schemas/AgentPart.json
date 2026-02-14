@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "agent"
+    },
+    "name": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "end": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "value",
+        "start",
+        "end"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "name"
+  ]
+}

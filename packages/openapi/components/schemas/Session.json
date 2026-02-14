@@ -1,0 +1,117 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ses.*"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "projectID": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "parentID": {
+      "type": "string",
+      "pattern": "^ses.*"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "additions": {
+          "type": "number"
+        },
+        "deletions": {
+          "type": "number"
+        },
+        "files": {
+          "type": "number"
+        },
+        "diffs": {
+          "type": "array",
+          "items": {
+            "$ref": "./FileDiff.json"
+          }
+        }
+      },
+      "required": [
+        "additions",
+        "deletions",
+        "files"
+      ]
+    },
+    "share": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "number"
+        },
+        "updated": {
+          "type": "number"
+        },
+        "compacting": {
+          "type": "number"
+        },
+        "archived": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "created",
+        "updated"
+      ]
+    },
+    "permission": {
+      "$ref": "./PermissionRuleset.json"
+    },
+    "revert": {
+      "type": "object",
+      "properties": {
+        "messageID": {
+          "type": "string"
+        },
+        "partID": {
+          "type": "string"
+        },
+        "snapshot": {
+          "type": "string"
+        },
+        "diff": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageID"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "slug",
+    "projectID",
+    "directory",
+    "title",
+    "version",
+    "time"
+  ]
+}

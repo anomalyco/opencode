@@ -1,19 +1,19 @@
 ---
 title: Server
-description: Komunicirajte s opencode serverom preko HTTP-a.
+description: Komunicirajte s weapon serverom preko HTTP-a.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Komanda `opencode serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji opencode klijent moze koristiti.
+Komanda `weapon serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji weapon klijent moze koristiti.
 
 ---
 
 ### Korištenje
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opcije
@@ -23,38 +23,38 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port na kojem slusa                 | `4096`           |
 | `--hostname`    | Hostname na kojem slusa             | `127.0.0.1`      |
 | `--mdns`        | Ukljuci mDNS otkrivanje             | `false`          |
-| `--mdns-domain` | Prilagodeni domen za mDNS servis    | `opencode.local` |
+| `--mdns-domain` | Prilagodeni domen za mDNS servis    | `weapon.local` |
 | `--cors`        | Dodatni browser origin-i koje dozv. | `[]`             |
 
 `--cors` mozete navesti vise puta:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Autentifikacija
 
-Postavite `OPENCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `OPENCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `opencode serve` i za `opencode web`.
+Postavite `WEAPON_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `weapon`, ili postavite `WEAPON_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `weapon serve` i za `weapon web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### Kako radi
 
-Kada pokrenete `opencode`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](/docs/sdk).
+Kada pokrenete `weapon`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](/docs/sdk).
 
 :::tip
-Koristite opencode server za programsku interakciju sa opencode-om.
+Koristite weapon server za programsku interakciju sa weapon-om.
 :::
 
-Ova arhitektura omogucava opencode podrsku za vise klijenata i programsku interakciju.
+Ova arhitektura omogucava weapon podrsku za vise klijenata i programsku interakciju.
 
-Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode TUI vec pokrenut, `opencode serve` ce pokrenuti novi server.
+Mozete pokrenuti `weapon serve` da startate standalone server. Ako je weapon TUI vec pokrenut, `weapon serve` ce pokrenuti novi server.
 
 ---
 
@@ -62,7 +62,7 @@ Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode
 
 Kada pokrenete TUI, port i hostname se nasumicno dodijele. Umjesto toga, mozete zadati `--hostname` i `--port` [zastave](/docs/cli), pa se povezati na taj server.
 
-Endpoint [`/tui`](#tui) mozete koristiti za upravljanje TUI-jem kroz server. Na primjer, mozete unaprijed popuniti ili pokrenuti prompt. Ovaj setup koriste OpenCode [IDE](/docs/ide) pluginovi.
+Endpoint [`/tui`](#tui) mozete koristiti za upravljanje TUI-jem kroz server. Na primjer, mozete unaprijed popuniti ili pokrenuti prompt. Ovaj setup koriste Weapon [IDE](/docs/ide) pluginovi.
 
 ---
 
@@ -80,7 +80,7 @@ Na primjer, `http://localhost:4096/doc`. Koristite specifikaciju da generisete k
 
 ## API-ji
 
-opencode server izlaže sljedece API-je.
+weapon server izlaže sljedece API-je.
 
 ---
 

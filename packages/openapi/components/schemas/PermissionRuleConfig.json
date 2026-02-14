@@ -1,0 +1,10 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./PermissionActionConfig.json"
+    },
+    {
+      "$ref": "./PermissionObjectConfig.json"
+    }
+  ]
+}

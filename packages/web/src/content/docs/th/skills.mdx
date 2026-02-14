@@ -3,7 +3,7 @@ title: ทักษะของเอเจนต์
 description: "กำหนดพฤติกรรมที่นำมาใช้ซ้ำได้ผ่านคำจำกัดความ SKILL.md"
 ---
 
-ทักษะของเจ้าหน้าที่ช่วยให้ OpenCode ค้นพบคำแนะนำที่ใช้ซ้ำได้จาก repo หรือโฮมไดเร็กทอรีของคุณ
+ทักษะของเจ้าหน้าที่ช่วยให้ Weapon ค้นพบคำแนะนำที่ใช้ซ้ำได้จาก repo หรือโฮมไดเร็กทอรีของคุณ
 ทักษะจะถูกโหลดตามความต้องการผ่านเครื่องมือ `skill` ดั้งเดิม ตัวแทนจะเห็นทักษะที่มีอยู่และสามารถโหลดเนื้อหาทั้งหมดได้เมื่อจำเป็น
 
 ---
@@ -11,10 +11,10 @@ description: "กำหนดพฤติกรรมที่นำมาใช
 ## วางไฟล์
 
 สร้างหนึ่งโฟลเดอร์ต่อชื่อทักษะ และใส่ `SKILL.md` ไว้ข้างใน
-OpenCode ค้นหาตำแหน่งเหล่านี้:
+Weapon ค้นหาตำแหน่งเหล่านี้:
 
-- การกำหนดค่าโครงการ: `.opencode/skills/<name>/SKILL.md`
-- การกำหนดค่าส่วนกลาง: `~/.config/opencode/skills/<name>/SKILL.md`
+- การกำหนดค่าโครงการ: `.weapon/skills/<name>/SKILL.md`
+- การกำหนดค่าส่วนกลาง: `~/.config/weapon/skills/<name>/SKILL.md`
 - เข้ากันได้กับโครงการ Claude: `.claude/skills/<name>/SKILL.md`
 - เข้ากันได้กับ Global Claude: `~/.claude/skills/<name>/SKILL.md`
 - เข้ากันได้กับตัวแทนโครงการ: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode ค้นหาตำแหน่งเหล่านี้:
 
 ## ทำความเข้าใจกับการค้นพบ
 
-สำหรับเส้นทางภายในโปรเจ็กต์ OpenCode จะเดินขึ้นมาจากไดเร็กทอรีการทำงานปัจจุบันของคุณจนกว่าจะถึงแผนผังงาน git
-โดยจะโหลด `skills/*/SKILL.md` ที่ตรงกันใน `.opencode/` และ `.claude/skills/*/SKILL.md` หรือ `.agents/skills/*/SKILL.md` ที่ตรงกันตลอดทาง
+สำหรับเส้นทางภายในโปรเจ็กต์ Weapon จะเดินขึ้นมาจากไดเร็กทอรีการทำงานปัจจุบันของคุณจนกว่าจะถึงแผนผังงาน git
+โดยจะโหลด `skills/*/SKILL.md` ที่ตรงกันใน `.weapon/` และ `.claude/skills/*/SKILL.md` หรือ `.agents/skills/*/SKILL.md` ที่ตรงกันตลอดทาง
 
-คำจำกัดความสากลยังโหลดจาก `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` และ `~/.agents/skills/*/SKILL.md`
+คำจำกัดความสากลยังโหลดจาก `~/.config/weapon/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` และ `~/.agents/skills/*/SKILL.md`
 
 ---
 
@@ -73,14 +73,14 @@ regex ที่เทียบเท่า:
 
 ## ใช้ตัวอย่าง
 
-สร้าง `.opencode/skills/git-release/SKILL.md` แบบนี้:
+สร้าง `.weapon/skills/git-release/SKILL.md` แบบนี้:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## การค้นพบคำอธิบายเครื่องมือ
 
-OpenCode แสดงรายการทักษะที่มีอยู่ในคำอธิบายเครื่องมือ `skill`
+Weapon แสดงรายการทักษะที่มีอยู่ในคำอธิบายเครื่องมือ `skill`
 แต่ละรายการจะมีชื่อทักษะและคำอธิบาย:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## กำหนดค่าสิทธิ์
 
-ควบคุมว่าตัวแทนทักษะใดสามารถเข้าถึงโดยใช้สิทธิ์ตามรูปแบบใน `opencode.json`:
+ควบคุมว่าตัวแทนทักษะใดสามารถเข้าถึงโดยใช้สิทธิ์ตามรูปแบบใน `weapon.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**สำหรับตัวแทนในตัว** (ใน `opencode.json`):
+**สำหรับตัวแทนในตัว** (ใน `weapon.json`):
 
 ```json
 {

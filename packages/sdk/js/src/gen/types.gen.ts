@@ -1359,7 +1359,7 @@ export type KeybindsConfig = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
- * Server configuration for opencode serve and web commands
+ * Server configuration for weapon serve and web commands
  */
 export type ServerConfig = {
   /**
@@ -1375,7 +1375,7 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
-   * Custom domain name for mDNS service (default: opencode.local)
+   * Custom domain name for mDNS service (default: weapon.local)
    */
   mdnsDomain?: string
   /**
@@ -1617,7 +1617,7 @@ export type Config = {
   }
   server?: ServerConfig
   /**
-   * Command configuration, see https://opencode.ai/docs/commands
+   * Command configuration, see https://weapon.ai/docs/commands
    */
   command?: {
     [key: string]: {
@@ -1691,7 +1691,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agents
+   * Agent configuration, see https://weapon.ai/docs/agents
    */
   agent?: {
     plan?: AgentConfig

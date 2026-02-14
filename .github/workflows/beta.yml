@@ -24,8 +24,8 @@ jobs:
         id: setup-git-committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          weapon-app-id: ${{ vars.WEAPON_APP_ID }}
+          weapon-app-secret: ${{ secrets.WEAPON_APP_SECRET }}
 
       - name: Sync beta branch
         env:

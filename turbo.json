@@ -1,18 +1,18 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "WEAPON_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "WEAPON_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "weapon#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/app#test": {
+    "@weapon-ai/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

@@ -1,9 +1,9 @@
 ---
 title: 사용자 정의 도구
-description: OpenCode에서 LLM이 호출할 수 있는 도구를 만듭니다.
+description: Weapon에서 LLM이 호출할 수 있는 도구를 만듭니다.
 ---
 
-사용자 정의 도구는 LLM이 대화 중에 호출 할 수있는 기능을 만듭니다. 그들은 `read`, `write` 및 `bash`와 같은 opencode의 [붙박이 도구](./tools)와 함께 작동합니다.
+사용자 정의 도구는 LLM이 대화 중에 호출 할 수있는 기능을 만듭니다. 그들은 `read`, `write` 및 `bash`와 같은 weapon의 [붙박이 도구](./tools)와 함께 작동합니다.
 
 ---
 
@@ -17,8 +17,8 @@ description: OpenCode에서 LLM이 호출할 수 있는 도구를 만듭니다.
 
 그들은 정의 할 수 있습니다:
 
-- 프로젝트의 `.opencode/tools/` 디렉토리에 배치하여 로컬.
-- 또는 전 세계적으로 `~/.config/opencode/tools/`에 배치하여.
+- 프로젝트의 `.weapon/tools/` 디렉토리에 배치하여 로컬.
+- 또는 전 세계적으로 `~/.config/weapon/tools/`에 배치하여.
 
 ---
 
@@ -26,8 +26,8 @@ description: OpenCode에서 LLM이 호출할 수 있는 도구를 만듭니다.
 
 도구를 만드는 가장 쉬운 방법은 `tool()` helper를 사용하여 유형 안전 및 검증을 제공합니다.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 단일 파일에서 여러 도구를 수출할 수 있습니다. 각 수출은 ** 별도의 도구 ** 이름 ** `<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 도구는 현재 세션에 대한 컨텍스트를받습니다.
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ git worktree 루트에 `context.worktree`를 사용합니다.
 
 먼저 Python 스크립트로 도구를 만듭니다.
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 그런 다음 도구 정의를 만듭니다.
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

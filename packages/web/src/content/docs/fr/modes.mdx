@@ -4,13 +4,13 @@ description: Différents modes pour différents cas d'utilisation.
 ---
 
 :::caution
-Les modes sont désormais configurés via l'option `agent` dans la configuration opencode.
+Les modes sont désormais configurés via l'option `agent` dans la configuration weapon.
 L’option `mode` est désormais obsolète. [En savoir plus](/docs/agents).
 :::
 
-Les modes dans opencode vous permettent de personnaliser le comportement, les outils et les prompts pour différents cas d'utilisation.
+Les modes dans weapon vous permettent de personnaliser le comportement, les outils et les prompts pour différents cas d'utilisation.
 
-Il est livré avec deux modes intégrés : **build** et **plan**. Vous pouvez personnaliser ceux-ci ou configurez les vôtres via la configuration opencode.
+Il est livré avec deux modes intégrés : **build** et **plan**. Vous pouvez personnaliser ceux-ci ou configurez les vôtres via la configuration weapon.
 
 Vous pouvez basculer entre les modes au cours d'une session ou les configurer dans votre fichier de configuration.
 
@@ -18,7 +18,7 @@ Vous pouvez basculer entre les modes au cours d'une session ou les configurer da
 
 ## Modes intégrés
 
-opencode est livré avec deux modes intégrés.
+weapon est livré avec deux modes intégrés.
 
 ---
 
@@ -33,7 +33,7 @@ Build est le mode **par défaut** avec tous les outils activés. Il s'agit du mo
 Un mode restreint conçu pour la planification et l’analyse. En mode plan, les outils suivants sont désactivés par défaut :
 
 - `write` - Impossible de créer de nouveaux fichiers
-- `edit` - Impossible de modifier les fichiers existants, à l'exception des fichiers situés à `.opencode/plans/*.md` pour détailler le plan lui-même
+- `edit` - Impossible de modifier les fichiers existants, à l'exception des fichiers situés à `.weapon/plans/*.md` pour détailler le plan lui-même
 - `patch` - Impossible d'appliquer les correctifs
 - `bash` - Impossible d'exécuter les commandes shell
 
@@ -55,11 +55,11 @@ Vous pouvez personnaliser les modes intégrés ou créer les vôtres via la conf
 
 ### Configuration JSON
 
-Configurez les modes dans votre fichier de configuration `opencode.json` :
+Configurez les modes dans votre fichier de configuration `weapon.json` :
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -86,10 +86,10 @@ Configurez les modes dans votre fichier de configuration `opencode.json` :
 
 Vous pouvez également définir des modes à l'aide de fichiers markdown. Placez-les dans :
 
-- Global : `~/.config/opencode/modes/`
-- Projet : `.opencode/modes/`
+- Global : `~/.config/weapon/modes/`
+- Projet : `.weapon/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/weapon/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -119,7 +119,7 @@ Examinons ces options de configuration en détail.
 
 Utilisez la configuration `model` pour remplacer le modèle par défaut pour ce mode. Utile pour utiliser différents modèles optimisés pour différentes tâches. Par exemple, un modèle de planification plus rapide, un modèle de mise en œuvre plus performant.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -135,7 +135,7 @@ Utilisez la configuration `model` pour remplacer le modèle par défaut pour ce 
 
 Contrôlez le caractère aléatoire et la créativité des réponses de l'IA avec la configuration `temperature`. Des valeurs faibles rendent les réponses plus ciblées et déterministes, tandis que des valeurs plus élevées augmentent la créativité et la variabilité.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -154,7 +154,7 @@ Les valeurs de température varient généralement de 0,0 à 1,0 :
 - **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
 - **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "analyze": {
@@ -172,7 +172,7 @@ Les valeurs de température varient généralement de 0,0 à 1,0 :
 }
 ```
 
-Si aucune température n'est spécifiée, opencode utilise les valeurs par défaut spécifiques au modèle (généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen).
+Si aucune température n'est spécifiée, weapon utilise les valeurs par défaut spécifiques au modèle (généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen).
 
 ---
 
@@ -180,7 +180,7 @@ Si aucune température n'est spécifiée, opencode utilise les valeurs par défa
 
 Spécifiez un fichier de prompt système personnalisé pour ce mode avec la configuration `prompt`. Le fichier de prompt doit contenir des instructions spécifiques à l'objectif du mode.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "review": {
@@ -190,7 +190,7 @@ Spécifiez un fichier de prompt système personnalisé pour ce mode avec la conf
 }
 ```
 
-Ce chemin est relatif à l'emplacement du fichier de configuration. Donc ça marche pour à la fois la configuration globale opencode et la configuration spécifique au projet.
+Ce chemin est relatif à l'emplacement du fichier de configuration. Donc ça marche pour à la fois la configuration globale weapon et la configuration spécifique au projet.
 
 ---
 
@@ -245,9 +245,9 @@ Vous pouvez créer vos propres modes personnalisés en les ajoutant à la config
 
 ### Utilisation de la configuration JSON
 
-```json title="opencode.json" {4-14}
+```json title="weapon.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -266,9 +266,9 @@ Vous pouvez créer vos propres modes personnalisés en les ajoutant à la config
 
 ### Utiliser des fichiers Markdown
 
-Créez des fichiers de mode dans `.opencode/modes/` pour les modes spécifiques au projet ou `~/.config/opencode/modes/` pour les modes globaux :
+Créez des fichiers de mode dans `.weapon/modes/` pour les modes spécifiques au projet ou `~/.config/weapon/modes/` pour les modes globaux :
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".weapon/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -292,7 +292,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/weapon/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

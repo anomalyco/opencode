@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "lsp.client.diagnostics"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "serverID": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "serverID",
+        "path"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

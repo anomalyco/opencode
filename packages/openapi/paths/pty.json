@@ -1,0 +1,118 @@
+{
+  "get": {
+    "operationId": "pty.list",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "List PTY sessions",
+    "description": "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
+    "responses": {
+      "200": {
+        "description": "List of sessions",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/Pty.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/pty/get.js"
+        }
+      }
+    ]
+  },
+  "post": {
+    "operationId": "pty.create",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Create PTY session",
+    "description": "Create a new pseudo-terminal (PTY) session for running shell commands and processes.",
+    "responses": {
+      "200": {
+        "description": "Created session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Pty.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/pty/post.js"
+        }
+      }
+    ]
+  }
+}

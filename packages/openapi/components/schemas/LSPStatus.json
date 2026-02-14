@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "connected"
+        },
+        {
+          "type": "string",
+          "const": "error"
+        }
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "root",
+    "status"
+  ]
+}

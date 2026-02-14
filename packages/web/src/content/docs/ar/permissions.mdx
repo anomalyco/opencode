@@ -3,7 +3,7 @@ title: الأذونات
 description: تحكّم في الإجراءات التي تتطلب موافقة قبل تنفيذها.
 ---
 
-يستخدم OpenCode إعداد `permission` لتحديد ما إذا كان إجراءٌ ما سيُنفّذ تلقائيًا، أو سيطلب موافقتك، أو سيتم حظره.
+يستخدم Weapon إعداد `permission` لتحديد ما إذا كان إجراءٌ ما سيُنفّذ تلقائيًا، أو سيطلب موافقتك، أو سيتم حظره.
 
 اعتبارًا من `v1.1.1`، تم إهمال إعداد `tools` القديم (المنطقي) ودمجه ضمن `permission`. ولا يزال إعداد `tools` القديم مدعومًا للتوافق مع الإصدارات السابقة.
 
@@ -23,9 +23,9 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 يمكنك تعيين الأذونات بشكل عام (باستخدام `*`) ثم تجاوزها لأدوات محددة.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 يمكنك أيضًا تعيين جميع الأذونات دفعة واحدة:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 في معظم الأذونات، يمكنك استخدام كائن لتطبيق إجراءات مختلفة بناءً على مُدخلات الأداة.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 ### الأدلة الخارجية
 
-استخدم `external_directory` للسماح باستدعاءات الأدوات التي تلمس مسارات خارج دليل العمل الذي بدأ منه OpenCode. ينطبق ذلك على أي أداة تأخذ مسارًا كمدخل (مثل `read` و`edit` و`list` و`glob` و`grep` والعديد من أوامر `bash`).
+استخدم `external_directory` للسماح باستدعاءات الأدوات التي تلمس مسارات خارج دليل العمل الذي بدأ منه Weapon. ينطبق ذلك على أي أداة تأخذ مسارًا كمدخل (مثل `read` و`edit` و`list` و`glob` و`grep` والعديد من أوامر `bash`).
 
 توسيع المنزل (مثل `~/...`) يؤثر فقط على طريقة كتابة النمط. لا يجعل ذلك المسار الخارجي جزءًا من مساحة العمل الحالية، لذا يجب السماح بالمسارات خارج دليل العمل عبر `external_directory` أيضًا.
 
 على سبيل المثال، يتيح هذا الوصول إلى كل ما يقع تحت `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 أي دليل مسموح به هنا يرث نفس القيم الافتراضية لمساحة العمل الحالية. وبما أن [`read` افتراضيًا هو `allow`](#defaults)، فإن عمليات القراءة تكون مسموحة أيضًا للعناصر ضمن `external_directory` ما لم يتم تجاوز ذلك. أضِف قواعد صريحة عندما يجب تقييد أداة ما في هذه المسارات، مثل حظر التعديلات مع الإبقاء على القراءة:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 ## الأذونات المتاحة
 
-تُعرَّف أذونات OpenCode بأسماء الأدوات، بالإضافة إلى بعض حواجز الأمان:
+تُعرَّف أذونات Weapon بأسماء الأدوات، بالإضافة إلى بعض حواجز الأمان:
 
 - `read` — قراءة ملف (يطابق مسار الملف)
 - `edit` — جميع تعديلات الملفات (يشمل `edit` و`write` و`patch` و`multiedit`)
@@ -148,13 +148,13 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 ## القيم الافتراضية
 
-إذا لم تحدد شيئًا، يبدأ OpenCode بقيم افتراضية متساهلة:
+إذا لم تحدد شيئًا، يبدأ Weapon بقيم افتراضية متساهلة:
 
 - معظم الأذونات افتراضيًا تكون `"allow"`.
 - `doom_loop` و`external_directory` افتراضيًا تكون `"ask"`.
 - `read` هو `"allow"`، لكن ملفات `.env` تكون مرفوضة افتراضيًا:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 ## ماذا تفعل `"ask"`
 
-عندما يطلب OpenCode الموافقة، تعرض الواجهة ثلاث نتائج ممكنة:
+عندما يطلب Weapon الموافقة، تعرض الواجهة ثلاث نتائج ممكنة:
 
 - `once` — الموافقة على هذا الطلب فقط
-- `always` — الموافقة على الطلبات المستقبلية المطابقة للأنماط المقترحة (لباقي جلسة OpenCode الحالية)
+- `always` — الموافقة على الطلبات المستقبلية المطابقة للأنماط المقترحة (لباقي جلسة Weapon الحالية)
 - `reject` — رفض الطلب
 
 مجموعة الأنماط التي ستوافق عليها `always` تُوفَّر من الأداة نفسها (على سبيل المثال، موافقات `bash` عادةً ما تُدرج بادئة أمر آمنة في القائمة البيضاء مثل `git status*`).
@@ -189,9 +189,9 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 ارجع إلى قسم [قواعد دقيقة (صيغة الكائن)](#granular-rules-object-syntax) للحصول على أمثلة أكثر تفصيلًا حول مطابقة الأنماط.
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ description: تحكّم في الإجراءات التي تتطلب موافقة
 
 يمكنك أيضًا ضبط أذونات الوكيل في Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

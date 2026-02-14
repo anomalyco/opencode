@@ -1,6 +1,6 @@
-# @opencode-ai/slack
+# @weapon-ai/slack
 
-Slack bot integration for opencode that creates threaded conversations.
+Slack bot integration for weapon that creates threaded conversations.
 
 ## Setup
 
@@ -24,4 +24,4 @@ Slack bot integration for opencode that creates threaded conversations.
 bun dev
 ```
 
-The bot will respond to messages in channels where it's added, creating separate opencode sessions for each thread.
+The bot will respond to messages in channels where it's added, creating separate weapon sessions for each thread.

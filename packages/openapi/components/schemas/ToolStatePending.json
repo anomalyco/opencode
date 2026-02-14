@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "pending"
+    },
+    "input": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "raw": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "input",
+    "raw"
+  ]
+}

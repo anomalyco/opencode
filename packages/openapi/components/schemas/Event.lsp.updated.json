@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "lsp.updated"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

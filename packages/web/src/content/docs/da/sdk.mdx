@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 Åpenkoden JS/TS SDK gir en typesikker klient for samhandling med serveren.
-Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
+Brug den til at bygge integrasjoner og kontrollere weapon programmatisk.
 
 [Finn ut mer](/docs/server) om hvordan serveren fungerer. For eksempler, tjek ut [prosjektene](/docs/ecosystem#projects) bygget av fellesskapet.
 
@@ -18,19 +18,19 @@ Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
 Installer SDK fra npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @weapon-ai/sdk
 ```
 
 ---
 
 ## Opret klient
 
-Opret en forekomst av opencode:
+Opret en forekomst av weapon:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createWeapon()
 ```
 
 Dette starter både en server og en klient
@@ -49,12 +49,12 @@ Dette starter både en server og en klient
 
 ## Konfig
 
-Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `opencode.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
+Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `weapon.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const opencode = await createOpencode({
+const weapon = await createWeapon({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${weapon.server.url}`)
 
-opencode.server.close()
+weapon.server.close()
 ```
 
 ## Kun klient
 
-Hvis du allerede har en kjørende forekomst av opencode, kan du oprete en klientforekomst for at koble til den:
+Hvis du allerede har en kjørende forekomst av weapon, kan du oprete en klientforekomst for at koble til den:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createWeaponClient } from "@weapon-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createWeaponClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK inkluderer TypeScript-definisjoner for alle API-typer. Importer dem direkte:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@weapon-ai/sdk"
 ```
 
 Alle typer er generert fra serverens OpenAPI-spesifikasjon og tilgængelig i <a href={typesUrl}>types-filen</a>.
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*weapon" },
 })
 
 const files = await client.find.files({

@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "tui.toast.show"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        "duration": {
+          "description": "Duration in milliseconds",
+          "default": 5000,
+          "type": "number"
+        }
+      },
+      "required": [
+        "message",
+        "variant"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

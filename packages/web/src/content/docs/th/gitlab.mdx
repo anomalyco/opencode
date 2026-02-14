@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: ใช้ OpenCode ในปัญหา GitLab และรวมคำขอ
+description: ใช้ Weapon ในปัญหา GitLab และรวมคำขอ
 ---
 
-OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณผ่านไปป์ไลน์ GitLab CI/CD หรือกับ GitLab Duo
+Weapon ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณผ่านไปป์ไลน์ GitLab CI/CD หรือกับ GitLab Duo
 
-ในทั้งสองกรณี OpenCode จะทำงานบน GitLab runners ของคุณ
+ในทั้งสองกรณี Weapon จะทำงานบน GitLab runners ของคุณ
 
 ---
 
 ## GitLab CI
 
-OpenCode ทำงานในไปป์ไลน์ GitLab ปกติ คุณสามารถสร้างมันลงในไปป์ไลน์เป็น [องค์ประกอบ CI](https://docs.gitlab.com/ee/ci/components/)
+Weapon ทำงานในไปป์ไลน์ GitLab ปกติ คุณสามารถสร้างมันลงในไปป์ไลน์เป็น [องค์ประกอบ CI](https://docs.gitlab.com/ee/ci/components/)
 
-ที่นี่เรากำลังใช้คอมโพเนนต์ CI/CD ที่สร้างโดยชุมชนสำหรับ OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)
+ที่นี่เรากำลังใช้คอมโพเนนต์ CI/CD ที่สร้างโดยชุมชนสำหรับ Weapon — [nagyv/gitlab-weapon](https://gitlab.com/nagyv/gitlab-weapon)
 
 ---
 
 ### คุณสมบัติ
 
-- **ใช้การกำหนดค่าแบบกำหนดเองต่องาน**: กำหนดค่า OpenCode ด้วยไดเร็กทอรีการกำหนดค่าแบบกำหนดเอง เช่น `./config/#custom-directory` เพื่อเปิดหรือปิดฟังก์ชันการทำงานต่อการเรียกใช้ OpenCode
-- **การตั้งค่าขั้นต่ำ**: องค์ประกอบ CI จะตั้งค่า OpenCode ในเบื้องหลัง คุณเพียงแค่ต้องสร้างการกำหนดค่า OpenCode และข้อความแจ้งเริ่มต้นเท่านั้น
+- **ใช้การกำหนดค่าแบบกำหนดเองต่องาน**: กำหนดค่า Weapon ด้วยไดเร็กทอรีการกำหนดค่าแบบกำหนดเอง เช่น `./config/#custom-directory` เพื่อเปิดหรือปิดฟังก์ชันการทำงานต่อการเรียกใช้ Weapon
+- **การตั้งค่าขั้นต่ำ**: องค์ประกอบ CI จะตั้งค่า Weapon ในเบื้องหลัง คุณเพียงแค่ต้องสร้างการกำหนดค่า Weapon และข้อความแจ้งเริ่มต้นเท่านั้น
 - **ยืดหยุ่น**: ส่วนประกอบ CI รองรับอินพุตหลายอินพุตเพื่อปรับแต่งลักษณะการทำงาน
 
 ---
 
 ### ตั้งค่า
 
-1. จัดเก็บการรับรองความถูกต้อง OpenCode ของคุณ JSON เป็นประเภทไฟล์ CI ตัวแปรสภาพแวดล้อมภายใต้ **การตั้งค่า** > **CI/CD** > **ตัวแปร** ตรวจสอบให้แน่ใจว่าได้ทำเครื่องหมายว่าเป็น "ปิดบังและซ่อนไว้"
+1. จัดเก็บการรับรองความถูกต้อง Weapon ของคุณ JSON เป็นประเภทไฟล์ CI ตัวแปรสภาพแวดล้อมภายใต้ **การตั้งค่า** > **CI/CD** > **ตัวแปร** ตรวจสอบให้แน่ใจว่าได้ทำเครื่องหมายว่าเป็น "ปิดบังและซ่อนไว้"
 2. เพิ่มสิ่งต่อไปนี้ในไฟล์ `.gitlab-ci.yml` ของคุณ
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-weapon/weapon@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/weapon-config
+         auth_json: $WEAPON_AUTH_JSON # The variable name for your Weapon authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-หากต้องการข้อมูลเพิ่มเติมและกรณีการใช้งาน [ตรวจสอบเอกสาร](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) สำหรับส่วนประกอบนี้
+หากต้องการข้อมูลเพิ่มเติมและกรณีการใช้งาน [ตรวจสอบเอกสาร](https://gitlab.com/explore/catalog/nagyv/gitlab-weapon) สำหรับส่วนประกอบนี้
 
 ---
 
 ## GitLab Duo
 
-OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณ
-พูดถึง `@opencode` ในความคิดเห็น แล้ว OpenCode จะดำเนินการงานภายในไปป์ไลน์ GitLab CI ของคุณ
+Weapon ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณ
+พูดถึง `@weapon` ในความคิดเห็น แล้ว Weapon จะดำเนินการงานภายในไปป์ไลน์ GitLab CI ของคุณ
 
 ---
 
 ### คุณสมบัติ
 
-- **Issue Triage**: ขอให้ OpenCode ตรวจสอบปัญหาและอธิบายให้คุณทราบ
-- **แก้ไขและนำไปใช้**: ขอให้ OpenCode แก้ไขปัญหาหรือใช้ฟีเจอร์
+- **Issue Triage**: ขอให้ Weapon ตรวจสอบปัญหาและอธิบายให้คุณทราบ
+- **แก้ไขและนำไปใช้**: ขอให้ Weapon แก้ไขปัญหาหรือใช้ฟีเจอร์
   มันจะสร้างสาขาใหม่และขอรวมการเปลี่ยนแปลง
-- **ปลอดภัย**: OpenCode ทำงานบนนักวิ่ง GitLab ของคุณ
+- **ปลอดภัย**: Weapon ทำงานบนนักวิ่ง GitLab ของคุณ
 
 ---
 
 ### ตั้งค่า
 
-OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของคุณ นี่คือสิ่งที่คุณจะต้องตั้งค่า:
+Weapon ทำงานในไปป์ไลน์ GitLab CI/CD ของคุณ นี่คือสิ่งที่คุณจะต้องตั้งค่า:
 
 :::tip
 ตรวจสอบ [**เอกสาร GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) เพื่อดูคำแนะนำล่าสุด
@@ -82,19 +82,19 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing weapon"
+      - npm install --global weapon-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_WEAPON
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating Weapon auth configuration"
+      - mkdir --parents ~/.local/share/weapon
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/weapon/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "weapon@gitlab.com"
+      - git config --global user.name "Weapon"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Weapon"
       - |
-        opencode run "
+        weapon run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_WEAPON
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
 
 ### ตัวอย่าง
 
-นี่คือตัวอย่างบางส่วนของวิธีที่คุณสามารถใช้ OpenCode ใน GitLab
+นี่คือตัวอย่างบางส่วนของวิธีที่คุณสามารถใช้ Weapon ใน GitLab
 
 :::tip
-คุณสามารถกำหนดค่าให้ใช้วลีทริกเกอร์ที่แตกต่างจาก `@opencode`
+คุณสามารถกำหนดค่าให้ใช้วลีทริกเกอร์ที่แตกต่างจาก `@weapon`
 :::
 
 - **อธิบายปัญหา**
@@ -169,27 +169,27 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
   เพิ่มความคิดเห็นนี้ในปัญหา GitLab
 
   ```
-  @opencode explain this issue
+  @weapon explain this issue
   ```
 
-  OpenCode จะอ่านปัญหาและตอบกลับพร้อมคำอธิบายที่ชัดเจน
+  Weapon จะอ่านปัญหาและตอบกลับพร้อมคำอธิบายที่ชัดเจน
 
 - **แก้ไขปัญหา**
 
   ในปัญหา GitLab ให้พูดว่า:
 
   ```
-  @opencode fix this
+  @weapon fix this
   ```
 
-  OpenCode จะสร้างสาขาใหม่ ดำเนินการเปลี่ยนแปลง และเปิดคำขอรวมที่มีการเปลี่ยนแปลง
+  Weapon จะสร้างสาขาใหม่ ดำเนินการเปลี่ยนแปลง และเปิดคำขอรวมที่มีการเปลี่ยนแปลง
 
 - **ตรวจสอบคำขอรวม**
 
   แสดงความคิดเห็นต่อไปนี้ในคำขอรวม GitLab
 
   ```
-  @opencode review this merge request
+  @weapon review this merge request
   ```
 
-  OpenCode จะตรวจสอบคำขอรวมและให้ข้อเสนอแนะ
+  Weapon จะตรวจสอบคำขอรวมและให้ข้อเสนอแนะ

@@ -1,0 +1,68 @@
+{
+  "get": {
+    "operationId": "session.todo",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Session ID"
+      }
+    ],
+    "summary": "Get session todos",
+    "description": "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+    "responses": {
+      "200": {
+        "description": "Todo list",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/Todo.json"
+              }
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_todo/get.js"
+        }
+      }
+    ]
+  }
+}

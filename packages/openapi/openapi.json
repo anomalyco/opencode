@@ -1,0 +1,241 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "opencode",
+    "description": "opencode api",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4096",
+      "description": "Local server"
+    }
+  ],
+  "paths": {
+    "/global/health": {
+      "$ref": "paths/global_health.json"
+    },
+    "/global/event": {
+      "$ref": "paths/global_event.json"
+    },
+    "/global/config": {
+      "$ref": "paths/global_config.json"
+    },
+    "/global/dispose": {
+      "$ref": "paths/global_dispose.json"
+    },
+    "/auth/{providerID}": {
+      "$ref": "paths/auth_{providerID}.json"
+    },
+    "/project": {
+      "$ref": "paths/project.json"
+    },
+    "/project/current": {
+      "$ref": "paths/project_current.json"
+    },
+    "/project/{projectID}": {
+      "$ref": "paths/project_{projectID}.json"
+    },
+    "/pty": {
+      "$ref": "paths/pty.json"
+    },
+    "/pty/{ptyID}": {
+      "$ref": "paths/pty_{ptyID}.json"
+    },
+    "/pty/{ptyID}/connect": {
+      "$ref": "paths/pty_{ptyID}_connect.json"
+    },
+    "/config": {
+      "$ref": "paths/config.json"
+    },
+    "/config/providers": {
+      "$ref": "paths/config_providers.json"
+    },
+    "/experimental/tool/ids": {
+      "$ref": "paths/experimental_tool_ids.json"
+    },
+    "/experimental/tool": {
+      "$ref": "paths/experimental_tool.json"
+    },
+    "/experimental/worktree": {
+      "$ref": "paths/experimental_worktree.json"
+    },
+    "/experimental/worktree/reset": {
+      "$ref": "paths/experimental_worktree_reset.json"
+    },
+    "/session": {
+      "$ref": "paths/session.json"
+    },
+    "/session/status": {
+      "$ref": "paths/session_status.json"
+    },
+    "/session/{sessionID}": {
+      "$ref": "paths/session_{sessionID}.json"
+    },
+    "/session/{sessionID}/children": {
+      "$ref": "paths/session_{sessionID}_children.json"
+    },
+    "/session/{sessionID}/todo": {
+      "$ref": "paths/session_{sessionID}_todo.json"
+    },
+    "/session/{sessionID}/init": {
+      "$ref": "paths/session_{sessionID}_init.json"
+    },
+    "/session/{sessionID}/fork": {
+      "$ref": "paths/session_{sessionID}_fork.json"
+    },
+    "/session/{sessionID}/abort": {
+      "$ref": "paths/session_{sessionID}_abort.json"
+    },
+    "/session/{sessionID}/share": {
+      "$ref": "paths/session_{sessionID}_share.json"
+    },
+    "/session/{sessionID}/diff": {
+      "$ref": "paths/session_{sessionID}_diff.json"
+    },
+    "/session/{sessionID}/summarize": {
+      "$ref": "paths/session_{sessionID}_summarize.json"
+    },
+    "/session/{sessionID}/message": {
+      "$ref": "paths/session_{sessionID}_message.json"
+    },
+    "/session/{sessionID}/message/{messageID}": {
+      "$ref": "paths/session_{sessionID}_message_{messageID}.json"
+    },
+    "/session/{sessionID}/message/{messageID}/part/{partID}": {
+      "$ref": "paths/session_{sessionID}_message_{messageID}_part_{partID}.json"
+    },
+    "/session/{sessionID}/prompt_async": {
+      "$ref": "paths/session_{sessionID}_prompt_async.json"
+    },
+    "/session/{sessionID}/command": {
+      "$ref": "paths/session_{sessionID}_command.json"
+    },
+    "/session/{sessionID}/shell": {
+      "$ref": "paths/session_{sessionID}_shell.json"
+    },
+    "/session/{sessionID}/revert": {
+      "$ref": "paths/session_{sessionID}_revert.json"
+    },
+    "/session/{sessionID}/unrevert": {
+      "$ref": "paths/session_{sessionID}_unrevert.json"
+    },
+    "/session/{sessionID}/permissions/{permissionID}": {
+      "$ref": "paths/session_{sessionID}_permissions_{permissionID}.json"
+    },
+    "/permission/{requestID}/reply": {
+      "$ref": "paths/permission_{requestID}_reply.json"
+    },
+    "/permission": {
+      "$ref": "paths/permission.json"
+    },
+    "/question": {
+      "$ref": "paths/question.json"
+    },
+    "/question/{requestID}/reply": {
+      "$ref": "paths/question_{requestID}_reply.json"
+    },
+    "/question/{requestID}/reject": {
+      "$ref": "paths/question_{requestID}_reject.json"
+    },
+    "/provider": {
+      "$ref": "paths/provider.json"
+    },
+    "/provider/auth": {
+      "$ref": "paths/provider_auth.json"
+    },
+    "/provider/{providerID}/oauth/authorize": {
+      "$ref": "paths/provider_{providerID}_oauth_authorize.json"
+    },
+    "/provider/{providerID}/oauth/callback": {
+      "$ref": "paths/provider_{providerID}_oauth_callback.json"
+    },
+    "/find": {
+      "$ref": "paths/find.json"
+    },
+    "/find/file": {
+      "$ref": "paths/find_file.json"
+    },
+    "/find/symbol": {
+      "$ref": "paths/find_symbol.json"
+    },
+    "/file": {
+      "$ref": "paths/file.json"
+    },
+    "/file/content": {
+      "$ref": "paths/file_content.json"
+    },
+    "/file/status": {
+      "$ref": "paths/file_status.json"
+    },
+    "/tui/append-prompt": {
+      "$ref": "paths/tui_append-prompt.json"
+    },
+    "/tui/open-help": {
+      "$ref": "paths/tui_open-help.json"
+    },
+    "/tui/open-sessions": {
+      "$ref": "paths/tui_open-sessions.json"
+    },
+    "/tui/open-themes": {
+      "$ref": "paths/tui_open-themes.json"
+    },
+    "/tui/open-models": {
+      "$ref": "paths/tui_open-models.json"
+    },
+    "/tui/submit-prompt": {
+      "$ref": "paths/tui_submit-prompt.json"
+    },
+    "/tui/clear-prompt": {
+      "$ref": "paths/tui_clear-prompt.json"
+    },
+    "/tui/execute-command": {
+      "$ref": "paths/tui_execute-command.json"
+    },
+    "/tui/show-toast": {
+      "$ref": "paths/tui_show-toast.json"
+    },
+    "/tui/publish": {
+      "$ref": "paths/tui_publish.json"
+    },
+    "/tui/select-session": {
+      "$ref": "paths/tui_select-session.json"
+    },
+    "/tui/control/next": {
+      "$ref": "paths/tui_control_next.json"
+    },
+    "/tui/control/response": {
+      "$ref": "paths/tui_control_response.json"
+    },
+    "/instance/dispose": {
+      "$ref": "paths/instance_dispose.json"
+    },
+    "/path": {
+      "$ref": "paths/path.json"
+    },
+    "/vcs": {
+      "$ref": "paths/vcs.json"
+    },
+    "/command": {
+      "$ref": "paths/command.json"
+    },
+    "/log": {
+      "$ref": "paths/log.json"
+    },
+    "/agent": {
+      "$ref": "paths/agent.json"
+    },
+    "/skill": {
+      "$ref": "paths/skill.json"
+    },
+    "/lsp": {
+      "$ref": "paths/lsp.json"
+    },
+    "/formatter": {
+      "$ref": "paths/formatter.json"
+    },
+    "/event": {
+      "$ref": "paths/event.json"
+    }
+  }
+}

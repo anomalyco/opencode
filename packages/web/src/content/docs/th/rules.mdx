@@ -1,21 +1,21 @@
 ---
 title: กฎ
-description: ตั้งค่าคำแนะนำที่กำหนดเองสำหรับ opencode
+description: ตั้งค่าคำแนะนำที่กำหนดเองสำหรับ weapon
 ---
 
-คุณสามารถให้คำแนะนำที่กำหนดเองแก่ opencode ได้โดยการสร้างไฟล์ `AGENTS.md` ซึ่งคล้ายกับกฎของเคอร์เซอร์ ประกอบด้วยคำแนะนำที่จะรวมอยู่ในบริบทของ LLM เพื่อปรับแต่งลักษณะการทำงานสำหรับโครงการเฉพาะของคุณ
+คุณสามารถให้คำแนะนำที่กำหนดเองแก่ weapon ได้โดยการสร้างไฟล์ `AGENTS.md` ซึ่งคล้ายกับกฎของเคอร์เซอร์ ประกอบด้วยคำแนะนำที่จะรวมอยู่ในบริบทของ LLM เพื่อปรับแต่งลักษณะการทำงานสำหรับโครงการเฉพาะของคุณ
 
 ---
 
 ## เริ่มต้น
 
-หากต้องการสร้างไฟล์ `AGENTS.md` ใหม่ คุณสามารถเรียกใช้คำสั่ง `/init` ใน opencode
+หากต้องการสร้างไฟล์ `AGENTS.md` ใหม่ คุณสามารถเรียกใช้คำสั่ง `/init` ใน weapon
 
 :::tip
 คุณควรคอมมิตไฟล์ `AGENTS.md` ของโปรเจ็กต์ของคุณไปที่ Git
 :::
 
-การดำเนินการนี้จะสแกนโปรเจ็กต์ของคุณและเนื้อหาทั้งหมดเพื่อทำความเข้าใจว่าโปรเจ็กต์เกี่ยวกับอะไร และสร้างไฟล์ `AGENTS.md` ด้วย สิ่งนี้ช่วยให้ opencode นำทางโครงการได้ดีขึ้น
+การดำเนินการนี้จะสแกนโปรเจ็กต์ของคุณและเนื้อหาทั้งหมดเพื่อทำความเข้าใจว่าโปรเจ็กต์เกี่ยวกับอะไร และสร้างไฟล์ `AGENTS.md` ด้วย สิ่งนี้ช่วยให้ weapon นำทางโครงการได้ดีขึ้น
 
 หากคุณมีไฟล์ `AGENTS.md` อยู่แล้ว ระบบจะพยายามเพิ่มไฟล์ดังกล่าว
 
@@ -54,7 +54,7 @@ This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for 
 
 ## ประเภท
 
-opencode ยังรองรับการอ่านไฟล์ `AGENTS.md` จากหลาย ๆ ที่ และสิ่งนี้มีจุดประสงค์ที่แตกต่างกัน
+weapon ยังรองรับการอ่านไฟล์ `AGENTS.md` จากหลาย ๆ ที่ และสิ่งนี้มีจุดประสงค์ที่แตกต่างกัน
 
 ### โครงการ
 
@@ -62,58 +62,58 @@ opencode ยังรองรับการอ่านไฟล์ `AGENTS.md
 
 ### ทั่วโลก
 
-คุณยังสามารถมีกฎสากลในไฟล์ `~/.config/opencode/AGENTS.md` สิ่งนี้จะนำไปใช้กับเซสชัน opencode ทั้งหมด
+คุณยังสามารถมีกฎสากลในไฟล์ `~/.config/weapon/AGENTS.md` สิ่งนี้จะนำไปใช้กับเซสชัน weapon ทั้งหมด
 
 เนื่องจากสิ่งนี้ไม่ได้ผูกมัดกับ Git หรือแชร์กับทีมของคุณ เราขอแนะนำให้ใช้สิ่งนี้เพื่อระบุกฎส่วนบุคคลที่ LLM ควรปฏิบัติตาม
 
 ### ความเข้ากันได้กับ Claude Code
 
-สำหรับผู้ใช้ที่ย้ายจาก Claude Code นั้น OpenCode รองรับรูปแบบไฟล์ของ Claude Code เป็นทางเลือก:
+สำหรับผู้ใช้ที่ย้ายจาก Claude Code นั้น Weapon รองรับรูปแบบไฟล์ของ Claude Code เป็นทางเลือก:
 
 - **กฎของโครงการ**: `CLAUDE.md` ในไดเรกทอรีโครงการของคุณ (ใช้หากไม่มี `AGENTS.md`)
-- **กฎสากล**: `~/.claude/CLAUDE.md` (ใช้หากไม่มี `~/.config/opencode/AGENTS.md`)
+- **กฎสากล**: `~/.claude/CLAUDE.md` (ใช้หากไม่มี `~/.config/weapon/AGENTS.md`)
 - **ทักษะ**: `~/.claude/skills/` — ดูรายละเอียด [ทักษะตัวแทน](/docs/skills/)
 
 หากต้องการปิดใช้งานความเข้ากันได้ของ Claude Code ให้ตั้งค่าหนึ่งในตัวแปรสภาพแวดล้อมเหล่านี้:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export WEAPON_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export WEAPON_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export WEAPON_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## ลำดับความสำคัญ
 
-เมื่อ opencode เริ่มต้นขึ้น มันจะค้นหาไฟล์กฎตามลำดับนี้:
+เมื่อ weapon เริ่มต้นขึ้น มันจะค้นหาไฟล์กฎตามลำดับนี้:
 
 1. **ไฟล์ในเครื่อง** โดยการสำรวจจากไดเรกทอรีปัจจุบัน (`AGENTS.md`, `CLAUDE.md`)
-2. **ไฟล์ทั่วโลก** ที่ `~/.config/opencode/AGENTS.md`
+2. **ไฟล์ทั่วโลก** ที่ `~/.config/weapon/AGENTS.md`
 3. **Claude Code files** ที่ `~/.claude/CLAUDE.md` (ยกเว้นปิดการใช้งาน)
 
-ไฟล์ที่ตรงกันไฟล์แรกจะชนะในแต่ละหมวดหมู่ ตัวอย่างเช่น หากคุณมีทั้ง `AGENTS.md` และ `CLAUDE.md` ระบบจะใช้เฉพาะ `AGENTS.md` ในทำนองเดียวกัน `~/.config/opencode/AGENTS.md` จะมีความสำคัญมากกว่า `~/.claude/CLAUDE.md`
+ไฟล์ที่ตรงกันไฟล์แรกจะชนะในแต่ละหมวดหมู่ ตัวอย่างเช่น หากคุณมีทั้ง `AGENTS.md` และ `CLAUDE.md` ระบบจะใช้เฉพาะ `AGENTS.md` ในทำนองเดียวกัน `~/.config/weapon/AGENTS.md` จะมีความสำคัญมากกว่า `~/.claude/CLAUDE.md`
 
 ---
 
 ## คำแนะนำที่กำหนดเอง
 
-คุณสามารถระบุไฟล์คำแนะนำที่กำหนดเองได้ใน `opencode.json` หรือ `~/.config/opencode/opencode.json` ทั่วโลก สิ่งนี้ช่วยให้คุณและทีมของคุณสามารถนำกฎที่มีอยู่กลับมาใช้ใหม่ได้ แทนที่จะต้องทำซ้ำกฎเหล่านั้นกับ AGENTS.md
+คุณสามารถระบุไฟล์คำแนะนำที่กำหนดเองได้ใน `weapon.json` หรือ `~/.config/weapon/weapon.json` ทั่วโลก สิ่งนี้ช่วยให้คุณและทีมของคุณสามารถนำกฎที่มีอยู่กลับมาใช้ใหม่ได้ แทนที่จะต้องทำซ้ำกฎเหล่านั้นกับ AGENTS.md
 
 ตัวอย่าง:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 คุณยังสามารถใช้ URL ระยะไกลเพื่อโหลดคำแนะนำจากเว็บได้
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -126,22 +126,22 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ## การอ้างอิงไฟล์ภายนอก
 
-แม้ว่า opencode จะไม่แยกวิเคราะห์การอ้างอิงไฟล์ใน `AGENTS.md` โดยอัตโนมัติ แต่คุณสามารถใช้ฟังก์ชันที่คล้ายกันได้สองวิธี:
+แม้ว่า weapon จะไม่แยกวิเคราะห์การอ้างอิงไฟล์ใน `AGENTS.md` โดยอัตโนมัติ แต่คุณสามารถใช้ฟังก์ชันที่คล้ายกันได้สองวิธี:
 
-### ใช้ opencode.json
+### ใช้ weapon.json
 
-แนวทางที่แนะนำคือการใช้ฟิลด์ `instructions` ใน `opencode.json`:
+แนวทางที่แนะนำคือการใช้ฟิลด์ `instructions` ใน `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### คำแนะนำแบบแมนนวลใน AGENTS.md
 
-คุณสามารถสอนให้ opencode อ่านไฟล์ภายนอกได้โดยการให้คำแนะนำที่ชัดเจนใน `AGENTS.md` ของคุณ นี่เป็นตัวอย่างที่เป็นประโยชน์:
+คุณสามารถสอนให้ weapon อ่านไฟล์ภายนอกได้โดยการให้คำแนะนำที่ชัดเจนใน `AGENTS.md` ของคุณ นี่เป็นตัวอย่างที่เป็นประโยชน์:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,8 +173,8 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - สร้างไฟล์กฎแบบโมดูลาร์ที่สามารถนำมาใช้ซ้ำได้
 - แชร์กฎระหว่างโปรเจ็กต์ผ่าน symlink หรือโมดูลย่อย git
 - เขียน AGENTS.md ให้กระชับโดยอ้างอิงหลักเกณฑ์โดยละเอียด
-- ตรวจสอบให้แน่ใจว่า opencode จะโหลดไฟล์เมื่อจำเป็นสำหรับงานเฉพาะเท่านั้น
+- ตรวจสอบให้แน่ใจว่า weapon จะโหลดไฟล์เมื่อจำเป็นสำหรับงานเฉพาะเท่านั้น
 
 :::tip
-สำหรับ monorepos หรือโปรเจ็กต์ที่มีมาตรฐานร่วมกัน การใช้ `opencode.json` ที่มีรูปแบบ glob (เช่น `packages/*/AGENTS.md`) จะสามารถบำรุงรักษาได้ดีกว่าคำสั่งแบบแมนนวล
+สำหรับ monorepos หรือโปรเจ็กต์ที่มีมาตรฐานร่วมกัน การใช้ `weapon.json` ที่มีรูปแบบ glob (เช่น `packages/*/AGENTS.md`) จะสามารถบำรุงรักษาได้ดีกว่าคำสั่งแบบแมนนวล
 :::

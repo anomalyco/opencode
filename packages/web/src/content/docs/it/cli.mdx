@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: Opzioni e comandi della CLI di OpenCode.
+description: Opzioni e comandi della CLI di Weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-La CLI di OpenCode, per impostazione predefinita, avvia la [TUI](/docs/tui) quando viene eseguita senza argomenti.
+La CLI di Weapon, per impostazione predefinita, avvia la [TUI](/docs/tui) quando viene eseguita senza argomenti.
 
 ```bash
-opencode
+weapon
 ```
 
-Ma accetta anche i comandi documentati in questa pagina. Questo ti permette di interagire con OpenCode in modo programmatico.
+Ma accetta anche i comandi documentati in questa pagina. Questo ti permette di interagire con Weapon in modo programmatico.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+weapon run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Avvia l'interfaccia testuale di OpenCode (interfaccia utente da terminale).
+Avvia l'interfaccia testuale di Weapon (interfaccia utente da terminale).
 
 ```bash
-opencode [project]
+weapon [project]
 ```
 
 #### Flag
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Comandi
 
-La CLI di OpenCode include anche i seguenti comandi.
+La CLI di Weapon include anche i seguenti comandi.
 
 ---
 
 ### agent
 
-Gestisci gli agenti per OpenCode.
+Gestisci gli agenti per Weapon.
 
 ```bash
-opencode agent [command]
+weapon agent [command]
 ```
 
 ---
 
 ### attach
 
-Collega un terminale a un backend server di OpenCode già in esecuzione avviato tramite i comandi `serve` o `web`.
+Collega un terminale a un backend server di Weapon già in esecuzione avviato tramite i comandi `serve` o `web`.
 
 ```bash
-opencode attach [url]
+weapon attach [url]
 ```
 
-Questo consente di usare la TUI con un backend OpenCode remoto. Per esempio:
+Questo consente di usare la TUI con un backend Weapon remoto. Per esempio:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+weapon web --port 4096 --hostname 0.0.0.0
 
 # In un altro terminale, collega la TUI al backend in esecuzione
-opencode attach http://10.20.30.40:4096
+weapon attach http://10.20.30.40:4096
 ```
 
 #### Flag
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Crea un nuovo agente con configurazione personalizzata.
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 Questo comando ti guida nella creazione di un nuovo agente con un system prompt personalizzato e configurazione degli strumenti.
@@ -102,7 +102,7 @@ Questo comando ti guida nella creazione di un nuovo agente con un system prompt 
 Elenca tutti gli agenti disponibili.
 
 ```bash
-opencode agent list
+weapon agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Comando per gestire le credenziali e il login dei provider.
 
 ```bash
-opencode auth [command]
+weapon auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode si basa sull'elenco provider di [Models.dev](https://models.dev), quindi puoi usare `opencode auth login` per configurare le API key per qualunque provider tu voglia usare. Le credenziali vengono salvate in `~/.local/share/opencode/auth.json`.
+Weapon si basa sull'elenco provider di [Models.dev](https://models.dev), quindi puoi usare `weapon auth login` per configurare le API key per qualunque provider tu voglia usare. Le credenziali vengono salvate in `~/.local/share/weapon/auth.json`.
 
 ```bash
-opencode auth login
+weapon auth login
 ```
 
-Quando OpenCode si avvia, carica i provider dal file delle credenziali e, se presenti, anche eventuali key definite nell'ambiente o in un file `.env` nel progetto.
+Quando Weapon si avvia, carica i provider dal file delle credenziali e, se presenti, anche eventuali key definite nell'ambiente o in un file `.env` nel progetto.
 
 ---
 
@@ -134,13 +134,13 @@ Quando OpenCode si avvia, carica i provider dal file delle credenziali e, se pre
 Elenca tutti i provider autenticati come salvati nel file delle credenziali.
 
 ```bash
-opencode auth list
+weapon auth list
 ```
 
 Oppure la versione corta.
 
 ```bash
-opencode auth ls
+weapon auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Esegue il logout da un provider rimuovendolo dal file delle credenziali.
 
 ```bash
-opencode auth logout
+weapon auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Gestisci l'agente GitHub per l'automazione dei repository.
 
 ```bash
-opencode github [command]
+weapon github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Installa l'agente GitHub nel tuo repository.
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 Questo configura il workflow GitHub Actions necessario e ti guida nel processo di configurazione. [Scopri di più](/docs/github).
@@ -182,7 +182,7 @@ Questo configura il workflow GitHub Actions necessario e ti guida nel processo d
 Esegui l'agente GitHub. Tipicamente usato in GitHub Actions.
 
 ```bash
-opencode github run
+weapon github run
 ```
 
 ##### Flag
@@ -199,7 +199,7 @@ opencode github run
 Gestisci i server Model Context Protocol.
 
 ```bash
-opencode mcp [command]
+weapon mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Aggiungi un server MCP alla tua configurazione.
 
 ```bash
-opencode mcp add
+weapon mcp add
 ```
 
 Questo comando ti guida nell'aggiunta di un server MCP locale o remoto.
@@ -221,13 +221,13 @@ Questo comando ti guida nell'aggiunta di un server MCP locale o remoto.
 Elenca tutti i server MCP configurati e il loro stato di connessione.
 
 ```bash
-opencode mcp list
+weapon mcp list
 ```
 
 Oppure la versione corta.
 
 ```bash
-opencode mcp ls
+weapon mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Autentica con un server MCP con OAuth abilitato.
 
 ```bash
-opencode mcp auth [name]
+weapon mcp auth [name]
 ```
 
 Se non fornisci un nome server, ti verrà chiesto di selezionare tra i server OAuth-capable disponibili.
@@ -245,13 +245,13 @@ Se non fornisci un nome server, ti verrà chiesto di selezionare tra i server OA
 Puoi anche elencare i server OAuth-capable e il loro stato di autenticazione.
 
 ```bash
-opencode mcp auth list
+weapon mcp auth list
 ```
 
 Oppure la versione corta.
 
 ```bash
-opencode mcp auth ls
+weapon mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Rimuovi le credenziali OAuth per un server MCP.
 
 ```bash
-opencode mcp logout [name]
+weapon mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Esegui debug di problemi di connessione OAuth per un server MCP.
 
 ```bash
-opencode mcp debug <name>
+weapon mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 Elenca tutti i modelli disponibili dai provider configurati.
 
 ```bash
-opencode models [provider]
+weapon models [provider]
 ```
 
 Questo comando mostra tutti i modelli disponibili tra i provider configurati nel formato `provider/model`.
@@ -291,7 +291,7 @@ Questo comando mostra tutti i modelli disponibili tra i provider configurati nel
 Puoi anche passare opzionalmente un ID provider per filtrare i modelli a quel provider.
 
 ```bash
-opencode models anthropic
+weapon models anthropic
 ```
 
 #### Flag
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Aggiorna la cache modelli da models.dev            |
 | `--verbose` | Output più verboso (include metadati come i costi) |
 
-Usa `--refresh` per aggiornare l'elenco modelli in cache. È utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in OpenCode.
+Usa `--refresh` per aggiornare l'elenco modelli in cache. È utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in Weapon.
 
 ```bash
-opencode models --refresh
+weapon models --refresh
 ```
 
 ---
 
 ### run
 
-Esegui opencode in modalità non interattiva passando un prompt direttamente.
+Esegui weapon in modalità non interattiva passando un prompt direttamente.
 
 ```bash
-opencode run [message..]
+weapon run [message..]
 ```
 
 È utile per scripting, automazione o quando vuoi una risposta rapida senza avviare la TUI completa. Per esempio:
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "weapon run"
+weapon run Explain the use of context in Go
 ```
 
-Puoi anche collegarti a una istanza `opencode serve` già in esecuzione per evitare i cold boot dei server MCP ad ogni esecuzione:
+Puoi anche collegarti a una istanza `weapon serve` già in esecuzione per evitare i cold boot dei server MCP ad ogni esecuzione:
 
 ```bash
 # Avvia un server headless in un terminale
-opencode serve
+weapon serve
 
 # In un altro terminale, esegui comandi che si collegano ad esso
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+weapon run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flag
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`  | File da allegare al messaggio                                            |
 | `--format`   |       | Formato: default (formattato) o json (eventi JSON grezzi)                |
 | `--title`    |       | Titolo sessione (usa prompt troncato se non viene fornito un valore)     |
-| `--attach`   |       | Attach a un server opencode in esecuzione (es. http://localhost:4096)    |
+| `--attach`   |       | Attach a un server weapon in esecuzione (es. http://localhost:4096)    |
 | `--port`     |       | Porta per il server locale (di default una porta casuale)                |
 
 ---
 
 ### serve
 
-Avvia un server OpenCode headless per accesso via API. Vedi le [server docs](/docs/server) per l'interfaccia HTTP completa.
+Avvia un server Weapon headless per accesso via API. Vedi le [server docs](/docs/server) per l'interfaccia HTTP completa.
 
 ```bash
-opencode serve
+weapon serve
 ```
 
-Avvia un server HTTP che espone accesso API alle funzionalità di opencode senza la TUI. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
+Avvia un server HTTP che espone accesso API alle funzionalità di weapon senza la TUI. Imposta `WEAPON_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `weapon`).
 
 #### Flag
 
@@ -375,20 +375,20 @@ Avvia un server HTTP che espone accesso API alle funzionalità di opencode senza
 
 ### session
 
-Gestisci le sessioni OpenCode.
+Gestisci le sessioni Weapon.
 
 ```bash
-opencode session [command]
+weapon session [command]
 ```
 
 ---
 
 #### list
 
-Elenca tutte le sessioni OpenCode.
+Elenca tutte le sessioni Weapon.
 
 ```bash
-opencode session list
+weapon session list
 ```
 
 ##### Flag
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Mostra statistiche di utilizzo token e costo per le sessioni OpenCode.
+Mostra statistiche di utilizzo token e costo per le sessioni Weapon.
 
 ```bash
-opencode stats
+weapon stats
 ```
 
 #### Flag
@@ -424,7 +424,7 @@ opencode stats
 Esporta i dati di sessione come JSON.
 
 ```bash
-opencode export [sessionID]
+weapon export [sessionID]
 ```
 
 Se non fornisci un ID sessione, ti verrà chiesto di selezionare tra le sessioni disponibili.
@@ -433,30 +433,30 @@ Se non fornisci un ID sessione, ti verrà chiesto di selezionare tra le sessioni
 
 ### import
 
-Importa i dati di sessione da un file JSON o da un URL di condivisione OpenCode.
+Importa i dati di sessione da un file JSON o da un URL di condivisione Weapon.
 
 ```bash
-opencode import <file>
+weapon import <file>
 ```
 
-Puoi importare da un file locale o da un URL di condivisione OpenCode.
+Puoi importare da un file locale o da un URL di condivisione Weapon.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+weapon import session.json
+weapon import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Avvia un server OpenCode headless con interfaccia web.
+Avvia un server Weapon headless con interfaccia web.
 
 ```bash
-opencode web
+weapon web
 ```
 
-Avvia un server HTTP e apre un browser per accedere a OpenCode tramite interfaccia web. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
+Avvia un server HTTP e apre un browser per accedere a Weapon tramite interfaccia web. Imposta `WEAPON_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `weapon`).
 
 #### Flag
 
@@ -474,7 +474,7 @@ Avvia un server HTTP e apre un browser per accedere a OpenCode tramite interfacc
 Avvia un server ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+weapon acp
 ```
 
 Questo comando avvia un server ACP che comunica via stdin/stdout usando nd-JSON.
@@ -491,10 +491,10 @@ Questo comando avvia un server ACP che comunica via stdin/stdout usando nd-JSON.
 
 ### uninstall
 
-Disinstalla OpenCode e rimuove tutti i file correlati.
+Disinstalla Weapon e rimuove tutti i file correlati.
 
 ```bash
-opencode uninstall
+weapon uninstall
 ```
 
 #### Flag
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Aggiorna opencode all'ultima versione o a una versione specifica.
+Aggiorna weapon all'ultima versione o a una versione specifica.
 
 ```bash
-opencode upgrade [target]
+weapon upgrade [target]
 ```
 
 Per aggiornare all'ultima versione:
 
 ```bash
-opencode upgrade
+weapon upgrade
 ```
 
 Per aggiornare a una versione specifica:
 
 ```bash
-opencode upgrade v0.1.48
+weapon upgrade v0.1.48
 ```
 
 #### Flag
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Flag globali
 
-La CLI di opencode accetta i seguenti flag globali.
+La CLI di weapon accetta i seguenti flag globali.
 
 | Flag           | Breve | Descrizione                            |
 | -------------- | ----- | -------------------------------------- |
@@ -551,34 +551,34 @@ La CLI di opencode accetta i seguenti flag globali.
 
 ## Variabili d'ambiente
 
-OpenCode può essere configurato tramite variabili d'ambiente.
+Weapon può essere configurato tramite variabili d'ambiente.
 
 | Variabile                             | Tipo    | Descrizione                                                 |
 | ------------------------------------- | ------- | ----------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Condivide automaticamente le sessioni                       |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Percorso all'eseguibile Git Bash su Windows                 |
-| `OPENCODE_CONFIG`                     | string  | Percorso al file di configurazione                          |
-| `OPENCODE_CONFIG_DIR`                 | string  | Percorso alla directory di configurazione                   |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Contenuto JSON di config inline                             |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disabilita i controlli automatici di aggiornamento          |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Disabilita la potatura dei dati vecchi                      |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disabilita aggiornamenti automatici del titolo terminale    |
-| `OPENCODE_PERMISSION`                 | string  | Config permessi JSON inline                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disabilita i plugin di default                              |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disabilita download automatico dei server LSP               |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Abilita modelli sperimentali                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disabilita compaction automatica del contesto               |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disabilita lettura da `.claude` (prompt + skill)            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disabilita lettura di `~/.claude/CLAUDE.md`                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disabilita caricamento di `.claude/skills`                  |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disabilita fetch dei modelli da fonti remote                |
-| `OPENCODE_FAKE_VCS`                   | string  | Provider VCS finto per scopi di test                        |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Disabilita controllo file time per ottimizzazione           |
-| `OPENCODE_CLIENT`                     | string  | Identificatore client (default `cli`)                       |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Abilita gli strumenti di web search Exa                     |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Abilita basic auth per `serve`/`web`                        |
-| `OPENCODE_SERVER_USERNAME`            | string  | Sovrascrive lo username basic auth (default `opencode`)     |
-| `OPENCODE_MODELS_URL`                 | string  | URL personalizzato per recuperare la configurazione modelli |
+| `WEAPON_AUTO_SHARE`                 | boolean | Condivide automaticamente le sessioni                       |
+| `WEAPON_GIT_BASH_PATH`              | string  | Percorso all'eseguibile Git Bash su Windows                 |
+| `WEAPON_CONFIG`                     | string  | Percorso al file di configurazione                          |
+| `WEAPON_CONFIG_DIR`                 | string  | Percorso alla directory di configurazione                   |
+| `WEAPON_CONFIG_CONTENT`             | string  | Contenuto JSON di config inline                             |
+| `WEAPON_DISABLE_AUTOUPDATE`         | boolean | Disabilita i controlli automatici di aggiornamento          |
+| `WEAPON_DISABLE_PRUNE`              | boolean | Disabilita la potatura dei dati vecchi                      |
+| `WEAPON_DISABLE_TERMINAL_TITLE`     | boolean | Disabilita aggiornamenti automatici del titolo terminale    |
+| `WEAPON_PERMISSION`                 | string  | Config permessi JSON inline                                 |
+| `WEAPON_DISABLE_DEFAULT_PLUGINS`    | boolean | Disabilita i plugin di default                              |
+| `WEAPON_DISABLE_LSP_DOWNLOAD`       | boolean | Disabilita download automatico dei server LSP               |
+| `WEAPON_ENABLE_EXPERIMENTAL_MODELS` | boolean | Abilita modelli sperimentali                                |
+| `WEAPON_DISABLE_AUTOCOMPACT`        | boolean | Disabilita compaction automatica del contesto               |
+| `WEAPON_DISABLE_CLAUDE_CODE`        | boolean | Disabilita lettura da `.claude` (prompt + skill)            |
+| `WEAPON_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disabilita lettura di `~/.claude/CLAUDE.md`                 |
+| `WEAPON_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disabilita caricamento di `.claude/skills`                  |
+| `WEAPON_DISABLE_MODELS_FETCH`       | boolean | Disabilita fetch dei modelli da fonti remote                |
+| `WEAPON_FAKE_VCS`                   | string  | Provider VCS finto per scopi di test                        |
+| `WEAPON_DISABLE_FILETIME_CHECK`     | boolean | Disabilita controllo file time per ottimizzazione           |
+| `WEAPON_CLIENT`                     | string  | Identificatore client (default `cli`)                       |
+| `WEAPON_ENABLE_EXA`                 | boolean | Abilita gli strumenti di web search Exa                     |
+| `WEAPON_SERVER_PASSWORD`            | string  | Abilita basic auth per `serve`/`web`                        |
+| `WEAPON_SERVER_USERNAME`            | string  | Sovrascrive lo username basic auth (default `weapon`)     |
+| `WEAPON_MODELS_URL`                 | string  | URL personalizzato per recuperare la configurazione modelli |
 
 ---
 
@@ -588,16 +588,16 @@ Queste variabili d'ambiente abilitano funzionalità sperimentali che potrebbero 
 
 | Variabile                                       | Tipo    | Descrizione                                |
 | ----------------------------------------------- | ------- | ------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Abilita tutte le funzionalità sperimentali |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Abilita icon discovery                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disabilita copy on select nella TUI        |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Timeout di default per comandi bash in ms  |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Massimo token di output per risposte LLM   |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Abilita file watcher per l'intera dir      |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Abilita formatter oxfmt                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Abilita strumento LSP sperimentale         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disabilita file watcher                    |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalità Exa sperimentali      |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita type checking LSP sperimentale     |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Abilita markdown sperimentale              |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                          |
+| `WEAPON_EXPERIMENTAL`                         | boolean | Abilita tutte le funzionalità sperimentali |
+| `WEAPON_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Abilita icon discovery                     |
+| `WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disabilita copy on select nella TUI        |
+| `WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Timeout di default per comandi bash in ms  |
+| `WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Massimo token di output per risposte LLM   |
+| `WEAPON_EXPERIMENTAL_FILEWATCHER`             | boolean | Abilita file watcher per l'intera dir      |
+| `WEAPON_EXPERIMENTAL_OXFMT`                   | boolean | Abilita formatter oxfmt                    |
+| `WEAPON_EXPERIMENTAL_LSP_TOOL`                | boolean | Abilita strumento LSP sperimentale         |
+| `WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disabilita file watcher                    |
+| `WEAPON_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalità Exa sperimentali      |
+| `WEAPON_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita type checking LSP sperimentale     |
+| `WEAPON_EXPERIMENTAL_MARKDOWN`                | boolean | Abilita markdown sperimentale              |
+| `WEAPON_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                          |

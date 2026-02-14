@@ -17,9 +17,9 @@ Polecenia są dodatkiem do wbudowanych, takich jak `/init`, `/undo`, `/redo`, `/
 
 Utwórz pliki Markdown w katalogu `commands/`, aby zdefiniować polecenia.
 
-Utwórz `.opencode/commands/test.md`:
+Utwórz `.weapon/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Uruchom polecenie, wpisując `/`, a następnie nazwę polecenia.
 
 ## Konfiguracja
 
-Możesz zdefiniować polecenia w `opencode.json` lub w plikach w katalogu `commands/`.
+Możesz zdefiniować polecenia w `weapon.json` lub w plikach w katalogu `commands/`.
 
 ---
 
 ### JSON
 
-Użyj opcji `command` w swojej konfiguracji opencode:
+Użyj opcji `command` w swojej konfiguracji weapon:
 
-```json title="opencode.jsonc" {4-12}
+```json title="weapon.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Teraz możesz wybrać opcję w TUI:
 
 Można także definiować polecenia za pomocą plików Markdown. Trzymaj je w:
 
-- Globalnie: `~/.config/opencode/commands/`
-- Na projekt: `.opencode/commands/`
+- Globalnie: `~/.config/weapon/commands/`
+- Na projekt: `.weapon/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Prompty niestandardowych poleceń obsługują kilka specjalnych symboli zastępc
 
 Przekazuj argumenty do promptu, używając symbolu zastępczego `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".weapon/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Dostęp do poszczególnych argumentów można uzyskać za pomocą parametrów po
 
 Na przykład:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".weapon/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Użyj `!command`, aby wstawić dane wyjściowe [polecenia bash](/docs/tui#bash-c
 
 Na przykład, aby przeanalizować pokrycie testami:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".weapon/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Lub aby przejrzeć ostatnie zmiany:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".weapon/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Polecenia są uruchamiane w powłoce, a ich dane wyjściowe są wstawiane do pro
 
 Dołącz pliki do swojego polecenia, używając `@` i ścieżki do pliku.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".weapon/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Przyjrzyjmy się szczegółowo opcjom konfiguracji.
 
 Opcja `template` to prompt wysyłany do LLM po wykonaniu polecenia.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Jest to **wymagana** opcja konfiguracji.
 
 Użyj `description`, aby dodać krótki opis działania polecenia.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Użyj opcji `agent`, aby określić, który [agent](/docs/agents) powinien wykon
 Jeśli jest to [subagent](/docs/agents/#subagents), zostanie on użyty.
 Aby to zmienić, ustaw `subtask` na `false`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Użyj `subtask`, aby wymusić wywołanie polecenia jako subzadania.
 Jest to przydatne, jeśli chcesz, aby polecenie nie zanieczyszczało kontekstu i **zmusiło** agenta do działania jako subagent,
 nawet jeśli `mode` jest ustawiony na `primary` w konfiguracji [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 Użyj `model`, aby określić model dla tego polecenia.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 ## Wbudowane
 
-opencode zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
+weapon zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
 
 :::note
 Polecenia wbudowane mogą zostać nadpisane.

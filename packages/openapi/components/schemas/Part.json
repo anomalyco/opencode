@@ -1,0 +1,40 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./TextPart.json"
+    },
+    {
+      "$ref": "./SubtaskPart.json"
+    },
+    {
+      "$ref": "./ReasoningPart.json"
+    },
+    {
+      "$ref": "./FilePart.json"
+    },
+    {
+      "$ref": "./ToolPart.json"
+    },
+    {
+      "$ref": "./StepStartPart.json"
+    },
+    {
+      "$ref": "./StepFinishPart.json"
+    },
+    {
+      "$ref": "./SnapshotPart.json"
+    },
+    {
+      "$ref": "./PatchPart.json"
+    },
+    {
+      "$ref": "./AgentPart.json"
+    },
+    {
+      "$ref": "./RetryPart.json"
+    },
+    {
+      "$ref": "./CompactionPart.json"
+    }
+  ]
+}

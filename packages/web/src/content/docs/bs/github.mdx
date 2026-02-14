@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Koristite OpenCode u GitHub problemima i zahtjevima za povlačenjem.
+description: Koristite Weapon u GitHub problemima i zahtjevima za povlačenjem.
 ---
 
-OpenCode se integriše sa vašim GitHub tokovom rada. Spomenite `/opencode` ili `/oc` u svom komentaru i OpenCode će izvršiti zadatke unutar vašeg GitHub Actions runnera.
+Weapon se integriše sa vašim GitHub tokovom rada. Spomenite `/weapon` ili `/oc` u svom komentaru i Weapon će izvršiti zadatke unutar vašeg GitHub Actions runnera.
 
 ---
 
 ## Funkcije
 
-- **Problemi trijaže**: Zamolite OpenCode da ispita problem i objasni vam ga.
-- **Popravi i implementiraj**: Zamolite OpenCode da popravi problem ili implementira funkciju. I radit će u novoj poslovnici i dostavljati PR sa svim promjenama.
-- **Secure**: OpenCode se pokreće unutar pokretača vašeg GitHub-a.
+- **Problemi trijaže**: Zamolite Weapon da ispita problem i objasni vam ga.
+- **Popravi i implementiraj**: Zamolite Weapon da popravi problem ili implementira funkciju. I radit će u novoj poslovnici i dostavljati PR sa svim promjenama.
+- **Secure**: Weapon se pokreće unutar pokretača vašeg GitHub-a.
 
 ---
 
@@ -20,7 +20,7 @@ OpenCode se integriše sa vašim GitHub tokovom rada. Spomenite `/opencode` ili 
 Pokrenite sljedeću naredbu u projektu koji se nalazi u GitHub repo:
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 Ovo će vas provesti kroz instalaciju GitHub aplikacije, kreiranje toka posla i postavljanje tajni.
@@ -32,12 +32,12 @@ Ovo će vas provesti kroz instalaciju GitHub aplikacije, kreiranje toka posla i 
 Ili ga možete postaviti ručno.
 
 1. **Instalirajte GitHub aplikaciju**
-   Idite na [**github.com/apps/opencodegent**](https://github.com/apps/opencodegent). Uvjerite se da je instaliran na ciljnom spremištu.
+   Idite na [**github.com/apps/weapongent**](https://github.com/apps/weapongent). Uvjerite se da je instaliran na ciljnom spremištu.
 2. **Dodajte radni tok**
-   Dodajte sljedeći fajl toka posla u `.github/workflows/opencode.yml` u svoj repo. Obavezno postavite odgovarajuće `model` i potrebne API ključeve u `env`.
+   Dodajte sljedeći fajl toka posla u `.github/workflows/weapon.yml` u svoj repo. Obavezno postavite odgovarajuće `model` i potrebne API ključeve u `env`.
 
-```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+```yml title=".github/workflows/weapon.yml" {24,26}
+   name: weapon
 
    on:
      issue_comment:
@@ -46,10 +46,10 @@ Ili ga možete postaviti ručno.
        types: [created]
 
    jobs:
-     opencode:
+     weapon:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/weapon')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -60,8 +60,8 @@ Ili ga možete postaviti ručno.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+          - name: Run Weapon
+           uses: anomalyco/weapon/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -77,12 +77,12 @@ Ili ga možete postaviti ručno.
 
 ## Konfiguracija
 
-- `model`: Model za korištenje s OpenCode. Uzima format `provider/model`. Ovo je **obavezno**.
+- `model`: Model za korištenje s Weapon. Uzima format `provider/model`. Ovo je **obavezno**.
 - `agent`: Agent za korištenje. Mora biti primarni agent. Vraća se na `default_agent` iz konfiguracije ili `"build"` ako nije pronađen.
-- `share`: Da li dijeliti OpenCode sesiju. Podrazumevano je **true** za javna spremišta.
-- `prompt`: Opcioni prilagođeni upit za nadjačavanje zadanog ponašanja. Koristite ovo da prilagodite kako OpenCode obrađuje zahtjeve.
-- `token`: Opcionalni GitHub pristupni token za izvođenje operacija kao što su kreiranje komentara, upisivanje promjena i otvaranje zahtjeva za povlačenjem. OpenCode prema zadanim postavkama koristi token za pristup instalaciji iz aplikacije OpenCode GitHub, tako da se urezivanje, komentari i zahtjevi za povlačenjem pojavljuju kao da dolaze iz aplikacije.
-  Alternativno, možete koristiti GitHub Action runner [ugrađeni `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) bez instaliranja OpenCode GitHub aplikacije. Samo se pobrinite da date potrebna odobrenja u svom toku rada:
+- `share`: Da li dijeliti Weapon sesiju. Podrazumevano je **true** za javna spremišta.
+- `prompt`: Opcioni prilagođeni upit za nadjačavanje zadanog ponašanja. Koristite ovo da prilagodite kako Weapon obrađuje zahtjeve.
+- `token`: Opcionalni GitHub pristupni token za izvođenje operacija kao što su kreiranje komentara, upisivanje promjena i otvaranje zahtjeva za povlačenjem. Weapon prema zadanim postavkama koristi token za pristup instalaciji iz aplikacije Weapon GitHub, tako da se urezivanje, komentari i zahtjevi za povlačenjem pojavljuju kao da dolaze iz aplikacije.
+  Alternativno, možete koristiti GitHub Action runner [ugrađeni `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) bez instaliranja Weapon GitHub aplikacije. Samo se pobrinite da date potrebna odobrenja u svom toku rada:
 
 ```yaml
 permissions:
@@ -98,29 +98,29 @@ Također možete koristiti [Personal Access Tokens](https://docs.github.com/en/a
 
 ## Podržani događaji
 
-OpenCode se može pokrenuti sljedećim GitHub događajima:
+Weapon se može pokrenuti sljedećim GitHub događajima:
 | Vrsta događaja | Pokrenuo | Detalji
 |----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | Komentirajte problem ili PR | Navedite `/opencode` ili `/oc` u svom komentaru. OpenCode čita kontekst i može kreirati grane, otvarati PR-ove ili odgovarati. |
-| `pull_request_review_comment` | Komentirajte određene linije koda u PR-u | Navedite `/opencode` ili `/oc` dok pregledavate kod. OpenCode prima putanju datoteke, brojeve redova i kontekst razlike. |
-| `issues` | Broj otvoren ili uređen | Automatski pokrenite OpenCode kada se problemi kreiraju ili modificiraju. Zahtijeva `prompt` unos. |
-| `pull_request` | PR otvoren ili ažuriran | Automatski pokrenite OpenCode kada se PR-ovi otvore, sinkroniziraju ili ponovo otvore. Korisno za automatske recenzije. |
-| `schedule` | Cron baziran raspored | Pokrenite OpenCode prema rasporedu. Zahtijeva `prompt` unos. Izlaz ide u dnevnike i PR-ove (nema problema za komentarisanje). |
-| `workflow_dispatch` | Ručni okidač iz GitHub korisničkog sučelja | Aktivirajte OpenCode na zahtjev preko kartice Akcije. Zahtijeva `prompt` unos. Izlaz ide u dnevnike i PR-ove. |
+| `issue_comment` | Komentirajte problem ili PR | Navedite `/weapon` ili `/oc` u svom komentaru. Weapon čita kontekst i može kreirati grane, otvarati PR-ove ili odgovarati. |
+| `pull_request_review_comment` | Komentirajte određene linije koda u PR-u | Navedite `/weapon` ili `/oc` dok pregledavate kod. Weapon prima putanju datoteke, brojeve redova i kontekst razlike. |
+| `issues` | Broj otvoren ili uređen | Automatski pokrenite Weapon kada se problemi kreiraju ili modificiraju. Zahtijeva `prompt` unos. |
+| `pull_request` | PR otvoren ili ažuriran | Automatski pokrenite Weapon kada se PR-ovi otvore, sinkroniziraju ili ponovo otvore. Korisno za automatske recenzije. |
+| `schedule` | Cron baziran raspored | Pokrenite Weapon prema rasporedu. Zahtijeva `prompt` unos. Izlaz ide u dnevnike i PR-ove (nema problema za komentarisanje). |
+| `workflow_dispatch` | Ručni okidač iz GitHub korisničkog sučelja | Aktivirajte Weapon na zahtjev preko kartice Akcije. Zahtijeva `prompt` unos. Izlaz ide u dnevnike i PR-ove. |
 
 ### Primjer rasporeda
 
-Pokrenite OpenCode po rasporedu za obavljanje automatiziranih zadataka:
+Pokrenite Weapon po rasporedu za obavljanje automatiziranih zadataka:
 
-```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+```yaml title=".github/workflows/weapon-scheduled.yml"
+name: Scheduled Weapon Task
 
 on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
 
 jobs:
-  opencode:
+  weapon:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -133,8 +133,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+      - name: Run Weapon
+        uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -144,7 +144,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-Za zakazane događaje, unos `prompt` je **potreban** jer nema komentara za izvlačenje instrukcija. Planirani tokovi posla se pokreću bez korisničkog konteksta za provjeru dozvola, tako da tok posla mora odobriti `contents: write` i `pull-requests: write` ako očekujete da će OpenCode kreirati grane ili PR-ove.
+Za zakazane događaje, unos `prompt` je **potreban** jer nema komentara za izvlačenje instrukcija. Planirani tokovi posla se pokreću bez korisničkog konteksta za provjeru dozvola, tako da tok posla mora odobriti `contents: write` i `pull-requests: write` ako očekujete da će Weapon kreirati grane ili PR-ove.
 
 ---
 
@@ -152,8 +152,8 @@ Za zakazane događaje, unos `prompt` je **potreban** jer nema komentara za izvla
 
 Automatski pregledajte PR-ove kada se otvore ili ažuriraju:
 
-```yaml title=".github/workflows/opencode-review.yml"
-name: opencode-review
+```yaml title=".github/workflows/weapon-review.yml"
+name: weapon-review
 
 on:
   pull_request:
@@ -171,7 +171,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -185,7 +185,7 @@ jobs:
             - Suggest improvements
 ```
 
-Za `pull_request` događaje, ako nije naveden `prompt`, OpenCode podrazumevano pregledava zahtjev za povlačenjem.
+Za `pull_request` događaje, ako nije naveden `prompt`, Weapon podrazumevano pregledava zahtjev za povlačenjem.
 
 ---
 
@@ -193,7 +193,7 @@ Za `pull_request` događaje, ako nije naveden `prompt`, OpenCode podrazumevano p
 
 Automatski triažirajte nove probleme. Ovaj primjer filtrira na račune starije od 30 dana radi smanjenja neželjene pošte:
 
-```yaml title=".github/workflows/opencode-triage.yml"
+```yaml title=".github/workflows/weapon-triage.yml"
 name: Issue Triage
 
 on:
@@ -227,7 +227,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -246,10 +246,10 @@ Za `issues` događaje, `prompt` unos je **potreban** jer nema komentara za izvla
 
 ## Prilagođeni upiti
 
-Zaobiđite zadani prompt da biste prilagodili ponašanje OpenCode za vaš tok posla.
+Zaobiđite zadani prompt da biste prilagodili ponašanje Weapon za vaš tok posla.
 
-```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+```yaml title=".github/workflows/weapon.yml"
+- uses: anomalyco/weapon/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |
@@ -265,25 +265,25 @@ Ovo je korisno za provođenje specifičnih kriterija pregleda, standarda kodiran
 
 ## Primjeri
 
-Evo nekoliko primjera kako možete koristiti OpenCode u GitHub.
+Evo nekoliko primjera kako možete koristiti Weapon u GitHub.
 
 - **Objasnite problem**
   Dodajte ovaj komentar u GitHub izdanje.
 
 ```
-  /opencode explain this issue
+  /weapon explain this issue
 ```
 
-OpenCode će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s jasnim objašnjenjem.
+Weapon će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s jasnim objašnjenjem.
 
 - **Popravi problem**
   U izdanju na GitHub-u recite:
 
 ```
-  /opencode fix this
+  /weapon fix this
 ```
 
-I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa promjenama.
+I Weapon će kreirati novu granu, implementirati promjene i otvoriti PR sa promjenama.
 
 - **Pregledajte PR-ove i izvršite izmjene**
   Ostavite sljedeći komentar na GitHub PR-u.
@@ -292,17 +292,17 @@ I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa pro
   Delete the attachment from S3 when the note is removed /oc
 ```
 
-OpenCode će implementirati traženu promjenu i posvetiti je istom PR-u.
+Weapon će implementirati traženu promjenu i posvetiti je istom PR-u.
 
 - **Pregledajte određene linije koda**
-  Ostavite komentar direktno na linije koda u PR kartici "Files". OpenCode automatski detektuje datoteku, brojeve redova i kontekst razlike kako bi pružio precizne odgovore.
+  Ostavite komentar direktno na linije koda u PR kartici "Files". Weapon automatski detektuje datoteku, brojeve redova i kontekst razlike kako bi pružio precizne odgovore.
 
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
 ```
 
-Kada komentarišete određene linije, OpenCode prima:
+Kada komentarišete određene linije, Weapon prima:
 
 - Tačan fajl se pregleda
 - Specifične linije koda

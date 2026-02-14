@@ -3,7 +3,7 @@ title: Strumenti
 description: Gestisci gli strumenti che un LLM puo' usare.
 ---
 
-Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. OpenCode include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](/docs/custom-tools) o con [server MCP](/docs/mcp-servers).
+Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. Weapon include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](/docs/custom-tools) o con [server MCP](/docs/mcp-servers).
 
 Di default, tutti gli strumenti sono **abilitati** e non richiedono permessi per essere eseguiti. Puoi controllare il comportamento degli strumenti tramite i [permessi](/docs/permissions).
 
@@ -13,9 +13,9 @@ Di default, tutti gli strumenti sono **abilitati** e non richiedono permessi per
 
 Usa il campo `permission` per controllare il comportamento degli strumenti. Puoi consentire, negare o richiedere approvazione per ciascuno.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -26,9 +26,9 @@ Usa il campo `permission` per controllare il comportamento degli strumenti. Puoi
 
 Puoi anche usare wildcard per controllare piu' strumenti insieme. Per esempio, per richiedere approvazione per tutti gli strumenti di un server MCP:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ Puoi anche usare wildcard per controllare piu' strumenti insieme. Per esempio, p
 
 ## Integrati
 
-Ecco tutti gli strumenti integrati disponibili in OpenCode.
+Ecco tutti gli strumenti integrati disponibili in Weapon.
 
 ---
 
@@ -49,9 +49,9 @@ Ecco tutti gli strumenti integrati disponibili in OpenCode.
 
 Esegui comandi di shell nel tuo ambiente di progetto.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -66,9 +66,9 @@ Questo strumento permette all'LLM di eseguire comandi da terminale come `npm ins
 
 Modifica file esistenti usando sostituzioni esatte di stringhe.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -83,9 +83,9 @@ Questo strumento esegue modifiche precise ai file sostituendo corrispondenze di 
 
 Crea nuovi file o sovrascrive quelli esistenti.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -104,9 +104,9 @@ Lo strumento `write` e' controllato dal permesso `edit`, che copre tutte le modi
 
 Leggi il contenuto dei file dal tuo codebase.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "read": "allow"
   }
@@ -121,9 +121,9 @@ Questo strumento legge i file e ne restituisce il contenuto. Supporta la lettura
 
 Cerca nel contenuto dei file usando espressioni regolari.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -138,9 +138,9 @@ Ricerca rapida nel contenuto su tutto il codebase. Supporta la sintassi completa
 
 Trova file tramite pattern matching.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -155,9 +155,9 @@ Cerca file usando pattern glob come `**/*.js` o `src/**/*.ts`. Restituisce i per
 
 Elenca file e directory in un percorso specifico.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "list": "allow"
   }
@@ -173,12 +173,12 @@ Questo strumento elenca il contenuto di una directory. Accetta pattern glob per 
 Interagisci con i server LSP configurati per ottenere funzionalita' di code intelligence come definizioni, riferimenti, hover info e call hierarchy.
 
 :::note
-Questo strumento e' disponibile solo quando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (oppure `OPENCODE_EXPERIMENTAL=true`).
+Questo strumento e' disponibile solo quando `WEAPON_EXPERIMENTAL_LSP_TOOL=true` (oppure `WEAPON_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -195,9 +195,9 @@ Per configurare quali server LSP sono disponibili per il tuo progetto, vedi [LSP
 
 Applica patch ai file.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -216,9 +216,9 @@ Lo strumento `patch` e' controllato dal permesso `edit`, che copre tutte le modi
 
 Carica una [skill](/docs/skills) (un file `SKILL.md`) e ne restituisce il contenuto nella conversazione.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -231,9 +231,9 @@ Carica una [skill](/docs/skills) (un file `SKILL.md`) e ne restituisce il conten
 
 Gestisci todo list durante le sessioni di coding.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -252,9 +252,9 @@ Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo 
 
 Leggi le todo list esistenti.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -273,9 +273,9 @@ Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo 
 
 Recupera contenuti dal web.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -291,19 +291,19 @@ Permette all'LLM di recuperare e leggere pagine web. Utile per consultare docume
 Cerca informazioni sul web.
 
 :::note
-Questo strumento e' disponibile solo quando usi il provider OpenCode o quando la variabile d'ambiente `OPENCODE_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
+Questo strumento e' disponibile solo quando usi il provider Weapon o quando la variabile d'ambiente `WEAPON_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
 
-Per abilitarlo all'avvio di OpenCode:
+Per abilitarlo all'avvio di Weapon:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+WEAPON_ENABLE_EXA=1 weapon
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -324,9 +324,9 @@ Usa `websearch` quando devi trovare informazioni (discovery) e `webfetch` quando
 
 Fai domande all'utente durante l'esecuzione.
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "question": "allow"
   }

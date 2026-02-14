@@ -1,0 +1,36 @@
+{
+  "post": {
+    "operationId": "tui.openHelp",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Open help dialog",
+    "description": "Open the help dialog in the TUI to display user assistance information.",
+    "responses": {
+      "200": {
+        "description": "Help dialog opened successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_open-help/post.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,19 +1,19 @@
 ---
 title: الخادم
-description: تفاعل مع خادم opencode عبر HTTP.
+description: تفاعل مع خادم weapon عبر HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-يشغّل الأمر `opencode serve` خادما HTTP دون واجهة ويعرض نقطة نهاية OpenAPI يمكن لعميل opencode استخدامها.
+يشغّل الأمر `weapon serve` خادما HTTP دون واجهة ويعرض نقطة نهاية OpenAPI يمكن لعميل weapon استخدامها.
 
 ---
 
 ### الاستخدام
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### الخيارات
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | المنفذ الذي يستمع عليه                | `4096`           |
 | `--hostname`    | اسم المضيف الذي يستمع عليه            | `127.0.0.1`      |
 | `--mdns`        | تفعيل اكتشاف mDNS                     | `false`          |
-| `--mdns-domain` | اسم نطاق مخصص لخدمة mDNS              | `opencode.local` |
+| `--mdns-domain` | اسم نطاق مخصص لخدمة mDNS              | `weapon.local` |
 | `--cors`        | أصول (Origins) متصفح إضافية مسموح بها | `[]`             |
 
 يمكن تمرير `--cors` عدة مرات:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### المصادقة
 
-عيّن `OPENCODE_SERVER_PASSWORD` لحماية الخادم باستخدام مصادقة HTTP الأساسية. اسم المستخدم افتراضيا هو `opencode`، أو عيّن `OPENCODE_SERVER_USERNAME` لتغييره. ينطبق ذلك على كل من `opencode serve` و `opencode web`.
+عيّن `WEAPON_SERVER_PASSWORD` لحماية الخادم باستخدام مصادقة HTTP الأساسية. اسم المستخدم افتراضيا هو `weapon`، أو عيّن `WEAPON_SERVER_USERNAME` لتغييره. ينطبق ذلك على كل من `weapon serve` و `weapon web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### كيف يعمل
 
-عند تشغيل `opencode` يبدأ تشغيل واجهة terminal تفاعلية (TUI) وخادما. تكون الـ TUI هي
+عند تشغيل `weapon` يبدأ تشغيل واجهة terminal تفاعلية (TUI) وخادما. تكون الـ TUI هي
 العميل الذي يتحدث إلى الخادم. يوفّر الخادم نقطة نهاية لمواصفة OpenAPI 3.1.
 وتُستخدم هذه النقطة أيضا لتوليد [SDK](/docs/sdk).
 
 :::tip
-استخدم خادم opencode للتفاعل مع opencode برمجيا.
+استخدم خادم weapon للتفاعل مع weapon برمجيا.
 :::
 
-تتيح هذه البنية لـ opencode دعم عدة عملاء وتمكّنك من التفاعل مع opencode برمجيا.
+تتيح هذه البنية لـ weapon دعم عدة عملاء وتمكّنك من التفاعل مع weapon برمجيا.
 
-يمكنك تشغيل `opencode serve` لبدء خادم مستقل. إذا كانت واجهة opencode في terminal (TUI)
-قيد التشغيل، فسيبدأ `opencode serve` خادما جديدا.
+يمكنك تشغيل `weapon serve` لبدء خادم مستقل. إذا كانت واجهة weapon في terminal (TUI)
+قيد التشغيل، فسيبدأ `weapon serve` خادما جديدا.
 
 ---
 
@@ -65,7 +65,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 عند بدء الـ TUI تقوم بتعيين منفذ واسم مضيف عشوائيا. يمكنك بدلا من ذلك تمرير [الخيارات](/docs/cli) `--hostname` و `--port`، ثم استخدامهما للاتصال بخادمها.
 
-يمكن استخدام نقطة النهاية [`/tui`](#tui) للتحكم في الـ TUI عبر الخادم. على سبيل المثال، يمكنك تعبئة الموجّه مسبقا أو تشغيله. يُستخدم هذا الإعداد بواسطة ملحقات OpenCode لـ [IDE](/docs/ide).
+يمكن استخدام نقطة النهاية [`/tui`](#tui) للتحكم في الـ TUI عبر الخادم. على سبيل المثال، يمكنك تعبئة الموجّه مسبقا أو تشغيله. يُستخدم هذا الإعداد بواسطة ملحقات Weapon لـ [IDE](/docs/ide).
 
 ---
 
@@ -83,7 +83,7 @@ http://<hostname>:<port>/doc
 
 ## واجهات API
 
-يعرض خادم opencode واجهات API التالية.
+يعرض خادم weapon واجهات API التالية.
 
 ---
 

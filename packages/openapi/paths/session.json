@@ -1,0 +1,137 @@
+{
+  "get": {
+    "operationId": "session.list",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter sessions by project directory"
+      },
+      {
+        "in": "query",
+        "name": "roots",
+        "schema": {
+          "type": "boolean"
+        },
+        "description": "Only return root sessions (no parentID)"
+      },
+      {
+        "in": "query",
+        "name": "start",
+        "schema": {
+          "type": "number"
+        },
+        "description": "Filter sessions updated on or after this timestamp (milliseconds since epoch)"
+      },
+      {
+        "in": "query",
+        "name": "search",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter sessions by title (case-insensitive)"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "schema": {
+          "type": "number"
+        },
+        "description": "Maximum number of sessions to return"
+      }
+    ],
+    "summary": "List sessions",
+    "description": "Get a list of all OpenCode sessions, sorted by most recently updated.",
+    "responses": {
+      "200": {
+        "description": "List of sessions",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/Session.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session/get.js"
+        }
+      }
+    ]
+  },
+  "post": {
+    "operationId": "session.create",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Create session",
+    "description": "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+    "responses": {
+      "200": {
+        "description": "Successfully created session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Session.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "parentID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "title": {
+                "type": "string"
+              },
+              "permission": {
+                "$ref": "../components/schemas/PermissionRuleset.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session/post.js"
+        }
+      }
+    ]
+  }
+}

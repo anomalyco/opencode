@@ -1,15 +1,15 @@
 ---
 title: Biçimlendiriciler
-description: opencode dile özgü biçimlendiriciler kullanır.
+description: weapon dile özgü biçimlendiriciler kullanır.
 ---
 
-opencode, dosyaları dile özgü formatlayıcılar kullanılarak yazıldıktan veya düzenlendikten sonra otomatik olarak formatlar. Bu, oluşturulan kodun projenizin kod stillerine uymasını sağlar.
+weapon, dosyaları dile özgü formatlayıcılar kullanılarak yazıldıktan veya düzenlendikten sonra otomatik olarak formatlar. Bu, oluşturulan kodun projenizin kod stillerine uymasını sağlar.
 
 ---
 
 ## Yerleşik
 
-opencode, popüler diller ve çerçeveler için çeşitli yerleşik biçimlendiricilerle birlikte gelir. Aşağıda ihtiyaç duyduğu biçimlendiricilerin, desteklenen dosya uzantılarının ve komutların veya yapılandırma seçeneklerinin bir listesi bulunmaktadır.
+weapon, popüler diller ve çerçeveler için çeşitli yerleşik biçimlendiricilerle birlikte gelir. Aşağıda ihtiyaç duyduğu biçimlendiricilerin, desteklenen dosya uzantılarının ve komutların veya yapılandırma seçeneklerinin bir listesi bulunmaktadır.
 
 | Biçimlendirici   | Uzantılar                                                                                                    | Gereksinimler                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
@@ -38,13 +38,13 @@ opencode, popüler diller ve çerçeveler için çeşitli yerleşik biçimlendir
 | oxfmt (Deneysel) | .js, .jsx, .ts, .tsx                                                                                         | `package.json` içinde `oxfmt` bağımlılığı ve [experimental env variable flag](/docs/cli/#experimental) |
 | ormolu           | .hs                                                                                                          | `ormolu` komutu mevcut                                                                                 |
 
-Yani eğer projenizin `package.json` dosyasında `prettier` varsa, opencode bunu otomatik olarak kullanacaktır.
+Yani eğer projenizin `package.json` dosyasında `prettier` varsa, weapon bunu otomatik olarak kullanacaktır.
 
 ---
 
 ## Nasıl çalışır?
 
-opencode bir dosyayı yazdığında veya düzenlediğinde:
+weapon bir dosyayı yazdığında veya düzenlediğinde:
 
 1. Dosya uzantısını tüm etkin formatlayıcılara göre kontrol eder.
 2. Dosyada uygun biçimlendirici komutunu çalıştırır.
@@ -56,11 +56,11 @@ Bu işlem arka planda gerçekleşir ve kod stillerinizin herhangi bir manuel ad�
 
 ## Yapılandırma
 
-Biçimlendiricileri opencode yapılandırmanızdaki `formatter` bölümü aracılığıyla özelleştirebilirsiniz.
+Biçimlendiricileri weapon yapılandırmanızdaki `formatter` bölümü aracılığıyla özelleştirebilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ Bazı örneklere bakalım.
 
 **tüm** biçimlendiricileri genel olarak devre dışı bırakmak için `formatter` değerini `false` olarak ayarlayın:
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": false
 }
 ```
 
 **Belirli** bir biçimlendiriciyi devre dışı bırakmak için `disabled` değerini `true` olarak ayarlayın:
 
-```json title="opencode.json" {5}
+```json title="weapon.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ Bazı örneklere bakalım.
 
 Komutu, ortam değişkenlerini ve dosya uzantılarını belirterek yerleşik biçimlendiricileri geçersiz kılabilir veya yenilerini ekleyebilirsiniz:
 
-```json title="opencode.json" {4-14}
+```json title="weapon.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

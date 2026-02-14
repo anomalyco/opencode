@@ -1,0 +1,45 @@
+{
+  "get": {
+    "operationId": "provider.auth",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get provider auth methods",
+    "description": "Retrieve available authentication methods for all AI providers.",
+    "responses": {
+      "200": {
+        "description": "Provider auth methods",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "$ref": "../components/schemas/ProviderAuthMethod.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/provider_auth/get.js"
+        }
+      }
+    ]
+  }
+}

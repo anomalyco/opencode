@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Korištenje korisničkog interfejsa OpenCode terminala.
+description: Korištenje korisničkog interfejsa Weapon terminala.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
+Weapon pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
 
-Pokretanje OpenCode pokreće TUI za trenutni direktorij.
+Pokretanje Weapon pokreće TUI za trenutni direktorij.
 
 ```bash
-opencode
+weapon
 ```
 
 Ili ga možete pokrenuti za određeni radni direktorij.
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 Kada uđete u TUI, možete to zatražiti porukom.
@@ -57,7 +57,7 @@ Izlaz naredbe se dodaje u razgovor kao rezultat alata.
 
 ## Naredbe
 
-Kada koristite OpenCode TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
+Kada koristite Weapon TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Ovdje su sve dostupne komande kose crte:
 
 ### connect
 
-Dodajte provajdera u OpenCode. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
+Dodajte provajdera u Weapon. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Otvorite vanjski uređivač za sastavljanje poruka. Koristi editor postavljen u 
 
 ### exit
 
-Izađite iz OpenCode. _Aliases_: `/quit`, `/q`
+Izađite iz Weapon. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -358,11 +358,11 @@ Nekim uređivačima su potrebni argumenti komandne linije da bi se pokrenuli u n
 
 ## Konfiguracija
 
-Možete prilagoditi TUI ponašanje putem vašeg OpenCode konfiguracionog fajla.
+Možete prilagoditi TUI ponašanje putem vašeg Weapon konfiguracionog fajla.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

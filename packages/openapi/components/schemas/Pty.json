@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^pty.*"
+    },
+    "title": {
+      "type": "string"
+    },
+    "command": {
+      "type": "string"
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "exited"
+      ]
+    },
+    "pid": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "command",
+    "args",
+    "cwd",
+    "status",
+    "pid"
+  ]
+}

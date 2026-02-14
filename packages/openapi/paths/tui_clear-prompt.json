@@ -1,0 +1,36 @@
+{
+  "post": {
+    "operationId": "tui.clearPrompt",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Clear TUI prompt",
+    "description": "Clear the prompt",
+    "responses": {
+      "200": {
+        "description": "Prompt cleared successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_clear-prompt/post.js"
+        }
+      }
+    ]
+  }
+}

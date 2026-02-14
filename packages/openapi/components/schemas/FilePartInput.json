@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "file"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "source": {
+      "$ref": "./FilePartSource.json"
+    }
+  },
+  "required": [
+    "type",
+    "mime",
+    "url"
+  ]
+}

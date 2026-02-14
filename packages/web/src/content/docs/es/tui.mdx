@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Usando la interfaz de usuario del terminal OpenCode.
+description: Usando la interfaz de usuario del terminal Weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode proporciona una interfaz de terminal interactiva o TUI para trabajar en sus proyectos con un LLM.
+Weapon proporciona una interfaz de terminal interactiva o TUI para trabajar en sus proyectos con un LLM.
 
-Al ejecutar OpenCode se inicia TUI para el directorio actual.
+Al ejecutar Weapon se inicia TUI para el directorio actual.
 
 ```bash
-opencode
+weapon
 ```
 
 O puede iniciarlo para un directorio de trabajo específico.
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 Una vez que esté en TUI, puede indicarlo con un mensaje.
@@ -57,7 +57,7 @@ El resultado del comando se agrega a la conversación como resultado de la herra
 
 ## Comandos
 
-Cuando utilice OpenCode TUI, puede escribir `/` seguido de un nombre de comando para ejecutar acciones rápidamente. Por ejemplo:
+Cuando utilice Weapon TUI, puede escribir `/` seguido de un nombre de comando para ejecutar acciones rápidamente. Por ejemplo:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Aquí están todos los comandos de barra diagonal disponibles:
 
 ### connect
 
-Agregue un proveedor a OpenCode. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
+Agregue un proveedor a Weapon. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Abra un editor externo para redactar mensajes. Utiliza el editor configurado en 
 
 ### exit
 
-Salga de OpenCode. _Alias_: `/quit`, `/q`
+Salga de Weapon. _Alias_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -355,11 +355,11 @@ Algunos editores necesitan argumentos de línea de comandos para ejecutarse en m
 
 ## Configurar
 
-Puede personalizar el comportamiento de TUI a través de su archivo de configuración OpenCode.
+Puede personalizar el comportamiento de TUI a través de su archivo de configuración Weapon.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

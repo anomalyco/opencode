@@ -3082,7 +3082,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-desktop"
+name = "weapon-desktop"
 version = "0.0.0"
 dependencies = [
  "chrono",

@@ -1,30 +1,30 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in Weapon.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
+Weapon uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using the `/connect` command.
-2. Configure the provider in your OpenCode config.
+2. Configure the provider in your Weapon config.
 
 ---
 
 ### Credentials
 
 When you add a provider's API keys with the `/connect` command, they are stored
-in `~/.local/share/opencode/auth.json`.
+in `~/.local/share/weapon/auth.json`.
 
 ---
 
 ### Config
 
-You can customize the providers through the `provider` section in your OpenCode
+You can customize the providers through the `provider` section in your Weapon
 config.
 
 ---
@@ -33,9 +33,9 @@ config.
 
 You can customize the base URL for any provider by setting the `baseURL` option. This is useful when using proxy services or custom endpoints.
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## OpenCode Zen
+## Weapon Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+Weapon Zen is a list of models provided by the Weapon team that have been
+tested and verified to work well with Weapon. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+If you are new, we recommend starting with Weapon Zen.
 :::
 
-1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run the `/connect` command in the TUI, select weapon, and head to [weapon.ai/auth](https://weapon.ai/auth).
 
    ```txt
    /connect
@@ -80,7 +80,7 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode and is completely optional to use.
+It works like any other provider in Weapon and is completely optional to use.
 
 ---
 
@@ -124,7 +124,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with OpenCode:
+To use Amazon Bedrock with Weapon:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -137,17 +137,17 @@ To use Amazon Bedrock with OpenCode:
 
    #### Environment Variables (Quick Start)
 
-   Set one of these environment variables while running opencode:
+   Set one of these environment variables while running weapon:
 
    ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY weapon
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile weapon
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX weapon
    ```
 
    Or add them to your bash profile:
@@ -159,11 +159,11 @@ To use Amazon Bedrock with OpenCode:
 
    #### Configuration File (Recommended)
 
-   For project-specific or persistent configuration, use `opencode.json`:
+   For project-specific or persistent configuration, use `weapon.json`:
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -188,9 +188,9 @@ To use Amazon Bedrock with OpenCode:
 
    If you're using VPC endpoints for Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -232,9 +232,9 @@ To use Amazon Bedrock with OpenCode:
 :::note
 For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -279,7 +279,7 @@ For custom inference profiles, use the model and provider name in the key and se
    ```
 
 :::info
-Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
+Using your Claude Pro/Max subscription in Weapon is not officially supported by [Anthropic](https://anthropic.com).
 :::
 
 ##### Using API keys
@@ -303,7 +303,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
    :::note
-   The deployment name must match the model name for opencode to work properly.
+   The deployment name must match the model name for weapon to work properly.
    :::
 
 3. Run the `/connect` command and search for **Azure**.
@@ -324,7 +324,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 5. Set your resource name as an environment variable:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX weapon
    ```
 
    Or add it to your bash profile:
@@ -350,7 +350,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
    :::note
-   The deployment name must match the model name for opencode to work properly.
+   The deployment name must match the model name for weapon to work properly.
    :::
 
 3. Run the `/connect` command and search for **Azure Cognitive Services**.
@@ -371,7 +371,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 5. Set your resource name as an environment variable:
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX weapon
    ```
 
    Or add it to your bash profile:
@@ -482,11 +482,11 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
    /models
    ```
 
-   You can also add models through your opencode config.
+   You can also add models through your weapon config.
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -662,7 +662,7 @@ GitLab Duo provides AI-powered agentic chat with native tool calling capabilitie
    #### Using Personal Access Token
    1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
-   3. Name: `OpenCode`, Scopes: `api`
+   3. Name: `Weapon`, Scopes: `api`
    4. Copy the token (starts with `glpat-`)
    5. Enter it in the terminal
 
@@ -679,20 +679,20 @@ GitLab Duo provides AI-powered agentic chat with native tool calling capabilitie
 
 :::note
 You can also specify 'GITLAB_TOKEN' environment variable if you don't want
-to store token in opencode auth storage.
+to store token in weapon auth storage.
 :::
 
 ##### Self-Hosted GitLab
 
 :::note[compliance note]
-OpenCode uses a small model for some AI tasks like generating the session title.
-It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
+Weapon uses a small model for some AI tasks like generating the session title.
+It is configured to use gpt-5-nano by default, hosted by Zen. To lock Weapon
 to only use your own GitLab-hosted instance, add the following to your
-`opencode.json` file. It is also recommended to disable session sharing.
+`weapon.json` file. It is also recommended to disable session sharing.
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -750,11 +750,11 @@ More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/@gitl
 
 ##### Configuration
 
-Customize through `opencode.json`:
+Customize through `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -773,10 +773,10 @@ Customize through `opencode.json`:
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["@gitlab/weapon-gitlab-plugin"]
 }
 ```
 
@@ -786,7 +786,7 @@ This plugin provides comprehensive GitLab repository management capabilities inc
 
 ### GitHub Copilot
 
-To use your GitHub Copilot subscription with opencode:
+To use your GitHub Copilot subscription with weapon:
 
 :::note
 Some models might need a [Pro+
@@ -821,7 +821,7 @@ subscription](https://github.com/features/copilot/plans) to use.
 
 ### Google Vertex AI
 
-To use Google Vertex AI with OpenCode:
+To use Google Vertex AI with Weapon:
 
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
@@ -837,10 +837,10 @@ To use Google Vertex AI with OpenCode:
      - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
 
-   Set them while running opencode.
+   Set them while running weapon.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id weapon
    ```
 
    Or add them to your bash profile.
@@ -950,13 +950,13 @@ For more providers and advanced features like caching and rate limiting, check t
 
 #### Optional Configs
 
-In the event you see a feature or model from Helicone that isn't configured automatically through opencode, you can always configure it yourself.
+In the event you see a feature or model from Helicone that isn't configured automatically through weapon, you can always configure it yourself.
 
 Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -982,9 +982,9 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
 
 Helicone supports custom headers for features like caching, user tracking, and session management. Add them to your provider config using `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -993,7 +993,7 @@ Helicone supports custom headers for features like caching, user tracking, and s
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "weapon",
         },
       },
     },
@@ -1003,21 +1003,21 @@ Helicone supports custom headers for features like caching, user tracking, and s
 
 ##### Session tracking
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [weapon-helicone-session](https://github.com/H2Shami/weapon-helicone-session) plugin to automatically log each Weapon conversation as a session in Helicone.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g weapon-helicone-session
 ```
 
 Add it to your config.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["weapon-helicone-session"]
 }
 ```
 
-The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each Weapon conversation listed as a separate session.
 
 ##### Common Helicone headers
 
@@ -1034,11 +1034,11 @@ See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/he
 
 ### llama.cpp
 
-You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
+You can configure weapon to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="weapon.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1101,11 +1101,11 @@ IO.NET offers 17 models optimized for various use cases:
 
 ### LM Studio
 
-You can configure opencode to use local models through LM Studio.
+You can configure weapon to use local models through LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="weapon.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1218,15 +1218,15 @@ To use Kimi K2 from Moonshot AI:
 
 ### Ollama
 
-You can configure opencode to use local models through Ollama.
+You can configure weapon to use local models through Ollama.
 
 :::tip
-Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
+Ollama can automatically configure itself for Weapon. See the [Ollama integration docs](https://docs.ollama.com/integrations/weapon) for details.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="weapon.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1260,13 +1260,13 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ### Ollama Cloud
 
-To use Ollama Cloud with OpenCode:
+To use Ollama Cloud with Weapon:
 
 1. Head over to [https://ollama.com/](https://ollama.com/) and sign in or create an account.
 
 2. Navigate to **Settings** > **Keys** and click **Add API Key** to generate a new API key.
 
-3. Copy the API key for use in OpenCode.
+3. Copy the API key for use in Weapon.
 
 4. Run the `/connect` command and search for **Ollama Cloud**.
 
@@ -1283,7 +1283,7 @@ To use Ollama Cloud with OpenCode:
    └ enter
    ```
 
-6. **Important**: Before using cloud models in OpenCode, you must pull the model information locally:
+6. **Important**: Before using cloud models in Weapon, you must pull the model information locally:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1330,19 +1330,19 @@ If you already have an API key, you can select **Manually enter API Key** and pa
 
 ---
 
-### OpenCode Zen
+### Weapon Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+Weapon Zen is a list of tested and verified models provided by the Weapon team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>Weapon Zen</a>** and click **Create API Key**.
 
-2. Run the `/connect` command and search for **OpenCode Zen**.
+2. Run the `/connect` command and search for **Weapon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Enter your OpenCode API key.
+3. Enter your Weapon API key.
 
    ```txt
    ┌ API key
@@ -1384,11 +1384,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
    /models
    ```
 
-   You can also add additional models through your opencode config.
+   You can also add additional models through your weapon config.
 
-   ```json title="opencode.json" {6}
+   ```json title="weapon.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1399,11 +1399,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
    }
    ```
 
-5. You can also customize them through your opencode config. Here's an example of specifying a provider
+5. You can also customize them through your weapon config. Here's an example of specifying a provider
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1451,7 +1451,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    Or set the `AICORE_SERVICE_KEY` environment variable:
 
    ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' weapon
    ```
 
    Or add it to your bash profile:
@@ -1463,7 +1463,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 4. Optionally set deployment ID and resource group:
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group weapon
    ```
 
    :::note
@@ -1540,7 +1540,7 @@ STACKIT AI Model Serving provides fully managed soverign hosting environment for
 
 ### Scaleway
 
-To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) with Opencode:
+To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) with Weapon:
 
 1. Head over to the [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) to generate a new API key.
 
@@ -1648,11 +1648,11 @@ Vercel AI Gateway lets you access models from OpenAI, Anthropic, Google, xAI, an
    /models
    ```
 
-You can also customize models through your opencode config. Here's an example of specifying provider routing order.
+You can also customize models through your weapon config. Here's an example of specifying provider routing order.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1758,11 +1758,11 @@ Some useful routing options:
    /models
    ```
 
-   You can also add additional models through your opencode config.
+   You can also add additional models through your weapon config.
 
-   ```json title="opencode.json" {6}
+   ```json title="weapon.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1780,7 +1780,7 @@ Some useful routing options:
 To add any **OpenAI-compatible** provider that's not listed in the `/connect` command:
 
 :::tip
-You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+You can use any OpenAI-compatible provider with weapon. Most modern AI providers offer OpenAI-compatible APIs.
 :::
 
 1. Run the `/connect` command and scroll down to **Other**.
@@ -1819,18 +1819,18 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in weapon.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Create or update your `opencode.json` file in your project directory:
+4. Create or update your `weapon.json` file in your project directory:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="weapon.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1866,9 +1866,9 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="weapon.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1901,7 +1901,7 @@ Configuration details:
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
 
-The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+The `limit` fields allow Weapon to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 
@@ -1909,12 +1909,12 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 If you are having trouble with configuring a provider, check the following:
 
-1. **Check the auth setup**: Run `opencode auth list` to see if the credentials
+1. **Check the auth setup**: Run `weapon auth list` to see if the credentials
    for the provider are added to your config.
 
    This doesn't apply to providers like Amazon Bedrock, that rely on environment variables for their auth.
 
-2. For custom providers, check the opencode config and:
-   - Make sure the provider ID used in the `/connect` command matches the ID in your opencode config.
+2. For custom providers, check the weapon config and:
+   - Make sure the provider ID used in the `/connect` command matches the ID in your weapon config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.

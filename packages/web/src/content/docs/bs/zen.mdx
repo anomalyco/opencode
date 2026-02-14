@@ -1,19 +1,19 @@
 ---
 title: Zen
-description: Kurirana lista modela koje nudi OpenCode.
+description: Kurirana lista modela koje nudi Weapon.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen je lista testiranih i provjerenih modela koje obezbjeduje OpenCode tim.
+Weapon Zen je lista testiranih i provjerenih modela koje obezbjeduje Weapon tim.
 
 :::note
-OpenCode Zen je trenutno u beta fazi.
+Weapon Zen je trenutno u beta fazi.
 :::
 
-Zen radi kao i svaki drugi provajder u OpenCode. Prijavite se u OpenCode Zen i uzmete API kljuc. Ovo je **potpuno opcionalno** i ne morate ga koristiti da biste koristili OpenCode.
+Zen radi kao i svaki drugi provajder u Weapon. Prijavite se u Weapon Zen i uzmete API kljuc. Ovo je **potpuno opcionalno** i ne morate ga koristiti da biste koristili Weapon.
 
 ---
 
@@ -22,7 +22,7 @@ Zen radi kao i svaki drugi provajder u OpenCode. Prijavite se u OpenCode Zen i u
 Postoji veliki broj modela, ali samo mali dio radi dobro kao coding agent. Dodatno, vecina provajdera je drugacije konfigurisana, pa su performanse i kvalitet cesto neujednaceni.
 
 :::tip
-Testirali smo odabranu grupu modela i provajdera koji dobro rade s OpenCode.
+Testirali smo odabranu grupu modela i provajdera koji dobro rade s Weapon.
 :::
 
 Ako model koristite preko servisa poput OpenRouter-a, cesto ne mozete biti sigurni da dobijate najbolju verziju zeljenog modela.
@@ -33,16 +33,16 @@ Da to rijesimo, uradili smo nekoliko stvari:
 2. Zatim smo saradjivali s nekoliko provajdera da potvrdimo da se modeli isporucuju ispravno.
 3. Na kraju smo benchmarkirali kombinacije model/provajder i sastavili listu koju preporucujemo.
 
-OpenCode Zen je AI gateway koji vam daje pristup tim modelima.
+Weapon Zen je AI gateway koji vam daje pristup tim modelima.
 
 ---
 
 ## Kako radi
 
-OpenCode Zen radi kao i svaki drugi provajder u OpenCode.
+Weapon Zen radi kao i svaki drugi provajder u Weapon.
 
-1. Prijavite se na **<a href={console}>OpenCode Zen</a>**, dodajte billing podatke i kopirajte API kljuc.
-2. U TUI-ju pokrenite `/connect`, izaberite OpenCode Zen i zalijepite API kljuc.
+1. Prijavite se na **<a href={console}>Weapon Zen</a>**, dodajte billing podatke i kopirajte API kljuc.
+2. U TUI-ju pokrenite `/connect`, izaberite Weapon Zen i zalijepite API kljuc.
 3. Pokrenite `/models` u TUI-ju da vidite listu preporucenih modela.
 
 Naplata je po zahtjevu i mozete dodavati kredit na racun.
@@ -55,37 +55,37 @@ Nasim modelima mozete pristupiti i preko sljedecih API endpointa.
 
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
-| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GPT 5.2            | gpt-5.2            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://weapon.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://weapon.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free     | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-[model id](/docs/config/#models) u OpenCode konfiguraciji koristi format `opencode/<model-id>`. Na primjer, za GPT 5.2 Codex u konfiguraciji koristite `opencode/gpt-5.2-codex`.
+[model id](/docs/config/#models) u Weapon konfiguraciji koristi format `weapon/<model-id>`. Na primjer, za GPT 5.2 Codex u konfiguraciji koristite `weapon/gpt-5.2-codex`.
 
 ---
 
@@ -94,7 +94,7 @@ Nasim modelima mozete pristupiti i preko sljedecih API endpointa.
 Pun spisak dostupnih modela i metapodataka mozete preuzeti na:
 
 ```
-https://opencode.ai/zen/v1/models
+https://weapon.ai/zen/v1/models
 ```
 
 ---
@@ -147,10 +147,10 @@ Naknade kartica se prenose po stvarnom trosku (4.4% + $0.30 po transakciji) i ne
 
 Besplatni modeli:
 
-- GLM 4.7 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Kimi K2.5 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- MiniMax M2.1 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Big Pickle je stealth model koji je besplatan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- GLM 4.7 Free je dostupan na Weapon ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- Kimi K2.5 Free je dostupan na Weapon ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- MiniMax M2.1 Free je dostupan na Weapon ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- Big Pickle je stealth model koji je besplatan na Weapon ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
 
 Ako imate pitanja, <a href={email}>kontaktirajte nas</a>.
 
@@ -228,9 +228,9 @@ Na primjer, vasa organizacija mozda vec ima OpenAI ili Anthropic kljuc i zelite 
 
 ## Ciljevi
 
-OpenCode Zen smo napravili da:
+Weapon Zen smo napravili da:
 
 1. **Benchmarkiramo** najbolje kombinacije model/provajder za coding agente.
 2. Omogucimo pristup opcijama **najviseg kvaliteta** bez degradacije performansi i preusmjeravanja na jeftinije provajdere.
 3. Prenesemo svaka **snizenja cijena** prodajom po trosku, tako da je jedini markup pokrice processing naknada.
-4. Obezbijedimo **bez lock-ina** tako da Zen mozete koristiti sa bilo kojim coding agentom, uz slobodu koristenja drugih provajdera u OpenCode.
+4. Obezbijedimo **bez lock-ina** tako da Zen mozete koristiti sa bilo kojim coding agentom, uz slobodu koristenja drugih provajdera u Weapon.

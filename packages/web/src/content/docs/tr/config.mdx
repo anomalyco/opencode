@@ -1,21 +1,21 @@
 ---
 title: Yapılandırma
-description: opencode JSON yapılandırması kullanır.
+description: weapon JSON yapılandırması kullanır.
 ---
 
-opencode'u JSON yapılandırma dosyası kullanarak yapılandırabilirsiniz.
+weapon'u JSON yapılandırma dosyası kullanarak yapılandırabilirsiniz.
 
 ---
 
 ## Format
 
-opencode hem **JSON** hem de **JSONC** (JSON Yorumlarla birlikte) formatlarını destekler.
+weapon hem **JSON** hem de **JSONC** (JSON Yorumlarla birlikte) formatlarını destekler.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "weapon",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -34,7 +34,7 @@ Yapılandırma dosyaları **birleştirilir**, değiştirilmez.
 
 Yapılandırma dosyaları değiştirilmez, birleştirilir. Aşağıdaki yapılandırma konumlarındaki ayarlar birleştirilir. Daha sonraki yapılandırmalar, yalnızca çakışan anahtarlar için önceki yapılandırmaları geçersiz kılar. Tüm yapılandırmalardaki çakışmayan ayarlar korunur.
 
-Örneğin, genel ayarınız `theme: "opencode"` ve `autoupdate: true`'yi ayarlıyorsa ve proje ayarlarınız `model: "anthropic/claude-sonnet-4-5"`'yi ayarlıyorsa, nihai yapılandırma üç ayarı da içerecektir.
+Örneğin, genel ayarınız `theme: "weapon"` ve `autoupdate: true`'yi ayarlıyorsa ve proje ayarlarınız `model: "anthropic/claude-sonnet-4-5"`'yi ayarlıyorsa, nihai yapılandırma üç ayarı da içerecektir.
 
 ---
 
@@ -42,30 +42,30 @@ Yapılandırma dosyaları değiştirilmez, birleştirilir. Aşağıdaki yapılan
 
 Yapılandırma kaynakları bu sırayla yüklenir (sonraki kaynaklar öncekileri geçersiz kılar):
 
-1. **Uzak yapılandırma** (`.well-known/opencode`'dan) - kurumsal varsayılanlar
-2. **Genel yapılandırma** (`~/.config/opencode/opencode.json`) - kullanıcı tercihleri
-3. **Özel yapılandırma** (`OPENCODE_CONFIG` env var) - özel geçersiz kılmalar
-4. **Proje yapılandırması** (projedeki `opencode.json`) - projeye özgü ayarlar
-5. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
-6. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
+1. **Uzak yapılandırma** (`.well-known/weapon`'dan) - kurumsal varsayılanlar
+2. **Genel yapılandırma** (`~/.config/weapon/weapon.json`) - kullanıcı tercihleri
+3. **Özel yapılandırma** (`WEAPON_CONFIG` env var) - özel geçersiz kılmalar
+4. **Proje yapılandırması** (projedeki `weapon.json`) - projeye özgü ayarlar
+5. **`.weapon` dizinleri** - agent'lar, komutlar, eklentiler
+6. **Satır içi yapılandırma** (`WEAPON_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
 
 Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceği ve genel yapılandırmaların uzak organizasyonel varsayılanları geçersiz kılabileceği anlamına gelir.
 
 :::note
-`.opencode` ve `~/.config/opencode` dizinleri alt dizinler için **çoğul adlar** kullanır: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` ve `themes/`. Tekil adlar (örneğin, `agent/`) da geriye dönük uyumluluk açısından desteklenir.
+`.weapon` ve `~/.config/weapon` dizinleri alt dizinler için **çoğul adlar** kullanır: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` ve `themes/`. Tekil adlar (örneğin, `agent/`) da geriye dönük uyumluluk açısından desteklenir.
 :::
 
 ---
 
 ### Uzak
 
-Kuruluşlar, `.well-known/opencode` uç noktası aracılığıyla varsayılan yapılandırmayı sağlayabilir. Bu, onu destekleyen bir sağlayıcıyla kimlik doğrulaması yaptığınızda otomatik olarak alınır.
+Kuruluşlar, `.well-known/weapon` uç noktası aracılığıyla varsayılan yapılandırmayı sağlayabilir. Bu, onu destekleyen bir sağlayıcıyla kimlik doğrulaması yaptığınızda otomatik olarak alınır.
 
 Uzak yapılandırma ilk olarak yüklenir ve temel katman görevi görür. Diğer tüm yapılandırma kaynakları (genel, proje) bu varsayılanları geçersiz kılabilir.
 
 Örneğin, kuruluşunuz varsayılan olarak devre dışı bırakılan MCP sunucuları sağlıyorsa:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/weapon"
 {
   "mcp": {
     "jira": {
@@ -79,7 +79,7 @@ Uzak yapılandırma ilk olarak yüklenir ve temel katman görevi görür. Diğer
 
 Yerel yapılandırmanızda belirli sunucuları etkinleştirebilirsiniz:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mcp": {
     "jira": {
@@ -95,7 +95,7 @@ Yerel yapılandırmanızda belirli sunucuları etkinleştirebilirsiniz:
 
 ### Global
 
-Global opencode yapılandırmanızı `~/.config/opencode/opencode.json` içine yerleştirin. Temalar, sağlayıcılar veya tuş atamaları gibi kullanıcı çapındaki tercihler için genel yapılandırmayı kullanın.
+Global weapon yapılandırmanızı `~/.config/weapon/weapon.json` içine yerleştirin. Temalar, sağlayıcılar veya tuş atamaları gibi kullanıcı çapındaki tercihler için genel yapılandırmayı kullanın.
 
 Genel yapılandırma, uzak kurumsal varsayılanları geçersiz kılar.
 
@@ -103,13 +103,13 @@ Genel yapılandırma, uzak kurumsal varsayılanları geçersiz kılar.
 
 ### Proje başına
 
-Proje kökünüze `opencode.json` ekleyin. Proje yapılandırması, standart yapılandırma dosyaları arasında en yüksek önceliğe sahiptir; hem genel hem de uzak yapılandırmaları geçersiz kılar.
+Proje kökünüze `weapon.json` ekleyin. Proje yapılandırması, standart yapılandırma dosyaları arasında en yüksek önceliğe sahiptir; hem genel hem de uzak yapılandırmaları geçersiz kılar.
 
 :::tip
 Projeye özel yapılandırmayı projenizin köküne yerleştirin.
 :::
 
-opencode başlatıldığında geçerli dizinde bir yapılandırma dosyası arar veya en yakın Git dizinine gider.
+weapon başlatıldığında geçerli dizinde bir yapılandırma dosyası arar veya en yakın Git dizinine gider.
 
 Bunun Git'te kontrol edilmesi de güvenlidir ve global olanla aynı şemayı kullanır.
 
@@ -117,11 +117,11 @@ Bunun Git'te kontrol edilmesi de güvenlidir ve global olanla aynı şemayı kul
 
 ### Özel yol
 
-`OPENCODE_CONFIG` ortam değişkenini kullanarak özel bir yapılandırma dosyası yolu belirtin.
+`WEAPON_CONFIG` ortam değişkenini kullanarak özel bir yapılandırma dosyası yolu belirtin.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export WEAPON_CONFIG=/path/to/my/custom-config.json
+weapon run "Hello world"
 ```
 
 Özel yapılandırma genel ve proje yapılandırmaları arasında öncelik sırasına göre yüklenir.
@@ -130,23 +130,23 @@ opencode run "Hello world"
 
 ### Özel dizin
 
-`OPENCODE_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
+`WEAPON_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
 ortam değişkeni. Bu dizin agent'lar, komutlar için aranacaktır.
-modlar ve eklentiler tıpkı standart `.opencode` dizini gibi olmalıdır ve
+modlar ve eklentiler tıpkı standart `.weapon` dizini gibi olmalıdır ve
 aynı yapıyı takip edin.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export WEAPON_CONFIG_DIR=/path/to/my/config-directory
+weapon run "Hello world"
 ```
 
-Özel dizin, genel yapılandırma ve `.opencode` dizinlerinden sonra yüklenir, böylece bunların ayarlarını **geçersiz kılabilir**.
+Özel dizin, genel yapılandırma ve `.weapon` dizinlerinden sonra yüklenir, böylece bunların ayarlarını **geçersiz kılabilir**.
 
 ---
 
 ## Şema
 
-Yapılandırma dosyası [**`opencode.ai/config.json`**](https://opencode.ai/config.json)'da tanımlanan bir şemaya sahiptir.
+Yapılandırma dosyası [**`weapon.ai/config.json`**](https://weapon.ai/config.json)'da tanımlanan bir şemaya sahiptir.
 
 Editörünüz şemaya göre doğrulama ve otomatik tamamlama yapabilmelidir.
 
@@ -156,9 +156,9 @@ Editörünüz şemaya göre doğrulama ve otomatik tamamlama yapabilmelidir.
 
 TUI'ye özgü ayarları `tui` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -181,11 +181,11 @@ Mevcut seçenekler:
 
 ### Sunucu
 
-`opencode serve` ve `opencode web` komutları için sunucu ayarlarını `server` seçeneği aracılığıyla yapılandırabilirsiniz.
+`weapon serve` ve `weapon web` komutları için sunucu ayarlarını `server` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -200,8 +200,8 @@ Mevcut seçenekler:
 
 - `port` - Dinlenecek port.
 - `hostname` - Dinlenecek ana bilgisayar adı. `mdns` etkinleştirildiğinde ve hiçbir ana bilgisayar adı ayarlanmadığında, varsayılan değer `0.0.0.0` olur.
-- `mdns` - mDNS hizmet bulmayı etkinleştirin. Bu, ağdaki diğer cihazların opencode sunucunuzu keşfetmesine olanak tanır.
-- `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `opencode.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
+- `mdns` - mDNS hizmet bulmayı etkinleştirin. Bu, ağdaki diğer cihazların weapon sunucunuzu keşfetmesine olanak tanır.
+- `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `weapon.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
 - `cors` - Tarayıcı tabanlı bir istemciden HTTP sunucusunu kullanırken CORS'ye izin verecek ek kaynaklar. Değerler tam kaynaklar olmalıdır (şema + ana bilgisayar + isteğe bağlı bağlantı noktası), örneğin `https://app.example.com`.
 
 [Sunucu hakkında daha fazla bilgi](/docs/server).
@@ -212,9 +212,9 @@ Mevcut seçenekler:
 
 Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yönetebilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -228,24 +228,24 @@ Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yön
 
 ### Modeller
 
-opencode yapılandırmanızda kullanmak istediğiniz sağlayıcıları ve modelleri `provider`, `model` ve `small_model` seçenekleri aracılığıyla yapılandırabilirsiniz.
+weapon yapılandırmanızda kullanmak istediğiniz sağlayıcıları ve modelleri `provider`, `model` ve `small_model` seçenekleri aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-`small_model` seçeneği, başlık oluşturma gibi hafif görevler için ayrı bir model yapılandırır. Varsayılan olarak opencode, sağlayıcınızda mevcutsa daha ucuz bir model kullanmaya çalışır, aksi takdirde ana modelinize geri döner.
+`small_model` seçeneği, başlık oluşturma gibi hafif görevler için ayrı bir model yapılandırır. Varsayılan olarak weapon, sağlayıcınızda mevcutsa daha ucuz bir model kullanmaya çalışır, aksi takdirde ana modelinize geri döner.
 
 Sağlayıcı seçenekleri `timeout` ve `setCacheKey` içerebilir:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -272,9 +272,9 @@ Bazı sağlayıcılar genel `timeout` ve `apiKey` ayarlarının ötesinde ek yap
 
 Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -301,11 +301,11 @@ Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil t
 
 ### Temalar
 
-opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği aracılığıyla yapılandırabilirsiniz.
+weapon yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": ""
 }
 ```
@@ -318,9 +318,9 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 
 `agent` seçeneği aracılığıyla özel görevlere yönelik özel agent'ları yapılandırabilirsiniz.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -337,7 +337,7 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-Agent'ları `~/.config/opencode/agents/` veya `.opencode/agents/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/agents).
+Agent'ları `~/.config/weapon/agents/` veya `.weapon/agents/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/agents).
 
 ---
 
@@ -345,16 +345,16 @@ Agent'ları `~/.config/opencode/agents/` veya `.opencode/agents/` içindeki Mark
 
 `default_agent` seçeneğini kullanarak varsayılan agent'ı ayarlayabilirsiniz. Bu, hiçbiri açıkça belirtilmediğinde hangi agent'ın kullanılacağını belirler.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "default_agent": "plan"
 }
 ```
 
-Varsayılan agent, birincil agent olmalıdır (alt agent değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir agent ya da tanımladığınız bir [özel agent](/docs/agents) olabilir. Belirtilen agent mevcut değilse veya bir alt agent ise, opencode bir uyarıyla birlikte `"build"`'ye geri döner.
+Varsayılan agent, birincil agent olmalıdır (alt agent değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir agent ya da tanımladığınız bir [özel agent](/docs/agents) olabilir. Belirtilen agent mevcut değilse veya bir alt agent ise, weapon bir uyarıyla birlikte `"build"`'ye geri döner.
 
-Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü uygulaması ve GitHub Action.
+Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`weapon run`), masaüstü uygulaması ve GitHub Action.
 
 ---
 
@@ -362,9 +362,9 @@ Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü
 
 [share](/docs/share) özelliğini `share` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "share": "manual"
 }
 ```
@@ -383,9 +383,9 @@ Varsayılan olarak paylaşım, `/share` komutunu kullanarak konuşmaları açık
 
 `command` seçeneği aracılığıyla tekrarlanan görevler için özel komutlar yapılandırabilirsiniz.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -401,7 +401,7 @@ Varsayılan olarak paylaşım, `/share` komutunu kullanarak konuşmaları açık
 }
 ```
 
-Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/commands).
+Komutları `~/.config/weapon/commands/` veya `.weapon/commands/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/commands).
 
 ---
 
@@ -409,9 +409,9 @@ Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki M
 
 Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {}
 }
 ```
@@ -422,11 +422,11 @@ Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirs
 
 ### Otomatik Güncelleme
 
-opencode başlatıldığında yeni güncellemeleri otomatik olarak indirecektir. Bunu `autoupdate` seçeneğiyle devre dışı bırakabilirsiniz.
+weapon başlatıldığında yeni güncellemeleri otomatik olarak indirecektir. Bunu `autoupdate` seçeneğiyle devre dışı bırakabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "autoupdate": false
 }
 ```
@@ -440,9 +440,9 @@ Bunun yalnızca Homebrew gibi bir paket yöneticisi kullanılarak yüklenmemişs
 
 Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -464,13 +464,13 @@ Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandıra
 
 ### İzinler
 
-Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izin verir**. `permission` seçeneğini kullanarak bunu değiştirebilirsiniz.
+Varsayılan olarak, weapon açık bir onay gerektirmeden **tüm işlemlere izin verir**. `permission` seçeneğini kullanarak bunu değiştirebilirsiniz.
 
 Örneğin, `edit` ve `bash` araçlarının kullanıcı onayı gerektirdiğinden emin olmak için:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -486,9 +486,9 @@ Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izi
 
 Bağlam sıkıştırma davranışını `compaction` seçeneği aracılığıyla kontrol edebilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -505,9 +505,9 @@ Bağlam sıkıştırma davranışını `compaction` seçeneği aracılığıyla 
 
 Dosya izleyicinin yok sayma kalıplarını `watcher` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -522,9 +522,9 @@ Desenler glob sözdizimini takip eder. Gürültülü dizinleri dosya izlemenin d
 
 Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mcp": {}
 }
 ```
@@ -535,14 +535,14 @@ Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yap�
 
 ### Eklentiler
 
-[Eklentiler](/docs/plugins) opencode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
+[Eklentiler](/docs/plugins) weapon'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
 
-Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` içine yerleştirin. Ayrıca eklentileri `plugin` seçeneği aracılığıyla npm'den de yükleyebilirsiniz.
+Eklenti dosyalarını `.weapon/plugins/` veya `~/.config/weapon/plugins/` içine yerleştirin. Ayrıca eklentileri `plugin` seçeneği aracılığıyla npm'den de yükleyebilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -554,9 +554,9 @@ Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` i�
 
 Kullandığınız modele ilişkin talimatları `instructions` seçeneği aracılığıyla yapılandırabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -569,9 +569,9 @@ Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Kurallar h
 
 `disabled_providers` seçeneği aracılığıyla otomatik olarak yüklenen sağlayıcıları devre dışı bırakabilirsiniz. Bu, belirli sağlayıcıların kimlik bilgileri mevcut olsa bile yüklenmesini engellemek istediğinizde kullanışlıdır.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -592,14 +592,14 @@ Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Kurallar h
 
 `enabled_providers` seçeneğini kullanarak sağlayıcıların izin verilenler listesini belirtebilirsiniz. Ayarlandığında yalnızca belirtilen sağlayıcılar etkinleştirilecek ve diğerleri göz ardı edilecektir.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-Bu, opencode'u tek tek devre dışı bırakmak yerine yalnızca belirli sağlayıcıları kullanacak şekilde kısıtlamak istediğinizde kullanışlıdır.
+Bu, weapon'u tek tek devre dışı bırakmak yerine yalnızca belirli sağlayıcıları kullanacak şekilde kısıtlamak istediğinizde kullanışlıdır.
 
 :::note
 `disabled_providers`, `enabled_providers`'ye göre önceliklidir.
@@ -613,9 +613,9 @@ Bir sağlayıcı hem `enabled_providers` hem de `disabled_providers`'de görün�
 
 `experimental` anahtarı aktif olarak geliştirilmekte olan seçenekleri içerir.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "experimental": {}
 }
 ```
@@ -636,10 +636,10 @@ Ortam değişkenlerine ve dosya içeriklerine referans vermek için yapılandır
 
 Ortam değişkenlerini değiştirmek için `{env:VARIABLE_NAME}` kullanın:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://weapon.ai/config.json",
+  "model": "{env:WEAPON_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -659,9 +659,9 @@ Ortam değişkeni ayarlanmamışsa boş bir dizeyle değiştirilecektir.
 
 Bir dosyanın biçimini değiştirmek için `{file:path/to/file}` kullanın:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

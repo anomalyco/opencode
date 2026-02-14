@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.removed"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "messageID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionID",
+        "messageID"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

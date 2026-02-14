@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "file"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "source": {
+      "$ref": "./FilePartSource.json"
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "mime",
+    "url"
+  ]
+}

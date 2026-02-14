@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: Запускайте opencode в Windows через WSL.
+description: Запускайте weapon в Windows через WSL.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-opencode можно запускать напрямую в Windows, но для лучшего опыта мы рекомендуем [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install). WSL дает Linux-среду, которая отлично работает с возможностями opencode.
+weapon можно запускать напрямую в Windows, но для лучшего опыта мы рекомендуем [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install). WSL дает Linux-среду, которая отлично работает с возможностями weapon.
 
 :::tip[Почему WSL?]
-WSL дает более высокую производительность файловой системы, полноценную поддержку терминала и совместимость с инструментами разработки, на которые опирается opencode.
+WSL дает более высокую производительность файловой системы, полноценную поддержку терминала и совместимость с инструментами разработки, на которые опирается weapon.
 :::
 
 ---
@@ -21,21 +21,21 @@ WSL дает более высокую производительность фа
 
    Если вы еще не сделали этого, установите WSL по [официальному руководству Microsoft](https://learn.microsoft.com/en-us/windows/wsl/install).
 
-2. **Установите opencode в WSL**
+2. **Установите weapon в WSL**
 
-   После настройки WSL откройте терминал WSL и установите opencode одним из [способов установки](/docs/).
+   После настройки WSL откройте терминал WSL и установите weapon одним из [способов установки](/docs/).
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://weapon.ai/install | bash
    ```
 
-3. **Запускайте opencode из WSL**
+3. **Запускайте weapon из WSL**
 
-   Перейдите в каталог проекта (к файлам Windows можно обращаться через `/mnt/c/`, `/mnt/d/` и т.д.) и запустите opencode.
+   Перейдите в каталог проекта (к файлам Windows можно обращаться через `/mnt/c/`, `/mnt/d/` и т.д.) и запустите weapon.
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   weapon
    ```
 
 </Steps>
@@ -44,12 +44,12 @@ WSL дает более высокую производительность фа
 
 ## Десктопное приложение + сервер в WSL
 
-Если вы предпочитаете opencode Desktop, но хотите запускать сервер в WSL:
+Если вы предпочитаете weapon Desktop, но хотите запускать сервер в WSL:
 
 1. **Запустите сервер в WSL** с параметром `--hostname 0.0.0.0`, чтобы разрешить внешние подключения:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   weapon serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Подключите десктопное приложение** к `http://localhost:4096`
@@ -59,10 +59,10 @@ WSL дает более высокую производительность фа
 :::
 
 :::caution
-При использовании `--hostname 0.0.0.0` задайте `OPENCODE_SERVER_PASSWORD`, чтобы защитить сервер.
+При использовании `--hostname 0.0.0.0` задайте `WEAPON_SERVER_PASSWORD`, чтобы защитить сервер.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+WEAPON_SERVER_PASSWORD=your-password weapon serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Для лучшего веб-опыта в Windows:
 
-1. **Запускайте `opencode web` в терминале WSL**, а не в PowerShell:
+1. **Запускайте `weapon web` в терминале WSL**, а не в PowerShell:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   weapon web --hostname 0.0.0.0
    ```
 
-2. **Открывайте в браузере Windows** адрес `http://localhost:<port>` (opencode выведет URL)
+2. **Открывайте в браузере Windows** адрес `http://localhost:<port>` (weapon выведет URL)
 
-Запуск `opencode web` из WSL обеспечивает корректный доступ к файловой системе и интеграцию с терминалом, при этом интерфейс остается доступным из браузера Windows.
+Запуск `weapon web` из WSL обеспечивает корректный доступ к файловой системе и интеграцию с терминалом, при этом интерфейс остается доступным из браузера Windows.
 
 ---
 
@@ -97,17 +97,17 @@ WSL может получать доступ ко всем вашим файла
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+weapon
 ```
 
 :::tip
-Для максимально плавной работы стоит клонировать или скопировать репозиторий в файловую систему WSL (например, в `~/code/`) и запускать opencode оттуда.
+Для максимально плавной работы стоит клонировать или скопировать репозиторий в файловую систему WSL (например, в `~/code/`) и запускать weapon оттуда.
 :::
 
 ---
 
 ## Советы
 
-- Даже для проектов на дисках Windows запускайте opencode в WSL, чтобы получить более плавный доступ к файлам
-- Используйте opencode вместе с [расширением WSL для VS Code](https://code.visualstudio.com/docs/remote/wsl) для единого рабочего процесса
-- Конфигурация и сессии opencode хранятся в среде WSL по пути `~/.local/share/opencode/`
+- Даже для проектов на дисках Windows запускайте weapon в WSL, чтобы получить более плавный доступ к файлам
+- Используйте weapon вместе с [расширением WSL для VS Code](https://code.visualstudio.com/docs/remote/wsl) для единого рабочего процесса
+- Конфигурация и сессии weapon хранятся в среде WSL по пути `~/.local/share/weapon/`

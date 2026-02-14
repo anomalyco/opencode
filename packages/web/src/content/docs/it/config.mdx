@@ -1,21 +1,21 @@
 ---
 title: Configurazione
-description: Usa la configurazione JSON di OpenCode.
+description: Usa la configurazione JSON di Weapon.
 ---
 
-Puoi configurare OpenCode usando un file di configurazione JSON.
+Puoi configurare Weapon usando un file di configurazione JSON.
 
 ---
 
 ## Formato
 
-OpenCode supporta sia **JSON** sia **JSONC** (JSON con commenti).
+Weapon supporta sia **JSON** sia **JSONC** (JSON con commenti).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "weapon",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -33,7 +33,7 @@ I file di configurazione vengono **uniti (merge)**, non sostituiti.
 
 I file di configurazione vengono uniti (merge), non sostituiti. Le impostazioni provenienti dalle posizioni qui sotto vengono combinate. Le configurazioni caricate dopo sovrascrivono quelle precedenti solo per le chiavi in conflitto. Le impostazioni non in conflitto vengono preservate.
 
-Per esempio, se la tua configurazione globale imposta `theme: "opencode"` e `autoupdate: true`, e la configurazione del progetto imposta `model: "anthropic/claude-sonnet-4-5"`, la configurazione finale includera tutte e tre le impostazioni.
+Per esempio, se la tua configurazione globale imposta `theme: "weapon"` e `autoupdate: true`, e la configurazione del progetto imposta `model: "anthropic/claude-sonnet-4-5"`, la configurazione finale includera tutte e tre le impostazioni.
 
 ---
 
@@ -41,30 +41,30 @@ Per esempio, se la tua configurazione globale imposta `theme: "opencode"` e `aut
 
 Le sorgenti di configurazione vengono caricate in questo ordine (le successive sovrascrivono le precedenti):
 
-1. **Config remota** (da `.well-known/opencode`) - default dell'organizzazione
-2. **Config globale** (`~/.config/opencode/opencode.json`) - preferenze utente
-3. **Config personalizzata** (variabile d'ambiente `OPENCODE_CONFIG`) - sovrascritture personalizzate
-4. **Config di progetto** (`opencode.json` nel progetto) - impostazioni specifiche del progetto
-5. **Directory `.opencode`** - agenti, comandi, plugin
-6. **Config inline** (variabile d'ambiente `OPENCODE_CONFIG_CONTENT`) - sovrascritture a runtime
+1. **Config remota** (da `.well-known/weapon`) - default dell'organizzazione
+2. **Config globale** (`~/.config/weapon/weapon.json`) - preferenze utente
+3. **Config personalizzata** (variabile d'ambiente `WEAPON_CONFIG`) - sovrascritture personalizzate
+4. **Config di progetto** (`weapon.json` nel progetto) - impostazioni specifiche del progetto
+5. **Directory `.weapon`** - agenti, comandi, plugin
+6. **Config inline** (variabile d'ambiente `WEAPON_CONFIG_CONTENT`) - sovrascritture a runtime
 
 Questo significa che la configurazione di progetto puo sovrascrivere i default globali, e la configurazione globale puo sovrascrivere i default remoti dell'organizzazione.
 
 :::note
-Le directory `.opencode` e `~/.config/opencode` usano **nomi al plurale** per le sottodirectory: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` e `themes/`. I nomi al singolare (ad es. `agent/`) sono supportati per retrocompatibilita.
+Le directory `.weapon` e `~/.config/weapon` usano **nomi al plurale** per le sottodirectory: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` e `themes/`. I nomi al singolare (ad es. `agent/`) sono supportati per retrocompatibilita.
 :::
 
 ---
 
 ### Configurazione remota
 
-Le organizzazioni possono fornire una configurazione predefinita tramite l'endpoint `.well-known/opencode`. Viene recuperata automaticamente quando ti autentichi con un provider che lo supporta.
+Le organizzazioni possono fornire una configurazione predefinita tramite l'endpoint `.well-known/weapon`. Viene recuperata automaticamente quando ti autentichi con un provider che lo supporta.
 
 La configurazione remota viene caricata per prima e fa da livello base. Tutte le altre sorgenti (globale, progetto) possono sovrascrivere questi default.
 
 Per esempio, se la tua organizzazione fornisce server MCP disabilitati per impostazione predefinita:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/weapon"
 {
   "mcp": {
     "jira": {
@@ -78,7 +78,7 @@ Per esempio, se la tua organizzazione fornisce server MCP disabilitati per impos
 
 Puoi abilitare server specifici nella tua configurazione locale:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mcp": {
     "jira": {
@@ -94,7 +94,7 @@ Puoi abilitare server specifici nella tua configurazione locale:
 
 ### Configurazione globale
 
-Metti la configurazione globale di OpenCode in `~/.config/opencode/opencode.json`. Usa la configurazione globale per preferenze valide per l'utente (ad es. temi, provider o keybind).
+Metti la configurazione globale di Weapon in `~/.config/weapon/weapon.json`. Usa la configurazione globale per preferenze valide per l'utente (ad es. temi, provider o keybind).
 
 La configurazione globale sovrascrive i default remoti dell'organizzazione.
 
@@ -102,13 +102,13 @@ La configurazione globale sovrascrive i default remoti dell'organizzazione.
 
 ### Configurazione di progetto
 
-Aggiungi `opencode.json` nella root del progetto. La configurazione di progetto ha la precedenza piu alta tra i file standard: sovrascrive sia la configurazione globale sia quella remota.
+Aggiungi `weapon.json` nella root del progetto. La configurazione di progetto ha la precedenza piu alta tra i file standard: sovrascrive sia la configurazione globale sia quella remota.
 
 :::tip
 Metti la configurazione specifica del progetto nella root del progetto.
 :::
 
-Quando OpenCode si avvia, cerca un file di configurazione nella directory corrente oppure risale fino alla directory Git piu vicina.
+Quando Weapon si avvia, cerca un file di configurazione nella directory corrente oppure risale fino alla directory Git piu vicina.
 
 Questo file puo essere tranquillamente versionato in Git e usa lo stesso schema di quello globale.
 
@@ -116,11 +116,11 @@ Questo file puo essere tranquillamente versionato in Git e usa lo stesso schema 
 
 ### Percorso personalizzato
 
-Specifica un percorso personalizzato per il file di configurazione usando la variabile d'ambiente `OPENCODE_CONFIG`.
+Specifica un percorso personalizzato per il file di configurazione usando la variabile d'ambiente `WEAPON_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export WEAPON_CONFIG=/path/to/my/custom-config.json
+weapon run "Hello world"
 ```
 
 La configurazione personalizzata viene caricata tra quella globale e quella di progetto nell'ordine di precedenza.
@@ -129,20 +129,20 @@ La configurazione personalizzata viene caricata tra quella globale e quella di p
 
 ### Directory personalizzata
 
-Specifica una directory di configurazione personalizzata usando la variabile d'ambiente `OPENCODE_CONFIG_DIR`. Questa directory verra usata per cercare agenti, comandi, modalita e plugin proprio come la directory standard `.opencode` e dovrebbe seguire la stessa struttura.
+Specifica una directory di configurazione personalizzata usando la variabile d'ambiente `WEAPON_CONFIG_DIR`. Questa directory verra usata per cercare agenti, comandi, modalita e plugin proprio come la directory standard `.weapon` e dovrebbe seguire la stessa struttura.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export WEAPON_CONFIG_DIR=/path/to/my/config-directory
+weapon run "Hello world"
 ```
 
-La directory personalizzata viene caricata dopo la configurazione globale e le directory `.opencode`, quindi **puo sovrascrivere** le loro impostazioni.
+La directory personalizzata viene caricata dopo la configurazione globale e le directory `.weapon`, quindi **puo sovrascrivere** le loro impostazioni.
 
 ---
 
 ## Schema
 
-Il file di configurazione ha uno schema definito in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+Il file di configurazione ha uno schema definito in [**`weapon.ai/config.json`**](https://weapon.ai/config.json).
 
 Il tuo editor dovrebbe poter validare e suggerire l'autocompletamento in base allo schema.
 
@@ -152,9 +152,9 @@ Il tuo editor dovrebbe poter validare e suggerire l'autocompletamento in base al
 
 Puoi configurare impostazioni specifiche della TUI tramite l'opzione `tui`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -177,11 +177,11 @@ Opzioni disponibili:
 
 ### Server
 
-Puoi configurare le impostazioni del server per i comandi `opencode serve` e `opencode web` tramite l'opzione `server`.
+Puoi configurare le impostazioni del server per i comandi `weapon serve` e `weapon web` tramite l'opzione `server`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -196,8 +196,8 @@ Opzioni disponibili:
 
 - `port` - Porta su cui ascoltare.
 - `hostname` - Nome host su cui ascoltare. Quando `mdns` e abilitato e non e impostato alcun hostname, il default e `0.0.0.0`.
-- `mdns` - Abilita la scoperta del servizio mDNS. Questo permette ad altri dispositivi sulla rete di scoprire il tuo server OpenCode.
-- `mdnsDomain` - Nome di dominio personalizzato per il servizio mDNS. Predefinito: `opencode.local`. Utile per eseguire piu istanze sulla stessa rete.
+- `mdns` - Abilita la scoperta del servizio mDNS. Questo permette ad altri dispositivi sulla rete di scoprire il tuo server Weapon.
+- `mdnsDomain` - Nome di dominio personalizzato per il servizio mDNS. Predefinito: `weapon.local`. Utile per eseguire piu istanze sulla stessa rete.
 - `cors` - Origini aggiuntive da consentire per CORS quando usi il server HTTP da un client basato su browser. I valori devono essere origini complete (schema + host + porta opzionale), ad es. `https://app.example.com`.
 
 [Scopri di piu sul server](/docs/server).
@@ -208,9 +208,9 @@ Opzioni disponibili:
 
 Puoi gestire gli strumenti che un LLM puo usare tramite l'opzione `tools`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -224,24 +224,24 @@ Puoi gestire gli strumenti che un LLM puo usare tramite l'opzione `tools`.
 
 ### Modelli
 
-Puoi configurare provider e modelli da usare in OpenCode tramite le opzioni `provider`, `model` e `small_model`.
+Puoi configurare provider e modelli da usare in Weapon tramite le opzioni `provider`, `model` e `small_model`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-L'opzione `small_model` configura un modello separato per task leggeri come la generazione dei titoli. Per impostazione predefinita, OpenCode prova a usare un modello più economico se disponibile dal tuo provider, altrimenti fa fallback sul tuo modello principale.
+L'opzione `small_model` configura un modello separato per task leggeri come la generazione dei titoli. Per impostazione predefinita, Weapon prova a usare un modello più economico se disponibile dal tuo provider, altrimenti fa fallback sul tuo modello principale.
 
 Le opzioni del provider possono includere `timeout` e `setCacheKey`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -268,9 +268,9 @@ Alcuni provider supportano opzioni di configurazione aggiuntive oltre alle impos
 
 Amazon Bedrock supporta una configurazione specifica per AWS:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -297,11 +297,11 @@ I bearer token (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) hanno precedenza sull'a
 
 ### Temi
 
-Puoi configurare il tema da usare in OpenCode tramite l'opzione `theme`.
+Puoi configurare il tema da usare in Weapon tramite l'opzione `theme`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": ""
 }
 ```
@@ -314,9 +314,9 @@ Puoi configurare il tema da usare in OpenCode tramite l'opzione `theme`.
 
 Puoi configurare agenti specializzati per task specifici tramite l'opzione `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -332,7 +332,7 @@ Puoi configurare agenti specializzati per task specifici tramite l'opzione `agen
 }
 ```
 
-Puoi anche definire agenti usando file markdown in `~/.config/opencode/agents/` o `.opencode/agents/`. [Scopri di piu](/docs/agents).
+Puoi anche definire agenti usando file markdown in `~/.config/weapon/agents/` o `.weapon/agents/`. [Scopri di piu](/docs/agents).
 
 ---
 
@@ -340,16 +340,16 @@ Puoi anche definire agenti usando file markdown in `~/.config/opencode/agents/` 
 
 Puoi impostare l'agente predefinito usando l'opzione `default_agent`. Questo determina quale agente viene usato quando non ne specifichi uno esplicitamente.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "default_agent": "plan"
 }
 ```
 
-L'agente predefinito deve essere un agente primary (non un subagent). Puo essere un agente integrato come `"build"` o `"plan"`, oppure un [agente personalizzato](/docs/agents) che hai definito. Se l'agente specificato non esiste o e un subagent, OpenCode fara fallback su `"build"` mostrando un avviso.
+L'agente predefinito deve essere un agente primary (non un subagent). Puo essere un agente integrato come `"build"` o `"plan"`, oppure un [agente personalizzato](/docs/agents) che hai definito. Se l'agente specificato non esiste o e un subagent, Weapon fara fallback su `"build"` mostrando un avviso.
 
-Questa impostazione si applica a tutte le interfacce: TUI, CLI (`opencode run`), app desktop e GitHub Action.
+Questa impostazione si applica a tutte le interfacce: TUI, CLI (`weapon run`), app desktop e GitHub Action.
 
 ---
 
@@ -357,9 +357,9 @@ Questa impostazione si applica a tutte le interfacce: TUI, CLI (`opencode run`),
 
 Puoi configurare la funzione di [condivisione](/docs/share) tramite l'opzione `share`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "share": "manual"
 }
 ```
@@ -378,9 +378,9 @@ Per impostazione predefinita, la condivisione e in modalita manuale e devi condi
 
 Puoi configurare comandi personalizzati per task ripetitivi tramite l'opzione `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -396,7 +396,7 @@ Puoi configurare comandi personalizzati per task ripetitivi tramite l'opzione `c
 }
 ```
 
-Puoi anche definire comandi usando file markdown in `~/.config/opencode/commands/` o `.opencode/commands/`. [Scopri di piu](/docs/commands).
+Puoi anche definire comandi usando file markdown in `~/.config/weapon/commands/` o `.weapon/commands/`. [Scopri di piu](/docs/commands).
 
 ---
 
@@ -404,9 +404,9 @@ Puoi anche definire comandi usando file markdown in `~/.config/opencode/commands
 
 Puoi personalizzare i keybind tramite l'opzione `keybinds`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {}
 }
 ```
@@ -417,11 +417,11 @@ Puoi personalizzare i keybind tramite l'opzione `keybinds`.
 
 ### Aggiornamenti automatici
 
-OpenCode scarichera automaticamente eventuali aggiornamenti quando si avvia. Puoi disabilitare questa funzione con l'opzione `autoupdate`.
+Weapon scarichera automaticamente eventuali aggiornamenti quando si avvia. Puoi disabilitare questa funzione con l'opzione `autoupdate`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "autoupdate": false
 }
 ```
@@ -435,9 +435,9 @@ Nota che questo funziona solo se non e stato installato con un package manager c
 
 Puoi configurare i formatter di codice tramite l'opzione `formatter`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -459,13 +459,13 @@ Puoi configurare i formatter di codice tramite l'opzione `formatter`.
 
 ### Permessi
 
-Per impostazione predefinita, opencode **consente tutte le operazioni** senza richiedere un'approvazione esplicita. Puoi cambiarlo usando l'opzione `permission`.
+Per impostazione predefinita, weapon **consente tutte le operazioni** senza richiedere un'approvazione esplicita. Puoi cambiarlo usando l'opzione `permission`.
 
 Per esempio, per fare in modo che gli strumenti `edit` e `bash` richiedano l'approvazione dell'utente:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -481,9 +481,9 @@ Per esempio, per fare in modo che gli strumenti `edit` e `bash` richiedano l'app
 
 Puoi controllare il comportamento di compattazione del contesto tramite l'opzione `compaction`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -500,9 +500,9 @@ Puoi controllare il comportamento di compattazione del contesto tramite l'opzion
 
 Puoi configurare i pattern di ignoramento del file watcher tramite l'opzione `watcher`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -517,9 +517,9 @@ I pattern seguono la sintassi glob. Usali per escludere directory rumorose dal m
 
 Puoi configurare i server MCP che vuoi usare tramite l'opzione `mcp`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mcp": {}
 }
 ```
@@ -530,14 +530,14 @@ Puoi configurare i server MCP che vuoi usare tramite l'opzione `mcp`.
 
 ### Plugin
 
-[I plugin](/docs/plugins) estendono OpenCode con strumenti personalizzati, hook e integrazioni.
+[I plugin](/docs/plugins) estendono Weapon con strumenti personalizzati, hook e integrazioni.
 
-Metti i file dei plugin in `.opencode/plugins/` o `~/.config/opencode/plugins/`. Puoi anche caricare plugin da npm tramite l'opzione `plugin`.
+Metti i file dei plugin in `.weapon/plugins/` o `~/.config/weapon/plugins/`. Puoi anche caricare plugin da npm tramite l'opzione `plugin`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -549,9 +549,9 @@ Metti i file dei plugin in `.opencode/plugins/` o `~/.config/opencode/plugins/`.
 
 Puoi configurare le istruzioni per il modello che stai usando tramite l'opzione `instructions`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -564,9 +564,9 @@ Accetta un array di percorsi e pattern glob verso file di istruzioni. [Scopri di
 
 Puoi disabilitare i provider caricati automaticamente tramite l'opzione `disabled_providers`. E utile quando vuoi impedire il caricamento di alcuni provider anche se le credenziali sono disponibili.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -587,14 +587,14 @@ L'opzione `disabled_providers` accetta un array di ID provider. Quando un provid
 
 Puoi specificare un'allowlist di provider tramite l'opzione `enabled_providers`. Se impostata, solo i provider indicati verranno abilitati e tutti gli altri saranno ignorati.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-E utile quando vuoi limitare OpenCode a usare solo alcuni provider invece di disabilitarli uno per uno.
+E utile quando vuoi limitare Weapon a usare solo alcuni provider invece di disabilitarli uno per uno.
 
 :::note
 `disabled_providers` ha priorita su `enabled_providers`.
@@ -608,9 +608,9 @@ Se un provider appare sia in `enabled_providers` sia in `disabled_providers`, `d
 
 La chiave `experimental` contiene opzioni in sviluppo attivo.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "experimental": {}
 }
 ```
@@ -631,10 +631,10 @@ Puoi usare la sostituzione di variabili nei file di configurazione per referenzi
 
 Usa `{env:VARIABLE_NAME}` per sostituire variabili d'ambiente:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://weapon.ai/config.json",
+  "model": "{env:WEAPON_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -654,9 +654,9 @@ Se la variabile d'ambiente non e impostata, verra sostituita con una stringa vuo
 
 Usa `{file:path/to/file}` per sostituire il contenuto di un file:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

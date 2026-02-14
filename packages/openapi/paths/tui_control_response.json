@@ -1,0 +1,43 @@
+{
+  "post": {
+    "operationId": "tui.control.response",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Submit TUI response",
+    "description": "Submit a response to the TUI request queue to complete a pending request.",
+    "responses": {
+      "200": {
+        "description": "Response submitted successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {}
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_control_response/post.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,10 +1,10 @@
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   // "enterprise": {
-  //   "url": "https://enterprise.dev.opencode.ai",
+  //   "url": "https://enterprise.dev.weapon.ai",
   // },
   "provider": {
-    "opencode": {
+    "weapon": {
       "options": {},
     },
   },

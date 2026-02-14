@@ -17,9 +17,9 @@ description: Создавайте собственные команды для �
 
 Создайте Markdown файлы в каталоге `commands/` для определения пользовательских команд.
 
-Создайте `.opencode/commands/test.md`:
+Создайте `.weapon/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Focus on the failing tests and suggest fixes.
 
 ## Настройка
 
-Вы можете добавлять собственные команды через конфигурацию opencode или создав файлы Markdown в каталоге `commands/`.
+Вы можете добавлять собственные команды через конфигурацию weapon или создав файлы Markdown в каталоге `commands/`.
 
 ---
 
 ### JSON
 
-Используйте опцию `command` в вашем opencode [config](/docs/config):
+Используйте опцию `command` в вашем weapon [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="weapon.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Focus on the failing tests and suggest fixes.
 
 Вы также можете определять команды, используя Markdown файлы. Поместите их в:
 
-- Глобальный: `~/.config/opencode/commands/`
-- Для каждого проекта: `.opencode/commands/`
+- Глобальный: `~/.config/weapon/commands/`
+- Для каждого проекта: `.weapon/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Focus on the failing tests and suggest fixes.
 
 Передавайте аргументы командам, используя заполнитель `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".weapon/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Include proper typing and basic structure.
 
 Например:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".weapon/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ with the following content: $3
 
 Например, чтобы создать пользовательскую команду, которая анализирует тестовое покрытие:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".weapon/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Или просмотреть последние изменения:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".weapon/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Review these changes and suggest any improvements.
 
 Включите файлы в свою команду, используя `@`, за которым следует имя файла.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".weapon/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Check for performance issues and suggest improvements.
 
 Параметр `template` определяет приглашение, которое будет отправлено в LLM при выполнении команды.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Check for performance issues and suggest improvements.
 
 Используйте опцию `description`, чтобы предоставить краткое описание того, что делает команда.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Check for performance issues and suggest improvements.
 Если это [subagent](/docs/agents/#subagents), команда по умолчанию инициирует вызов субагента.
 Чтобы отключить это поведение, установите для `subtask` значение `false`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Check for performance issues and suggest improvements.
 Это полезно, если вы хотите, чтобы команда не загрязняла ваш основной контекст и **заставляла** агента действовать как субагент.
 даже если для `mode` установлено значение `primary` в конфигурации [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Check for performance issues and suggest improvements.
 
 Используйте конфигурацию `model`, чтобы переопределить модель по умолчанию для этой команды.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## Встроенные команды
 
-opencode включает несколько встроенных команд, таких как `/init`, `/undo`, `/redo`, `/share`, `/help`; [подробнее](/docs/tui#commands).
+weapon включает несколько встроенных команд, таких как `/init`, `/undo`, `/redo`, `/share`, `/help`; [подробнее](/docs/tui#commands).
 
 :::note
 Пользовательские команды могут переопределять встроенные команды.

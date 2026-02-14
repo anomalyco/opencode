@@ -1,9 +1,9 @@
 ---
 title: ACP-understøttelse
-description: Brug OpenCode i enhver ACP-kompatibel editor.
+description: Brug Weapon i enhver ACP-kompatibel editor.
 ---
 
-OpenCode understøtter [Agent Client Protocol](https://agentclientprotocol.com) eller (ACP), så du kan bruge det direkte i kompatible editorer og IDE'er.
+Weapon understøtter [Agent Client Protocol](https://agentclientprotocol.com) eller (ACP), så du kan bruge det direkte i kompatible editorer og IDE'er.
 
 :::tip
 For en liste over editorer og værktøjer, der understøtter ACP, tjek [ACP fremskridtsrapport](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ ACP er en åben protokol, der standardiserer kommunikation mellem kodeeditorer o
 
 ## Konfiguration
 
-For at bruge OpenCode via ACP, konfigurer din editor til at køre kommandoen `opencode acp`.
+For at bruge Weapon via ACP, konfigurer din editor til at køre kommandoen `weapon acp`.
 
-Kommandoen starter OpenCode som en ACP-kompatibel underproces, der kommunikerer med din editor over JSON-RPC via stdio.
+Kommandoen starter Weapon som en ACP-kompatibel underproces, der kommunikerer med din editor over JSON-RPC via stdio.
 
 Nedenfor er eksempler på populære editorer, der understøtter ACP.
 
@@ -30,8 +30,8 @@ Føj til din [Zed](https://zed.dev)-konfiguration (`~/.config/zed/settings.json`
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "Weapon": {
+      "command": "weapon",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ Du kan også binde en tastaturgenvej ved at redigere din `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Weapon",
               "command": {
-                "command": "opencode",
+                "command": "weapon",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ Tilføj til din [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold t
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Weapon": {
+      "command": "/absolute/path/bin/weapon",
       "args": ["acp"]
     }
   }
 }
 ```
 
-For at åbne den skal du bruge den nye 'OpenCode'-agent i AI Chat-agentvælgeren.
+For at åbne den skal du bruge den nye 'Weapon'-agent i AI Chat-agentvælgeren.
 
 ---
 
@@ -93,8 +93,8 @@ Føj til din [Avante.nvim](https://github.com/yetone/avante.nvim)-konfiguration:
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ Hvis du har brug for at videregive miljøvariabler:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        WEAPON_API_KEY = os.getenv("WEAPON_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ Hvis du har brug for at videregive miljøvariabler:
 
 ### CodeCompanion.nvim
 
-For at bruge OpenCode som en ACP-agent i [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), skal du tilføje følgende til din Neovim-konfiguration:
+For at bruge Weapon som en ACP-agent i [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), skal du tilføje følgende til din Neovim-konfiguration:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "weapon",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-Denne konfiguration sætter CodeCompanion til at bruge OpenCode som ACP-agent til chat.
+Denne konfiguration sætter CodeCompanion til at bruge Weapon som ACP-agent til chat.
 
-Hvis du har brug for at sende miljøvariabler (som `OPENCODE_API_KEY`), henvises til [Konfiguration af adaptere: Miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
+Hvis du har brug for at sende miljøvariabler (som `WEAPON_API_KEY`), henvises til [Konfiguration af adaptere: Miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
 
 ## Understøttelse
 
-OpenCode fungerer på samme måde via ACP som i terminalen. Alle funktioner understøtter:
+Weapon fungerer på samme måde via ACP som i terminalen. Alle funktioner understøtter:
 
 :::note
 Nogle indbyggede slash-kommandoer som `/undo` og `/redo` er i øjeblikket ikke understøttet.
@@ -150,7 +150,7 @@ Nogle indbyggede slash-kommandoer som `/undo` og `/redo` er i øjeblikket ikke u
 
 - Indbyggede værktøjer (filoperationer, terminalkommandoer osv.)
 - Brugerdefinerede værktøjer og slash-kommandoer
-- MCP-servere konfigureret i din OpenCode-konfiguration
+- MCP-servere konfigureret i din Weapon-konfiguration
 - Projektspecifikke regler fra `AGENTS.md`
 - Brugerdefinerede formatere og linters
 - Agenter og tilladelsessystem

@@ -17,9 +17,9 @@ Les commandes personnalisées s'ajoutent aux commandes intégrées telles que `/
 
 Créez des fichiers markdown dans le répertoire `commands/` pour définir des commandes personnalisées.
 
-Créez `.opencode/commands/test.md` :
+Créez `.weapon/commands/test.md` :
 
-```md title=".opencode/commands/test.md"
+```md title=".weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Utilisez la commande en tapant `/` suivi du nom de la commande.
 
 ## Configuration
 
-Vous pouvez ajouter des commandes personnalisées via la configuration OpenCode ou en créant des fichiers markdown dans le répertoire `commands/`.
+Vous pouvez ajouter des commandes personnalisées via la configuration Weapon ou en créant des fichiers markdown dans le répertoire `commands/`.
 
 ---
 
 ### JSON
 
-Utilisez l'option `command` dans votre OpenCode [config](/docs/config) :
+Utilisez l'option `command` dans votre Weapon [config](/docs/config) :
 
-```json title="opencode.jsonc" {4-12}
+```json title="weapon.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Vous pouvez maintenant exécuter cette commande dans le TUI :
 
 Vous pouvez également définir des commandes à l'aide de fichiers markdown. Placez-les dans :
 
-- Global : `~/.config/opencode/commands/`
-- Par projet : `.opencode/commands/`
+- Global : `~/.config/weapon/commands/`
+- Par projet : `.weapon/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -111,7 +111,7 @@ Les prompts pour les commandes personnalisées prennent en charge plusieurs espa
 
 Transmettez les arguments aux commandes à l’aide de l’espace réservé `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".weapon/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -137,7 +137,7 @@ Vous pouvez également accéder à des arguments individuels à l'aide de param�
 
 Par exemple:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".weapon/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -166,7 +166,7 @@ Utilisez _!`command`_ pour injecter la sortie [bash command](/docs/tui#bash-comm
 
 Par exemple, pour créer une commande personnalisée qui analyse la couverture des tests :
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".weapon/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -179,7 +179,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Ou pour consulter les modifications récentes :
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".weapon/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -198,7 +198,7 @@ Les commandes s'exécutent dans le répertoire racine de votre projet et leur so
 
 Incluez les fichiers dans votre commande en utilisant `@` suivi du nom du fichier.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".weapon/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -221,7 +221,7 @@ Examinons les options de configuration en détail.
 
 L'option `template` définit le prompt qui sera envoyé au LLM lors de l'exécution de la commande.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Il s'agit d'une option de configuration **obligatoire**.
 
 Utilisez l'option `description` pour fournir une brève description de ce que fait la commande.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -259,7 +259,7 @@ Utilisez la configuration `agent` pour spécifier éventuellement quel [agent](/
 S'il s'agit d'un [subagent](/docs/agents/#subagents), la commande déclenchera un appel de sous-agent par défaut.
 Pour désactiver ce comportement, définissez `subtask` sur `false`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "review": {
@@ -279,7 +279,7 @@ Utilisez le booléen `subtask` pour forcer la commande à déclencher une invoca
 Ceci est utile si vous souhaitez que la commande ne pollue pas votre contexte principal et **force** l'agent à agir en tant que sous-agent,
 même si `mode` est défini sur `primary` dans la configuration [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -297,7 +297,7 @@ Il s'agit d'une option de configuration **facultative**.
 
 Utilisez la configuration `model` pour remplacer le modèle par défaut pour cette commande.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -313,7 +313,7 @@ Il s'agit d'une option de configuration **facultative**.
 
 ## Commandes intégrées
 
-opencode comprend plusieurs commandes intégrées comme `/init`, `/undo`, `/redo`, `/share`, `/help` ; [en savoir plus](/docs/tui#commands).
+weapon comprend plusieurs commandes intégrées comme `/init`, `/undo`, `/redo`, `/share`, `/help` ; [en savoir plus](/docs/tui#commands).
 
 :::note
 Les commandes personnalisées peuvent remplacer les commandes intégrées.

@@ -1,0 +1,78 @@
+{
+  "get": {
+    "operationId": "find.files",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "query",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      },
+      {
+        "in": "query",
+        "name": "dirs",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        }
+      },
+      {
+        "in": "query",
+        "name": "type",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "file",
+            "directory"
+          ]
+        }
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    ],
+    "summary": "Find files",
+    "description": "Search for files or directories by name or pattern in the project directory.",
+    "responses": {
+      "200": {
+        "description": "File paths",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/find_file/get.js"
+        }
+      }
+    ]
+  }
+}

@@ -3,9 +3,9 @@ title: السمات
 description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 ---
 
-مع OpenCode يمكنك الاختيار من بين عدة سمات مدمجة، أو استخدام سمة تتكيّف مع سمة terminal لديك، أو تعريف سمة مخصصة خاصة بك.
+مع Weapon يمكنك الاختيار من بين عدة سمات مدمجة، أو استخدام سمة تتكيّف مع سمة terminal لديك، أو تعريف سمة مخصصة خاصة بك.
 
-افتراضيًا، يستخدم OpenCode سمتنا `opencode`.
+افتراضيًا، يستخدم Weapon سمتنا `weapon`.
 
 ---
 
@@ -23,7 +23,7 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 
 ## السمات المدمجة
 
-يأتي OpenCode مع عدة سمات مدمجة.
+يأتي Weapon مع عدة سمات مدمجة.
 
 | الاسم                  | الوصف                                                                       |
 | ---------------------- | --------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 
 سمة النظام مناسبة للمستخدمين الذين:
 
-- يريدون أن يطابق OpenCode مظهر terminal لديهم
+- يريدون أن يطابق Weapon مظهر terminal لديهم
 - يستخدمون مخططات ألوان مخصصة لـ terminal
 - يفضلون مظهرًا متسقًا عبر جميع تطبيقات terminal
 
@@ -63,9 +63,9 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 
 يمكنك اختيار سمة بفتح منتقي السمات باستخدام الأمر `/theme`. أو يمكنك تحديدها في [الضبط](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 
 ## سمات مخصصة
 
-يدعم OpenCode نظام سمات مرنًا قائمًا على JSON يتيح للمستخدمين إنشاء السمات وتخصيصها بسهولة.
+يدعم Weapon نظام سمات مرنًا قائمًا على JSON يتيح للمستخدمين إنشاء السمات وتخصيصها بسهولة.
 
 ---
 
@@ -83,9 +83,9 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 تُحمَّل السمات من عدة مجلدات بالترتيب التالي، حيث تتجاوز المجلدات اللاحقة المجلدات السابقة:
 
 1. **السمات المدمجة** - تكون مضمنة داخل الملف التنفيذي
-2. **مجلد ضبط المستخدم** - معرّف في `~/.config/opencode/themes/*.json` أو `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **مجلد جذر المشروع** - معرّف في `<project-root>/.opencode/themes/*.json`
-4. **مجلد العمل الحالي** - معرّف في `./.opencode/themes/*.json`
+2. **مجلد ضبط المستخدم** - معرّف في `~/.config/weapon/themes/*.json` أو `$XDG_CONFIG_HOME/weapon/themes/*.json`
+3. **مجلد جذر المشروع** - معرّف في `<project-root>/.weapon/themes/*.json`
+4. **مجلد العمل الحالي** - معرّف في `./.weapon/themes/*.json`
 
 إذا احتوت عدة مجلدات على سمة بالاسم نفسه، فستُستخدم السمة من المجلد ذي الأولوية الأعلى.
 
@@ -98,15 +98,15 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 للسمات على مستوى المستخدم:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/weapon/themes
+vim ~/.config/weapon/themes/my-theme.json
 ```
 
 وللسمات الخاصة بالمشروع:
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .weapon/themes
+vim .weapon/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://weapon.ai/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

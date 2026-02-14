@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: opencode CLI 选项和命令。
+description: weapon CLI 选项和命令。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-默认情况下，opencode CLI 在不带任何参数运行时启动 [TUI](/docs/tui)。
+默认情况下，weapon CLI 在不带任何参数运行时启动 [TUI](/docs/tui)。
 
 ```bash
-opencode
+weapon
 ```
 
-但它也接受本页记录的命令。这允许您以编程方式与 opencode 交互。
+但它也接受本页记录的命令。这允许您以编程方式与 weapon 交互。
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+weapon run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-启动 opencode 终端用户界面。
+启动 weapon 终端用户界面。
 
 ```bash
-opencode [project]
+weapon [project]
 ```
 
 #### 标志
@@ -44,36 +44,36 @@ opencode [project]
 
 ## 命令
 
-opencode CLI 还具有以下命令。
+weapon CLI 还具有以下命令。
 
 ---
 
 ### agent
 
-管理 opencode 代理。
+管理 weapon 代理。
 
 ```bash
-opencode agent [command]
+weapon agent [command]
 ```
 
 ---
 
 ### attach
 
-将终端附加到通过 `serve` 或 `web` 命令启动的已运行 opencode 后端服务器。
+将终端附加到通过 `serve` 或 `web` 命令启动的已运行 weapon 后端服务器。
 
 ```bash
-opencode attach [url]
+weapon attach [url]
 ```
 
-这允许将 TUI 与远程 opencode 后端一起使用。例如：
+这允许将 TUI 与远程 weapon 后端一起使用。例如：
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+weapon web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+weapon attach http://10.20.30.40:4096
 ```
 
 #### 标志
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 使用自定义配置创建新代理。
 
 ```bash
-opencode agent create
+weapon agent create
 ```
 
 此命令将指导您使用自定义系统提示和工具配置创建新代理。
@@ -102,7 +102,7 @@ opencode agent create
 列出所有可用的代理。
 
 ```bash
-opencode agent list
+weapon agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 用于管理提供商的凭据和登录的命令。
 
 ```bash
-opencode auth [command]
+weapon auth [command]
 ```
 
 ---
 
 #### login
 
-opencode 由 [Models.dev](https://models.dev) 上的提供商列表支持，因此您可以使用 `opencode auth login` 来为您想要使用的任何提供商配置 API 密钥。它存储在 `~/.local/share/opencode/auth.json` 中。
+weapon 由 [Models.dev](https://models.dev) 上的提供商列表支持，因此您可以使用 `weapon auth login` 来为您想要使用的任何提供商配置 API 密钥。它存储在 `~/.local/share/weapon/auth.json` 中。
 
 ```bash
-opencode auth login
+weapon auth login
 ```
 
-当 opencode 启动时，它会从凭据文件加载提供商。以及如果在您的环境或项目中的 `.env` 文件中定义了任何密钥。
+当 weapon 启动时，它会从凭据文件加载提供商。以及如果在您的环境或项目中的 `.env` 文件中定义了任何密钥。
 
 ---
 
@@ -134,13 +134,13 @@ opencode auth login
 列出凭据文件中存储的所有经过身份验证的提供商。
 
 ```bash
-opencode auth list
+weapon auth list
 ```
 
 或者简短的版本。
 
 ```bash
-opencode auth ls
+weapon auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 通过从凭据文件中清除提供商，将您从提供商中注销。
 
 ```bash
-opencode auth logout
+weapon auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 管理 GitHub 代理以实现存储库自动化。
 
 ```bash
-opencode github [command]
+weapon github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 在您的存储库中安装 GitHub 代理。
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 这将设置必要的 GitHub Actions 工作流程并指导您完成配置过程。 [了解更多](/docs/github)。
@@ -182,7 +182,7 @@ opencode github install
 运行 GitHub 代理。这通常用在 GitHub Actions 中。
 
 ```bash
-opencode github run
+weapon github run
 ```
 
 #### 标志
@@ -199,7 +199,7 @@ opencode github run
 管理模型上下文协议 (MCP) 服务器。
 
 ```bash
-opencode mcp [command]
+weapon mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 将 MCP 服务器添加到您的配置中。
 
 ```bash
-opencode mcp add
+weapon mcp add
 ```
 
 此命令将指导您添加本地或远程 MCP 服务器。
@@ -221,13 +221,13 @@ opencode mcp add
 列出所有已配置的 MCP 服务器及其连接状态。
 
 ```bash
-opencode mcp list
+weapon mcp list
 ```
 
 或者使用简短版本。
 
 ```bash
-opencode mcp ls
+weapon mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 使用启用 OAuth 的 MCP 服务器进行身份验证。
 
 ```bash
-opencode mcp auth [name]
+weapon mcp auth [name]
 ```
 
 如果您不提供服务器名称，系统将提示您从可用的支持 OAuth 的服务器中进行选择。
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 您还可以列出支持 OAuth 的服务器及其身份验证状态。
 
 ```bash
-opencode mcp auth list
+weapon mcp auth list
 ```
 
 或者使用简短版本。
 
 ```bash
-opencode mcp auth ls
+weapon mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 删除 MCP 服务器的 OAuth 凭据。
 
 ```bash
-opencode mcp logout [name]
+weapon mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 调试 MCP 服务器的 OAuth 连接问题。
 
 ```bash
-opencode mcp debug <name>
+weapon mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 列出已配置提供商的所有可用模型。
 
 ```bash
-opencode models [provider]
+weapon models [provider]
 ```
 
 此命令以 `provider/model` 格式显示您配置的提供商中可用的所有模型。
@@ -291,7 +291,7 @@ opencode models [provider]
 您可以选择提供提供商 ID 并按该提供商筛选模型。
 
 ```bash
-opencode models anthropic
+weapon models anthropic
 ```
 
 #### 标志
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | 从 models.dev 刷新模型缓存               |
 | `--verbose` | 使用更详细的模型输出（包括成本等元数据） |
 
-使用 `--refresh` 标志来更新服务器的模型列表。当新模型已添加到提供商并且您希望在 opencode 中查看它们时，这非常有用。
+使用 `--refresh` 标志来更新服务器的模型列表。当新模型已添加到提供商并且您希望在 weapon 中查看它们时，这非常有用。
 
 ```bash
-opencode models --refresh
+weapon models --refresh
 ```
 
 ---
 
 ### run
 
-通过直接传递提示以非交互模式运行 opencode。
+通过直接传递提示以非交互模式运行 weapon。
 
 ```bash
-opencode run [message..]
+weapon run [message..]
 ```
 
 这对于编写脚本、自动化，或者当您想要快速获得答案而不是完整的 TUI 时非常有用。例如。
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "weapon run"
+weapon run Explain the use of context in Go
 ```
 
-您还可以附加到正在运行的 `opencode serve` 实例，以避免每次运行时 MCP 服务器冷启动时间：
+您还可以附加到正在运行的 `weapon serve` 实例，以避免每次运行时 MCP 服务器冷启动时间：
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+weapon serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+weapon run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### 标志
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | 要附加到消息的文件                                              |
 | `--format`   |      | 格式：default（格式化）或 json（原始 JSON 事件）                |
 | `--title`    |      | 会话标题（如果未提供值，则使用截断的提示）                      |
-| `--attach`   |      | 连接到正在运行的 opencode 服务器（例如，http://localhost:4096） |
+| `--attach`   |      | 连接到正在运行的 weapon 服务器（例如，http://localhost:4096） |
 | `--port`     |      | 本地服务器的端口（默认为随机端口）                              |
 
 ---
 
 ### serve
 
-启动无头 opencode 服务器以进行 API 访问。查看 [服务器文档](/docs/server) 以获取完整的 HTTP 接口。
+启动无头 weapon 服务器以进行 API 访问。查看 [服务器文档](/docs/server) 以获取完整的 HTTP 接口。
 
 ```bash
-opencode serve
+weapon serve
 ```
 
-这将启动一个 HTTP 服务器，该服务器提供对 opencode 功能的 API 访问，无需 TUI 界面。设置 `OPENCODE_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `opencode`）。
+这将启动一个 HTTP 服务器，该服务器提供对 weapon 功能的 API 访问，无需 TUI 界面。设置 `WEAPON_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `weapon`）。
 
 #### 标志
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-管理 opencode 会话。
+管理 weapon 会话。
 
 ```bash
-opencode session [command]
+weapon session [command]
 ```
 
 ---
 
 #### list
 
-列出所有 opencode 会话。
+列出所有 weapon 会话。
 
 ```bash
-opencode session list
+weapon session list
 ```
 
 ##### 标志
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-显示 opencode 会话的 Token 使用情况和成本统计信息。
+显示 weapon 会话的 Token 使用情况和成本统计信息。
 
 ```bash
-opencode stats
+weapon stats
 ```
 
 #### 标志
@@ -424,7 +424,7 @@ opencode stats
 将会话数据导出为 JSON。
 
 ```bash
-opencode export [sessionID]
+weapon export [sessionID]
 ```
 
 如果您不提供会话 ID，系统将提示您从可用的会话中进行选择。
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-从 JSON 文件或 opencode 共享 URL 导入会话数据。
+从 JSON 文件或 weapon 共享 URL 导入会话数据。
 
 ```bash
-opencode import <file>
+weapon import <file>
 ```
 
-您可以从本地文件或 opencode 共享 URL 导入。
+您可以从本地文件或 weapon 共享 URL 导入。
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+weapon import session.json
+weapon import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-使用 Web 界面启动无头 opencode 服务器。
+使用 Web 界面启动无头 weapon 服务器。
 
 ```bash
-opencode web
+weapon web
 ```
 
-这将启动 HTTP 服务器并打开 Web 浏览器以通过 Web 界面访问 opencode。设置 `OPENCODE_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `opencode`）。
+这将启动 HTTP 服务器并打开 Web 浏览器以通过 Web 界面访问 weapon。设置 `WEAPON_SERVER_PASSWORD` 以启用 HTTP 基本身份验证（用户名默认为 `weapon`）。
 
 #### 标志
 
@@ -474,7 +474,7 @@ opencode web
 启动 ACP (Agent Client Protocol) 服务器。
 
 ```bash
-opencode acp
+weapon acp
 ```
 
 此命令启动一个 ACP 服务器，该服务器使用 nd-JSON 通过 stdin/stdout 进行通信。
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-卸载 opencode 并删除所有相关文件。
+卸载 weapon 并删除所有相关文件。
 
 ```bash
-opencode uninstall
+weapon uninstall
 ```
 
 #### 标志
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-将 opencode 更新到最新版本或特定版本。
+将 weapon 更新到最新版本或特定版本。
 
 ```bash
-opencode upgrade [target]
+weapon upgrade [target]
 ```
 
 升级到最新版本。
 
 ```bash
-opencode upgrade
+weapon upgrade
 ```
 
 升级到特定版本。
 
 ```bash
-opencode upgrade v0.1.48
+weapon upgrade v0.1.48
 ```
 
 #### 标志
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## 全局标志
 
-opencode CLI 接受以下全局标志。
+weapon CLI 接受以下全局标志。
 
 | 标志           | 简写 | 描述                                |
 | -------------- | ---- | ----------------------------------- |
@@ -551,34 +551,34 @@ opencode CLI 接受以下全局标志。
 
 ## 环境变量
 
-可以使用环境变量配置 opencode。
+可以使用环境变量配置 weapon。
 
 | 变量                                  | 类型    | 描述                                      |
 | ------------------------------------- | ------- | ----------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 自动共享会话                              |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径      |
-| `OPENCODE_CONFIG`                     | string  | 配置文件路径                              |
-| `OPENCODE_CONFIG_DIR`                 | string  | 配置目录的路径                            |
-| `OPENCODE_CONFIG_CONTENT`             | string  | 内联 json 配置内容                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                          |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | 禁用数据的修剪                            |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自动终端标题更新                      |
-| `OPENCODE_PERMISSION`                 | string  | 内联 json 权限配置                        |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认插件                              |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用自动 LSP 服务器下载                   |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验模型                              |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | 禁用从 `.claude` 读取（提示+技能）        |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`                 |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                      |
-| `OPENCODE_FAKE_VCS`                   | string  | 用于测试目的的伪造 VCS                    |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 禁用文件时间检查以进行优化                |
-| `OPENCODE_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）              |
-| `OPENCODE_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                     |
-| `OPENCODE_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本身份验证         |
-| `OPENCODE_SERVER_USERNAME`            | string  | 覆盖基本身份验证用户名（默认 `opencode`） |
-| `OPENCODE_MODELS_URL`                 | string  | 用于获取模型配置的自定义 URL              |
+| `WEAPON_AUTO_SHARE`                 | boolean | 自动共享会话                              |
+| `WEAPON_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径      |
+| `WEAPON_CONFIG`                     | string  | 配置文件路径                              |
+| `WEAPON_CONFIG_DIR`                 | string  | 配置目录的路径                            |
+| `WEAPON_CONFIG_CONTENT`             | string  | 内联 json 配置内容                        |
+| `WEAPON_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                          |
+| `WEAPON_DISABLE_PRUNE`              | boolean | 禁用数据的修剪                            |
+| `WEAPON_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自动终端标题更新                      |
+| `WEAPON_PERMISSION`                 | string  | 内联 json 权限配置                        |
+| `WEAPON_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认插件                              |
+| `WEAPON_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用自动 LSP 服务器下载                   |
+| `WEAPON_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验模型                              |
+| `WEAPON_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                        |
+| `WEAPON_DISABLE_CLAUDE_CODE`        | boolean | 禁用从 `.claude` 读取（提示+技能）        |
+| `WEAPON_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`            |
+| `WEAPON_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`                 |
+| `WEAPON_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                      |
+| `WEAPON_FAKE_VCS`                   | string  | 用于测试目的的伪造 VCS                    |
+| `WEAPON_DISABLE_FILETIME_CHECK`     | boolean | 禁用文件时间检查以进行优化                |
+| `WEAPON_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）              |
+| `WEAPON_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                     |
+| `WEAPON_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本身份验证         |
+| `WEAPON_SERVER_USERNAME`            | string  | 覆盖基本身份验证用户名（默认 `weapon`） |
+| `WEAPON_MODELS_URL`                 | string  | 用于获取模型配置的自定义 URL              |
 
 ---
 
@@ -588,16 +588,16 @@ opencode CLI 接受以下全局标志。
 
 | 变量                                            | 类型    | 描述                                |
 | ----------------------------------------------- | ------- | ----------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 启用所有实验性功能                  |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                        |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 在 TUI 中禁用选择时复制             |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令的默认超时（以毫秒为单位） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 Token            |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 为整个目录启用文件观察器            |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt 格式化程序               |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具                 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件观察器                      |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能                 |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 启用实验性 LSP 类型检查             |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 启用实验性 Markdown 功能            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                        |
+| `WEAPON_EXPERIMENTAL`                         | boolean | 启用所有实验性功能                  |
+| `WEAPON_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                        |
+| `WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 在 TUI 中禁用选择时复制             |
+| `WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令的默认超时（以毫秒为单位） |
+| `WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 Token            |
+| `WEAPON_EXPERIMENTAL_FILEWATCHER`             | boolean | 为整个目录启用文件观察器            |
+| `WEAPON_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt 格式化程序               |
+| `WEAPON_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具                 |
+| `WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件观察器                      |
+| `WEAPON_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能                 |
+| `WEAPON_EXPERIMENTAL_LSP_TY`                  | boolean | 启用实验性 LSP 类型检查             |
+| `WEAPON_EXPERIMENTAL_MARKDOWN`                | boolean | 启用实验性 Markdown 功能            |
+| `WEAPON_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                        |

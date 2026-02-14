@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "StructuredOutputError"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "retries": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "message",
+        "retries"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "data"
+  ]
+}

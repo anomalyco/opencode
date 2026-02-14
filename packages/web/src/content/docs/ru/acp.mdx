@@ -1,9 +1,9 @@
 ---
 title: Поддержка ACP
-description: Используйте opencode в любом ACP-совместимом редакторе.
+description: Используйте weapon в любом ACP-совместимом редакторе.
 ---
 
-opencode поддерживает [Agent Client Protocol](https://agentclientprotocol.com) (ACP), что позволяет использовать его непосредственно в совместимых редакторах и IDE.
+weapon поддерживает [Agent Client Protocol](https://agentclientprotocol.com) (ACP), что позволяет использовать его непосредственно в совместимых редакторах и IDE.
 
 :::tip
 Список редакторов и инструментов, поддерживающих ACP, можно найти в [отчете о ходе работы ACP](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ ACP — это открытый протокол, который стандар�
 
 ## Настройка
 
-Чтобы использовать opencode через ACP, настройте свой редактор для запуска команды `opencode acp`.
+Чтобы использовать weapon через ACP, настройте свой редактор для запуска команды `weapon acp`.
 
-Команда запускает opencode как ACP-совместимый подпроцесс, который взаимодействует с вашим редактором через JSON-RPC через stdio.
+Команда запускает weapon как ACP-совместимый подпроцесс, который взаимодействует с вашим редактором через JSON-RPC через stdio.
 
 Ниже приведены примеры популярных редакторов, поддерживающих ACP.
 
@@ -30,8 +30,8 @@ ACP — это открытый протокол, который стандар�
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "Weapon": {
+      "command": "weapon",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP — это открытый протокол, который стандар�
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Weapon",
               "command": {
-                "command": "opencode",
+                "command": "weapon",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ ACP — это открытый протокол, который стандар�
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Weapon": {
+      "command": "/absolute/path/bin/weapon",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Чтобы открыть его, используйте новый агент opencode в селекторе агентов AI Chat.
+Чтобы открыть его, используйте новый агент weapon в селекторе агентов AI Chat.
 
 ---
 
@@ -93,8 +93,8 @@ ACP — это открытый протокол, который стандар�
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP — это открытый протокол, который стандар�
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        WEAPON_API_KEY = os.getenv("WEAPON_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ ACP — это открытый протокол, который стандар�
 
 ### CodeCompanion.nvim
 
-Чтобы использовать opencode в качестве агента ACP в [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), добавьте в конфигурацию Neovim следующее:
+Чтобы использовать weapon в качестве агента ACP в [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), добавьте в конфигурацию Neovim следующее:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "weapon",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-Эта конфигурация настраивает CodeCompanion для использования opencode в качестве агента ACP для чата.
+Эта конфигурация настраивает CodeCompanion для использования weapon в качестве агента ACP для чата.
 
-Если вам нужно передать переменные среды (например, `OPENCODE_API_KEY`), обратитесь к разделу [Настройка адаптеров: переменные среды](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) в документации CodeCompanion.nvim для получения полной информации.
+Если вам нужно передать переменные среды (например, `WEAPON_API_KEY`), обратитесь к разделу [Настройка адаптеров: переменные среды](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) в документации CodeCompanion.nvim для получения полной информации.
 
 ## Поддержка
 
-opencode через ACP работает так же, как и в терминале. Поддерживаются все функции:
+weapon через ACP работает так же, как и в терминале. Поддерживаются все функции:
 
 :::note
 Некоторые встроенные команды слэша, такие как `/undo` и `/redo`, в настоящее время не поддерживаются.
@@ -150,7 +150,7 @@ opencode через ACP работает так же, как и в термин�
 
 - Встроенные инструменты (файловые операции, команды терминала и т. д.)
 - Пользовательские инструменты и команды слэша
-- Серверы MCP, настроенные в вашей конфигурации opencode
+- Серверы MCP, настроенные в вашей конфигурации weapon
 - Правила для конкретного проекта из `AGENTS.md`
 - Пользовательские форматтеры и линтеры
 - Агенты и система разрешений

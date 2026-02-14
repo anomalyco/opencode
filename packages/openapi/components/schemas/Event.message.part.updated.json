@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.part.updated"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "part": {
+          "$ref": "./Part.json"
+        },
+        "delta": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "part"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

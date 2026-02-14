@@ -5,7 +5,7 @@ description: Use this when you are working on file operations like reading, writ
 
 ## Use this when
 
-- Editing file I/O or scans in `packages/opencode`
+- Editing file I/O or scans in `packages/weapon`
 - Handling directory operations or external tools
 
 ## Bun file APIs (from Bun docs)

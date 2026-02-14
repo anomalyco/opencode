@@ -1,15 +1,15 @@
 ---
 title: Einführung
-description: Beginnen Sie mit OpenCode.
+description: Beginnen Sie mit Weapon.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) ist ein Open-Source-Coding-Agent für AI. Es ist als terminalbasierte Schnittstelle, Desktop-App oder IDE-Erweiterung verfügbar.
+[**Weapon**](/) ist ein Open-Source-Coding-Agent für AI. Es ist als terminalbasierte Schnittstelle, Desktop-App oder IDE-Erweiterung verfügbar.
 
-![OpenCode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+![Weapon TUI with the weapon theme](../../../assets/lander/screenshot.png)
 
 Fangen wir an.
 
@@ -17,7 +17,7 @@ Fangen wir an.
 
 #### Voraussetzungen
 
-Um OpenCode in Ihrem Terminal verwenden zu können, benötigen Sie:
+Um Weapon in Ihrem Terminal verwenden zu können, benötigen Sie:
 
 1. Ein moderner Terminal-Emulator, zum Beispiel:
    - [WezTerm](https://wezterm.org), cross-platform
@@ -31,10 +31,10 @@ Um OpenCode in Ihrem Terminal verwenden zu können, benötigen Sie:
 
 ## Installation
 
-Der einfachste Weg, OpenCode zu installieren, ist über das Installationsskript.
+Der einfachste Weg, Weapon zu installieren, ist über das Installationsskript.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://weapon.ai/install | bash
 ```
 
 Sie können es auch mit den folgenden Befehlen installieren:
@@ -45,28 +45,28 @@ Sie können es auch mit den folgenden Befehlen installieren:
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g weapon-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add weapon-ai
         ```
 
       </TabItem>
@@ -76,67 +76,67 @@ Sie können es auch mit den folgenden Befehlen installieren:
 - **Homebrew unter macOS und Linux verwenden**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install anomalyco/tap/weapon
   ```
 
-  > Wir empfehlen die Verwendung des OpenCode-Taps für die aktuellsten Versionen. Die offizielle `brew install opencode`-Formel wird vom Homebrew-Team gepflegt und seltener aktualisiert.
+  > Wir empfehlen die Verwendung des Weapon-Taps für die aktuellsten Versionen. Die offizielle `brew install weapon`-Formel wird vom Homebrew-Team gepflegt und seltener aktualisiert.
 
 - **Verwendung von Paru unter Arch Linux**
 
   ```bash
-  paru -S opencode-bin
+  paru -S weapon-bin
   ```
 
 #### Windows
 
 :::tip[Empfohlen: Verwenden Sie WSL]
-Für das beste Erlebnis unter Windows empfehlen wir die Verwendung von [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Es bietet eine bessere Leistung und vollständige Kompatibilität mit den Funktionen von OpenCode.
+Für das beste Erlebnis unter Windows empfehlen wir die Verwendung von [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Es bietet eine bessere Leistung und vollständige Kompatibilität mit den Funktionen von Weapon.
 :::
 
 - **Verwendung von Chocolatey**
 
   ```bash
-  choco install opencode
+  choco install weapon
   ```
 
 - **Scoop verwenden**
 
   ```bash
-  scoop install opencode
+  scoop install weapon
   ```
 
 - **Mit NPM**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g weapon-ai
   ```
 
 - **Mit Mise**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:anomalyco/weapon
   ```
 
 - **Verwendung von Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/anomalyco/weapon
   ```
 
-Die Unterstützung für die Installation von OpenCode unter Windows mit Bun ist derzeit in Arbeit.
+Die Unterstützung für die Installation von Weapon unter Windows mit Bun ist derzeit in Arbeit.
 
-Sie können die Binärdatei auch aus [Releases](https://github.com/anomalyco/opencode/releases) abrufen.
+Sie können die Binärdatei auch aus [Releases](https://github.com/anomalyco/weapon/releases) abrufen.
 
 ---
 
 ## Konfiguration
 
-Mit OpenCode können Sie jeden LLM-Anbieter verwenden, indem Sie dessen API-Schlüssel konfigurieren.
+Mit Weapon können Sie jeden LLM-Anbieter verwenden, indem Sie dessen API-Schlüssel konfigurieren.
 
-Wenn Sie mit der Verwendung von LLM-Anbietern noch nicht vertraut sind, empfehlen wir die Verwendung von [OpenCode Zen](/docs/zen).
-Es handelt sich um eine kuratierte Liste von Modellen, die vom OpenCode Team getestet und verifiziert wurden.
+Wenn Sie mit der Verwendung von LLM-Anbietern noch nicht vertraut sind, empfehlen wir die Verwendung von [Weapon Zen](/docs/zen).
+Es handelt sich um eine kuratierte Liste von Modellen, die vom Weapon Team getestet und verifiziert wurden.
 
-1. Führen Sie den Befehl `/connect` in TUI aus, wählen Sie OpenCode aus und gehen Sie zu [opencode.ai/auth](https://opencode.ai/auth).
+1. Führen Sie den Befehl `/connect` in TUI aus, wählen Sie Weapon aus und gehen Sie zu [weapon.ai/auth](https://weapon.ai/auth).
 
    ```txt
    /connect
@@ -166,32 +166,32 @@ an dem Sie arbeiten möchten.
 cd /path/to/project
 ```
 
-Und führen Sie OpenCode aus.
+Und führen Sie Weapon aus.
 
 ```bash
-opencode
+weapon
 ```
 
-Als nächstes initialisieren Sie OpenCode für das Projekt, indem Sie den folgenden Befehl ausführen.
+Als nächstes initialisieren Sie Weapon für das Projekt, indem Sie den folgenden Befehl ausführen.
 
 ```bash frame="none"
 /init
 ```
 
-Dadurch wird OpenCode dazu veranlasst, Ihr Projekt zu analysieren und eine `AGENTS.md`-Datei im Projektstammverzeichnis zu erstellen.
+Dadurch wird Weapon dazu veranlasst, Ihr Projekt zu analysieren und eine `AGENTS.md`-Datei im Projektstammverzeichnis zu erstellen.
 
 :::tip
 Sie sollten die `AGENTS.md`-Datei Ihres Projekts an Git übergeben.
 :::
 
-Dies hilft OpenCode, die Projektstruktur und die Codierungsmuster zu verstehen
+Dies hilft Weapon, die Projektstruktur und die Codierungsmuster zu verstehen
 die verwendet werden.
 
 ---
 
 ## Verwendung
 
-Sie können nun OpenCode verwenden, um an Ihrem Projekt zu arbeiten. Fragen Sie ruhig nach
+Sie können nun Weapon verwenden, um an Ihrem Projekt zu arbeiten. Fragen Sie ruhig nach
 allem!
 
 Wenn Sie mit der Verwendung eines AI-Codierungsagenten noch nicht vertraut sind, finden Sie hier einige Beispiele, die hilfreich sein könnten.
@@ -200,7 +200,7 @@ Wenn Sie mit der Verwendung eines AI-Codierungsagenten noch nicht vertraut sind,
 
 ### Fragen stellen
 
-Sie können OpenCode bitten, Ihnen die Codebasis zu erklären.
+Sie können Weapon bitten, Ihnen die Codebasis zu erklären.
 
 :::tip
 Verwenden Sie die Taste `@`, um eine Fuzzy-Suche nach Dateien im Projekt durchzuführen.
@@ -216,11 +216,11 @@ Dies ist hilfreich, wenn es einen Teil der Codebasis gibt, an dem Sie nicht gear
 
 ### Funktionen hinzufügen
 
-Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir empfehlen jedoch, es zunächst um die Erstellung eines Plans zu bitten.
+Sie können Weapon bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir empfehlen jedoch, es zunächst um die Erstellung eines Plans zu bitten.
 
 1. **Erstellen Sie einen Plan**
 
-   OpenCode verfügt über einen _Plan Mode_, der seine Fähigkeit, Änderungen vorzunehmen, deaktiviert
+   Weapon verfügt über einen _Plan Mode_, der seine Fähigkeit, Änderungen vorzunehmen, deaktiviert
    Schlagen Sie stattdessen vor, wie die Funktion implementiert wird.
 
    Wechseln Sie mit der **Tabulatortaste** dorthin. In der unteren rechten Ecke sehen Sie einen Indikator dafür.
@@ -237,11 +237,11 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   Sie möchten OpenCode genügend Details geben, um zu verstehen, was Sie wollen. Es hilft
+   Sie möchten Weapon genügend Details geben, um zu verstehen, was Sie wollen. Es hilft
    mit ihm zu sprechen, als ob Sie mit einem Junior-Entwickler in Ihrem Team sprechen würden.
 
    :::tip
-   Geben Sie OpenCode reichlich Kontext und Beispiele, damit es versteht, was Sie
+   Geben Sie Weapon reichlich Kontext und Beispiele, damit es versteht, was Sie
    wollen.
    :::
 
@@ -258,7 +258,7 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
    Ziehen Sie Bilder per Drag-and-Drop in das Terminal, um sie zur Eingabeaufforderung hinzuzufügen.
    :::
 
-   OpenCode kann alle von Ihnen bereitgestellten Bilder scannen und zur Eingabeaufforderung hinzufügen. Du kannst
+   Weapon kann alle von Ihnen bereitgestellten Bilder scannen und zur Eingabeaufforderung hinzufügen. Du kannst
    Ziehen Sie dazu ein Bild per Drag & Drop in das Terminal.
 
 3. **Funktion erstellen**
@@ -280,7 +280,7 @@ Sie können OpenCode bitten, Ihrem Projekt neue Funktionen hinzuzufügen. Wir em
 
 ### Änderungen vornehmen
 
-Für einfachere Änderungen können Sie OpenCode bitten, es direkt zu erstellen
+Für einfachere Änderungen können Sie Weapon bitten, es direkt zu erstellen
 ohne den Plan vorher überprüfen zu müssen.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -289,14 +289,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Sie möchten sicherstellen, dass Sie viele Details bereitstellen, damit OpenCode die richtigen
+Sie möchten sicherstellen, dass Sie viele Details bereitstellen, damit Weapon die richtigen
 Änderungen vornimmt.
 
 ---
 
 ### Änderungen rückgängig machen
 
-Nehmen wir an, Sie bitten OpenCode, einige Änderungen vorzunehmen.
+Nehmen wir an, Sie bitten Weapon, einige Änderungen vorzunehmen.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -309,14 +309,14 @@ mit dem Befehl `/undo`.
 /undo
 ```
 
-OpenCode macht nun die von Ihnen vorgenommenen Änderungen rückgängig und zeigt Ihre ursprüngliche Nachricht
+Weapon macht nun die von Ihnen vorgenommenen Änderungen rückgängig und zeigt Ihre ursprüngliche Nachricht
 wieder an.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Von hier aus können Sie die Eingabeaufforderung anpassen und OpenCode bitten, es erneut zu versuchen.
+Von hier aus können Sie die Eingabeaufforderung anpassen und Weapon bitten, es erneut zu versuchen.
 
 :::tip
 Sie können `/undo` mehrmals ausführen, um mehrere Änderungen rückgängig zu machen.
@@ -332,7 +332,7 @@ Oder Sie **können** die Änderungen mit dem Befehl `/redo` wiederholen.
 
 ## Teilen
 
-Die Gespräche, die Sie mit OpenCode führen, können [mit Ihrem Team](/docs/share) geteilt werden.
+Die Gespräche, die Sie mit Weapon führen, können [mit Ihrem Team](/docs/share) geteilt werden.
 
 ```bash frame="none"
 /share
@@ -344,12 +344,12 @@ Dadurch wird ein Link zur aktuellen Konversation erstellt und in Ihre Zwischenab
 Gespräche werden standardmäßig nicht geteilt.
 :::
 
-Hier ist ein [Beispielgespräch](https://opencode.ai/s/4XP1fce5) mit OpenCode.
+Hier ist ein [Beispielgespräch](https://weapon.ai/s/4XP1fce5) mit Weapon.
 
 ---
 
 ## Anpassung
 
-Und das ist es! Sie sind jetzt ein Profi im Umgang mit OpenCode.
+Und das ist es! Sie sind jetzt ein Profi im Umgang mit Weapon.
 
-Um es zu Ihrem eigenen zu machen, empfehlen wir [ein Theme auszuwählen](/docs/themes), [Keybinds anzupassen](/docs/keybinds), [Code-Formatter zu konfigurieren](/docs/formatters), [eigene Commands zu erstellen](/docs/commands) oder mit der [OpenCode-Konfiguration](/docs/config) zu experimentieren.
+Um es zu Ihrem eigenen zu machen, empfehlen wir [ein Theme auszuwählen](/docs/themes), [Keybinds anzupassen](/docs/keybinds), [Code-Formatter zu konfigurieren](/docs/formatters), [eigene Commands zu erstellen](/docs/commands) oder mit der [Weapon-Konfiguration](/docs/config) zu experimentieren.

@@ -1,0 +1,52 @@
+{
+  "get": {
+    "operationId": "session.status",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get session status",
+    "description": "Retrieve the current status of all sessions, including active, idle, and completed states.",
+    "responses": {
+      "200": {
+        "description": "Get session status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "../components/schemas/SessionStatus.json"
+              }
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_status/get.js"
+        }
+      }
+    ]
+  }
+}

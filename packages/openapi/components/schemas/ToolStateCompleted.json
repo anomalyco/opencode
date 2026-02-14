@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "completed"
+    },
+    "input": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "output": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "compacted": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "./FilePart.json"
+      }
+    }
+  },
+  "required": [
+    "status",
+    "input",
+    "output",
+    "title",
+    "metadata",
+    "time"
+  ]
+}

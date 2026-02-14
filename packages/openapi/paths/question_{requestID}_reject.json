@@ -1,0 +1,64 @@
+{
+  "post": {
+    "operationId": "question.reject",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "requestID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Reject question request",
+    "description": "Reject a question request from the AI assistant.",
+    "responses": {
+      "200": {
+        "description": "Question rejected successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/question_{requestID}_reject/post.js"
+        }
+      }
+    ]
+  }
+}

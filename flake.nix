@@ -1,5 +1,5 @@
 {
-  description = "OpenCode development flake";
+  description = "Weapon development flake";
 
   nixConfig = {
     extra-substituters = [ "https://weyl-ai.cachix.org" ];
@@ -42,16 +42,16 @@
             node_modules = final.callPackage ./nix/node_modules.nix {
               inherit rev;
             };
-            opencode = final.callPackage ./nix/opencode.nix {
+            weapon = final.callPackage ./nix/weapon.nix {
               inherit node_modules;
             };
             desktop = final.callPackage ./nix/desktop.nix {
-              inherit opencode;
+              inherit weapon;
             };
           in
           {
-            inherit opencode;
-            opencode-desktop = desktop;
+            inherit weapon;
+            weapon-desktop = desktop;
           };
       };
 
@@ -61,16 +61,16 @@
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
           };
-          opencode = pkgs.callPackage ./nix/opencode.nix {
+          weapon = pkgs.callPackage ./nix/weapon.nix {
             inherit node_modules;
           };
           desktop = pkgs.callPackage ./nix/desktop.nix {
-            inherit opencode;
+            inherit weapon;
           };
         in
         {
-          default = opencode;
-          inherit opencode desktop;
+          default = weapon;
+          inherit weapon desktop;
           # Updater derivation with fakeHash - build fails and reveals correct hash
           node_modules_updater = node_modules.override {
             hash = pkgs.lib.fakeHash;

@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "oauth"
+        },
+        {
+          "type": "string",
+          "const": "api"
+        }
+      ]
+    },
+    "label": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "label"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "propertyNames": {
+    "type": "string"
+  },
+  "additionalProperties": {}
+}

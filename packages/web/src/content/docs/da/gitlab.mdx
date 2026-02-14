@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: Brug OpenCode i GitLab-problemer og Merge Requests.
+description: Brug Weapon i GitLab-problemer og Merge Requests.
 ---
 
-OpenCode integreres med din GitLab-arbejdsgang gennem din GitLab CI/CD-pipeline eller med GitLab Duo.
+Weapon integreres med din GitLab-arbejdsgang gennem din GitLab CI/CD-pipeline eller med GitLab Duo.
 
-I begge tilfælde vil OpenCode køre på dine GitLab-løbere.
+I begge tilfælde vil Weapon køre på dine GitLab-løbere.
 
 ---
 
 ## GitLab CI
 
-OpenCode fungerer i en almindelig GitLab-pipeline. Du kan bygge det ind i en pipeline som en [CI component](https://docs.gitlab.com/ee/ci/components/)
+Weapon fungerer i en almindelig GitLab-pipeline. Du kan bygge det ind i en pipeline som en [CI component](https://docs.gitlab.com/ee/ci/components/)
 
-Her bruger vi en community-skabt CI/CD-komponent til OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Her bruger vi en community-skabt CI/CD-komponent til Weapon — [nagyv/gitlab-weapon](https://gitlab.com/nagyv/gitlab-weapon).
 
 ---
 
 ### Funktioner
 
-- **Brug brugerdefineret konfiguration pr. job**: Konfigurer OpenCode med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. OpenCode påkald.
-- **Minimal opsætning**: CI-komponenten sætter OpenCode op i baggrunden, du behøver kun at oprette OpenCode-konfigurationen og den indledende prompt.
+- **Brug brugerdefineret konfiguration pr. job**: Konfigurer Weapon med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. Weapon påkald.
+- **Minimal opsætning**: CI-komponenten sætter Weapon op i baggrunden, du behøver kun at oprette Weapon-konfigurationen og den indledende prompt.
 - **Fleksibel**: CI-komponenten understøtter flere input til at tilpasse dens adfærd
 
 ---
 
 ### Opsætning
 
-1. Gem din OpenCode-autentificering JSON som en filtype CI-miljøvariabel under **Indstillinger** > **CI/CD** > **Variabler**. Sørg for at markere dem som "Maskede og skjulte".
+1. Gem din Weapon-autentificering JSON som en filtype CI-miljøvariabel under **Indstillinger** > **CI/CD** > **Variabler**. Sørg for at markere dem som "Maskede og skjulte".
 2. Tilføj følgende til din `.gitlab-ci.yml` fil.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-weapon/weapon@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/weapon-config
+         auth_json: $WEAPON_AUTH_JSON # The variable name for your Weapon authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-For flere input og use cases [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) for denne komponent.
+For flere input og use cases [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-weapon) for denne komponent.
 
 ---
 
 ## GitLab Duo
 
-OpenCode integreres med din GitLab-arbejdsgang.
-Nævn `@opencode` i en kommentar, og OpenCode vil udføre opgaver i din GitLab CI-pipeline.
+Weapon integreres med din GitLab-arbejdsgang.
+Nævn `@weapon` i en kommentar, og Weapon vil udføre opgaver i din GitLab CI-pipeline.
 
 ---
 
 ### Funktioner
 
-- **Triageproblemer**: Bed OpenCode om at undersøge et problem og forklare dig det.
-- **Ret og implementer**: Bed OpenCode om at løse et problem eller implementere en funktion.
+- **Triageproblemer**: Bed Weapon om at undersøge et problem og forklare dig det.
+- **Ret og implementer**: Bed Weapon om at løse et problem eller implementere en funktion.
   Det vil oprette en ny branch og rejse en Merge Request med ændringer.
-- **Sikker**: OpenCode kører på dine GitLab-løbere.
+- **Sikker**: Weapon kører på dine GitLab-løbere.
 
 ---
 
 ### Opsætning
 
-OpenCode kører i din GitLab CI/CD pipeline, her er hvad du skal bruge for at konfigurere det:
+Weapon kører i din GitLab CI/CD pipeline, her er hvad du skal bruge for at konfigurere det:
 
 :::tip
 Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for opdaterede instruktioner.
@@ -82,19 +82,19 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing weapon"
+      - npm install --global weapon-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_WEAPON
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating Weapon auth configuration"
+      - mkdir --parents ~/.local/share/weapon
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/weapon/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "weapon@gitlab.com"
+      - git config --global user.name "Weapon"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Weapon"
       - |
-        opencode run "
+        weapon run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_WEAPON
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ Du kan henvise til [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_age
 
 ### Eksempler
 
-Her er nogle eksempler på, hvordan du kan bruge OpenCode i GitLab.
+Her er nogle eksempler på, hvordan du kan bruge Weapon i GitLab.
 
 :::tip
-Du kan konfigurere til at bruge en anden udløsersætning end `@opencode`.
+Du kan konfigurere til at bruge en anden udløsersætning end `@weapon`.
 :::
 
 - **Forklar et problem**
@@ -169,27 +169,27 @@ Du kan konfigurere til at bruge en anden udløsersætning end `@opencode`.
   Tilføj denne kommentar i et GitLab-problem.
 
   ```
-  @opencode explain this issue
+  @weapon explain this issue
   ```
 
-  OpenCode vil læse spørgsmålet og svare med en klar forklaring.
+  Weapon vil læse spørgsmålet og svare med en klar forklaring.
 
 - **Løs et problem**
 
   I et GitLab-nummer skal du sige:
 
   ```
-  @opencode fix this
+  @weapon fix this
   ```
 
-  OpenCode vil oprette en ny branch, implementere ændringer og åbne en Merge Request med ændringer.
+  Weapon vil oprette en ny branch, implementere ændringer og åbne en Merge Request med ændringer.
 
 - **Gennemgå Merge Requests**
 
   Efterlad følgende kommentar til en GitLab-Merge Request.
 
   ```
-  @opencode review this merge request
+  @weapon review this merge request
   ```
 
-  OpenCode vil gennemgå din Merge Request og give feedback.
+  Weapon vil gennemgå din Merge Request og give feedback.

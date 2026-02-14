@@ -1,0 +1,124 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./Event.installation.updated.json"
+    },
+    {
+      "$ref": "./Event.installation.update-available.json"
+    },
+    {
+      "$ref": "./Event.project.updated.json"
+    },
+    {
+      "$ref": "./Event.server.instance.disposed.json"
+    },
+    {
+      "$ref": "./Event.server.connected.json"
+    },
+    {
+      "$ref": "./Event.global.disposed.json"
+    },
+    {
+      "$ref": "./Event.lsp.client.diagnostics.json"
+    },
+    {
+      "$ref": "./Event.lsp.updated.json"
+    },
+    {
+      "$ref": "./Event.file.edited.json"
+    },
+    {
+      "$ref": "./Event.message.updated.json"
+    },
+    {
+      "$ref": "./Event.message.removed.json"
+    },
+    {
+      "$ref": "./Event.message.part.updated.json"
+    },
+    {
+      "$ref": "./Event.message.part.removed.json"
+    },
+    {
+      "$ref": "./Event.permission.asked.json"
+    },
+    {
+      "$ref": "./Event.permission.replied.json"
+    },
+    {
+      "$ref": "./Event.session.status.json"
+    },
+    {
+      "$ref": "./Event.session.idle.json"
+    },
+    {
+      "$ref": "./Event.question.asked.json"
+    },
+    {
+      "$ref": "./Event.question.replied.json"
+    },
+    {
+      "$ref": "./Event.question.rejected.json"
+    },
+    {
+      "$ref": "./Event.session.compacted.json"
+    },
+    {
+      "$ref": "./Event.file.watcher.updated.json"
+    },
+    {
+      "$ref": "./Event.todo.updated.json"
+    },
+    {
+      "$ref": "./Event.tui.prompt.append.json"
+    },
+    {
+      "$ref": "./Event.tui.command.execute.json"
+    },
+    {
+      "$ref": "./Event.tui.toast.show.json"
+    },
+    {
+      "$ref": "./Event.tui.session.select.json"
+    },
+    {
+      "$ref": "./Event.command.executed.json"
+    },
+    {
+      "$ref": "./Event.session.created.json"
+    },
+    {
+      "$ref": "./Event.session.updated.json"
+    },
+    {
+      "$ref": "./Event.session.deleted.json"
+    },
+    {
+      "$ref": "./Event.session.diff.json"
+    },
+    {
+      "$ref": "./Event.session.error.json"
+    },
+    {
+      "$ref": "./Event.vcs.branch.updated.json"
+    },
+    {
+      "$ref": "./Event.pty.created.json"
+    },
+    {
+      "$ref": "./Event.pty.updated.json"
+    },
+    {
+      "$ref": "./Event.pty.exited.json"
+    },
+    {
+      "$ref": "./Event.pty.deleted.json"
+    },
+    {
+      "$ref": "./Event.worktree.ready.json"
+    },
+    {
+      "$ref": "./Event.worktree.failed.json"
+    }
+  ]
+}

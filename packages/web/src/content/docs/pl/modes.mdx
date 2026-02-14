@@ -4,14 +4,14 @@ description: Różne tryby dla różnych zastosowań.
 ---
 
 :::caution
-Tryby są teraz konfigurowane za pomocą opcji `agent` w konfiguracji opencode.
+Tryby są teraz konfigurowane za pomocą opcji `agent` w konfiguracji weapon.
 Opcja `mode` jest obecnie przestarzała. [Dowiedz się więcej](/docs/agents).
 :::
 
 Tryb udostępniania możliwości stosowania, narzędzie i podpowiedzi do różnych zastosowań.
 
 Posiadanie dwa tryby: **Build** i **Plan**. Można dostosować
-te lub skonfiguruj własne za pomocą konfiguracji opencode.
+te lub skonfiguruj własne za pomocą konfiguracji weapon.
 
 Można przełączać się między trybami podczas sesji lub konfigurować je w pliku konfiguracyjnym.
 
@@ -19,7 +19,7 @@ Można przełączać się między trybami podczas sesji lub konfigurować je w p
 
 ## Wbudowane
 
-opencode ma dwa puste tryby.
+weapon ma dwa puste tryby.
 
 ---
 
@@ -34,7 +34,7 @@ Build jest trybem **domyślnym** z dostępnymi narzędziami. Jest to standardowy
 Tryb ograniczony do analizy. W urządzeniu planowym narzędzia są przydatne:
 
 - `write` - Nie można stworzyć nowych plików
-- `edit` — Nie można zastosować naruszenia plików, z naruszeniem praw autorskich w `.opencode/plans/*.md` w celu uszczegółowienia samego planu
+- `edit` — Nie można zastosować naruszenia plików, z naruszeniem praw autorskich w `.weapon/plans/*.md` w celu uszczegółowienia samego planu
 - `patch` - Nie można zastosować poprawek
 - `bash` - Nie można wykonać poleceń shell
 
@@ -56,11 +56,11 @@ Możliwość dostosowania alternatywnego trybu lub konfiguracji poprzez własną
 
 ### Konfiguracja JSON
 
-Skonfiguruj tryb w pliku konfiguracyjnym `opencode.json`:
+Skonfiguruj tryb w pliku konfiguracyjnym `weapon.json`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ Skonfiguruj tryb w pliku konfiguracyjnym `opencode.json`:
 
 Można także definiować tryby za pomocą plików przecen. Trzymaj je w:
 
-- Globalnie: `~/.config/opencode/modes/`
-- Projekt: `.opencode/modes/`
+- Globalnie: `~/.config/weapon/modes/`
+- Projekt: `.weapon/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/weapon/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Przyjrzyjmy się szczegółowo tym opcjom konfiguracji.
 
 Zastosowanie konstrukcji `model`, aby zastosować domyślny model dla tego trybu. Przydatne przy wykorzystaniu różnych modeli dostępnych w różnych zadaniach. Na przykład zastosowanie modelu, skuteczniejsze wykonanie modelu.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Zastosowanie konstrukcji `model`, aby zastosować domyślny model dla tego trybu
 
 Kontroluj losowość i kreatywność reakcji AI za pomocą konstrukcji `temperature`. Niższe wartości, że odpowiedzi są bardziej skupione i deterministyczne, podczas gdy najwyższa wartość jest innowacyjna i złożona.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Wartości temperatury zazwyczaj wahają się od 0,0 do 1,0:
 - **0,3-0,5**: Zrównoważona odpowiedź z chwilą powstania, dobre do ogólnych zadań rozwojowych
 - **0,6–1,0**: Bardziej kreatywne i odpowiedzi, rozstrzygnięte podczas burzy mózgów i eksploracji
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Wartości temperatury zazwyczaj wahają się od 0,0 do 1,0:
 }
 ```
 
-Jeśli nie ma wpływu na temperaturę, opencode stosuje się narzędzia badawcze dla modelu (zwykle 0 dla największych modeli, 0,55 dla modeli Qwen).
+Jeśli nie ma wpływu na temperaturę, weapon stosuje się narzędzia badawcze dla modelu (zwykle 0 dla największych modeli, 0,55 dla modeli Qwen).
 
 ---
 
@@ -181,7 +181,7 @@ Jeśli nie ma wpływu na temperaturę, opencode stosuje się narzędzia badawcze
 
 niestandardowy plik podpowiedzi systemowych dla tej procedury za pomocą konfiguracji `prompt`. Plik informacyjny powinien zawierać instrukcje dotyczące przeznaczenia trybu.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ niestandardowy plik podpowiedzi systemowych dla tej procedury za pomocą konfigu
 ```
 
 Ścieżka ta zależy od miejsca, w którym znajduje się plik konfiguracyjny. Więc to dla działa
-zarówno globalna opencode, jak i specjalna dla projektu.
+zarówno globalna weapon, jak i specjalna dla projektu.
 
 ---
 
@@ -247,9 +247,9 @@ Możesz stworzyć własny tryb prywatny, dodając je do konfiguracji. Oto zastos
 
 ### Korzystanie z konfiguracji JSON
 
-```json title="opencode.json" {4-14}
+```json title="weapon.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -268,9 +268,9 @@ Możesz stworzyć własny tryb prywatny, dodając je do konfiguracji. Oto zastos
 
 ### Korzystanie z plików Markdown
 
-Utwórz pliki trybów w `.opencode/modes/` dla trybów zapisanych dla projektu lub `~/.config/opencode/modes/` dla trybów globalnych:
+Utwórz pliki trybów w `.weapon/modes/` dla trybów zapisanych dla projektu lub `~/.config/weapon/modes/` dla trybów globalnych:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".weapon/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/weapon/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

@@ -3,7 +3,7 @@ title: 權限
 description: 控制哪些操作需要批准才能執行。
 ---
 
-opencode 使用 `permission` 配置來決定給定的操作是否應自動執行、提示您或被阻止。
+weapon 使用 `permission` 配置來決定給定的操作是否應自動執行、提示您或被阻止。
 
 從 `v1.1.1` 開始，舊版 `tools` 布林配置已被棄用，並已合併到 `permission` 中。仍支援舊的 `tools` 配置以實現向後相容性。
 
@@ -23,9 +23,9 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 您可以全局設定權限（使用 `*`），並覆寫特定工具。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 您還可以一次設定所有權限：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 對於大多數權限，您可以使用物件根據工具輸入應用不同的操作。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 ### 外部目錄
 
-使用 `external_directory` 允許工具呼叫存取啟動 opencode 的工作目錄之外的路徑。這適用於任何採用路徑作為輸入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 和許多 `bash` 指令）。
+使用 `external_directory` 允許工具呼叫存取啟動 weapon 的工作目錄之外的路徑。這適用於任何採用路徑作為輸入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 和許多 `bash` 指令）。
 
 主目錄展開（如 `~/...`）僅影響模式的編寫方式。它不會使外部路徑成為當前工作空間的一部分，因此仍必須透過 `external_directory` 允許工作目錄之外的路徑。
 
 例如，這允許存取 `~/projects/personal/` 下的所有內容：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 此處允許的任何目錄都會繼承與當前工作空間相同的預設值。自 [`read` 預設為 `allow`](#defaults) 起，也允許讀取 `external_directory` 下的項目，除非被覆寫。當工具應限制在這些路徑中時添加顯式規則，例如在保留讀取的同時阻止編輯：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ opencode 使用 `permission` 配置來決定給定的操作是否應自動執行
 
 ## 可用權限
 
-opencode 權限由工具名稱和一些安全防護措施決定：
+weapon 權限由工具名稱和一些安全防護措施決定：
 
 - `read` — 讀取檔案（與檔案路徑匹配）
 - `edit` — 所有檔案修改（涵蓋 `edit`、`write`、`patch`、`multiedit`）
@@ -148,13 +148,13 @@ opencode 權限由工具名稱和一些安全防護措施決定：
 
 ## 預設值
 
-如果您不指定任何內容，opencode 將從許可的預設值開始：
+如果您不指定任何內容，weapon 將從許可的預設值開始：
 
 - 大多數權限預設為 `"allow"`。
 - `doom_loop` 和 `external_directory` 預設為 `"ask"`。
 - `read` 是 `"allow"`，但 `.env` 檔案預設被拒絕：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ opencode 權限由工具名稱和一些安全防護措施決定：
 
 ## 「問」(Ask) 的作用是什麼
 
-當 opencode 提示批准時，UI 會提供三種結果：
+當 weapon 提示批准時，UI 會提供三種結果：
 
 - `once` — 僅批准此請求
-- `always` — 批准與建議模式匹配的未來請求（對於當前 opencode 工作階段的其餘部分）
+- `always` — 批准與建議模式匹配的未來請求（對於當前 weapon 工作階段的其餘部分）
 - `reject` — 拒絕請求
 
 `always` 將批准的模式集由該工具提供（例如，bash 批准通常將安全指令前綴（如 `git status*`）列入白名單）。
@@ -189,9 +189,9 @@ opencode 權限由工具名稱和一些安全防護措施決定：
 有關更詳細的模式匹配範例，請參閱上面的 [精細規則（物件語法）](#granular-rules-object-syntax) 部分。
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ opencode 權限由工具名稱和一些安全防護措施決定：
 
 您還可以在 Markdown 中配置代理權限：
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "permission.replied"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "requestID": {
+          "type": "string"
+        },
+        "reply": {
+          "type": "string",
+          "enum": [
+            "once",
+            "always",
+            "reject"
+          ]
+        }
+      },
+      "required": [
+        "sessionID",
+        "requestID",
+        "reply"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

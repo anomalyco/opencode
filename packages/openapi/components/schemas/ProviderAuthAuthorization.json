@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "method": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "type": "string",
+          "const": "code"
+        }
+      ]
+    },
+    "instructions": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "url",
+    "method",
+    "instructions"
+  ]
+}

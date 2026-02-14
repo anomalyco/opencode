@@ -1,0 +1,55 @@
+{
+  "post": {
+    "operationId": "worktree.reset",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Reset worktree",
+    "description": "Reset a worktree branch to the primary default branch.",
+    "responses": {
+      "200": {
+        "description": "Worktree reset",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "../components/schemas/WorktreeResetInput.json"
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/experimental_worktree_reset/post.js"
+        }
+      }
+    ]
+  }
+}

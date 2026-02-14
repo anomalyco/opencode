@@ -1,0 +1,281 @@
+{
+  "type": "object",
+  "properties": {
+    "api": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "id": {
+      "type": "string"
+    },
+    "npm": {
+      "type": "string"
+    },
+    "models": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "release_date": {
+            "type": "string"
+          },
+          "attachment": {
+            "type": "boolean"
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "temperature": {
+            "type": "boolean"
+          },
+          "tool_call": {
+            "type": "boolean"
+          },
+          "interleaved": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "const": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "reasoning_content",
+                      "reasoning_details"
+                    ]
+                  }
+                },
+                "required": [
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "cost": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "cache_read": {
+                "type": "number"
+              },
+              "cache_write": {
+                "type": "number"
+              },
+              "context_over_200k": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "number"
+                  },
+                  "output": {
+                    "type": "number"
+                  },
+                  "cache_read": {
+                    "type": "number"
+                  },
+                  "cache_write": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "input",
+                  "output"
+                ]
+              }
+            },
+            "required": [
+              "input",
+              "output"
+            ]
+          },
+          "limit": {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "number"
+              },
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "context",
+              "output"
+            ]
+          },
+          "modalities": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "audio",
+                    "image",
+                    "video",
+                    "pdf"
+                  ]
+                }
+              },
+              "output": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "audio",
+                    "image",
+                    "video",
+                    "pdf"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "input",
+              "output"
+            ]
+          },
+          "experimental": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "alpha",
+              "beta",
+              "deprecated"
+            ]
+          },
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "provider": {
+            "type": "object",
+            "properties": {
+              "npm": {
+                "type": "string"
+              },
+              "api": {
+                "type": "string"
+              }
+            }
+          },
+          "variants": {
+            "description": "Variant-specific configuration",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "disabled": {
+                  "description": "Disable this variant for the model",
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": {}
+            }
+          }
+        }
+      }
+    },
+    "whitelist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blacklist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "enterpriseUrl": {
+          "description": "GitHub Enterprise URL for copilot authentication",
+          "type": "string"
+        },
+        "setCacheKey": {
+          "description": "Enable promptCacheKey for this provider (default false)",
+          "type": "boolean"
+        },
+        "timeout": {
+          "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+          "anyOf": [
+            {
+              "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "description": "Disable timeout for this provider entirely.",
+              "type": "boolean",
+              "const": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": {}
+    }
+  },
+  "additionalProperties": false
+}

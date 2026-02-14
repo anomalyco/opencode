@@ -3,7 +3,7 @@ title: "Habilidades del agente"
 description: "Defina el comportamiento reutilizable mediante definiciones de SKILL.md"
 ---
 
-Las habilidades del agente permiten a OpenCode descubrir instrucciones reutilizables de su repositorio o directorio de inicio.
+Las habilidades del agente permiten a Weapon descubrir instrucciones reutilizables de su repositorio o directorio de inicio.
 Las habilidades se cargan bajo demanda a través de la herramienta nativa `skill`: los agentes ven las habilidades disponibles y pueden cargar el contenido completo cuando sea necesario.
 
 ---
@@ -11,10 +11,10 @@ Las habilidades se cargan bajo demanda a través de la herramienta nativa `skill
 ## Colocar archivos
 
 Cree una carpeta por nombre de habilidad y coloque un `SKILL.md` dentro de ella.
-OpenCode busca estas ubicaciones:
+Weapon busca estas ubicaciones:
 
-- Configuración del proyecto: `.opencode/skills/<name>/SKILL.md`
-- Configuración global: `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuración del proyecto: `.weapon/skills/<name>/SKILL.md`
+- Configuración global: `~/.config/weapon/skills/<name>/SKILL.md`
 - Compatible con Proyecto Claude: `.claude/skills/<name>/SKILL.md`
 - Compatible con Claude global: `~/.claude/skills/<name>/SKILL.md`
 - Compatible con agente de proyecto: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode busca estas ubicaciones:
 
 ## Entender el descubrimiento
 
-Para las rutas locales del proyecto, OpenCode sube desde su directorio de trabajo actual hasta llegar al árbol de trabajo de git.
-Carga cualquier `skills/*/SKILL.md` coincidente en `.opencode/` y cualquier `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` coincidente a lo largo del camino.
+Para las rutas locales del proyecto, Weapon sube desde su directorio de trabajo actual hasta llegar al árbol de trabajo de git.
+Carga cualquier `skills/*/SKILL.md` coincidente en `.weapon/` y cualquier `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` coincidente a lo largo del camino.
 
-Las definiciones globales también se cargan desde `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` y `~/.agents/skills/*/SKILL.md`.
+Las definiciones globales también se cargan desde `~/.config/weapon/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` y `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Manténgalo lo suficientemente específico para que el agente elija correctament
 
 ## Usar un ejemplo
 
-Crea `.opencode/skills/git-release/SKILL.md` así:
+Crea `.weapon/skills/git-release/SKILL.md` así:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Reconocer la descripción de la herramienta
 
-OpenCode enumera las habilidades disponibles en la descripción de la herramienta `skill`.
+Weapon enumera las habilidades disponibles en la descripción de la herramienta `skill`.
 Cada entrada incluye el nombre y la descripción de la habilidad:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Configurar permisos
 
-Controle a qué agentes de habilidades pueden acceder utilizando permisos basados ​​en patrones en `opencode.json`:
+Controle a qué agentes de habilidades pueden acceder utilizando permisos basados ​​en patrones en `weapon.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Para agentes integrados** (en `opencode.json`):
+**Para agentes integrados** (en `weapon.json`):
 
 ```json
 {

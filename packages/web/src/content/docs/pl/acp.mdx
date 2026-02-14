@@ -1,11 +1,11 @@
 ---
 title: ACP
-description: Używanie OpenCode z protokołem Agent Client Protocol (ACP).
+description: Używanie Weapon z protokołem Agent Client Protocol (ACP).
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode obsługuje [Agent Client Protocol](https://agentclientprotocol.com) (ACP), który umożliwia korzystanie z OpenCode bezpośrednio w edytorach i środowiskach IDE.
+Weapon obsługuje [Agent Client Protocol](https://agentclientprotocol.com) (ACP), który umożliwia korzystanie z Weapon bezpośrednio w edytorach i środowiskach IDE.
 
 :::tip
 Listę edytorów i narzędzi obsługujących ACP znajdziesz w [raporcie postępu ACP](https://zed.dev/blog/acp-progress-report#available-now).
@@ -17,9 +17,9 @@ ACP to otwarty standard, który ujednolica komunikację między edytorami kodu a
 
 ## Konfiguracja
 
-Aby używać OpenCode przez ACP, skonfiguruj swój edytor tak, aby uruchamiał polecenie `opencode acp`.
+Aby używać Weapon przez ACP, skonfiguruj swój edytor tak, aby uruchamiał polecenie `weapon acp`.
 
-Uruchamia to OpenCode jako podproces zgodny z ACP, który komunikuje się z edytorem za pomocą JSON-RPC przez stdio.
+Uruchamia to Weapon jako podproces zgodny z ACP, który komunikuje się z edytorem za pomocą JSON-RPC przez stdio.
 
 Poniżej znajdują się przykłady dla edytorów obsługujących ACP.
 
@@ -32,8 +32,8 @@ Dodaj do konfiguracji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "Weapon": {
+      "command": "weapon",
       "args": ["acp"]
     }
   }
@@ -53,9 +53,9 @@ Możesz także przypisać skrót klawiszowy, edytując `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Weapon",
               "command": {
-                "command": "opencode",
+                "command": "weapon",
                 "args": ["acp"]
               }
             }
@@ -76,15 +76,15 @@ Dodaj do swojego [JetBrains IDE](https://www.jetbrains.com/) plik `acp.json` zgo
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Weapon": {
+      "command": "/absolute/path/bin/weapon",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Następnie wybierz „OpenCode” w selektorze agentów AI Chat.
+Następnie wybierz „Weapon” w selektorze agentów AI Chat.
 
 ---
 
@@ -95,8 +95,8 @@ Dodaj do konfiguracji [Avante.nvim](https://github.com/yetone/avante.nvim):
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" }
     }
   }
@@ -108,11 +108,11 @@ Jeśli potrzebujesz przekazać klucz API:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        WEAPON_API_KEY = os.getenv("WEAPON_API_KEY")
       }
     }
   }
@@ -123,14 +123,14 @@ Jeśli potrzebujesz przekazać klucz API:
 
 ### CodeCompanion.nvim
 
-Aby używać OpenCode jako agenta ACP w [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodaj następującą konfigurację do Neovim:
+Aby używać Weapon jako agenta ACP w [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodaj następującą konfigurację do Neovim:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "weapon",
         model = "claude-sonnet-4",
       },
     },
@@ -138,13 +138,13 @@ require("codecompanion").setup({
 })
 ```
 
-Ta konfiguracja sprawia, że CodeCompanion używa OpenCode jako agenta ACP do czatu.
+Ta konfiguracja sprawia, że CodeCompanion używa Weapon jako agenta ACP do czatu.
 
-Jeśli wymagany jest `OPENCODE_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne środowiskowe](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
+Jeśli wymagany jest `WEAPON_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne środowiskowe](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
 
 ## Wsparcie
 
-OpenCode działa przez ACP tak samo, jak w terminalu. Obsługiwane są wszystkie główne funkcje:
+Weapon działa przez ACP tak samo, jak w terminalu. Obsługiwane są wszystkie główne funkcje:
 
 :::note
 Niektóre polecenia z ukośnikiem, takie jak `/undo` i `/redo`, nie są obecnie obsługiwane przez ACP.
@@ -152,7 +152,7 @@ Niektóre polecenia z ukośnikiem, takie jak `/undo` i `/redo`, nie są obecnie 
 
 - Narzędzia wbudowane (operacje na plikach, terminal itp.)
 - Niestandardowe narzędzia i polecenia z ukośnikiem
-- Serwery MCP zdefiniowane w konfiguracji OpenCode
+- Serwery MCP zdefiniowane w konfiguracji Weapon
 - Zasady projektu z `AGENTS.md`
 - Niestandardowe formatery i lintery
 - Agenci systemowi i uprawnienia

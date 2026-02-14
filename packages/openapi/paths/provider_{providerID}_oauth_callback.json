@@ -1,0 +1,77 @@
+{
+  "post": {
+    "operationId": "provider.oauth.callback",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "providerID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Provider ID"
+      }
+    ],
+    "summary": "OAuth callback",
+    "description": "Handle the OAuth callback from a provider after user authorization.",
+    "responses": {
+      "200": {
+        "description": "OAuth callback processed successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "description": "Auth method index",
+                "type": "number"
+              },
+              "code": {
+                "description": "OAuth authorization code",
+                "type": "string"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/provider_{providerID}_oauth_callback/post.js"
+        }
+      }
+    ]
+  }
+}

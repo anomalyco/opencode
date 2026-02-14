@@ -1,9 +1,9 @@
 ---
 title: Пользовательские инструменты
-description: Создавайте инструменты, которые LLM может вызывать в opencode.
+description: Создавайте инструменты, которые LLM может вызывать в weapon.
 ---
 
-Пользовательские инструменты — это создаваемые вами функции, которые LLM может вызывать во время разговоров. Они работают вместе со [встроенными инструментами ](/docs/tools) opencode, такими как `read`, `write` и `bash`.
+Пользовательские инструменты — это создаваемые вами функции, которые LLM может вызывать во время разговоров. Они работают вместе со [встроенными инструментами ](/docs/tools) weapon, такими как `read`, `write` и `bash`.
 
 ---
 
@@ -17,8 +17,8 @@ description: Создавайте инструменты, которые LLM м�
 
 Их можно определить:
 
-- Локально, поместив их в каталог `.opencode/tools/` вашего проекта.
-- Или глобально, поместив их в `~/.config/opencode/tools/`.
+- Локально, поместив их в каталог `.weapon/tools/` вашего проекта.
+- Или глобально, поместив их в `~/.config/weapon/tools/`.
 
 ---
 
@@ -26,8 +26,8 @@ description: Создавайте инструменты, которые LLM м�
 
 Самый простой способ создания инструментов — использовать помощник `tool()`, который обеспечивает безопасность типов и проверку.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 Вы также можете экспортировать несколько инструментов из одного файла. Каждый экспорт становится **отдельным инструментом** с именем **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 Инструменты получают контекст текущего сеанса:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ export default tool({
 
 Сначала создайте инструмент как скрипт Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 Затем создайте определение инструмента, которое его вызывает:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

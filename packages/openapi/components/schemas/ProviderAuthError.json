@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "ProviderAuthError"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "providerID": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerID",
+        "message"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "data"
+  ]
+}

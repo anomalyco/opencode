@@ -1,0 +1,39 @@
+{
+  "get": {
+    "operationId": "app.agents",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "List agents",
+    "description": "Get a list of all available AI agents in the OpenCode system.",
+    "responses": {
+      "200": {
+        "description": "List of agents",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/Agent.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/agent/get.js"
+        }
+      }
+    ]
+  }
+}

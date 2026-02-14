@@ -1,0 +1,6 @@
+{
+  "type": "array",
+  "items": {
+    "$ref": "./PermissionRule.json"
+  }
+}

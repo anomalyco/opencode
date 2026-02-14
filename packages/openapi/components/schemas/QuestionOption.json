@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "label": {
+      "description": "Display text (1-5 words, concise)",
+      "type": "string"
+    },
+    "description": {
+      "description": "Explanation of choice",
+      "type": "string"
+    }
+  },
+  "required": [
+    "label",
+    "description"
+  ]
+}

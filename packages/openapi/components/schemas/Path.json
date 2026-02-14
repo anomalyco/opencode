@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "home": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "config": {
+      "type": "string"
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "home",
+    "state",
+    "config",
+    "worktree",
+    "directory"
+  ]
+}

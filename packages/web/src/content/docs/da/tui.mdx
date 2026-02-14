@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Brug af OpenCode-terminalbrugergrænsefladen.
+description: Brug af Weapon-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
+Weapon giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-At køre OpenCode starter TUI for den nuværende mappe.
+At køre Weapon starter TUI for den nuværende mappe.
 
 ```bash
-opencode
+weapon
 ```
 
 Eller du kan starte den for en bestemt arbejdsmappe.
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 Når du er i TUI, kan du spørge den med en besked.
@@ -57,7 +57,7 @@ Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
+Når du bruger Weapon TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
+Tilføj en udbyder til Weapon. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Skift visning af værktøjsudførelsesdetaljer.
 
 ### exit
 
-Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+Afslut Weapon. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ Nogle editorer kræver kommandolinjeargumenter for at køre i blokeringstilstand
 
 ## Konfigurer
 
-Du kan tilpasse TUI-adfærden gennem OpenCode-konfigurationsfilen.
+Du kan tilpasse TUI-adfærden gennem Weapon-konfigurationsfilen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

@@ -3,7 +3,7 @@ title: "Agent Skills"
 description: "Define reusable behavior via SKILL.md definitions"
 ---
 
-Agent skills let OpenCode discover reusable instructions from your repo or home directory.
+Agent skills let Weapon discover reusable instructions from your repo or home directory.
 Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
 
 ---
@@ -11,10 +11,10 @@ Skills are loaded on-demand via the native `skill` tool—agents see available s
 ## Place files
 
 Create one folder per skill name and put a `SKILL.md` inside it.
-OpenCode searches these locations:
+Weapon searches these locations:
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.weapon/skills/<name>/SKILL.md`
+- Global config: `~/.config/weapon/skills/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 - Project agent-compatible: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode searches these locations:
 
 ## Understand discovery
 
-For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+For project-local paths, Weapon walks up from your current working directory until it reaches the git worktree.
+It loads any matching `skills/*/SKILL.md` in `.weapon/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
+Global definitions are also loaded from `~/.config/weapon/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Keep it specific enough for the agent to choose correctly.
 
 ## Use an example
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Create `.weapon/skills/git-release/SKILL.md` like this:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Recognize tool description
 
-OpenCode lists available skills in the `skill` tool description.
+Weapon lists available skills in the `skill` tool description.
 Each entry includes the skill name and description:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Configure permissions
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Control which skills agents can access using pattern-based permissions in `weapon.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**For built-in agents** (in `weapon.json`):
 
 ```json
 {

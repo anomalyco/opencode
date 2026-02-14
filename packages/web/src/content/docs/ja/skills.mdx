@@ -3,7 +3,7 @@ title: エージェントスキル
 description: SKILL.md 定義による再利用可能な動作の定義
 ---
 
-エージェントスキルにより、OpenCode はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
+エージェントスキルにより、Weapon はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
 スキルはネイティブの `skill` ツールを介してオンデマンドでロードされます。エージェントは利用可能なスキルを確認し、必要に応じて完全なコンテンツをロードできます。
 
 ---
@@ -11,10 +11,10 @@ description: SKILL.md 定義による再利用可能な動作の定義
 ## ファイルの配置
 
 スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
-OpenCode は次の場所を検索します。
+Weapon は次の場所を検索します。
 
-- プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
-- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- プロジェクト設定: `.weapon/skills/<name>/SKILL.md`
+- グローバル設定: `~/.config/weapon/skills/<name>/SKILL.md`
 - プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
 - グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
 - プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode は次の場所を検索します。
 
 ## 検出の仕組み
 
-プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
-途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
+プロジェクトのローカルパスの場合、Weapon は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
+途中で、一致する `skills/*/SKILL.md` を `.weapon/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
 
-グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
+グローバル定義は、`~/.config/weapon/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
 
 ---
 
@@ -73,14 +73,14 @@ OpenCode は次の場所を検索します。
 
 ## 使用例
 
-次のように `.opencode/skills/git-release/SKILL.md` を作成します。
+次のように `.weapon/skills/git-release/SKILL.md` を作成します。
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: weapon
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## ツールの説明認識
 
-OpenCode では、`skill` ツールの説明に利用可能なスキルがリストされています。
+Weapon では、`skill` ツールの説明に利用可能なスキルがリストされています。
 各エントリにはスキル名と説明が含まれます。
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 権限の設定
 
-`opencode.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
+`weapon.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**組み込みエージェントの場合** (`opencode.json` 内):
+**組み込みエージェントの場合** (`weapon.json` 内):
 
 ```json
 {

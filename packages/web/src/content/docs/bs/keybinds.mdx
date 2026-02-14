@@ -3,11 +3,11 @@ title: Prečice tipki
 description: Prilagodite svoje veze tipki.
 ---
 
-OpenCode ima listu veza tipki koje možete prilagoditi preko OpenCode konfiguracije.
+Weapon ima listu veza tipki koje možete prilagoditi preko Weapon konfiguracije.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode ima listu veza tipki koje možete prilagoditi preko OpenCode konfigurac
 
 ## Leader tipka
 
-OpenCode koristi `leader` (vodeću) tipku za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
+Weapon koristi `leader` (vodeću) tipku za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
 Prema zadanim postavkama, `ctrl+x` je vodeća tipka i većina radnji zahtijeva da prvo pritisnete vodeću tipku, a zatim i prečicu. Na primjer, da biste započeli novu sesiju, prvo pritisnite `ctrl+x`, a zatim pritisnite `n`.
 Ne morate koristiti vodeću tipku za svoje veze tipki, ali preporučujemo da to učinite.
 
@@ -117,9 +117,9 @@ Ne morate koristiti vodeću tipku za svoje veze tipki, ali preporučujemo da to 
 
 Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s vrijednošću "none".
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -130,7 +130,7 @@ Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s v
 
 ## Prečice za radnu površinu
 
-Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. One su ugrađene i trenutno se ne mogu konfigurirati putem `opencode.json`.
+Unos prompta aplikacije Weapon za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. One su ugrađene i trenutno se ne mogu konfigurirati putem `weapon.json`.
 
 | Prečica  | Akcija                                           |
 | -------- | ------------------------------------------------ |

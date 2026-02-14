@@ -1,0 +1,47 @@
+{
+  "get": {
+    "operationId": "file.list",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "path",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "List files",
+    "description": "List files and directories in a specified path.",
+    "responses": {
+      "200": {
+        "description": "Files and directories",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/FileNode.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/file/get.js"
+        }
+      }
+    ]
+  }
+}

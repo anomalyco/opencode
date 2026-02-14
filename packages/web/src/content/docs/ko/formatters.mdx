@@ -1,15 +1,15 @@
 ---
 title: 포매터
-description: opencode는 언어별 포매터를 사용합니다.
+description: weapon는 언어별 포매터를 사용합니다.
 ---
 
-opencode는 언어 별 형식을 사용하여 작성 또는 편집 한 후 자동으로 파일을 포맷합니다. 이 생성 된 코드는 프로젝트의 코드 스타일을 따릅니다.
+weapon는 언어 별 형식을 사용하여 작성 또는 편집 한 후 자동으로 파일을 포맷합니다. 이 생성 된 코드는 프로젝트의 코드 스타일을 따릅니다.
 
 ---
 
 ## 내장
 
-opencode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장 형식자와 함께 제공됩니다. 아래는 formatters, 지원된 파일 확장 및 명령 또는 구성 옵션의 목록입니다.
+weapon는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장 형식자와 함께 제공됩니다. 아래는 formatters, 지원된 파일 확장 및 명령 또는 구성 옵션의 목록입니다.
 
 | 포매터               | 확장자                                                                             | 요구 사항                                                                                     |
 | -------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -37,13 +37,13 @@ opencode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                               | `oxfmt` Dependency in `package.json`, [experimental env 변수 플래그](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                | `ormolu` 명령 사용 가능                                                                       |
 
-그래서 프로젝트가 `prettier`를 `package.json`에 가지고 있다면, opencode는 자동으로 그것을 사용합니다.
+그래서 프로젝트가 `prettier`를 `package.json`에 가지고 있다면, weapon는 자동으로 그것을 사용합니다.
 
 ---
 
 ## 작동 방식
 
-opencode가 파일을 작성하거나 편집할 때:
+weapon가 파일을 작성하거나 편집할 때:
 
 1. 모든 활성화된 formatters에 대한 파일 확장을 확인합니다.
 2. 파일에 적절한 형식의 명령을 실행합니다.
@@ -55,11 +55,11 @@ opencode가 파일을 작성하거나 편집할 때:
 
 ## 구성
 
-opencode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 할 수 있습니다.
+weapon config의 `formatter` 섹션을 통해 형식기를 사용자 정의 할 수 있습니다.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {}
 }
 ```
@@ -81,18 +81,18 @@ opencode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 �
 
 모든 포매터를 비활성화하려면 `formatter`를 `false`로 설정하십시오:
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": false
 }
 ```
 
 **특정** 포매터의 경우, `disabled`를 `true`로 설정하십시오:
 
-```json title="opencode.json" {5}
+```json title="weapon.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -107,9 +107,9 @@ opencode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 �
 
 내장 형식자를 무시하거나 명령, 환경 변수 및 파일 확장을 지정하여 새로운 것을 추가 할 수 있습니다.
 
-```json title="opencode.json" {4-14}
+```json title="weapon.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

@@ -3,7 +3,7 @@ title: Tilladelser
 description: Kontroller, hvilke handlinger der kræver godkendelse for at køre.
 ---
 
-OpenCode bruger `permission`-konfigurationen til at bestemme, om en given handling skal køre automatisk, bede dig om eller blokeres.
+Weapon bruger `permission`-konfigurationen til at bestemme, om en given handling skal køre automatisk, bede dig om eller blokeres.
 
 Fra `v1.1.1` er den ældre `tools` booleske konfiguration forældet og er blevet flettet ind i `permission`. Den gamle `tools`-konfiguration er stadig understøttet for bagudkompatibilitet.
 
@@ -23,9 +23,9 @@ Hver tilladelsesregel løses til en af:
 
 Du kan indstille tilladelser globalt (med `*`) og tilsidesætte specifikke værktøjer.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ Du kan indstille tilladelser globalt (med `*`) og tilsidesætte specifikke værk
 
 Du kan også indstille alle tilladelser på én gang:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ Du kan også indstille alle tilladelser på én gang:
 
 For de fleste tilladelser kan du bruge et objekt til at anvende forskellige handlinger baseret på værktøjsinputtet.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ Du kan bruge `~` eller `$HOME` i starten af ​​et mønster til at referere ti
 
 ### Eksterne mapper
 
-Brug `external_directory` til at tillade værktøjsopkald, der berører stier uden for den arbejdsmappe, hvor OpenCode blev startet. Dette gælder for ethvert værktøj, der tager en sti som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash` kommandoer).
+Brug `external_directory` til at tillade værktøjsopkald, der berører stier uden for den arbejdsmappe, hvor Weapon blev startet. Dette gælder for ethvert værktøj, der tager en sti som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash` kommandoer).
 
 Hjemmeudvidelse (som `~/...`) påvirker kun, hvordan et mønster skrives. Det gør ikke en ekstern sti til en del af det aktuelle arbejdsområde, så stier uden for arbejdsbiblioteket skal stadig være tilladt via `external_directory`.
 
 For eksempel giver dette adgang til alt under `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ For eksempel giver dette adgang til alt under `~/projects/personal/`:
 
 Enhver mappe, der er tilladt her, arver de samme standarder som det aktuelle arbejdsområde. Siden [`read` defaults to `allow`](#defaults), er læsninger også tilladt for poster under `external_directory`, medmindre de tilsidesættes. Tilføj eksplicitte regler, når et værktøj skal begrænses i disse stier, såsom blokering af redigeringer, mens læsninger bevares:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ Hold listen fokuseret på betroede stier, og lag ekstra tillad eller afvis regle
 
 ## Tilgængelige tilladelser
 
-OpenCode tilladelser indtastes efter værktøjsnavn plus et par sikkerhedsafskærmninger:
+Weapon tilladelser indtastes efter værktøjsnavn plus et par sikkerhedsafskærmninger:
 
 - `read` — læser en fil (matcher filstien)
 - `edit` — alle filændringer (dækker `edit`, `write`, `patch`, `multiedit`)
@@ -148,13 +148,13 @@ OpenCode tilladelser indtastes efter værktøjsnavn plus et par sikkerhedsafskæ
 
 ## Standarder
 
-Hvis du ikke angiver noget, starter OpenCode fra tilladelige standardindstillinger:
+Hvis du ikke angiver noget, starter Weapon fra tilladelige standardindstillinger:
 
 - De fleste tilladelser er som standard `"allow"`.
 - `doom_loop` og `external_directory` er som standard `"ask"`.
 - `read` er `"allow"`, men `.env` filer nægtes som standard:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ Hvis du ikke angiver noget, starter OpenCode fra tilladelige standardindstilling
 
 ## Hvad "Spørg" gør
 
-Når OpenCode beder om godkendelse, tilbyder brugergrænsefladen tre resultater:
+Når Weapon beder om godkendelse, tilbyder brugergrænsefladen tre resultater:
 
 - `once` — godkend netop denne anmodning
-- `always` — godkend fremtidige anmodninger, der matcher de foreslåede mønstre (for resten af ​​den nuværende OpenCode session)
+- `always` — godkend fremtidige anmodninger, der matcher de foreslåede mønstre (for resten af ​​den nuværende Weapon session)
 - `reject` — afvis anmodningen
 
 Sættet af mønstre, som `always` ville godkende, leveres af værktøjet (f.eks. hvidlister bash-godkendelser typisk et sikkert kommandopræfiks som `git status*`).
@@ -189,9 +189,9 @@ Du kan tilsidesætte tilladelser pr. agent. Agenttilladelser flettes med den glo
 Se afsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ovenfor for mere detaljerede mønstermatchningseksempler.
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ Se afsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ove
 
 Du kan også konfigurere agenttilladelser i Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

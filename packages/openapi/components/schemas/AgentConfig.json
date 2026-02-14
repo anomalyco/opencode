@@ -1,0 +1,94 @@
+{
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string"
+    },
+    "variant": {
+      "description": "Default model variant for this agent (applies only when using the agent's configured model).",
+      "type": "string"
+    },
+    "temperature": {
+      "type": "number"
+    },
+    "top_p": {
+      "type": "number"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "tools": {
+      "description": "@deprecated Use 'permission' field instead",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "disable": {
+      "type": "boolean"
+    },
+    "description": {
+      "description": "Description of when to use the agent",
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "subagent",
+        "primary",
+        "all"
+      ]
+    },
+    "hidden": {
+      "description": "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
+      "type": "boolean"
+    },
+    "options": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "color": {
+      "description": "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "primary",
+            "secondary",
+            "accent",
+            "success",
+            "warning",
+            "error",
+            "info"
+          ]
+        }
+      ]
+    },
+    "steps": {
+      "description": "Maximum number of agentic iterations before forcing text-only response",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "maxSteps": {
+      "description": "@deprecated Use 'steps' field instead.",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "permission": {
+      "$ref": "./PermissionConfig.json"
+    }
+  },
+  "additionalProperties": {}
+}

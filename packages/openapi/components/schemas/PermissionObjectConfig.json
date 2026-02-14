@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "propertyNames": {
+    "type": "string"
+  },
+  "additionalProperties": {
+    "$ref": "./PermissionActionConfig.json"
+  }
+}

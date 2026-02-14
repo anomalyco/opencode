@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "directory"
+  ]
+}

@@ -1,9 +1,9 @@
 ---
 title: ACP 지원
-description: ACP 호환 편집기에서 opencode를 사용하세요.
+description: ACP 호환 편집기에서 weapon를 사용하세요.
 ---
 
-opencode는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
+weapon는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
 
 :::tip
 ACP를 지원하는 편집기 및 도구 목록의 경우 [ACP 진행 보고서](https://zed.dev/blog/acp-progress-report#available-now)를 확인하십시오.
@@ -15,9 +15,9 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려면 편집기를 구성하십시오.
+ACP를 통해 weapon를 사용하려면 `weapon acp` 명령을 실행하려면 편집기를 구성하십시오.
 
-명령은 opencode를 실행하여 JSON-RPC를 통해 편집기와 통신하는 ACP 호환 하위 프로세스로 시작합니다.
+명령은 weapon를 실행하여 JSON-RPC를 통해 편집기와 통신하는 ACP 호환 하위 프로세스로 시작합니다.
 
 아래는 ACP를 지원하는 인기있는 편집기의 예입니다.
 
@@ -30,8 +30,8 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "Weapon": {
+      "command": "weapon",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Weapon",
               "command": {
-                "command": "opencode",
+                "command": "weapon",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "Weapon": {
+      "command": "/absolute/path/bin/weapon",
       "args": ["acp"]
     }
   }
 }
 ```
 
-그것을 열려면 AI Chat Agent selector의 새로운 'opencode' 에이전트를 사용하십시오.
+그것을 열려면 AI Chat Agent selector의 새로운 'weapon' 에이전트를 사용하십시오.
 
 ---
 
@@ -93,8 +93,8 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["weapon"] = {
+      command = "weapon",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        WEAPON_API_KEY = os.getenv("WEAPON_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 #### CodeCompanion.nvim
 
-opencode를 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 ACP 에이전트로 사용하려면 Neovim config에 다음을 추가하십시오.
+weapon를 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 ACP 에이전트로 사용하려면 Neovim config에 다음을 추가하십시오.
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "weapon",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-이 구성은 CodeCompanion을 설정하여 채팅을 위한 ACP 에이전트로 opencode를 사용합니다.
+이 구성은 CodeCompanion을 설정하여 채팅을 위한 ACP 에이전트로 weapon를 사용합니다.
 
-환경 변수 (`OPENCODE_API_KEY`와 같은)를 전달해야하는 경우, CodeCompanion.nvim 문서에서 [Configuring Adapters: Environment variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참조하십시오.
+환경 변수 (`WEAPON_API_KEY`와 같은)를 전달해야하는 경우, CodeCompanion.nvim 문서에서 [Configuring Adapters: Environment variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참조하십시오.
 
 ## 지원 기능
 
-opencode는 터미널과 동일하게 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
+weapon는 터미널과 동일하게 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
 
 :::note
 `/undo` 및 `/redo`와 같은 일부 내장 슬래시 명령은 현재 지원되지 않습니다.
@@ -150,7 +150,7 @@ opencode는 터미널과 동일하게 ACP를 통해 작동합니다. 모든 기�
 
 - 내장 도구 (파일 작업, terminal 명령 등)
 - 사용자 정의 도구 및 슬래시 명령
-- opencode config에서 설정된 MCP 서버
+- weapon config에서 설정된 MCP 서버
 - `AGENTS.md`의 프로젝트 별 규칙
 - 사용자 정의 포맷 및 라이터
 - 에이전트 및 권한 시스템

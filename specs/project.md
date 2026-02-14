@@ -1,6 +1,6 @@
 ## project
 
-The goal is to let a single instance of OpenCode run sessions for multiple projects and different worktrees per project.
+The goal is to let a single instance of Weapon run sessions for multiple projects and different worktrees per project.
 
 ### api
 

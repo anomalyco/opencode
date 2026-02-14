@@ -1,0 +1,10 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./UserMessage.json"
+    },
+    {
+      "$ref": "./AssistantMessage.json"
+    }
+  ]
+}

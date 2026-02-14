@@ -1,19 +1,19 @@
 ---
 title: 伺服器
-description: 透過 HTTP 與 opencode 伺服器互動。
+description: 透過 HTTP 與 weapon 伺服器互動。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 指令執行一個無介面 HTTP 伺服器，該伺服器公開 opencode 客戶端可以使用的 OpenAPI 端點。
+`weapon serve` 指令執行一個無介面 HTTP 伺服器，該伺服器公開 weapon 客戶端可以使用的 OpenAPI 端點。
 
 ---
 
 ### 用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### 選項
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | 監聽連接埠                | `4096`           |
 | `--hostname`    | 監聽的主機名稱            | `127.0.0.1`      |
 | `--mdns`        | 啟用 mDNS 探索            | `false`          |
-| `--mdns-domain` | mDNS 服務的自定義網域名稱 | `opencode.local` |
+| `--mdns-domain` | mDNS 服務的自定義網域名稱 | `weapon.local` |
 | `--cors`        | 允許的其他瀏覽器來源      | `[]`             |
 
 `--cors` 可以多次傳遞：
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 身分驗證
 
-設定 `OPENCODE_SERVER_PASSWORD` 以使用 HTTP 基本身分驗證保護伺服器。使用者名稱預設為 `opencode`，或設定 `OPENCODE_SERVER_USERNAME` 來覆蓋它。這適用於 `opencode serve` 和 `opencode web`。
+設定 `WEAPON_SERVER_PASSWORD` 以使用 HTTP 基本身分驗證保護伺服器。使用者名稱預設為 `weapon`，或設定 `WEAPON_SERVER_USERNAME` 來覆蓋它。這適用於 `weapon serve` 和 `weapon web`。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### 它是如何運作的
 
-當您執行 `opencode` 時，它會啟動 TUI 和伺服器。 TUI 是
+當您執行 `weapon` 時，它會啟動 TUI 和伺服器。 TUI 是
 與伺服器對話的客戶端。伺服器公開 OpenAPI 3.1 規範
 端點。該端點還用於生成 [軟體開發套件](/docs/sdk)。
 
 :::tip
-使用 opencode 伺服器以程式化方式與 opencode 進行互動。
+使用 weapon 伺服器以程式化方式與 weapon 進行互動。
 :::
 
-此架構讓 opencode 支援多個客戶端，並允許您以程式化方式與 opencode 進行互動。
+此架構讓 weapon 支援多個客戶端，並允許您以程式化方式與 weapon 進行互動。
 
-您可以執行 `opencode serve` 來啟動獨立伺服器。如果您有
-opencode TUI 執行，`opencode serve` 將啟動一個新伺服器。
+您可以執行 `weapon serve` 來啟動獨立伺服器。如果您有
+weapon TUI 執行，`weapon serve` 將啟動一個新伺服器。
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI 執行，`opencode serve` 將啟動一個新伺服器。
 
 當您啟動 TUI 時，它會隨機分配連接埠和主機名稱。您可以改為傳入 `--hostname` 和 `--port` [旗標](/docs/cli)。然後使用它連接到其伺服器。
 
-[`/tui`](#tui) 端點可用於透過伺服器驅動 TUI。例如，您可以預填充或執行提示。此設定由 opencode [IDE](/docs/ide) 外掛使用。
+[`/tui`](#tui) 端點可用於透過伺服器驅動 TUI。例如，您可以預填充或執行提示。此設定由 weapon [IDE](/docs/ide) 外掛使用。
 
 ---
 
@@ -83,7 +83,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-opencode 伺服器公開以下 API。
+weapon 伺服器公開以下 API。
 
 ---
 

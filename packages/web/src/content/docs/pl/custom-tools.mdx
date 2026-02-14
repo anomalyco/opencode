@@ -3,7 +3,7 @@ title: Narzędzia specjalistyczne
 description: Twórz narzędzi, które LLM mogą być uruchamiane w otwartym kodzie.
 ---
 
-Narzędzia stosowane do funkcji, z których LLM może korzystać podczas rozmów. Współpracują z [wbudowanymi narzędziami] (./tools) opencode, wtyczka jak `read`, `write` i `bash`.
+Narzędzia stosowane do funkcji, z których LLM może korzystać podczas rozmów. Współpracują z [wbudowanymi narzędziami] (./tools) weapon, wtyczka jak `read`, `write` i `bash`.
 
 ---
 
@@ -17,8 +17,8 @@ Narzędzia tworzą pliki **TypeScript** lub **JavaScript**. Definicja narzędzia
 
 Można je uruchomić:
 
-- Lokalnie, umieszczając je w katalogu `.opencode/tools/` swojego projektu.
-- Lub globalnie, umieszczając je w `~/.config/opencode/tools/`.
+- Lokalnie, umieszczając je w katalogu `.weapon/tools/` swojego projektu.
+- Lub globalnie, umieszczając je w `~/.config/weapon/tools/`.
 
 ---
 
@@ -26,8 +26,8 @@ Można je uruchomić:
 
 Najłatwiejszym sposobem tworzenia narzędzia jest pomocnika `tool()`, który zapewnia bezpieczeństwo i sprawdzanie poprawności.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 Można także eksportować wiele narzędzi z jednego pliku. Każdy eksport staje się **oddzielnym językiem** o nazwie **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 Narzędzia kontekstowe charakterystycznej sesji:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ Napisz swoje narzędzie w języku angielskim. Oto przykład dodania dwóch liczb
 
 Fragment utworu jako skrypt w języku Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 Utwór instrumentalny, który jest ukryty:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

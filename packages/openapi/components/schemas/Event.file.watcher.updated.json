@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "file.watcher.updated"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "event": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "add"
+            },
+            {
+              "type": "string",
+              "const": "change"
+            },
+            {
+              "type": "string",
+              "const": "unlink"
+            }
+          ]
+        }
+      },
+      "required": [
+        "file",
+        "event"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

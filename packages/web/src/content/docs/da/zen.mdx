@@ -1,21 +1,21 @@
 ---
 title: Zen
-description: Udvalgt liste over modeller leveret af OpenCode.
+description: Udvalgt liste over modeller leveret af Weapon.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCode-teamet.
+Weapon Zen er en liste over testede og verificerede modeller leveret af Weapon-teamet.
 
 :::note
-OpenCode Zen er i øjeblikket i beta.
+Weapon Zen er i øjeblikket i beta.
 :::
 
-Zen fungerer som alle andre udbydere i OpenCode. Du logger på OpenCode Zen og får
+Zen fungerer som alle andre udbydere i Weapon. Du logger på Weapon Zen og får
 din API-nøgle. Den er **helt valgfri** og du behøver ikke bruge den for at bruge
-OpenCode.
+Weapon.
 
 ---
 
@@ -26,7 +26,7 @@ fungerer godt som kodeagenter. Derudover er de fleste udbydere
 konfigureret meget forskelligt, så du får meget forskellig ydeevne og kvalitet.
 
 :::tip
-Vi testede en udvalgt gruppe modeller og udbydere, der fungerer godt med OpenCode.
+Vi testede en udvalgt gruppe modeller og udbydere, der fungerer godt med Weapon.
 :::
 
 Så hvis du bruger en model gennem noget som OpenRouter, kan du aldrig være
@@ -41,17 +41,17 @@ For at fikse dette gjorde vi et par ting:
 3. Til sidst benchmarkede vi kombinationen af model/udbyder og kom frem
    til en liste, som vi har lyst til at anbefale.
 
-OpenCode Zen er en AI gateway, der giver dig adgang til disse modeller.
+Weapon Zen er en AI gateway, der giver dig adgang til disse modeller.
 
 ---
 
 ## Sådan fungerer det
 
-OpenCode Zen fungerer som alle andre udbydere i OpenCode.
+Weapon Zen fungerer som alle andre udbydere i Weapon.
 
-1. Du logger på **<a href={console}>OpenCode Zen</a>**, tilføjer faktureringsoplysninger
+1. Du logger på **<a href={console}>Weapon Zen</a>**, tilføjer faktureringsoplysninger
    og kopierer API-nøglen.
-2. Du kører kommandoen `/connect` i TUI, vælger OpenCode Zen og indsætter API-nøglen.
+2. Du kører kommandoen `/connect` i TUI, vælger Weapon Zen og indsætter API-nøglen.
 3. Kør `/models` i TUI for at se listen over modeller, vi anbefaler.
 
 Du opkræves per anmodning, og du kan tilføje kredit til din konto.
@@ -64,39 +64,39 @@ Du kan også få adgang til vores modeller gennem følgende API-endpoints.
 
 | Model               | Model ID           | Endpoint                                           | AI SDK Pakke                |
 | ------------------- | ------------------ | -------------------------------------------------- | --------------------------- |
-| GPT 5.2             | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex       | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1             | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex       | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max   | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini  | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5               | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex         | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano          | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5   | claude-sonnett-4-5 | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4     | claude-sonnett-4   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5    | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5    | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6     | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5     | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1     | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3 Pro        | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| Gemini 3 Flash      | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| MiniMax M2.1        | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Gratis | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7             | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Gratis      | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.6             | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5           | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Gratis    | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Tenker      | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2             | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3-koder 480B    | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Stor sylteagurk     | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GPT 5.2             | gpt-5.2            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex       | gpt-5.2-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1             | gpt-5.1            | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex       | gpt-5.1-codex      | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max   | gpt-5.1-codex-max  | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini  | gpt-5.1-codex-mini | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5               | gpt-5              | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex         | gpt-5-codex        | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano          | gpt-5-nano         | `https://weapon.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5   | claude-sonnett-4-5 | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4     | claude-sonnett-4   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5    | claude-haiku-4-5   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5    | claude-3-5-haiku   | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6     | claude-opus-4-6    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5     | claude-opus-4-5    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1     | claude-opus-4-1    | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro        | gemini-3-pro       | `https://weapon.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash      | gemini-3-flash     | `https://weapon.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1        | minimax-m2.1       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Gratis | minimax-m2.1-free  | `https://weapon.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7             | glm-4.7            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Gratis      | glm-4.7-free       | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6             | glm-4.6            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5           | kimi-k2.5          | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Gratis    | kimi-k2.5-free     | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Tenker      | kimi-k2-thinking   | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2             | kimi-k2            | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3-koder 480B    | qwen3-coder        | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Stor sylteagurk     | big-pickle         | `https://weapon.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-[model-id](/docs/config/#models) i OpenCode-konfigurationen
-bruger formatet `opencode/<model-id>`. For eksempel, for GPT 5.2 Codex, ville du
-bruge `opencode/gpt-5.2-codex` i din konfiguration.
+[model-id](/docs/config/#models) i Weapon-konfigurationen
+bruger formatet `weapon/<model-id>`. For eksempel, for GPT 5.2 Codex, ville du
+bruge `weapon/gpt-5.2-codex` i din konfiguration.
 
 ---
 
@@ -105,7 +105,7 @@ bruge `opencode/gpt-5.2-codex` i din konfiguration.
 Du kan hente hele listen over tilgængelige modeller og deres metadata fra:
 
 ```
-https://opencode.ai/zen/v1/models
+https://weapon.ai/zen/v1/models
 ```
 
 ---
@@ -158,10 +158,10 @@ Kreditkortgebyrer overføres til kostpris (4,4 % + $0,30 per transaktion); vi op
 
 De gratis modeller:
 
-- GLM 4.7 Gratis er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
-- Kimi K2.5 Gratis er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
-- MiniMax M2.1 Gratis er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
-- Stor sylteagurk er en stealth-model som er gratis på OpenCode i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
+- GLM 4.7 Gratis er tilgængelig på Weapon i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
+- Kimi K2.5 Gratis er tilgængelig på Weapon i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
+- MiniMax M2.1 Gratis er tilgængelig på Weapon i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
+- Stor sylteagurk er en stealth-model som er gratis på Weapon i en begrænset periode. Teamet bruger denne tid til at samle feedback og forbedre modellen.
 
 <a href={email}>Kontakt os</a> hvis du har spørgsmål.
 
@@ -246,9 +246,9 @@ og du vil bruge det i stedet for det Zen giver.
 
 ## Mål
 
-Vi oprettede OpenCode Zen for at:
+Vi oprettede Weapon Zen for at:
 
 1. **Benchmarke** de bedste modeller/udbydere for kodningsagenter.
 2. Have adgang til mulighederne for **højeste kvalitet** og ikke nedgradere ydeevnen eller rute til billigere udbydere.
 3. Give videre eventuelle **prisfald** ved at sælge til kostpris; så den eneste mark-up er for at dække vores behandlingsgebyrer.
-4. Have **ingen fastlåsning** ved at lade dig bruge den med en hvilken som helst anden kodeagent. Og lade dig altid bruge en hvilken som helst anden udbyder med OpenCode også.
+4. Have **ingen fastlåsning** ved at lade dig bruge den med en hvilken som helst anden kodeagent. Og lade dig altid bruge en hvilken som helst anden udbyder med Weapon også.

@@ -1,0 +1,36 @@
+{
+  "get": {
+    "operationId": "path.get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get paths",
+    "description": "Retrieve the current working directory and related path information for the OpenCode instance.",
+    "responses": {
+      "200": {
+        "description": "Path",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Path.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/path/get.js"
+        }
+      }
+    ]
+  }
+}

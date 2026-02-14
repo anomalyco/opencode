@@ -1,4 +1,4 @@
-name: opencode
+name: weapon
 
 on:
   issue_comment:
@@ -7,12 +7,12 @@ on:
     types: [created]
 
 jobs:
-  opencode:
+  weapon:
     if: |
       contains(github.event.comment.body, ' /oc') ||
       startsWith(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      contains(github.event.comment.body, ' /weapon') ||
+      startsWith(github.event.comment.body, '/weapon')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write
@@ -25,10 +25,10 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Run opencode
-        uses: anomalyco/opencode/github@latest
+      - name: Run weapon
+        uses: anomalyco/weapon/github@latest
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_PERMISSION: '{"bash": "deny"}'
+          WEAPON_API_KEY: ${{ secrets.WEAPON_API_KEY }}
+          WEAPON_PERMISSION: '{"bash": "deny"}'
         with:
-          model: opencode/claude-opus-4-5
+          model: weapon/claude-opus-4-5

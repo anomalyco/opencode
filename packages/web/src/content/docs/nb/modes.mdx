@@ -4,14 +4,14 @@ description: Ulike moduser for forskjellige brukstilfeller.
 ---
 
 :::caution
-Moduser er nå konfigurert gjennom alternativet `agent` i OpenCode-konfigurasjonen. De
+Moduser er nå konfigurert gjennom alternativet `agent` i Weapon-konfigurasjonen. De
 Alternativet `mode` er nå utdatert. [Finn ut mer](/docs/agents).
 :::
 
-Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
+Moduser i Weapon lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
 
 Den kommer med to innebygde moduser: **bygg** og **plan**. Du kan tilpasse
-disse eller konfigurer din egen gjennom OpenCode-konfigurasjonen.
+disse eller konfigurer din egen gjennom Weapon-konfigurasjonen.
 
 ---
 
@@ -26,7 +26,7 @@ Bygg er **standard**-modusen med alle verktøy aktivert. Dette er standardmoduse
 En begrenset modus designet for planlegging og analyse. I planmodus er følgende verktøy deaktivert som standard:
 
 - `write` - Kan ikke opprette nye filer
-- `edit` - Kan ikke endre eksisterende filer, bortsett fra filer som ligger på `.opencode/plans/*.md` for å detaljere selve planen
+- `edit` - Kan ikke endre eksisterende filer, bortsett fra filer som ligger på `.weapon/plans/*.md` for å detaljere selve planen
 - `patch` - Kan ikke bruke patcher
 - `bash` - Kan ikke utføre shell-kommandoer
 
@@ -38,7 +38,7 @@ Denne modusen er nyttig når du vil at AI skal analysere kode, foreslå endringe
 
 Kontroller tilfeldigheten og kreativiteten til AI-ens svar med `temperature`-konfigurasjonen. Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mode": {
     "plan": {
@@ -57,7 +57,7 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 - **0,3-0,5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
 - **0.6-1.0**: Mer kreative og varierte svar, nyttig for idédugnad og utforskning
 
-Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
+Hvis ingen temperatur er spesifisert, bruker Weapon modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
 
 ---
 

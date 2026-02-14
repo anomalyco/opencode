@@ -3,11 +3,11 @@ title: Tastenkombinationen
 description: Passen Sie Ihre Tastenkombinationen an.
 ---
 
-OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die OpenCode-Konfiguration anpassen können.
+Weapon verfügt über eine Liste von Tastenkombinationen, die Sie über die Weapon-Konfiguration anpassen können.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die Op
 
 ## Leader Key
 
-OpenCode verwendet für die meisten Keybinds einen `leader`-Schlüssel. Dies vermeidet Konflikte in Ihrem Terminal.
+Weapon verwendet für die meisten Keybinds einen `leader`-Schlüssel. Dies vermeidet Konflikte in Ihrem Terminal.
 
 Standardmäßig ist `ctrl+x` der Leader Key und bei den meisten Aktionen müssen Sie zuerst den Leader Key und dann die Tastenkombination drücken. Um beispielsweise eine neue Sitzung zu starten, drücken Sie zuerst `ctrl+x` und dann `n`.
 
@@ -119,9 +119,9 @@ Sie müssen für Ihre Keybinds keinen Leader Key verwenden, wir empfehlen jedoch
 
 Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu Ihrer Konfiguration hinzufügen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „
 
 ## Desktop-Prompt-Shortcuts
 
-Die Eingabeaufforderungseingabe der OpenCode-Desktop-App unterstützt gängige Readline/Emacs-style-Verknüpfungen zum Bearbeiten von Text. Diese sind integriert und derzeit nicht über `opencode.json` konfigurierbar.
+Die Eingabeaufforderungseingabe der Weapon-Desktop-App unterstützt gängige Readline/Emacs-style-Verknüpfungen zum Bearbeiten von Text. Diese sind integriert und derzeit nicht über `weapon.json` konfigurierbar.
 
 | Keybind  | Aktion                                                |
 | -------- | ----------------------------------------------------- |

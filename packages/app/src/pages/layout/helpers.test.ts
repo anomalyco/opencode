@@ -4,24 +4,24 @@ import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspac
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("weapon://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })
 
   test("ignores non-project deep links", () => {
-    expect(parseDeepLink("opencode://other?directory=/tmp/demo")).toBeUndefined()
+    expect(parseDeepLink("weapon://other?directory=/tmp/demo")).toBeUndefined()
     expect(parseDeepLink("https://example.com")).toBeUndefined()
   })
 
   test("ignores malformed deep links safely", () => {
-    expect(() => parseDeepLink("opencode://open-project/%E0%A4%A%")).not.toThrow()
-    expect(parseDeepLink("opencode://open-project/%E0%A4%A%")).toBeUndefined()
+    expect(() => parseDeepLink("weapon://open-project/%E0%A4%A%")).not.toThrow()
+    expect(parseDeepLink("weapon://open-project/%E0%A4%A%")).toBeUndefined()
   })
 
   test("parses links when URL.canParse is unavailable", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
     try {
-      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+      expect(parseDeepLink("weapon://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
     } finally {
       if (original) Object.defineProperty(URL, "canParse", original)
       if (!original) Reflect.deleteProperty(URL, "canParse")
@@ -29,27 +29,27 @@ describe("layout deep links", () => {
   })
 
   test("ignores open-project deep links without directory", () => {
-    expect(parseDeepLink("opencode://open-project")).toBeUndefined()
-    expect(parseDeepLink("opencode://open-project?directory=")).toBeUndefined()
+    expect(parseDeepLink("weapon://open-project")).toBeUndefined()
+    expect(parseDeepLink("weapon://open-project?directory=")).toBeUndefined()
   })
 
   test("collects only valid open-project directories", () => {
     const result = collectOpenProjectDeepLinks([
-      "opencode://open-project?directory=/a",
-      "opencode://other?directory=/b",
-      "opencode://open-project?directory=/c",
+      "weapon://open-project?directory=/a",
+      "weapon://other?directory=/b",
+      "weapon://open-project?directory=/c",
     ])
     expect(result).toEqual(["/a", "/c"])
   })
 
   test("drains global deep links once", () => {
     const target = {
-      __OPENCODE__: {
-        deepLinks: ["opencode://open-project?directory=/a"],
+      __WEAPON__: {
+        deepLinks: ["weapon://open-project?directory=/a"],
       },
-    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
+    } as unknown as Window & { __WEAPON__?: { deepLinks?: string[] } }
 
-    expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
+    expect(drainPendingDeepLinks(target)).toEqual(["weapon://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
   })
 })

@@ -1,9 +1,9 @@
 ---
 title: Programtillegg
-description: Skriv dine egne programtillegg for å utvide opencode.
+description: Skriv dine egne programtillegg for å utvide weapon.
 ---
 
-Plugins lar deg utvide OpenCode ved å koble til ulike hendelser og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til OpenCode.
+Plugins lar deg utvide Weapon ved å koble til ulike hendelser og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til Weapon.
 
 For eksempler, sjekk ut [plugins](/docs/ecosystem#plugins) opprettet av fellesskapet.
 
@@ -19,8 +19,8 @@ Det er to måter å laste inn plugins.
 
 Plasser JavaScript- eller TypeScript-filer i plugin-katalogen.
 
-- `.opencode/plugins/` - Programtillegg på prosjektnivå
-- `~/.config/opencode/plugins/` - Globale plugins
+- `.weapon/plugins/` - Programtillegg på prosjektnivå
+- `~/.config/weapon/plugins/` - Globale plugins
 
 Filer i disse katalogene lastes automatisk ved oppstart.
 
@@ -30,10 +30,10 @@ Filer i disse katalogene lastes automatisk ved oppstart.
 
 Spesifiser npm-pakker i konfigurasjonsfilen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "weapon-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ Bla gjennom tilgjengelige plugins i [økosystemet](/docs/ecosystem#plugins).
 
 ### Hvordan plugins installeres
 
-**npm-plugins** installeres automatisk ved hjelp av Bun ved oppstart. Pakker og deres avhengigheter er bufret i `~/.cache/opencode/node_modules/`.
+**npm-plugins** installeres automatisk ved hjelp av Bun ved oppstart. Pakker og deres avhengigheter er bufret i `~/.cache/weapon/node_modules/`.
 
 **Lokale plugins** lastes direkte fra plugin-katalogen. For å bruke eksterne pakker, må du opprette en `package.json` i konfigurasjonskatalogen din (se [Dependencies](#dependencies)), eller publisere plugin-en til npm og [legg den til i konfigurasjonen din](/docs/config#plugins).
 
@@ -55,10 +55,10 @@ Bla gjennom tilgjengelige plugins i [økosystemet](/docs/ecosystem#plugins).
 
 Plugins lastes inn fra alle kilder og alle kroker kjøres i rekkefølge. Lastrekkefølgen er:
 
-1. Global konfigurasjon (`~/.config/opencode/opencode.json`)
-2. Prosjektkonfigurasjon (`opencode.json`)
-3. Global plugin-katalog (`~/.config/opencode/plugins/`)
-4. Prosjektpluginkatalog (`.opencode/plugins/`)
+1. Global konfigurasjon (`~/.config/weapon/weapon.json`)
+2. Prosjektkonfigurasjon (`weapon.json`)
+3. Global plugin-katalog (`~/.config/weapon/plugins/`)
+4. Prosjektpluginkatalog (`.weapon/plugins/`)
 
 Dupliserte npm-pakker med samme navn og versjon lastes inn én gang. Imidlertid lastes en lokal plugin og en npm plugin med lignende navn begge separat.
 
@@ -75,7 +75,7 @@ funksjoner. Hver funksjon mottar et kontekstobjekt og returnerer et krokobjekt.
 
 Lokale plugins og tilpassede verktøy kan bruke eksterne npm-pakker. Legg til en `package.json` til konfigurasjonskatalogen med avhengighetene du trenger.
 
-```json title=".opencode/package.json"
+```json title=".weapon/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ Lokale plugins og tilpassede verktøy kan bruke eksterne npm-pakker. Legg til en
 }
 ```
 
-OpenCode kjører `bun install` ved oppstart for å installere disse. Programtilleggene og verktøyene dine kan deretter importere dem.
+Weapon kjører `bun install` ved oppstart for å installere disse. Programtilleggene og verktøyene dine kan deretter importere dem.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Grunnleggende struktur
 
-```js title=".opencode/plugins/example.js"
+```js title=".weapon/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ Plugin-funksjonen mottar:
 - `project`: Gjeldende prosjektinformasjon.
 - `directory`: Gjeldende arbeidskatalog.
 - `worktree`: Git-arbeidstrebanen.
-- `client`: En OpenCode SDK klient for samhandling med AI.
+- `client`: En Weapon SDK klient for samhandling med AI.
 - `$`: Buns [shell API](https://bun.com/docs/runtime/shell) for å utføre kommandoer.
 
 ---
@@ -128,7 +128,7 @@ Plugin-funksjonen mottar:
 For TypeScript-plugins kan du importere typer fra plugin-pakken:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ Plugins kan abonnere på hendelser som vist nedenfor i Eksempler-delen. Her er e
 
 ## Eksempler
 
-Her er noen eksempler på plugins du kan bruke for å utvide OpenCode.
+Her er noen eksempler på plugins du kan bruke for å utvide Weapon.
 
 ---
 
@@ -219,13 +219,13 @@ Her er noen eksempler på plugins du kan bruke for å utvide OpenCode.
 
 Send varsler når visse hendelser inntreffer:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".weapon/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "weapon"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Vi bruker `osascript` for å kjøre AppleScript på macOS. Her bruker vi den til å sende varsler.
 
 :::note
-Hvis du bruker OpenCode-skrivebordsappen, kan den sende systemvarsler automatisk når et svar er klart eller når en økt feiler.
+Hvis du bruker Weapon-skrivebordsappen, kan den sende systemvarsler automatisk når et svar er klart eller når en økt feiler.
 :::
 
 ---
 
 ### .env-beskyttelse
 
-Hindre OpenCode fra å lese `.env` filer:
+Hindre Weapon fra å lese `.env` filer:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".weapon/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Injiser miljøvariabler i all shell-utførelse (AI-verktøy og brukerterminaler):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".weapon/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Egendefinerte verktøy
 
-Plugins kan også legge til egendefinerte verktøy til OpenCode:
+Plugins kan også legge til egendefinerte verktøy til Weapon:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@weapon-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool`-hjelperen lager et tilpasset verktøy som OpenCode kan kalle. Den tar en Zod-skjemafunksjon og returnerer en verktøydefinisjon med:
+`tool`-hjelperen lager et tilpasset verktøy som Weapon kan kalle. Den tar en Zod-skjemafunksjon og returnerer en verktøydefinisjon med:
 
 - `description`: Hva verktøyet gjør
 - `args`: Zod-skjema for verktøyets argumenter
   - `execute`: Funksjon som kjører når verktøyet kalles
 
-Dine egendefinerte verktøy vil være tilgjengelige for OpenCode sammen med innebygde verktøy.
+Dine egendefinerte verktøy vil være tilgjengelige for Weapon sammen med innebygde verktøy.
 
 ---
 
@@ -314,7 +314,7 @@ Dine egendefinerte verktøy vil være tilgjengelige for OpenCode sammen med inne
 
 Bruk `client.app.log()` i stedet for `console.log` for strukturert logging:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".weapon/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://opencode.ai/docs/sdk) for detaljer.
+Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://weapon.ai/docs/sdk) for detaljer.
 
 ---
 
@@ -335,8 +335,8 @@ Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://openco
 
 Tilpass konteksten inkludert når en økt komprimeres:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 Du kan også erstatte komprimeringsprompten helt ved å stille inn `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".weapon/plugins/custom-compaction.ts"
+import type { Plugin } from "@weapon-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

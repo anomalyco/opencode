@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "APIError"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "statusCode": {
+          "type": "number"
+        },
+        "isRetryable": {
+          "type": "boolean"
+        },
+        "responseHeaders": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "responseBody": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "message",
+        "isRetryable"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "data"
+  ]
+}

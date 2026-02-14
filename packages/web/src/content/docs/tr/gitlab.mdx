@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: GitLab sorunlarında ve birleştirme isteklerinde opencode'u kullanın.
+description: GitLab sorunlarında ve birleştirme isteklerinde weapon'u kullanın.
 ---
 
-opencode, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
+weapon, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
 
-Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktır.
+Her iki durumda da weapon, GitLab çalıştırıcılarınızda çalışacaktır.
 
 ---
 
 ## GitLab CI
 
-opencode normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
+weapon normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
 
-Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Burada weapon için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-weapon](https://gitlab.com/nagyv/gitlab-weapon).
 
 ---
 
 ### Özellikler
 
-- **İş başına özel işlemleri kullanın**: opencode parçalarının kullanıma veya devre dışı bırakmak için opencode'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
-- **Minimum kurulum**: CI bileşeni opencode'u arka planda kurar; yalnızca opencode yapılandırmasını ve ilk istemi oluşturmanız gerekir.
+- **İş başına özel işlemleri kullanın**: weapon parçalarının kullanıma veya devre dışı bırakmak için weapon'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
+- **Minimum kurulum**: CI bileşeni weapon'u arka planda kurar; yalnızca weapon yapılandırmasını ve ilk istemi oluşturmanız gerekir.
 - **Esnek**: CI bileşeni, davranışını özelleştirmek için çeşitli girişleri destekler
 
 ---
 
 ### Kurulum
 
-1. opencode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
+1. weapon kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
 2. Aşağıdakileri `.gitlab-ci.yml` dosyanıza ekleyin.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-weapon/weapon@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/weapon-config
+         auth_json: $WEAPON_AUTH_JSON # The variable name for your Weapon authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode).
+Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-weapon).
 
 ---
 
 ## GitLab Duo
 
-opencode, GitLab iş akışınızla bütünleşir.
-Bir yorumda `@opencode`'dan bahsedin; opencode, GitLab CI işlem hattınızdaki görevleri yürütecektir.
+weapon, GitLab iş akışınızla bütünleşir.
+Bir yorumda `@weapon`'dan bahsedin; weapon, GitLab CI işlem hattınızdaki görevleri yürütecektir.
 
 ---
 
 ### Özellikler
 
-- **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
-- **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
+- **Sorunları önceliklendirin**: weapon'dan bir sorunu araştırıp size açıklamasını isteyin.
+- **Düzelt ve uygula**: weapon'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
   Yeni bir dal oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
-- **Güvenli**: opencode, GitLab çalıştırıcılarınızda çalışır.
+- **Güvenli**: weapon, GitLab çalıştırıcılarınızda çalışır.
 
 ---
 
 ### Yapılandırma
 
-opencode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
+weapon, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
 
 :::tip
 Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)'a göz atın.
@@ -82,19 +82,19 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing weapon"
+      - npm install --global weapon-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_WEAPON
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating Weapon auth configuration"
+      - mkdir --parents ~/.local/share/weapon
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/weapon/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "weapon@gitlab.com"
+      - git config --global user.name "Weapon"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Weapon"
       - |
-        opencode run "
+        weapon run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_WEAPON
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ Ayrıntılı talimatlar için [GitLab CLI agents docs](https://docs.gitlab.com/u
 
 ### Örnekler
 
-GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
+GitLab'da weapon'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
 :::tip
-`@opencode`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
+`@weapon`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
 :::
 
 - **Bir sorunu açıklama**
@@ -169,27 +169,27 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   Bu yorumu bir GitLab sayısına ekleyin.
 
   ```
-  @opencode explain this issue
+  @weapon explain this issue
   ```
 
-  opencode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
+  weapon konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
 
 - **Bir sorunu düzeltme**
 
   In a GitLab issue, say:
 
   ```
-  @opencode fix this
+  @weapon fix this
   ```
 
-  opencode yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
+  weapon yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
 
 - **Birleştirme isteklerini inceleme**
 
   GitLab birleştirme isteğine aşağıdaki yorumu bırakın.
 
   ```
-  @opencode review this merge request
+  @weapon review this merge request
   ```
 
-  opencode, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.
+  weapon, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.

@@ -3,7 +3,7 @@ title: Berechtigungen
 description: Steuern Sie, für welche Aktionen eine Genehmigung erforderlich ist.
 ---
 
-OpenCode verwendet die `permission`-Konfiguration, um zu entscheiden, ob eine bestimmte Aktion automatisch ausgeführt werden soll, Sie dazu auffordern oder blockiert werden soll.
+Weapon verwendet die `permission`-Konfiguration, um zu entscheiden, ob eine bestimmte Aktion automatisch ausgeführt werden soll, Sie dazu auffordern oder blockiert werden soll.
 
 Ab `v1.1.1` ist die alte boolesche Konfiguration `tools` veraltet und wurde in `permission` zusammengeführt. Die alte `tools`-Konfiguration wird aus Gründen der Abwärtskompatibilität weiterhin unterstützt.
 
@@ -23,9 +23,9 @@ Jede Berechtigungsregel wird zu einem der folgenden aufgelöst:
 
 Sie können Berechtigungen global festlegen (mit `*`) und bestimmte Tools überschreiben.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ Sie können Berechtigungen global festlegen (mit `*`) und bestimmte Tools übers
 
 Sie können auch alle Berechtigungen auf einmal festlegen:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ Sie können auch alle Berechtigungen auf einmal festlegen:
 
 Bei den meisten Berechtigungen können Sie ein Objekt verwenden, um basierend auf der Werkzeugeingabe verschiedene Aktionen anzuwenden.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ Sie können `~` oder `$HOME` am Anfang eines Musters verwenden, um auf Ihr Home-
 
 ### Externe Verzeichnisse
 
-Verwenden Sie `external_directory`, um Toolaufrufe zuzulassen, die Pfade außerhalb des Arbeitsverzeichnisses berühren, in dem OpenCode gestartet wurde. Dies gilt für jedes Werkzeug, das einen Pfad als Eingabe verwendet (z. B. `read`, `edit`, `list`, `glob`, `grep` und viele `bash`-Befehle).
+Verwenden Sie `external_directory`, um Toolaufrufe zuzulassen, die Pfade außerhalb des Arbeitsverzeichnisses berühren, in dem Weapon gestartet wurde. Dies gilt für jedes Werkzeug, das einen Pfad als Eingabe verwendet (z. B. `read`, `edit`, `list`, `glob`, `grep` und viele `bash`-Befehle).
 
 Die Home-Erweiterung (wie `~/...`) wirkt sich nur darauf aus, wie ein Muster geschrieben wird. Dadurch wird ein externer Pfad nicht zum Teil des aktuellen Arbeitsbereichs, daher müssen Pfade außerhalb des Arbeitsverzeichnisses weiterhin über `external_directory` zulässig sein.
 
 Dies ermöglicht beispielsweise den Zugriff auf alles unter `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ Dies ermöglicht beispielsweise den Zugriff auf alles unter `~/projects/personal
 
 Jedes hier zulässige Verzeichnis erbt dieselben Standardeinstellungen wie der aktuelle Arbeitsbereich. Seit [`read` defaults to `allow`](#defaults) sind Lesevorgänge auch für Einträge unter `external_directory` zulässig, sofern sie nicht überschrieben werden. Fügen Sie explizite Regeln hinzu, wenn ein Tool in diesen Pfaden eingeschränkt werden soll, z. B. das Blockieren von Bearbeitungen, während Lesevorgänge beibehalten werden:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ Konzentrieren Sie sich in der Liste auf vertrauenswürdige Pfade und fügen Sie 
 
 ## Verfügbare Berechtigungen
 
-OpenCode-Berechtigungen basieren auf Tool-Namen sowie einigen Sicherheitsvorkehrungen:
+Weapon-Berechtigungen basieren auf Tool-Namen sowie einigen Sicherheitsvorkehrungen:
 
 - `read` – eine Datei lesen (entspricht dem Dateipfad)
 - `edit` – alle Dateiänderungen (umfasst `edit`, `write`, `patch`, `multiedit`)
@@ -148,13 +148,13 @@ OpenCode-Berechtigungen basieren auf Tool-Namen sowie einigen Sicherheitsvorkehr
 
 ## Standardwerte
 
-Wenn Sie nichts angeben, beginnt OpenCode mit zulässigen Standardeinstellungen:
+Wenn Sie nichts angeben, beginnt Weapon mit zulässigen Standardeinstellungen:
 
 - Die meisten Berechtigungen sind standardmäßig auf `"allow"` eingestellt.
 - `doom_loop` und `external_directory` sind standardmäßig `"ask"`.
 - `read` ist `"allow"`, aber `.env`-Dateien werden standardmäßig verweigert:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ Wenn Sie nichts angeben, beginnt OpenCode mit zulässigen Standardeinstellungen:
 
 ## Was „Fragen“ bewirkt
 
-Wenn OpenCode zur Genehmigung auffordert, bietet UI drei Ergebnisse:
+Wenn Weapon zur Genehmigung auffordert, bietet UI drei Ergebnisse:
 
 - `once` – nur diese Anfrage genehmigen
-- `always` – zukünftige Anfragen genehmigen, die den vorgeschlagenen Mustern entsprechen (für den Rest der aktuellen OpenCode-Sitzung)
+- `always` – zukünftige Anfragen genehmigen, die den vorgeschlagenen Mustern entsprechen (für den Rest der aktuellen Weapon-Sitzung)
 - `reject` – die Anfrage ablehnen
 
 Der Satz von Mustern, die `always` genehmigen würde, wird vom Tool bereitgestellt (Beispiel: Bash-Genehmigungen setzen normalerweise ein sicheres Befehlspräfix wie `git status*` auf die Whitelist).
@@ -189,9 +189,9 @@ Sie können Berechtigungen pro Agent überschreiben. Agentenberechtigungen werde
 Ausführlichere Mustervergleichsbeispiele finden Sie oben im Abschnitt [Granular Rules (Object Syntax)](#granular-rules-object-syntax).
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ Ausführlichere Mustervergleichsbeispiele finden Sie oben im Abschnitt [Granular
 
 Sie können Agentenberechtigungen auch in Markdown konfigurieren:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

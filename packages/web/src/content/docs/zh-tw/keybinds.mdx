@@ -3,11 +3,11 @@ title: 按鍵綁定
 description: 自定義您的按鍵綁定。
 ---
 
-opencode 有一個按鍵綁定列表，您可以透過 opencode 設定進行自定義。
+weapon 有一個按鍵綁定列表，您可以透過 weapon 設定進行自定義。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ opencode 有一個按鍵綁定列表，您可以透過 opencode 設定進行自�
 
 ## Leader 鍵
 
-opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機中的衝突。
+weapon 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機中的衝突。
 
 預設情況下，`ctrl+x` 是 Leader 鍵，大多數操作要求您先按 Leader 鍵，然後再按快速鍵。例如，要開始新工作階段，請先按 `ctrl+x`，然後按 `n`。
 
@@ -119,9 +119,9 @@ opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機�
 
 您可以透過將鍵添加到您的設定中並使用值「none」來禁用鍵綁定。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機�
 
 ## 桌面提示快速鍵
 
-opencode 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的文字編輯快速鍵。這些是內建的，目前無法透過 `opencode.json` 進行設定。
+weapon 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的文字編輯快速鍵。這些是內建的，目前無法透過 `weapon.json` 進行設定。
 
 | 快速鍵   | 動作                      |
 | -------- | ------------------------- |

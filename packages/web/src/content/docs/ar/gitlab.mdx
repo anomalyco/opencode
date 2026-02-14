@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: استخدم OpenCode في مشكلات GitLab وطلبات الدمج.
+description: استخدم Weapon في مشكلات GitLab وطلبات الدمج.
 ---
 
-يتكامل OpenCode مع سير عمل GitLab لديك عبر خط أنابيب GitLab CI/CD أو عبر GitLab Duo.
+يتكامل Weapon مع سير عمل GitLab لديك عبر خط أنابيب GitLab CI/CD أو عبر GitLab Duo.
 
-في كلتا الحالتين، سيعمل OpenCode على مشغّلات GitLab لديك.
+في كلتا الحالتين، سيعمل Weapon على مشغّلات GitLab لديك.
 
 ---
 
 ## GitLab CI
 
-يعمل OpenCode ضمن خط أنابيب GitLab عادي. يمكنك دمجه في الخط كمكوّن [CI](https://docs.gitlab.com/ee/ci/components/).
+يعمل Weapon ضمن خط أنابيب GitLab عادي. يمكنك دمجه في الخط كمكوّن [CI](https://docs.gitlab.com/ee/ci/components/).
 
-هنا نستخدم مكوّن CI/CD أنشأه المجتمع لـ OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+هنا نستخدم مكوّن CI/CD أنشأه المجتمع لـ Weapon — [nagyv/gitlab-weapon](https://gitlab.com/nagyv/gitlab-weapon).
 
 ---
 
 ### الميزات
 
-- **استخدام إعدادات مخصّصة لكل مهمة**: يمكنك إعداد OpenCode باستخدام دليل إعدادات مخصّص، مثل `./config/#custom-directory`، لتفعيل الوظائف أو تعطيلها في كل تشغيل لـ OpenCode.
-- **إعداد بسيط**: يقوم مكوّن CI بإعداد OpenCode في الخلفية؛ كل ما عليك هو إنشاء إعدادات OpenCode والمطالبة (prompt) الأولية.
+- **استخدام إعدادات مخصّصة لكل مهمة**: يمكنك إعداد Weapon باستخدام دليل إعدادات مخصّص، مثل `./config/#custom-directory`، لتفعيل الوظائف أو تعطيلها في كل تشغيل لـ Weapon.
+- **إعداد بسيط**: يقوم مكوّن CI بإعداد Weapon في الخلفية؛ كل ما عليك هو إنشاء إعدادات Weapon والمطالبة (prompt) الأولية.
 - **مرن**: يدعم مكوّن CI عدة مُدخلات لتخصيص سلوكه.
 
 ---
 
 ### الإعداد
 
-1. احفظ JSON مصادقة OpenCode كمتغيرات بيئة CI من نوع File ضمن **Settings** > **CI/CD** > **Variables**. تأكد من تعيينها على "Masked and hidden".
+1. احفظ JSON مصادقة Weapon كمتغيرات بيئة CI من نوع File ضمن **Settings** > **CI/CD** > **Variables**. تأكد من تعيينها على "Masked and hidden".
 2. أضف ما يلي إلى ملف `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-weapon/weapon@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/weapon-config
+         auth_json: $WEAPON_AUTH_JSON # The variable name for your Weapon authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-لمزيد من المُدخلات وحالات الاستخدام، [اطّلع على الوثائق](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) الخاصة بهذا المكوّن.
+لمزيد من المُدخلات وحالات الاستخدام، [اطّلع على الوثائق](https://gitlab.com/explore/catalog/nagyv/gitlab-weapon) الخاصة بهذا المكوّن.
 
 ---
 
 ## GitLab Duo
 
-يتكامل OpenCode مع سير عمل GitLab لديك.
-اذكر `@opencode` في تعليق، وسينفّذ OpenCode المهام ضمن خط أنابيب GitLab CI لديك.
+يتكامل Weapon مع سير عمل GitLab لديك.
+اذكر `@weapon` في تعليق، وسينفّذ Weapon المهام ضمن خط أنابيب GitLab CI لديك.
 
 ---
 
 ### الميزات
 
-- **فرز المشكلات**: اطلب من OpenCode النظر في مشكلة وشرحها لك.
-- **الإصلاح والتنفيذ**: اطلب من OpenCode إصلاح مشكلة أو تنفيذ ميزة.
+- **فرز المشكلات**: اطلب من Weapon النظر في مشكلة وشرحها لك.
+- **الإصلاح والتنفيذ**: اطلب من Weapon إصلاح مشكلة أو تنفيذ ميزة.
   سيُنشئ فرعًا جديدًا ويرفع طلب دمج بالتغييرات.
-- **آمن**: يعمل OpenCode على مشغّلات GitLab لديك.
+- **آمن**: يعمل Weapon على مشغّلات GitLab لديك.
 
 ---
 
 ### الإعداد
 
-يعمل OpenCode ضمن خط أنابيب GitLab CI/CD لديك، وإليك ما ستحتاجه لإعداده:
+يعمل Weapon ضمن خط أنابيب GitLab CI/CD لديك، وإليك ما ستحتاجه لإعداده:
 
 :::tip
 اطّلع على [**وثائق GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) للحصول على تعليمات محدّثة.
@@ -82,19 +82,19 @@ description: استخدم OpenCode في مشكلات GitLab وطلبات الد�
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing weapon"
+      - npm install --global weapon-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_WEAPON
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating Weapon auth configuration"
+      - mkdir --parents ~/.local/share/weapon
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/weapon/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ description: استخدم OpenCode في مشكلات GitLab وطلبات الد�
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "weapon@gitlab.com"
+      - git config --global user.name "Weapon"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Weapon"
       - |
-        opencode run "
+        weapon run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ description: استخدم OpenCode في مشكلات GitLab وطلبات الد�
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_WEAPON
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ description: استخدم OpenCode في مشكلات GitLab وطلبات الد�
 
 ### أمثلة
 
-فيما يلي بعض الأمثلة على كيفية استخدام OpenCode في GitLab.
+فيما يلي بعض الأمثلة على كيفية استخدام Weapon في GitLab.
 
 :::tip
-يمكنك ضبطه لاستخدام عبارة تشغيل مختلفة عن `@opencode`.
+يمكنك ضبطه لاستخدام عبارة تشغيل مختلفة عن `@weapon`.
 :::
 
 - **شرح مشكلة**
@@ -169,27 +169,27 @@ description: استخدم OpenCode في مشكلات GitLab وطلبات الد�
   أضف هذا التعليق في مشكلة على GitLab.
 
   ```
-  @opencode explain this issue
+  @weapon explain this issue
   ```
 
-  سيقرأ OpenCode المشكلة ويرد بشرح واضح.
+  سيقرأ Weapon المشكلة ويرد بشرح واضح.
 
 - **إصلاح مشكلة**
 
   في مشكلة على GitLab، قل:
 
   ```
-  @opencode fix this
+  @weapon fix this
   ```
 
-  سيُنشئ OpenCode فرعًا جديدًا، وينفّذ التغييرات، ويفتح طلب دمج بالتغييرات.
+  سيُنشئ Weapon فرعًا جديدًا، وينفّذ التغييرات، ويفتح طلب دمج بالتغييرات.
 
 - **مراجعة طلبات الدمج**
 
   اترك التعليق التالي على طلب دمج في GitLab.
 
   ```
-  @opencode review this merge request
+  @weapon review this merge request
   ```
 
-  سيُراجع OpenCode طلب الدمج ويقدّم ملاحظات.
+  سيُراجع Weapon طلب الدمج ويقدّم ملاحظات.

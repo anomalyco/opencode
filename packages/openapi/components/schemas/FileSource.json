@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "$ref": "./FilePartSourceText.json"
+    },
+    "type": {
+      "type": "string",
+      "const": "file"
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text",
+    "type",
+    "path"
+  ]
+}

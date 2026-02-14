@@ -1,0 +1,56 @@
+{
+  "get": {
+    "operationId": "session.diff",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string",
+          "pattern": "^ses.*"
+        },
+        "required": true
+      },
+      {
+        "in": "query",
+        "name": "messageID",
+        "schema": {
+          "type": "string",
+          "pattern": "^msg.*"
+        }
+      }
+    ],
+    "summary": "Get message diff",
+    "description": "Get the file changes (diff) that resulted from a specific user message in the session.",
+    "responses": {
+      "200": {
+        "description": "Successfully retrieved diff",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "../components/schemas/FileDiff.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_diff/get.js"
+        }
+      }
+    ]
+  }
+}

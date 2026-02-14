@@ -1,0 +1,57 @@
+{
+  "get": {
+    "operationId": "config.providers",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "List config providers",
+    "description": "Get a list of all configured AI providers and their default models.",
+    "responses": {
+      "200": {
+        "description": "List of providers",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "providers": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "../components/schemas/Provider.json"
+                  }
+                },
+                "default": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "providers",
+                "default"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/config_providers/get.js"
+        }
+      }
+    ]
+  }
+}

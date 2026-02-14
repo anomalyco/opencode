@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: OpenCode ターミナルユーザーインターフェイスの使用。
+description: Weapon ターミナルユーザーインターフェイスの使用。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode は、LLM を使用してプロジェクトを作業するための対話型ターミナルインターフェイスまたは TUI を提供します。
+Weapon は、LLM を使用してプロジェクトを作業するための対話型ターミナルインターフェイスまたは TUI を提供します。
 
-OpenCode を実行すると、現在のディレクトリの TUI が開始されます。
+Weapon を実行すると、現在のディレクトリの TUI が開始されます。
 
 ```bash
-opencode
+weapon
 ```
 
 または、特定の作業ディレクトリに対して起動することもできます。
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 TUI に入ったら、メッセージを表示することができます。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## コマンド
 
-OpenCode TUI を使用する場合、「`/`」に続いてコマンド名を入力すると、アクションをすばやく実行できます。例えば：
+Weapon TUI を使用する場合、「`/`」に続いてコマンド名を入力すると、アクションをすばやく実行できます。例えば：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ OpenCode TUI を使用する場合、「`/`」に続いてコマンド名を入�
 
 ### 接続
 
-OpenCode にプロバイダーを追加します。利用可能なプロバイダーから選択し、その API キーを追加できます。
+Weapon にプロバイダーを追加します。利用可能なプロバイダーから選択し、その API キーを追加できます。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ OpenCode にプロバイダーを追加します。利用可能なプロバイ�
 
 ### 終了
 
-OpenCode を終了します。 _エイリアス_: `/quit`、`/q`
+Weapon を終了します。 _エイリアス_: `/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -349,11 +349,11 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 
 ## 設定
 
-OpenCode 設定ファイルを通じて TUI の動作をカスタマイズできます。
+Weapon 設定ファイルを通じて TUI の動作をカスタマイズできます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

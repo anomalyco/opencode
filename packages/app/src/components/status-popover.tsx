@@ -1,11 +1,11 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSXElement } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
+import { useDialog } from "@weapon-ai/ui/context/dialog"
+import { Popover } from "@weapon-ai/ui/popover"
+import { Tabs } from "@weapon-ai/ui/tabs"
+import { Button } from "@weapon-ai/ui/button"
+import { Icon } from "@weapon-ai/ui/icon"
 import { useSync } from "@/context/sync"
 import { normalizeServerUrl, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
@@ -140,7 +140,7 @@ export function StatusPopover() {
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
   const pluginCount = createMemo(() => plugins().length)
-  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "weapon.json"))
   const overallHealthy = createMemo(() => server.healthy() === true)
 
   return (

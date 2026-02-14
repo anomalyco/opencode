@@ -9,7 +9,7 @@ on:
 
 jobs:
   sync-locales:
-    if: github.actor != 'opencode-agent[bot]'
+    if: github.actor != 'weapon-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write
@@ -27,8 +27,8 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          weapon-app-id: ${{ vars.WEAPON_APP_ID }}
+          weapon-app-secret: ${{ secrets.WEAPON_APP_SECRET }}
 
       - name: Compute changed English docs
         id: changes
@@ -46,13 +46,13 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Sync locale docs with OpenCode
+      - name: Sync locale docs with Weapon
         if: steps.changes.outputs.has_changes == 'true'
-        uses: sst/opencode/github@latest
+        uses: sst/weapon/github@latest
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          WEAPON_API_KEY: ${{ secrets.WEAPON_API_KEY }}
         with:
-          model: opencode/gpt-5.2
+          model: weapon/gpt-5.2
           agent: docs
           prompt: |
             Update localized docs to match the latest English docs changes.
@@ -64,7 +64,7 @@ jobs:
 
             Requirements:
             1. Update all relevant locale docs under packages/web/src/content/docs/<locale>/ so they reflect these English page changes.
-            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).
+            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .weapon/agent/translator.md).
             3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.
             4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.
             5. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.

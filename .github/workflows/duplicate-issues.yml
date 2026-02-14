@@ -18,14 +18,14 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install weapon
+        run: curl -fsSL https://weapon.ai/install | bash
 
       - name: Check duplicates and compliance
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          WEAPON_API_KEY: ${{ secrets.WEAPON_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          WEAPON_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -34,7 +34,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:
+          weapon run -m weapon/claude-haiku-4-5 "A new issue has been created:
 
           Issue number: ${{ github.event.issue.number }}
 

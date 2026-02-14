@@ -1,10 +1,10 @@
 import { createStore, type SetStoreFunction } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@weapon-ai/ui/context"
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@weapon-ai/util/encode"
 
 interface PartBase {
   content: string

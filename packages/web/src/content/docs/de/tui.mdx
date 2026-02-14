@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Arbeite mit OpenCode in der Terminal-Oberflaeche.
+description: Arbeite mit Weapon in der Terminal-Oberflaeche.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
+Weapon bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
 
-Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
+Ohne weitere Argumente startet Weapon die TUI im aktuellen Verzeichnis.
 
 ```bash
-opencode
+weapon
 ```
 
 Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
 
 ```bash
-opencode /path/to/project
+weapon /path/to/project
 ```
 
 In der TUI kannst du direkt mit einer Nachricht prompten.
@@ -58,7 +58,7 @@ Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
 
 ## Befehle
 
-In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
+In der Weapon-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
 Zum Beispiel:
 
 ```bash frame="none"
@@ -74,7 +74,7 @@ Hier sind alle verfuegbaren Slash-Commands:
 
 ### connect
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Add a provider to Weapon. Allows you to select from available providers and add their API keys.
 
 ```bash frame="none"
 /connect
@@ -120,7 +120,7 @@ Open external editor for composing messages. Uses the editor set in your `EDITOR
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Exit Weapon. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -358,11 +358,11 @@ Some editors need command-line arguments to run in blocking mode. The `--wait` f
 
 ## Konfiguration
 
-You can customize TUI behavior through your OpenCode config file.
+You can customize TUI behavior through your Weapon config file.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

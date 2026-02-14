@@ -3,7 +3,7 @@ title: 工具
 description: 管理 LLM 可以使用的工具。
 ---
 
-工具允許 LLM 在您的程式碼庫中執行操作。 opencode 附帶了一組內建工具，但您可以使用 [自定義工具](/docs/custom-tools) 或 [MCP 伺服器](/docs/mcp-servers) 對其進行擴展。
+工具允許 LLM 在您的程式碼庫中執行操作。 weapon 附帶了一組內建工具，但您可以使用 [自定義工具](/docs/custom-tools) 或 [MCP 伺服器](/docs/mcp-servers) 對其進行擴展。
 
 預設情況下，所有工具都是**啟用**並且不需要執行權限。您可以透過 [權限](/docs/permissions) 控制工具行為。
 
@@ -13,9 +13,9 @@ description: 管理 LLM 可以使用的工具。
 
 使用 `permission` 欄位控制工具行為。您可以允許、拒絕或要求批准每個工具。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -26,9 +26,9 @@ description: 管理 LLM 可以使用的工具。
 
 您還可以使用通配符同時控制多個工具。例如，要求 MCP 伺服器批准所有工具：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ description: 管理 LLM 可以使用的工具。
 
 ## 內建
 
-以下是 opencode 中可用的所有內建工具。
+以下是 weapon 中可用的所有內建工具。
 
 ---
 
@@ -49,9 +49,9 @@ description: 管理 LLM 可以使用的工具。
 
 在專案環境中執行 shell 指令。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -66,9 +66,9 @@ description: 管理 LLM 可以使用的工具。
 
 使用精確的字串替換修改現有檔案。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -83,9 +83,9 @@ description: 管理 LLM 可以使用的工具。
 
 建立新檔案或覆蓋現有檔案。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -104,9 +104,9 @@ description: 管理 LLM 可以使用的工具。
 
 從程式碼庫中讀取檔案內容。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "read": "allow"
   }
@@ -121,9 +121,9 @@ description: 管理 LLM 可以使用的工具。
 
 使用正規表示式搜尋檔案內容。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -138,9 +138,9 @@ description: 管理 LLM 可以使用的工具。
 
 透過模式匹配尋找檔案。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -155,9 +155,9 @@ description: 管理 LLM 可以使用的工具。
 
 列出給定路徑中的檔案和目錄。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "list": "allow"
   }
@@ -173,12 +173,12 @@ description: 管理 LLM 可以使用的工具。
 與您配置的 LSP 伺服器互動，以獲得程式碼智慧功能，例如定義、引用、游標懸停資訊和呼叫階層。
 
 :::note
-該工具僅在 `OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或 `OPENCODE_EXPERIMENTAL=true`）時可用。
+該工具僅在 `WEAPON_EXPERIMENTAL_LSP_TOOL=true`（或 `WEAPON_EXPERIMENTAL=true`）時可用。
 :::
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -195,9 +195,9 @@ description: 管理 LLM 可以使用的工具。
 
 對檔案套用 Patch。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -216,9 +216,9 @@ description: 管理 LLM 可以使用的工具。
 
 載入 [技能](/docs/skills)（`SKILL.md` 檔案）並在對話中返回其內容。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -231,9 +231,9 @@ description: 管理 LLM 可以使用的工具。
 
 在編碼工作階段期間管理待辦事項清單。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -252,9 +252,9 @@ description: 管理 LLM 可以使用的工具。
 
 閱讀現有的待辦事項清單。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -273,9 +273,9 @@ description: 管理 LLM 可以使用的工具。
 
 獲取網頁內容。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -291,19 +291,19 @@ description: 管理 LLM 可以使用的工具。
 在網路上搜尋資訊。
 
 :::note
-僅當使用 opencode 供應商或 `OPENCODE_ENABLE_EXA` 環境變數設定為任何真值（例如 `true` 或 `1`）時，此工具才可用。
+僅當使用 weapon 供應商或 `WEAPON_ENABLE_EXA` 環境變數設定為任何真值（例如 `true` 或 `1`）時，此工具才可用。
 
-要在啟動 opencode 時啟用：
+要在啟動 weapon 時啟用：
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+WEAPON_ENABLE_EXA=1 weapon
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -324,9 +324,9 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 在執行過程中詢問使用者問題。
 
-```json title="opencode.json" {4}
+```json title="weapon.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "question": "allow"
   }

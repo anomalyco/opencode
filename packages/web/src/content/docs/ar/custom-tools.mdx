@@ -1,9 +1,9 @@
 ---
 title: الأدوات المخصصة
-description: أنشئ أدوات يمكن لـ LLM استدعاؤها في opencode.
+description: أنشئ أدوات يمكن لـ LLM استدعاؤها في weapon.
 ---
 
-الأدوات المخصصة هي دوال تنشئها يمكن لـ LLM استدعاؤها أثناء المحادثات. تعمل جنبا إلى جنب مع [الأدوات المدمجة](/docs/tools) في opencode مثل `read` و`write` و`bash`.
+الأدوات المخصصة هي دوال تنشئها يمكن لـ LLM استدعاؤها أثناء المحادثات. تعمل جنبا إلى جنب مع [الأدوات المدمجة](/docs/tools) في weapon مثل `read` و`write` و`bash`.
 
 ---
 
@@ -17,8 +17,8 @@ description: أنشئ أدوات يمكن لـ LLM استدعاؤها في openc
 
 يمكن تعريفها:
 
-- محليا بوضعها في مجلد `.opencode/tools/` داخل مشروعك.
-- أو عالميا بوضعها في `~/.config/opencode/tools/`.
+- محليا بوضعها في مجلد `.weapon/tools/` داخل مشروعك.
+- أو عالميا بوضعها في `~/.config/weapon/tools/`.
 
 ---
 
@@ -26,8 +26,8 @@ description: أنشئ أدوات يمكن لـ LLM استدعاؤها في openc
 
 أسهل طريقة لإنشاء أدوات هي استخدام المساعد `tool()` الذي يوفر أمان الأنواع والتحقق.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 يمكنك أيضا تصدير عدة أدوات من ملف واحد. يصبح كل تصدير **أداة مستقلة** باسم **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 تستقبل الأدوات سياقا حول الجلسة الحالية:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ export default tool({
 
 أولا، أنشئ الأداة كسكربت Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 ثم أنشئ تعريف الأداة الذي يستدعيه:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

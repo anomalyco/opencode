@@ -1,0 +1,10 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./OutputFormatText.json"
+    },
+    {
+      "$ref": "./OutputFormatJsonSchema.json"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "pty.exited"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^pty.*"
+        },
+        "exitCode": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "exitCode"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

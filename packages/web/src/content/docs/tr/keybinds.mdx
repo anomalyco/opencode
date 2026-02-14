@@ -3,11 +3,11 @@ title: Tuş atamaları
 description: Tuş bağlantılarınızı özelleştirin.
 ---
 
-opencode, opencode yapılandırması aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
+weapon, weapon yapılandırması aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ opencode, opencode yapılandırması aracılığıyla özelleştirebileceğiniz 
 
 ## Leader tuşu
 
-opencode çoğu tuş ataması için `leader` anahtarını kullanır. Bu, terminalinizdeki çakışmaları önler.
+weapon çoğu tuş ataması için `leader` anahtarını kullanır. Bu, terminalinizdeki çakışmaları önler.
 
 Varsayılan olarak `ctrl+x` lider tuştur ve çoğu eylem önce lider tuşa, ardından kısayola basmanızı gerektirir. Örneğin, yeni bir oturum başlatmak için önce `ctrl+x` tuşuna, ardından `n` tuşuna basarsınız.
 
@@ -119,9 +119,9 @@ Tuş atamalarınız için lider anahtar kullanmanıza gerek yoktur ancak bunu ya
 
 Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını devre dışı bırakabilirsiniz.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını d
 
 ## Masaüstü istemi kısayolları
 
-opencode masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `opencode.json` aracılığıyla yapılandırılamaz.
+weapon masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `weapon.json` aracılığıyla yapılandırılamaz.
 
 | Shortcut | Action                                   |
 | -------- | ---------------------------------------- |

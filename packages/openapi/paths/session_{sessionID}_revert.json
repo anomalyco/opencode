@@ -1,0 +1,86 @@
+{
+  "post": {
+    "operationId": "session.revert",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Revert message",
+    "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+    "responses": {
+      "200": {
+        "description": "Updated session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Session.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "partID": {
+                "type": "string",
+                "pattern": "^prt.*"
+              }
+            },
+            "required": [
+              "messageID"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_revert/post.js"
+        }
+      }
+    ]
+  }
+}

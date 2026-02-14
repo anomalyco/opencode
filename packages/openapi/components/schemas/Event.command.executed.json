@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "command.executed"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sessionID": {
+          "type": "string",
+          "pattern": "^ses.*"
+        },
+        "arguments": {
+          "type": "string"
+        },
+        "messageID": {
+          "type": "string",
+          "pattern": "^msg.*"
+        }
+      },
+      "required": [
+        "name",
+        "sessionID",
+        "arguments",
+        "messageID"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

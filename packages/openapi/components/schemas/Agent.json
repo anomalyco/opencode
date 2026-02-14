@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "subagent",
+        "primary",
+        "all"
+      ]
+    },
+    "native": {
+      "type": "boolean"
+    },
+    "hidden": {
+      "type": "boolean"
+    },
+    "topP": {
+      "type": "number"
+    },
+    "temperature": {
+      "type": "number"
+    },
+    "color": {
+      "type": "string"
+    },
+    "permission": {
+      "$ref": "./PermissionRuleset.json"
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "modelID": {
+          "type": "string"
+        },
+        "providerID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelID",
+        "providerID"
+      ]
+    },
+    "variant": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "options": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "steps": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "name",
+    "mode",
+    "permission",
+    "options"
+  ]
+}

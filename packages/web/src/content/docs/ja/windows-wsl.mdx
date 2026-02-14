@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: WSL を使って Windows で OpenCode を使う。
+description: WSL を使って Windows で Weapon を使う。
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-OpenCode は Windows で直接実行できますが、より快適に使うには [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) の利用をおすすめします。WSL は OpenCode の機能とスムーズに連携する Linux 環境を提供します。
+Weapon は Windows で直接実行できますが、より快適に使うには [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) の利用をおすすめします。WSL は Weapon の機能とスムーズに連携する Linux 環境を提供します。
 
 :::tip[WSL を使う理由]
-WSL を使うと、ファイルシステム性能、ターミナルサポート、OpenCode が依存する開発ツールとの互換性が向上します。
+WSL を使うと、ファイルシステム性能、ターミナルサポート、Weapon が依存する開発ツールとの互換性が向上します。
 :::
 
 ---
@@ -21,21 +21,21 @@ WSL を使うと、ファイルシステム性能、ターミナルサポート�
 
    まだの場合は、Microsoft 公式ガイドを使って [WSL をインストール](https://learn.microsoft.com/en-us/windows/wsl/install) します。
 
-2. **WSL で OpenCode をインストールする**
+2. **WSL で Weapon をインストールする**
 
-   WSL の準備ができたら WSL のターミナルを開き、[インストール方法](/docs/) のいずれかで OpenCode をインストールします。
+   WSL の準備ができたら WSL のターミナルを開き、[インストール方法](/docs/) のいずれかで Weapon をインストールします。
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://weapon.ai/install | bash
    ```
 
-3. **WSL から OpenCode を使う**
+3. **WSL から Weapon を使う**
 
-   プロジェクトディレクトリに移動し（Windows ファイルは `/mnt/c/` や `/mnt/d/` などからアクセス）、OpenCode を実行します。
+   プロジェクトディレクトリに移動し（Windows ファイルは `/mnt/c/` や `/mnt/d/` などからアクセス）、Weapon を実行します。
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   weapon
    ```
 
 </Steps>
@@ -44,14 +44,14 @@ WSL を使うと、ファイルシステム性能、ターミナルサポート�
 
 ## デスクトップアプリ + WSL サーバー
 
-OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動かしたい場合は次の手順です。
+Weapon デスクトップアプリを使いつつ、サーバーは WSL で動かしたい場合は次の手順です。
 
 1. **WSL でサーバーを起動する**
 
    外部接続を許可するため、`--hostname 0.0.0.0` を付けて起動します。
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   weapon serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **デスクトップアプリを接続する**
@@ -62,10 +62,10 @@ OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動
 環境によって `localhost` が使えない場合は、WSL 側で `hostname -I` を実行して IP アドレスを確認し、`http://<wsl-ip>:4096` に接続してください。
 :::
 :::caution
-`--hostname 0.0.0.0` を使う場合は、`OPENCODE_SERVER_PASSWORD` を設定してサーバーを保護してください。
+`--hostname 0.0.0.0` を使う場合は、`WEAPON_SERVER_PASSWORD` を設定してサーバーを保護してください。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+WEAPON_SERVER_PASSWORD=your-password weapon serve --hostname 0.0.0.0
 ```
 
 :::
@@ -74,17 +74,17 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Windows で Web 利用を快適にするには:
 
-1. **PowerShell ではなく WSL ターミナルで `opencode web` を実行する**
+1. **PowerShell ではなく WSL ターミナルで `weapon web` を実行する**
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   weapon web --hostname 0.0.0.0
    ```
 
 2. **Windows のブラウザからアクセスする**
 
-   `http://localhost:<port>` にアクセスします（URL は OpenCode が表示します）。
+   `http://localhost:<port>` にアクセスします（URL は Weapon が表示します）。
 
-WSL から `opencode web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザから利用できます。
+WSL から `weapon web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザから利用できます。
 
 ---
 
@@ -100,17 +100,17 @@ WSL からは `/mnt/` ディレクトリ経由で Windows ファイルにアク�
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+weapon
 ```
 
 :::tip
-よりスムーズに使うには、リポジトリを WSL のファイルシステム（例: `~/code/`）にクローンまたはコピーして、そこで OpenCode を実行することをおすすめします。
+よりスムーズに使うには、リポジトリを WSL のファイルシステム（例: `~/code/`）にクローンまたはコピーして、そこで Weapon を実行することをおすすめします。
 :::
 
 ---
 
 ## ヒント
 
-- Windows ドライブ上のプロジェクトでも、OpenCode は WSL で実行するとファイルアクセスがスムーズです
-- OpenCode と一緒に VS Code の [WSL 拡張機能](https://code.visualstudio.com/docs/remote/wsl) を使うと統合的な開発フローを構築できます
-- OpenCode の設定とセッションは WSL 環境内の `~/.local/share/opencode/` に保存されます
+- Windows ドライブ上のプロジェクトでも、Weapon は WSL で実行するとファイルアクセスがスムーズです
+- Weapon と一緒に VS Code の [WSL 拡張機能](https://code.visualstudio.com/docs/remote/wsl) を使うと統合的な開発フローを構築できます
+- Weapon の設定とセッションは WSL 環境内の `~/.local/share/weapon/` に保存されます

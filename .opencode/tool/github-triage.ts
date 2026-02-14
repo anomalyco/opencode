@@ -1,6 +1,6 @@
 /// <reference path="../env.d.ts" />
 // import { Octokit } from "@octokit/rest"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@weapon-ai/plugin"
 import DESCRIPTION from "./github-triage.txt"
 
 function getIssueNumber(): number {
@@ -41,7 +41,7 @@ export default tool({
     const issue = getIssueNumber()
     // const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
     const owner = "anomalyco"
-    const repo = "opencode"
+    const repo = "weapon"
 
     const results: string[] = []
 

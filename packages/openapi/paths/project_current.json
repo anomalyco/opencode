@@ -1,0 +1,36 @@
+{
+  "get": {
+    "operationId": "project.current",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Get current project",
+    "description": "Retrieve the currently active project that OpenCode is working with.",
+    "responses": {
+      "200": {
+        "description": "Current project information",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Project.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/project_current/get.js"
+        }
+      }
+    ]
+  }
+}

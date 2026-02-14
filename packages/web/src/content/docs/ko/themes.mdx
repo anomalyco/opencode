@@ -3,9 +3,9 @@ title: 테마
 description: 내장 테마를 선택하거나 자신만의 테마를 정의하세요.
 ---
 
-opencode를 사용하면 여러 내장 테마 중 하나에서 선택할 수 있으며 terminal 테마에 적응하는 테마를 사용하거나 사용자 정의 테마를 정의 할 수 있습니다.
+weapon를 사용하면 여러 내장 테마 중 하나에서 선택할 수 있으며 terminal 테마에 적응하는 테마를 사용하거나 사용자 정의 테마를 정의 할 수 있습니다.
 
-기본적으로 opencode는 자체 `opencode` 테마를 사용합니다.
+기본적으로 weapon는 자체 `weapon` 테마를 사용합니다.
 
 ---
 
@@ -24,7 +24,7 @@ truecolor 지원 없이, 테마는 감소된 색깔 정확도로 나타날지도
 
 ## 내장 테마
 
-opencode는 여러 내장 테마와 함께 제공됩니다.
+weapon는 여러 내장 테마와 함께 제공됩니다.
 
 | 이름                   | 설명                                                                |
 | ---------------------- | ------------------------------------------------------------------- |
@@ -54,7 +54,7 @@ opencode는 여러 내장 테마와 함께 제공됩니다.
 
 시스템 테마는 사용자를위한 것입니다 :
 
-- opencode가 terminal의 외관과 일치해야 합니다.
+- weapon가 terminal의 외관과 일치해야 합니다.
 - 사용자 정의 terminal 색상 구성
 - 모든 terminal 응용 분야의 일관된 모습
 
@@ -64,9 +64,9 @@ opencode는 여러 내장 테마와 함께 제공됩니다.
 
 테마를 `/theme` 명령어로 선택하여 테마를 선택할 수 있습니다. 또는 [config](/docs/config)에서 지정할 수 있습니다.
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -75,7 +75,7 @@ opencode는 여러 내장 테마와 함께 제공됩니다.
 
 ## 사용자 정의 테마
 
-opencode는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON 기반 테마 시스템을 지원합니다.
+weapon는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON 기반 테마 시스템을 지원합니다.
 
 ---
 
@@ -83,7 +83,7 @@ opencode는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON �
 
 테마는 다음과 같은 순서에서 여러 디렉토리에서로드됩니다. 나중에 감독은 이전 것을 무시합니다.
 
-1.**Built-in themes** - 이것은 바이너리에 내장되어 있습니다. 2. **사용자 설정 디렉토리 ** - `~/.config/opencode/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에서 정의 3. ** 루트 디렉토리 ** - `<project-root>/.opencode/themes/*.json`에서 정의 4. **현재 작업 디렉토리 ** - `./.opencode/themes/*.json`에서 정의
+1.**Built-in themes** - 이것은 바이너리에 내장되어 있습니다. 2. **사용자 설정 디렉토리 ** - `~/.config/weapon/themes/*.json` 또는 `$XDG_CONFIG_HOME/weapon/themes/*.json`에서 정의 3. ** 루트 디렉토리 ** - `<project-root>/.weapon/themes/*.json`에서 정의 4. **현재 작업 디렉토리 ** - `./.weapon/themes/*.json`에서 정의
 
 여러 디렉토리가 같은 이름을 가진 테마를 포함한다면, 더 높은 우선 순위를 가진 디렉토리의 테마가 사용됩니다.
 
@@ -96,15 +96,15 @@ opencode는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON �
 사용자 넓은 테마:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/weapon/themes
+vim ~/.config/weapon/themes/my-theme.json
 ```
 
 프로젝트 별 테마.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .weapon/themes
+vim .weapon/themes/my-theme.json
 ```
 
 ---
@@ -143,7 +143,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://weapon.ai/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

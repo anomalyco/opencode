@@ -1,0 +1,187 @@
+{
+  "get": {
+    "operationId": "pty.get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "ptyID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Get PTY session",
+    "description": "Retrieve detailed information about a specific pseudo-terminal (PTY) session.",
+    "responses": {
+      "200": {
+        "description": "Session info",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Pty.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/pty_{ptyID}/get.js"
+        }
+      }
+    ]
+  },
+  "put": {
+    "operationId": "pty.update",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "ptyID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Update PTY session",
+    "description": "Update properties of an existing pseudo-terminal (PTY) session.",
+    "responses": {
+      "200": {
+        "description": "Updated session",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Pty.json"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "size": {
+                "type": "object",
+                "properties": {
+                  "rows": {
+                    "type": "number"
+                  },
+                  "cols": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "rows",
+                  "cols"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/pty_{ptyID}/put.js"
+        }
+      }
+    ]
+  },
+  "delete": {
+    "operationId": "pty.remove",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "ptyID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Remove PTY session",
+    "description": "Remove and terminate a specific pseudo-terminal (PTY) session.",
+    "responses": {
+      "200": {
+        "description": "Session removed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/pty_{ptyID}/delete.js"
+        }
+      }
+    ]
+  }
+}

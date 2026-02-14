@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "permission": {
+      "type": "string"
+    },
+    "pattern": {
+      "type": "string"
+    },
+    "action": {
+      "$ref": "./PermissionAction.json"
+    }
+  },
+  "required": [
+    "permission",
+    "pattern",
+    "action"
+  ]
+}

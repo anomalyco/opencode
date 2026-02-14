@@ -3,13 +3,13 @@ title: Netværk
 description: Konfigurer proxyer og brugerdefinerede certifikater.
 ---
 
-OpenCode understøtter standard proxymiljøvariabler og brugerdefinerede certifikater til virksomhedsnetværksmiljøer.
+Weapon understøtter standard proxymiljøvariabler og brugerdefinerede certifikater til virksomhedsnetværksmiljøer.
 
 ---
 
 ## Proxy
 
-OpenCode respekterer standard proxy-miljøvariabler.
+Weapon respekterer standard proxy-miljøvariabler.
 
 ```bash
 # HTTPS proxy (recommended)
@@ -48,7 +48,7 @@ For proxyer, der kræver avanceret godkendelse som NTLM eller Kerberos, kan du o
 
 ## Brugerdefinerede certifikater
 
-Hvis din virksomhed bruger tilpassede CA'er til HTTPS-forbindelser, skal du konfigurere OpenCode til at stole på dem.
+Hvis din virksomhed bruger tilpassede CA'er til HTTPS-forbindelser, skal du konfigurere Weapon til at stole på dem.
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

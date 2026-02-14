@@ -3,13 +3,13 @@ title: 模型
 description: 配置 LLM 供應商和模型。
 ---
 
-OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 來支援 **75+ LLM 供應商**，並且它支援執行本地模型。
+Weapon 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 來支援 **75+ LLM 供應商**，並且它支援執行本地模型。
 
 ---
 
 ## 供應商
 
-預設情況下會預先載入大多數流行的供應商。如果您已透過 `/connect` 指令添加了供應商的憑證，那麼它們將在您啟動 OpenCode 時可用。
+預設情況下會預先載入大多數流行的供應商。如果您已透過 `/connect` 指令添加了供應商的憑證，那麼它們將在您啟動 Weapon 時可用。
 
 了解有關 [供應商](/docs/providers) 的更多資訊。
 
@@ -35,7 +35,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 然而，既擅長生成程式碼又擅長工具呼叫的只有少數。
 
-以下是與 OpenCode 配合良好的幾個模型，排名不分先後。 （這不是詳盡的列表，也不一定是最新的）：
+以下是與 Weapon 配合良好的幾個模型，排名不分先後。 （這不是詳盡的列表，也不一定是最新的）：
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,16 +49,16 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 ## 設定預設值
 
 要將其中之一設定為預設模型，您可以在您的
-OpenCode 配置。
+Weapon 配置。
 
-```json title="opencode.json" {3}
+```json title="weapon.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-這裡完整的 ID 是 `provider_id/model_id`。例如，如果您使用 [OpenCode Zen](/docs/zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+這裡完整的 ID 是 `provider_id/model_id`。例如，如果您使用 [Weapon Zen](/docs/zen)，則您將使用 `weapon/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
 
 如果您配置了 [自定義供應商](/docs/providers#custom)，則 `provider_id` 是配置中 `provider` 部分的鍵，`model_id` 是 `provider.models` 中的鍵。
 
@@ -68,9 +68,9 @@ OpenCode 配置。
 
 您可以透過 config.json 全局配置模型的選項。
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="weapon.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ OpenCode 配置。
 
 您還可以定義擴展內建變體的自定義變體。變體允許您為同一模型配置不同的設定，而無需建立重複的項目：
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="weapon.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
-    "opencode": {
+    "weapon": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ OpenCode 配置。
 
 ## 變體
 
-許多模型支援具有不同配置的多種變體。OpenCode 附帶了流行供應商的內建預設變體。
+許多模型支援具有不同配置的多種變體。Weapon 附帶了流行供應商的內建預設變體。
 
 ### 內建變體
 
-OpenCode 附帶了許多供應商的預設變體：
+Weapon 附帶了許多供應商的預設變體：
 
 **Anthropic**：
 
@@ -172,9 +172,9 @@ OpenCode 附帶了許多供應商的預設變體：
 
 您可以覆寫現有變體或添加您自己的變體：
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="weapon.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ OpenCode 附帶了許多供應商的預設變體：
 
 ## 載入模型
 
-當 OpenCode 啟動時，它會按以下優先順序檢查模型：
+當 Weapon 啟動時，它會按以下優先順序檢查模型：
 
 1. `--model` 或 `-m` 命令列旗標。格式與設定檔中的相同：`provider_id/model_id`。
 
-2. OpenCode 配置中的模型列表。
+2. Weapon 配置中的模型列表。
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

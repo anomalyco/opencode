@@ -1,0 +1,32 @@
+{
+  "description": "Server configuration for opencode serve and web commands",
+  "type": "object",
+  "properties": {
+    "port": {
+      "description": "Port to listen on",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "hostname": {
+      "description": "Hostname to listen on",
+      "type": "string"
+    },
+    "mdns": {
+      "description": "Enable mDNS service discovery",
+      "type": "boolean"
+    },
+    "mdnsDomain": {
+      "description": "Custom domain name for mDNS service (default: opencode.local)",
+      "type": "string"
+    },
+    "cors": {
+      "description": "Additional domains to allow for CORS",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

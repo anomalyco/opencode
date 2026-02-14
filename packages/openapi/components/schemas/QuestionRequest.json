@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^que.*"
+    },
+    "sessionID": {
+      "type": "string",
+      "pattern": "^ses.*"
+    },
+    "questions": {
+      "description": "Questions to ask",
+      "type": "array",
+      "items": {
+        "$ref": "./QuestionInfo.json"
+      }
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "messageID": {
+          "type": "string"
+        },
+        "callID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageID",
+        "callID"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "questions"
+  ]
+}

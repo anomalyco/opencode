@@ -1,0 +1,10 @@
+{
+  "description": "Log level",
+  "type": "string",
+  "enum": [
+    "DEBUG",
+    "INFO",
+    "WARN",
+    "ERROR"
+  ]
+}

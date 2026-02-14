@@ -1,0 +1,245 @@
+{
+  "get": {
+    "operationId": "session.messages",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Session ID"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "schema": {
+          "type": "number"
+        }
+      }
+    ],
+    "summary": "Get session messages",
+    "description": "Retrieve all messages in a session, including user prompts and AI responses.",
+    "responses": {
+      "200": {
+        "description": "List of messages",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "$ref": "../components/schemas/Message.json"
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "../components/schemas/Part.json"
+                    }
+                  }
+                },
+                "required": [
+                  "info",
+                  "parts"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_message/get.js"
+        }
+      }
+    ]
+  },
+  "post": {
+    "operationId": "session.prompt",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "Session ID"
+      }
+    ],
+    "summary": "Send message",
+    "description": "Create and send a new message to a session, streaming the AI response.",
+    "responses": {
+      "200": {
+        "description": "Created message",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "info": {
+                  "$ref": "../components/schemas/AssistantMessage.json"
+                },
+                "parts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "../components/schemas/Part.json"
+                  }
+                }
+              },
+              "required": [
+                "info",
+                "parts"
+              ]
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/NotFoundError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "modelID": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerID",
+                  "modelID"
+                ]
+              },
+              "agent": {
+                "type": "string"
+              },
+              "noReply": {
+                "type": "boolean"
+              },
+              "tools": {
+                "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "format": {
+                "$ref": "../components/schemas/OutputFormat.json"
+              },
+              "system": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              },
+              "parts": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "../components/schemas/TextPartInput.json"
+                    },
+                    {
+                      "$ref": "../components/schemas/FilePartInput.json"
+                    },
+                    {
+                      "$ref": "../components/schemas/AgentPartInput.json"
+                    },
+                    {
+                      "$ref": "../components/schemas/SubtaskPartInput.json"
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "parts"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_message/post.js"
+        }
+      }
+    ]
+  }
+}

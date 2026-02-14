@@ -1,21 +1,21 @@
 ---
 title: Web
-description: Bruke OpenCode i nettleseren din.
+description: Bruke Weapon i nettleseren din.
 ---
 
-OpenCode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme kraftige AI-kodingsopplevelsen uten at du trenger en terminal.
+Weapon kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme kraftige AI-kodingsopplevelsen uten at du trenger en terminal.
 
-![OpenCode Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
+![Weapon Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
 
 ## Komme i gang
 
 Start web-grensesnittet ved å kjøre:
 
 ```bash
-opencode web
+weapon web
 ```
 
-Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk OpenCode i standard nettleser.
+Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk Weapon i standard nettleser.
 
 ---
 
@@ -25,49 +25,49 @@ Du kan konfigurere webserveren ved å bruke kommandolinjeflagg eller i [konfigur
 
 ### Port
 
-Som standard velger OpenCode en tilgjengelig port. Du kan spesifisere en port:
+Som standard velger Weapon en tilgjengelig port. Du kan spesifisere en port:
 
 ```bash
-opencode web --port 4096
+weapon web --port 4096
 ```
 
 ### Vertsnavn
 
-Som standard binder serveren seg til `127.0.0.1` (kun localhost). Slik gjør du OpenCode tilgjengelig på nettverket ditt:
+Som standard binder serveren seg til `127.0.0.1` (kun localhost). Slik gjør du Weapon tilgjengelig på nettverket ditt:
 
 ```bash
-opencode web --hostname 0.0.0.0
+weapon web --hostname 0.0.0.0
 ```
 
 ---
 
 ### Autentisering
 
-For å beskytte tilgang, angi et passord ved hjelp av miljøvariabelen `OPENCODE_SERVER_PASSWORD`:
+For å beskytte tilgang, angi et passord ved hjelp av miljøvariabelen `WEAPON_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+WEAPON_SERVER_PASSWORD=secret weapon web
 ```
 
-Brukernavnet er satt til `opencode` som standard, men kan endres med `OPENCODE_SERVER_USERNAME`.
+Brukernavnet er satt til `weapon` som standard, men kan endres med `WEAPON_SERVER_USERNAME`.
 
 ---
 
 ## Bruke webgrensesnittet
 
-Når den er startet, gir nettgrensesnittet tilgang til dine OpenCode-økter.
+Når den er startet, gir nettgrensesnittet tilgang til dine Weapon-økter.
 
 ### Sesjoner
 
 Se og administrer øktene dine fra hjemmesiden. Du kan se aktive økter og starte nye.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![Weapon Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
 ### Serverstatus
 
 Klikk på "Se servere" for å se tilkoblede servere og deres status.
 
-![OpenCode Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
+![Weapon Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -77,10 +77,10 @@ Du kan koble en terminal TUI til en kjørende webserver:
 
 ```bash
 # Start the web server
-opencode web --port 4096
+weapon web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+weapon attach http://localhost:4096
 ```
 
 Dette lar deg bruke både nettgrensesnittet og terminalen samtidig, og deler samme økter og tilstand.
@@ -89,7 +89,7 @@ Dette lar deg bruke både nettgrensesnittet og terminalen samtidig, og deler sam
 
 ## Konfigurasjonsfil
 
-Du kan også konfigurere serverinnstillinger i `opencode.json` konfigurasjonsfilen:
+Du kan også konfigurere serverinnstillinger i `weapon.json` konfigurasjonsfilen:
 
 ```json
 {

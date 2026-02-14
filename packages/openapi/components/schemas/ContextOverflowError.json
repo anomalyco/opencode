@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "ContextOverflowError"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "responseBody": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "data"
+  ]
+}

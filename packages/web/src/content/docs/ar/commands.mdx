@@ -17,9 +17,9 @@ description: أنشئ أوامر مخصصة للمهام المتكررة.
 
 أنشئ ملفات Markdown داخل الدليل `commands/` لتعريف أوامر مخصصة.
 
-أنشئ الملف `.opencode/commands/test.md`:
+أنشئ الملف `.weapon/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Focus on the failing tests and suggest fixes.
 
 ## الإعداد
 
-يمكنك إضافة أوامر مخصصة عبر إعدادات OpenCode أو بإنشاء ملفات Markdown داخل الدليل `commands/`.
+يمكنك إضافة أوامر مخصصة عبر إعدادات Weapon أو بإنشاء ملفات Markdown داخل الدليل `commands/`.
 
 ---
 
 ### JSON
 
-استخدم خيار `command` في [config](/docs/config) الخاص بـ OpenCode:
+استخدم خيار `command` في [config](/docs/config) الخاص بـ Weapon:
 
-```json title="opencode.jsonc" {4-12}
+```json title="weapon.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     // يصبح هذا اسم الأمر
     "test": {
@@ -79,10 +79,10 @@ Focus on the failing tests and suggest fixes.
 
 يمكنك أيضًا تعريف الأوامر باستخدام ملفات Markdown. ضعها في:
 
-- على مستوى النظام: `~/.config/opencode/commands/`
-- لكل مشروع: `.opencode/commands/`
+- على مستوى النظام: `~/.config/weapon/commands/`
+- لكل مشروع: `.weapon/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -111,7 +111,7 @@ Focus on the failing tests and suggest fixes.
 
 مرِّر وسائط إلى الأوامر باستخدام العنصر النائب `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".weapon/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -137,7 +137,7 @@ Include proper typing and basic structure.
 
 على سبيل المثال:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".weapon/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -166,7 +166,7 @@ with the following content: $3
 
 على سبيل المثال، لإنشاء أمر مخصص يُحلل تغطية الاختبارات:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".weapon/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -179,7 +179,7 @@ Based on these results, suggest improvements to increase coverage.
 
 أو لمراجعة التغييرات الأخيرة:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".weapon/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -198,7 +198,7 @@ Review these changes and suggest any improvements.
 
 ضمِّن الملفات في أمرك باستخدام `@` ثم اسم الملف.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".weapon/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -221,7 +221,7 @@ Check for performance issues and suggest improvements.
 
 يُعرِّف خيار `template` المُطالبة التي ستُرسل إلى نموذج اللغة (LLM) عند تنفيذ الأمر.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Check for performance issues and suggest improvements.
 
 استخدم خيار `description` لتقديم وصف موجز لما يفعله الأمر.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -259,7 +259,7 @@ Check for performance issues and suggest improvements.
 إذا كان هذا [subagent](/docs/agents/#subagents)، فسيؤدي الأمر افتراضيًا إلى تشغيل استدعاء subagent.
 لإيقاف هذا السلوك، عيِّن `subtask` إلى `false`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "review": {
@@ -279,7 +279,7 @@ Check for performance issues and suggest improvements.
 يفيد هذا إذا أردت ألا يلوّث الأمر السياق الأساسي لديك، إذ سيُجبر (**force**) الـ agent على العمل كـ subagent،
 حتى لو كان `mode` مضبوطًا على `primary` في إعدادات [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -297,7 +297,7 @@ Check for performance issues and suggest improvements.
 
 استخدم إعداد `model` لتجاوز النموذج الافتراضي لهذا الأمر.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ## الأوامر المضمنة
 
-يتضمن opencode عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
+يتضمن weapon عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
 
 :::note
 يمكن للأوامر المخصصة تجاوز الأوامر المضمنة.

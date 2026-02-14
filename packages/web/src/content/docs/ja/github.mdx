@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: GitHub の問題とプルリクエストで OpenCode を使用します。
+description: GitHub の問題とプルリクエストで Weapon を使用します。
 ---
 
-OpenCode は GitHub ワークフローと統合します。コメントで `/opencode` または `/oc` に言及すると、OpenCode が GitHub Actions ランナー内でタスクを実行します。
+Weapon は GitHub ワークフローと統合します。コメントで `/weapon` または `/oc` に言及すると、Weapon が GitHub Actions ランナー内でタスクを実行します。
 
 ---
 
 ## 機能
 
-- **問題のトリアージ**: OpenCode に問題を調べて説明してもらいます。
-- **修正と実装**: OpenCode に問題の修正または機能の実装を依頼します。そして、新しいブランチで動作し、すべての変更を含む PR を送信します。
-- **安全**: OpenCode は GitHub のランナー内で実行されます。
+- **問題のトリアージ**: Weapon に問題を調べて説明してもらいます。
+- **修正と実装**: Weapon に問題の修正または機能の実装を依頼します。そして、新しいブランチで動作し、すべての変更を含む PR を送信します。
+- **安全**: Weapon は GitHub のランナー内で実行されます。
 
 ---
 
@@ -20,7 +20,7 @@ OpenCode は GitHub ワークフローと統合します。コメントで `/ope
 GitHub リポジトリにあるプロジェクトで次のコマンドを実行します。
 
 ```bash
-opencode github install
+weapon github install
 ```
 
 ここでは、GitHub アプリのインストール、ワークフローの作成、シークレットの設定について説明します。
@@ -33,14 +33,14 @@ opencode github install
 
 1. **GitHub アプリをインストールします**
 
-[**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent) にアクセスしてください。ターゲットリポジトリにインストールされていることを確認してください。
+[**github.com/apps/weapon-agent**](https://github.com/apps/weapon-agent) にアクセスしてください。ターゲットリポジトリにインストールされていることを確認してください。
 
 2. **ワークフローを追加**
 
-次のワークフローファイルをリポジトリの `.github/workflows/opencode.yml` に追加します。適切な `model` と必要な API キーを `env` に設定してください。
+次のワークフローファイルをリポジトリの `.github/workflows/weapon.yml` に追加します。適切な `model` と必要な API キーを `env` に設定してください。
 
-```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+```yml title=".github/workflows/weapon.yml" {24,26}
+   name: weapon
 
    on:
      issue_comment:
@@ -49,10 +49,10 @@ opencode github install
        types: [created]
 
    jobs:
-     opencode:
+     weapon:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/weapon')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -63,8 +63,8 @@ opencode github install
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+          - name: Run Weapon
+           uses: anomalyco/weapon/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -81,13 +81,13 @@ opencode github install
 
 ## 設定
 
-- `model`: OpenCode で使用するモデル。 `provider/model` の形式をとります。これは**必須**です。
+- `model`: Weapon で使用するモデル。 `provider/model` の形式をとります。これは**必須**です。
 - `agent`: 使用するエージェント。プライマリエージェントである必要があります。見つからない場合は、設定から `default_agent` にフォールバックするか、`"build"` にフォールバックします。
-- `share`: OpenCode セッションを共有するかどうか。パブリックリポジトリのデフォルトは **true** です。
-- `prompt`: デフォルトの動作をオーバーライドするためのオプションのカスタムプロンプト。これを使用して、OpenCode がリクエストを処理する方法をカスタマイズします。
-- `token`: コメントの作成、変更のコミット、プルリクエストのオープンなどの操作を実行するためのオプションの GitHub アクセストークン。デフォルトでは、OpenCode は OpenCode GitHub アプリからのインストールアクセストークンを使用するため、コミット、コメント、プルリクエストはアプリからのものとして表示されます。
+- `share`: Weapon セッションを共有するかどうか。パブリックリポジトリのデフォルトは **true** です。
+- `prompt`: デフォルトの動作をオーバーライドするためのオプションのカスタムプロンプト。これを使用して、Weapon がリクエストを処理する方法をカスタマイズします。
+- `token`: コメントの作成、変更のコミット、プルリクエストのオープンなどの操作を実行するためのオプションの GitHub アクセストークン。デフォルトでは、Weapon は Weapon GitHub アプリからのインストールアクセストークンを使用するため、コミット、コメント、プルリクエストはアプリからのものとして表示されます。
 
-あるいは、OpenCode GitHub アプリをインストールせずに、GitHub Action ランナーの [組み込み `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) を使用することもできます。ワークフローで必要な権限を必ず付与してください。
+あるいは、Weapon GitHub アプリをインストールせずに、GitHub Action ランナーの [組み込み `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) を使用することもできます。ワークフローで必要な権限を必ず付与してください。
 
 ```yaml
 permissions:
@@ -103,30 +103,30 @@ permissions:
 
 ## サポートされているイベント
 
-OpenCode は、次の GitHub イベントによってトリガーできます。
+Weapon は、次の GitHub イベントによってトリガーできます。
 
 | イベントの種類                | トリガー                            | 詳細                                                                                                                                                        |
 | ----------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | 問題または PR についてコメントする  | コメントで `/opencode` または `/oc` について言及してください。 OpenCode はコンテキストを読み取り、ブランチを作成したり、PR を開いたり、返信したりできます。 |
-| `pull_request_review_comment` | PR 内の特定のコード行にコメントする | コードをレビューするときに、`/opencode` または `/oc` について言及します。 OpenCode は、ファイルパス、行番号、および diff コンテキストを受け取ります。       |
-| `issues`                      | 問題がオープンまたは編集されました  | 問題が作成または変更されると、OpenCode が自動的にトリガーされます。 `prompt` 入力が必要です。                                                               |
-| `pull_request`                | PR がオープンまたは更新されました   | PR が開かれる、同期される、または再度開かれるときに、OpenCode を自動的にトリガーします。自動レビューに役立ちます。                                          |
-| `schedule`                    | Cron ベースのスケジュール           | スケジュールに従って OpenCode を実行します。 `prompt` 入力が必要です。出力はログと PR に送られます (コメントする問題はありません)。                         |
-| `workflow_dispatch`           | GitHub UI からの手動トリガー        | [アクション] タブから OpenCode をオンデマンドでトリガーします。 `prompt` 入力が必要です。出力はログと PR に送られます。                                     |
+| `issue_comment`               | 問題または PR についてコメントする  | コメントで `/weapon` または `/oc` について言及してください。 Weapon はコンテキストを読み取り、ブランチを作成したり、PR を開いたり、返信したりできます。 |
+| `pull_request_review_comment` | PR 内の特定のコード行にコメントする | コードをレビューするときに、`/weapon` または `/oc` について言及します。 Weapon は、ファイルパス、行番号、および diff コンテキストを受け取ります。       |
+| `issues`                      | 問題がオープンまたは編集されました  | 問題が作成または変更されると、Weapon が自動的にトリガーされます。 `prompt` 入力が必要です。                                                               |
+| `pull_request`                | PR がオープンまたは更新されました   | PR が開かれる、同期される、または再度開かれるときに、Weapon を自動的にトリガーします。自動レビューに役立ちます。                                          |
+| `schedule`                    | Cron ベースのスケジュール           | スケジュールに従って Weapon を実行します。 `prompt` 入力が必要です。出力はログと PR に送られます (コメントする問題はありません)。                         |
+| `workflow_dispatch`           | GitHub UI からの手動トリガー        | [アクション] タブから Weapon をオンデマンドでトリガーします。 `prompt` 入力が必要です。出力はログと PR に送られます。                                     |
 
 ### スケジュールの例
 
-スケジュールに従って OpenCode を実行し、自動化されたタスクを実行します。
+スケジュールに従って Weapon を実行し、自動化されたタスクを実行します。
 
-```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+```yaml title=".github/workflows/weapon-scheduled.yml"
+name: Scheduled Weapon Task
 
 on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
 
 jobs:
-  opencode:
+  weapon:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -139,8 +139,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+      - name: Run Weapon
+        uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-スケジュールされたイベントの場合、指示を抽出するためのコメントがないため、`prompt` 入力は **必須** です。スケジュールされたワークフローは、権限チェックのためのユーザーコンテキストなしで実行されるため、OpenCode がブランチまたは PR を作成することが予想される場合、ワークフローは `contents: write` および `pull-requests: write` を付与する必要があります。
+スケジュールされたイベントの場合、指示を抽出するためのコメントがないため、`prompt` 入力は **必須** です。スケジュールされたワークフローは、権限チェックのためのユーザーコンテキストなしで実行されるため、Weapon がブランチまたは PR を作成することが予想される場合、ワークフローは `contents: write` および `pull-requests: write` を付与する必要があります。
 
 ---
 
@@ -158,8 +158,8 @@ jobs:
 
 PR が開かれるか更新されるときに、PR を自動的にレビューします。
 
-```yaml title=".github/workflows/opencode-review.yml"
-name: opencode-review
+```yaml title=".github/workflows/weapon-review.yml"
+name: weapon-review
 
 on:
   pull_request:
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-`pull_request` イベントの場合、`prompt` が指定されていない場合、OpenCode はデフォルトでプルリクエストをレビューします。
+`pull_request` イベントの場合、`prompt` が指定されていない場合、Weapon はデフォルトでプルリクエストをレビューします。
 
 ---
 
@@ -199,7 +199,7 @@ jobs:
 
 新しい問題を自動的に優先順位付けします。この例では、スパムを減らすために 30 日より古いアカウントにフィルターを適用します。
 
-```yaml title=".github/workflows/opencode-triage.yml"
+```yaml title=".github/workflows/weapon-triage.yml"
 name: Issue Triage
 
 on:
@@ -233,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: anomalyco/weapon/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,10 +252,10 @@ jobs:
 
 ## カスタムプロンプト
 
-デフォルトのプロンプトをオーバーライドして、ワークフローに合わせて OpenCode の動作をカスタマイズします。
+デフォルトのプロンプトをオーバーライドして、ワークフローに合わせて Weapon の動作をカスタマイズします。
 
-```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+```yaml title=".github/workflows/weapon.yml"
+- uses: anomalyco/weapon/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |
@@ -271,27 +271,27 @@ jobs:
 
 ## 例
 
-GitHub で OpenCode を使用する方法の例をいくつか示します。
+GitHub で Weapon を使用する方法の例をいくつか示します。
 
 - **Issueの説明**
 
 このコメントを GitHub の問題に追加します。
 
 ```
-  /opencode explain this issue
+  /weapon explain this issue
 ```
 
-OpenCode は、すべてのコメントを含むスレッド全体を読み取り、明確な説明を返信します。
+Weapon は、すべてのコメントを含むスレッド全体を読み取り、明確な説明を返信します。
 
 - **Issueの修正**
 
 GitHub の問題で次のように言います。
 
 ```
-  /opencode fix this
+  /weapon fix this
 ```
 
-そして、OpenCode は新しいブランチを作成し、変更を実装し、変更を含む PR を開きます。
+そして、Weapon は新しいブランチを作成し、変更を実装し、変更を含む PR を開きます。
 
 - **PR をレビューして変更を加える**
 
@@ -301,18 +301,18 @@ GitHub PR に次のコメントを残してください。
   Delete the attachment from S3 when the note is removed /oc
 ```
 
-OpenCode は要求された変更を実装し、同じ PR にコミットします。
+Weapon は要求された変更を実装し、同じ PR にコミットします。
 
 - **特定のコード行のレビュー**
 
-PR の「ファイル」タブのコード行に直接コメントを残します。 OpenCode は、ファイル、行番号、および diff コンテキストを自動的に検出して、正確な応答を提供します。
+PR の「ファイル」タブのコード行に直接コメントを残します。 Weapon は、ファイル、行番号、および diff コンテキストを自動的に検出して、正確な応答を提供します。
 
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
 ```
 
-特定の行にコメントすると、OpenCode は以下を受け取ります。
+特定の行にコメントすると、Weapon は以下を受け取ります。
 
 - レビューされている正確なファイル
 - コードの特定の行

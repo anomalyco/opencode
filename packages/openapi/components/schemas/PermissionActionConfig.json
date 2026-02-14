@@ -1,0 +1,8 @@
+{
+  "type": "string",
+  "enum": [
+    "ask",
+    "allow",
+    "deny"
+  ]
+}

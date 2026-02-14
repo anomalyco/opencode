@@ -1,7 +1,7 @@
 ---
 description: Translate content for a specified locale while preserving technical terms
 mode: subagent
-model: opencode/gemini-3-pro
+model: weapon/gemini-3-pro
 ---
 
 You are a professional translator and localization specialist.
@@ -20,7 +20,7 @@ If the target locale is missing, ask the user to provide it.
 
 ---
 
-# Do-Not-Translate Terms (OpenCode Docs)
+# Do-Not-Translate Terms (Weapon Docs)
 
 Generated from: `packages/web/src/content/docs/*.mdx` (default English docs)
 Generated on: 2026-02-10
@@ -53,8 +53,8 @@ Neovim
 Node.js
 npm
 Obsidian
-opencode
-opencode-ai
+weapon
+weapon-ai
 Paru
 pnpm
 ripgrep
@@ -137,15 +137,15 @@ OAuth
 Ollama integration docs
 OpenAI's Data Policies
 OpenChamber
-OpenCode
-OpenCode config
-OpenCode Config
-OpenCode TUI with the opencode theme
-OpenCode Web - Active Session
-OpenCode Web - New Session
-OpenCode Web - See Servers
-OpenCode Zen
-OpenCode-Obsidian
+Weapon
+Weapon config
+Weapon Config
+Weapon TUI with the weapon theme
+Weapon Web - Active Session
+Weapon Web - New Session
+Weapon Web - See Servers
+Weapon Zen
+Weapon-Obsidian
 OpenRouter dashboard
 OpenWork
 OVHcloud panel
@@ -286,7 +286,7 @@ NoeFabris
 OpenAI
 OpenAPI
 OpenChamber
-OpenCode
+Weapon
 OpenRouter
 OpenTUI
 OpenWork
@@ -310,68 +310,68 @@ xAI
 ZenMux
 ```
 
-## OpenCode CLI commands (as shown in docs)
+## Weapon CLI commands (as shown in docs)
 
 ```text
-opencode
-opencode [project]
-opencode /path/to/project
-opencode acp
-opencode agent [command]
-opencode agent create
-opencode agent list
-opencode attach [url]
-opencode attach http://10.20.30.40:4096
-opencode attach http://localhost:4096
-opencode auth [command]
-opencode auth list
-opencode auth login
-opencode auth logout
-opencode auth ls
-opencode export [sessionID]
-opencode github [command]
-opencode github install
-opencode github run
-opencode import <file>
-opencode import https://opncd.ai/s/abc123
-opencode import session.json
-opencode mcp [command]
-opencode mcp add
-opencode mcp auth [name]
-opencode mcp auth list
-opencode mcp auth ls
-opencode mcp auth my-oauth-server
-opencode mcp auth sentry
-opencode mcp debug <name>
-opencode mcp debug my-oauth-server
-opencode mcp list
-opencode mcp logout [name]
-opencode mcp logout my-oauth-server
-opencode mcp ls
-opencode models --refresh
-opencode models [provider]
-opencode models anthropic
-opencode run [message..]
-opencode run Explain the use of context in Go
-opencode serve
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
-opencode serve --hostname 0.0.0.0 --port 4096
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
-opencode session [command]
-opencode session list
-opencode stats
-opencode uninstall
-opencode upgrade
-opencode upgrade [target]
-opencode upgrade v0.1.48
-opencode web
-opencode web --cors https://example.com
-opencode web --hostname 0.0.0.0
-opencode web --mdns
-opencode web --mdns --mdns-domain myproject.local
-opencode web --port 4096
-opencode web --port 4096 --hostname 0.0.0.0
-opencode.server.close()
+weapon
+weapon [project]
+weapon /path/to/project
+weapon acp
+weapon agent [command]
+weapon agent create
+weapon agent list
+weapon attach [url]
+weapon attach http://10.20.30.40:4096
+weapon attach http://localhost:4096
+weapon auth [command]
+weapon auth list
+weapon auth login
+weapon auth logout
+weapon auth ls
+weapon export [sessionID]
+weapon github [command]
+weapon github install
+weapon github run
+weapon import <file>
+weapon import https://opncd.ai/s/abc123
+weapon import session.json
+weapon mcp [command]
+weapon mcp add
+weapon mcp auth [name]
+weapon mcp auth list
+weapon mcp auth ls
+weapon mcp auth my-oauth-server
+weapon mcp auth sentry
+weapon mcp debug <name>
+weapon mcp debug my-oauth-server
+weapon mcp list
+weapon mcp logout [name]
+weapon mcp logout my-oauth-server
+weapon mcp ls
+weapon models --refresh
+weapon models [provider]
+weapon models anthropic
+weapon run [message..]
+weapon run Explain the use of context in Go
+weapon serve
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --hostname 0.0.0.0 --port 4096
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon session [command]
+weapon session list
+weapon stats
+weapon uninstall
+weapon upgrade
+weapon upgrade [target]
+weapon upgrade v0.1.48
+weapon web
+weapon web --cors https://example.com
+weapon web --hostname 0.0.0.0
+weapon web --mdns
+weapon web --mdns --mdns-domain myproject.local
+weapon web --port 4096
+weapon web --port 4096 --hostname 0.0.0.0
+weapon.server.close()
 ```
 
 ## Slash commands and routes
@@ -412,7 +412,7 @@ opencode.server.close()
 /mnt/d/
 /models
 /oc
-/opencode
+/weapon
 /path
 /project
 /project/current
@@ -550,7 +550,7 @@ GITLAB_HOST
 GITLAB_INSTANCE_URL
 GITLAB_OAUTH_CLIENT_ID
 GITLAB_TOKEN
-GITLAB_TOKEN_OPENCODE
+GITLAB_TOKEN_WEAPON
 GOOGLE_APPLICATION_CREDENTIALS
 GOOGLE_CLOUD_PROJECT
 HTTP_PROXY
@@ -565,47 +565,47 @@ NODE_ENV
 NODE_EXTRA_CA_CERTS
 NPM_AUTH_TOKEN
 OC_ALLOW_WAYLAND
-OPENCODE_API_KEY
-OPENCODE_AUTH_JSON
-OPENCODE_AUTO_SHARE
-OPENCODE_CLIENT
-OPENCODE_CONFIG
-OPENCODE_CONFIG_CONTENT
-OPENCODE_CONFIG_DIR
-OPENCODE_DISABLE_AUTOCOMPACT
-OPENCODE_DISABLE_AUTOUPDATE
-OPENCODE_DISABLE_CLAUDE_CODE
-OPENCODE_DISABLE_CLAUDE_CODE_PROMPT
-OPENCODE_DISABLE_CLAUDE_CODE_SKILLS
-OPENCODE_DISABLE_DEFAULT_PLUGINS
-OPENCODE_DISABLE_FILETIME_CHECK
-OPENCODE_DISABLE_LSP_DOWNLOAD
-OPENCODE_DISABLE_MODELS_FETCH
-OPENCODE_DISABLE_PRUNE
-OPENCODE_DISABLE_TERMINAL_TITLE
-OPENCODE_ENABLE_EXA
-OPENCODE_ENABLE_EXPERIMENTAL_MODELS
-OPENCODE_EXPERIMENTAL
-OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS
-OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
-OPENCODE_EXPERIMENTAL_EXA
-OPENCODE_EXPERIMENTAL_FILEWATCHER
-OPENCODE_EXPERIMENTAL_ICON_DISCOVERY
-OPENCODE_EXPERIMENTAL_LSP_TOOL
-OPENCODE_EXPERIMENTAL_LSP_TY
-OPENCODE_EXPERIMENTAL_MARKDOWN
-OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
-OPENCODE_EXPERIMENTAL_OXFMT
-OPENCODE_EXPERIMENTAL_PLAN_MODE
-OPENCODE_FAKE_VCS
-OPENCODE_GIT_BASH_PATH
-OPENCODE_MODEL
-OPENCODE_MODELS_URL
-OPENCODE_PERMISSION
-OPENCODE_PORT
-OPENCODE_SERVER_PASSWORD
-OPENCODE_SERVER_USERNAME
+WEAPON_API_KEY
+WEAPON_AUTH_JSON
+WEAPON_AUTO_SHARE
+WEAPON_CLIENT
+WEAPON_CONFIG
+WEAPON_CONFIG_CONTENT
+WEAPON_CONFIG_DIR
+WEAPON_DISABLE_AUTOCOMPACT
+WEAPON_DISABLE_AUTOUPDATE
+WEAPON_DISABLE_CLAUDE_CODE
+WEAPON_DISABLE_CLAUDE_CODE_PROMPT
+WEAPON_DISABLE_CLAUDE_CODE_SKILLS
+WEAPON_DISABLE_DEFAULT_PLUGINS
+WEAPON_DISABLE_FILETIME_CHECK
+WEAPON_DISABLE_LSP_DOWNLOAD
+WEAPON_DISABLE_MODELS_FETCH
+WEAPON_DISABLE_PRUNE
+WEAPON_DISABLE_TERMINAL_TITLE
+WEAPON_ENABLE_EXA
+WEAPON_ENABLE_EXPERIMENTAL_MODELS
+WEAPON_EXPERIMENTAL
+WEAPON_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS
+WEAPON_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+WEAPON_EXPERIMENTAL_DISABLE_FILEWATCHER
+WEAPON_EXPERIMENTAL_EXA
+WEAPON_EXPERIMENTAL_FILEWATCHER
+WEAPON_EXPERIMENTAL_ICON_DISCOVERY
+WEAPON_EXPERIMENTAL_LSP_TOOL
+WEAPON_EXPERIMENTAL_LSP_TY
+WEAPON_EXPERIMENTAL_MARKDOWN
+WEAPON_EXPERIMENTAL_OUTPUT_TOKEN_MAX
+WEAPON_EXPERIMENTAL_OXFMT
+WEAPON_EXPERIMENTAL_PLAN_MODE
+WEAPON_FAKE_VCS
+WEAPON_GIT_BASH_PATH
+WEAPON_MODEL
+WEAPON_MODELS_URL
+WEAPON_PERMISSION
+WEAPON_PORT
+WEAPON_SERVER_PASSWORD
+WEAPON_SERVER_USERNAME
 PROJECT_ROOT
 RESOURCE_NAME
 RUST_LOG
@@ -619,8 +619,8 @@ XDG_CONFIG_HOME
 ```text
 ../../../config.mjs
 @astrojs/starlight/components
-@opencode-ai/plugin
-@opencode-ai/sdk
+@weapon-ai/plugin
+@weapon-ai/sdk
 path
 shescape
 zod
@@ -633,77 +633,77 @@ zod
 @ai-sdk/openai-compatible
 @File#L37-42
 @modelcontextprotocol/server-everything
-@opencode
+@weapon
 ```
 
 ## GitHub owner/repo slugs referenced in docs
 
 ```text
-24601/opencode-zellij-namer
-angristan/opencode-wakatime
-anomalyco/opencode
-apps/opencode-agent
-athal7/opencode-devcontainers
-awesome-opencode/awesome-opencode
+24601/weapon-zellij-namer
+angristan/weapon-wakatime
+anomalyco/weapon
+apps/weapon-agent
+athal7/weapon-devcontainers
+awesome-weapon/awesome-weapon
 backnotprop/plannotator
-ben-vargas/ai-sdk-provider-opencode-sdk
+ben-vargas/ai-sdk-provider-weapon-sdk
 btriapitsyn/openchamber
 BurntSushi/ripgrep
 Cluster444/agentic
-code-yeongyu/oh-my-opencode
-darrenhinde/opencode-agents
-different-ai/opencode-scheduler
+code-yeongyu/oh-my-weapon
+darrenhinde/weapon-agents
+different-ai/weapon-scheduler
 different-ai/openwork
 features/copilot
 folke/tokyonight.nvim
-franlol/opencode-md-table-formatter
+franlol/weapon-md-table-formatter
 ggml-org/llama.cpp
-ghoulr/opencode-websearch-cited.git
-H2Shami/opencode-helicone-session
+ghoulr/weapon-websearch-cited.git
+H2Shami/weapon-helicone-session
 hosenur/portal
 jamesmurdza/daytona
-jenslys/opencode-gemini-auth
-JRedeker/opencode-morph-fast-apply
-JRedeker/opencode-shell-strategy
+jenslys/weapon-gemini-auth
+JRedeker/weapon-morph-fast-apply
+JRedeker/weapon-shell-strategy
 kdcokenny/ocx
-kdcokenny/opencode-background-agents
-kdcokenny/opencode-notify
-kdcokenny/opencode-workspace
-kdcokenny/opencode-worktree
+kdcokenny/weapon-background-agents
+kdcokenny/weapon-notify
+kdcokenny/weapon-workspace
+kdcokenny/weapon-worktree
 login/device
-mohak34/opencode-notifier
+mohak34/weapon-notifier
 morhetz/gruvbox
-mtymek/opencode-obsidian
+mtymek/weapon-obsidian
 NeuralNomadsAI/CodeNomad
-nick-vi/opencode-type-inject
-NickvanDyke/opencode.nvim
-NoeFabris/opencode-antigravity-auth
+nick-vi/weapon-type-inject
+NickvanDyke/weapon.nvim
+NoeFabris/weapon-antigravity-auth
 nordtheme/nord
-numman-ali/opencode-openai-codex-auth
+numman-ali/weapon-openai-codex-auth
 olimorris/codecompanion.nvim
-panta82/opencode-notificator
+panta82/weapon-notificator
 rebelot/kanagawa.nvim
 remorses/kimaki
 sainnhe/everforest
-shekohex/opencode-google-antigravity-auth
-shekohex/opencode-pty.git
+shekohex/weapon-google-antigravity-auth
+shekohex/weapon-pty.git
 spoons-and-mirrors/subtask2
-sudo-tee/opencode.nvim
-supermemoryai/opencode-supermemory
-Tarquinen/opencode-dynamic-context-pruning
+sudo-tee/weapon.nvim
+supermemoryai/weapon-supermemory
+Tarquinen/weapon-dynamic-context-pruning
 Th3Whit3Wolf/one-nvim
 upstash/context7
 vtemian/micode
 vtemian/octto
 yetone/avante.nvim
-zenobi-us/opencode-plugin-template
-zenobi-us/opencode-skillful
+zenobi-us/weapon-plugin-template
+zenobi-us/weapon-skillful
 ```
 
 ## Paths, filenames, globs, and URLs
 
 ```text
-./.opencode/themes/*.json
+./.weapon/themes/*.json
 ./<project-slug>/storage/
 ./config/#custom-directory
 ./global/storage/
@@ -715,68 +715,68 @@ zenobi-us/opencode-skillful
 .claude/skills/*/SKILL.md
 .claude/skills/<name>/SKILL.md
 .env
-.github/workflows/opencode.yml
+.github/workflows/weapon.yml
 .gitignore
 .gitlab-ci.yml
 .ignore
 .NET SDK
 .npmrc
 .ocamlformat
-.opencode
-.opencode/
-.opencode/agents/
-.opencode/commands/
-.opencode/commands/test.md
-.opencode/modes/
-.opencode/plans/*.md
-.opencode/plugins/
-.opencode/skills/<name>/SKILL.md
-.opencode/skills/git-release/SKILL.md
-.opencode/tools/
-.well-known/opencode
+.weapon
+.weapon/
+.weapon/agents/
+.weapon/commands/
+.weapon/commands/test.md
+.weapon/modes/
+.weapon/plans/*.md
+.weapon/plugins/
+.weapon/skills/<name>/SKILL.md
+.weapon/skills/git-release/SKILL.md
+.weapon/tools/
+.well-known/weapon
 { type: "raw" \| "patch", content: string }
 {file:path/to/file}
 **/*.js
 %USERPROFILE%/intelephense/license.txt
-%USERPROFILE%\.cache\opencode
-%USERPROFILE%\.config\opencode\opencode.jsonc
-%USERPROFILE%\.config\opencode\plugins
-%USERPROFILE%\.local\share\opencode
-%USERPROFILE%\.local\share\opencode\log
-<project-root>/.opencode/themes/*.json
+%USERPROFILE%\.cache\weapon
+%USERPROFILE%\.config\weapon\weapon.jsonc
+%USERPROFILE%\.config\weapon\plugins
+%USERPROFILE%\.local\share\weapon
+%USERPROFILE%\.local\share\weapon\log
+<project-root>/.weapon/themes/*.json
 <providerId>/<modelId>
-<your-project>/.opencode/plugins/
+<your-project>/.weapon/plugins/
 ~
 ~/...
 ~/.agents/skills/*/SKILL.md
 ~/.agents/skills/<name>/SKILL.md
 ~/.aws/credentials
 ~/.bashrc
-~/.cache/opencode
-~/.cache/opencode/node_modules/
+~/.cache/weapon
+~/.cache/weapon/node_modules/
 ~/.claude/CLAUDE.md
 ~/.claude/skills/
 ~/.claude/skills/*/SKILL.md
 ~/.claude/skills/<name>/SKILL.md
-~/.config/opencode
-~/.config/opencode/AGENTS.md
-~/.config/opencode/agents/
-~/.config/opencode/commands/
-~/.config/opencode/modes/
-~/.config/opencode/opencode.json
-~/.config/opencode/opencode.jsonc
-~/.config/opencode/plugins/
-~/.config/opencode/skills/*/SKILL.md
-~/.config/opencode/skills/<name>/SKILL.md
-~/.config/opencode/themes/*.json
-~/.config/opencode/tools/
+~/.config/weapon
+~/.config/weapon/AGENTS.md
+~/.config/weapon/agents/
+~/.config/weapon/commands/
+~/.config/weapon/modes/
+~/.config/weapon/weapon.json
+~/.config/weapon/weapon.jsonc
+~/.config/weapon/plugins/
+~/.config/weapon/skills/*/SKILL.md
+~/.config/weapon/skills/<name>/SKILL.md
+~/.config/weapon/themes/*.json
+~/.config/weapon/tools/
 ~/.config/zed/settings.json
 ~/.local/share
-~/.local/share/opencode/
-~/.local/share/opencode/auth.json
-~/.local/share/opencode/log/
-~/.local/share/opencode/mcp-auth.json
-~/.local/share/opencode/opencode.jsonc
+~/.local/share/weapon/
+~/.local/share/weapon/auth.json
+~/.local/share/weapon/log/
+~/.local/share/weapon/mcp-auth.json
+~/.local/share/weapon/weapon.jsonc
 ~/.npmrc
 ~/.zshrc
 ~/code/
@@ -786,7 +786,7 @@ zenobi-us/opencode-skillful
 ${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts
 $HOME/intelephense/license.txt
 $HOME/projects/*
-$XDG_CONFIG_HOME/opencode/themes/*.json
+$XDG_CONFIG_HOME/weapon/themes/*.json
 agent/
 agents/
 build/
@@ -799,11 +799,11 @@ http://localhost:4096
 http://localhost:4096/doc
 https://app.example.com
 https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/
-https://opencode.ai/zen/v1/chat/completions
-https://opencode.ai/zen/v1/messages
-https://opencode.ai/zen/v1/models/gemini-3-flash
-https://opencode.ai/zen/v1/models/gemini-3-pro
-https://opencode.ai/zen/v1/responses
+https://weapon.ai/zen/v1/chat/completions
+https://weapon.ai/zen/v1/messages
+https://weapon.ai/zen/v1/models/gemini-3-flash
+https://weapon.ai/zen/v1/models/gemini-3-pro
+https://weapon.ai/zen/v1/responses
 https://RESOURCE_NAME.openai.azure.com/
 laravel/pint
 log/
@@ -811,11 +811,11 @@ model: "anthropic/claude-sonnet-4-5"
 modes/
 node_modules/
 openai/gpt-4.1
-opencode.ai/config.json
-opencode/<model-id>
-opencode/gpt-5.1-codex
-opencode/gpt-5.2-codex
-opencode/kimi-k2
+weapon.ai/config.json
+weapon/<model-id>
+weapon/gpt-5.1-codex
+weapon/gpt-5.2-codex
+weapon/kimi-k2
 openrouter/google/gemini-2.5-flash
 opncd.ai/s/<share-id>
 packages/*/AGENTS.md
@@ -824,7 +824,7 @@ project/
 provider_id/model_id
 provider/model
 provider/model-id
-rm -rf ~/.cache/opencode
+rm -rf ~/.cache/weapon
 skills/
 skills/*/SKILL.md
 src/**/*.ts
@@ -866,7 +866,7 @@ WIN+R
 ## Model ID strings referenced
 
 ```text
-{env:OPENCODE_MODEL}
+{env:WEAPON_MODEL}
 anthropic/claude-3-5-sonnet-20241022
 anthropic/claude-haiku-4-20250514
 anthropic/claude-haiku-4-5
@@ -876,8 +876,8 @@ gitlab/duo-chat-haiku-4-5
 lmstudio/google/gemma-3n-e4b
 openai/gpt-4.1
 openai/gpt-5
-opencode/gpt-5.1-codex
-opencode/gpt-5.2-codex
-opencode/kimi-k2
+weapon/gpt-5.1-codex
+weapon/gpt-5.2-codex
+weapon/kimi-k2
 openrouter/google/gemini-2.5-flash
 ```

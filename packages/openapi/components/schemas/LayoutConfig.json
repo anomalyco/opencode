@@ -1,0 +1,8 @@
+{
+  "description": "@deprecated Always uses stretch layout.",
+  "type": "string",
+  "enum": [
+    "auto",
+    "stretch"
+  ]
+}

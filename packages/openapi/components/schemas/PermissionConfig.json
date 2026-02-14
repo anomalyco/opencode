@@ -1,0 +1,72 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "__originalKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "read": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "edit": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "glob": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "grep": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "list": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "bash": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "task": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "external_directory": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "todowrite": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "todoread": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "question": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "webfetch": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "websearch": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "codesearch": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "lsp": {
+          "$ref": "./PermissionRuleConfig.json"
+        },
+        "doom_loop": {
+          "$ref": "./PermissionActionConfig.json"
+        },
+        "skill": {
+          "$ref": "./PermissionRuleConfig.json"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "./PermissionRuleConfig.json"
+      }
+    },
+    {
+      "$ref": "./PermissionActionConfig.json"
+    }
+  ]
+}

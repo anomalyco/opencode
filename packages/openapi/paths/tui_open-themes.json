@@ -1,0 +1,36 @@
+{
+  "post": {
+    "operationId": "tui.openThemes",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Open themes dialog",
+    "description": "Open the theme dialog",
+    "responses": {
+      "200": {
+        "description": "Theme dialog opened successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/tui_open-themes/post.js"
+        }
+      }
+    ]
+  }
+}

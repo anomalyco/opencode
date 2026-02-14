@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "const": "user"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "created"
+      ]
+    },
+    "format": {
+      "$ref": "./OutputFormat.json"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "diffs": {
+          "type": "array",
+          "items": {
+            "$ref": "./FileDiff.json"
+          }
+        }
+      },
+      "required": [
+        "diffs"
+      ]
+    },
+    "agent": {
+      "type": "string"
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "providerID": {
+          "type": "string"
+        },
+        "modelID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerID",
+        "modelID"
+      ]
+    },
+    "system": {
+      "type": "string"
+    },
+    "tools": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "variant": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "role",
+    "time",
+    "agent",
+    "model"
+  ]
+}

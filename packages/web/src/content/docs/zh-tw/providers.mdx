@@ -1,30 +1,30 @@
 ---
 title: 供應商
-description: 使用 OpenCode 中的任何 LLM 供應商。
+description: 使用 Weapon 中的任何 LLM 供應商。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 來支援 **75+ LLM 供應商**，並且它支援執行本地模型。
+Weapon 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 來支援 **75+ LLM 供應商**，並且它支援執行本地模型。
 
 要添加供應商，您需要：
 
 1. 使用 `/connect` 指令添加供應商的 API 金鑰。
-2. 在 OpenCode 配置中配置供應商。
+2. 在 Weapon 配置中配置供應商。
 
 ---
 
 ### 憑證
 
 當您使用 `/connect` 指令添加供應商的 API 金鑰時，它們會被儲存
-在 `~/.local/share/opencode/auth.json`。
+在 `~/.local/share/weapon/auth.json`。
 
 ---
 
 ### 配置
 
-您可以在 OpenCode 配置的 `provider` 部分自定義供應商。
+您可以在 Weapon 配置的 `provider` 部分自定義供應商。
 
 ---
 
@@ -32,9 +32,9 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 您可以透過設定 `baseURL` 選項來自定義任何供應商的基本 URL。這在使用代理服務或自定義端點時非常有用。
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -47,16 +47,16 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ---
 
-## OpenCode Zen
+## Weapon Zen
 
-OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
-經過測試和驗證，可以與 OpenCode 良好配合。 [了解更多](/docs/zen)。
+Weapon Zen 是 Weapon 團隊提供的模型列表，這些模型已被
+經過測試和驗證，可以與 Weapon 良好配合。 [了解更多](/docs/zen)。
 
 :::tip
-如果您是新手，我們建議您從 OpenCode Zen 開始。
+如果您是新手，我們建議您從 Weapon Zen 開始。
 :::
 
-1. 在 TUI 中執行 `/connect` 指令，選擇 opencode，然後前往 [opencode.ai/auth](https://opencode.ai/auth)。
+1. 在 TUI 中執行 `/connect` 指令，選擇 weapon，然後前往 [weapon.ai/auth](https://weapon.ai/auth)。
 
    ```txt
    /connect
@@ -79,7 +79,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
    /models
    ```
 
-它的工作方式與 OpenCode 中的任何其他供應商一樣，並且完全可以選擇使用。
+它的工作方式與 Weapon 中的任何其他供應商一樣，並且完全可以選擇使用。
 
 ---
 
@@ -123,7 +123,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 
 ### Amazon Bedrock
 
-要將 Amazon Bedrock 與 OpenCode 結合使用：
+要將 Amazon Bedrock 與 Weapon 結合使用：
 
 1. 前往 Amazon Bedrock 主控台中的 **Model catalog** 並請求
    存取您想要的模型。
@@ -136,17 +136,17 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 
    #### 環境變數（快速啟動）
 
-   執行 opencode 時設定以下環境變數之一：
+   執行 weapon 時設定以下環境變數之一：
 
    ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY weapon
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile weapon
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX weapon
    ```
 
    或者將它們添加到您的 bash 設定檔中：
@@ -158,11 +158,11 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 
    #### 設定檔（推薦）
 
-   對於特定於專案或持久的配置，請使用 `opencode.json`：
+   對於特定於專案或持久的配置，請使用 `weapon.json`：
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -187,9 +187,9 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 
    如果您使用 Bedrock 的 VPC 端點：
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -231,9 +231,9 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 :::note
 對於自定義推理設定檔，請在鍵中使用模型和供應商名稱，並將 `id` 屬性設定為 arn。這確保了正確的快取：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -278,7 +278,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
    ```
 
 :::info
-[Anthropic](https://anthropic.com) 不正式支援在 OpenCode 中使用您的 Claude Pro/Max 訂閱。
+[Anthropic](https://anthropic.com) 不正式支援在 Weapon 中使用您的 Claude Pro/Max 訂閱。
 :::
 
 ##### 使用 API 金鑰
@@ -302,7 +302,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 2. 轉到 [Azure AI Foundry](https://ai.azure.com/) 並部署模型。
 
    :::note
-   部署名稱必須與模型名稱匹配，OpenCode 才能正常工作。
+   部署名稱必須與模型名稱匹配，Weapon 才能正常工作。
    :::
 
 3. 執行 `/connect` 指令並搜尋 **Azure**。
@@ -323,7 +323,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 5. 將您的資源名稱設定為環境變數：
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX weapon
    ```
 
    或者將其添加到您的 bash 設定檔中：
@@ -349,7 +349,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 2. 轉到 [Azure AI Foundry](https://ai.azure.com/) 並部署模型。
 
    :::note
-   部署名稱必須與模型名稱匹配，OpenCode 才能正常工作。
+   部署名稱必須與模型名稱匹配，Weapon 才能正常工作。
    :::
 
 3. 執行 `/connect` 指令並搜尋 **Azure Cognitive Services**。
@@ -370,7 +370,7 @@ OpenCode Zen 是 OpenCode 團隊提供的模型列表，這些模型已被
 5. 將您的資源名稱設定為環境變數：
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX weapon
    ```
 
    或者將其添加到您的 bash 設定檔中：
@@ -481,11 +481,11 @@ Cloudflare AI Gateway 讓您可以透過統一端點存取來自 OpenAI、Anthro
    /models
    ```
 
-   您還可以透過 OpenCode 配置添加模型。
+   您還可以透過 Weapon 配置添加模型。
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -662,7 +662,7 @@ GitLab Duo 透過 GitLab 的 Anthropic 代理提供具有本機工具呼叫功�
    #### 使用 Personal Access Token
    1. 前往 [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. 單擊 **Add new token**
-   3. Name：`OpenCode`，Scopes：`api`
+   3. Name：`Weapon`，Scopes：`api`
    4. 複製令牌（以 `glpat-` 開頭）
    5. 在終端機中輸入它
 
@@ -678,20 +678,20 @@ GitLab Duo 透過 GitLab 的 Anthropic 代理提供具有本機工具呼叫功�
    - **duo-chat-opus-4-5** - 最有能力進行複雜分析
 
 :::note
-如果您不想將令牌儲存在 OpenCode auth 儲存中，也可以指定 `GITLAB_TOKEN` 環境變數。
+如果您不想將令牌儲存在 Weapon auth 儲存中，也可以指定 `GITLAB_TOKEN` 環境變數。
 :::
 
 ##### 自託管 GitLab
 
 :::note[合規性注意事項]
-OpenCode 使用小型模型來執行某些 AI 任務，例如生成工作階段標題。
-預設情況下，它配置為使用 gpt-5-nano，由 Zen 託管。若要鎖定 OpenCode
+Weapon 使用小型模型來執行某些 AI 任務，例如生成工作階段標題。
+預設情況下，它配置為使用 gpt-5-nano，由 Zen 託管。若要鎖定 Weapon
 僅使用您自己的 GitLab 託管實例，請將以下內容添加到您的
-`opencode.json` 檔案。還建議禁用工作階段分享。
+`weapon.json` 檔案。還建議禁用工作階段分享。
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -749,11 +749,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### 配置
 
-透過 `opencode.json` 定制：
+透過 `weapon.json` 定制：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -772,10 +772,10 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 要存取 GitLab 工具（merge requests、issues、pipelines、CI/CD 等）：
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["@gitlab/weapon-gitlab-plugin"]
 }
 ```
 
@@ -785,7 +785,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### GitHub Copilot
 
-要將 GitHub Copilot 訂閱與 OpenCode 結合使用：
+要將 GitHub Copilot 訂閱與 Weapon 結合使用：
 
 :::note
 某些模型可能需要 [Pro+
@@ -820,7 +820,7 @@ subscription](https://github.com/features/copilot/plans) 來使用。
 
 ### Google Vertex AI
 
-要將 Google Vertex AI 與 OpenCode 結合使用：
+要將 Google Vertex AI 與 Weapon 結合使用：
 
 1. 前往 Google Cloud Console 中的 **Model Garden** 並檢查
    您所在地區提供的模型。
@@ -836,10 +836,10 @@ subscription](https://github.com/features/copilot/plans) 來使用。
      - `GOOGLE_APPLICATION_CREDENTIALS`：Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
 
-   在執行 opencode 時設定它們。
+   在執行 weapon 時設定它們。
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id weapon
    ```
 
    或者將它們添加到您的 bash 設定檔中。
@@ -949,13 +949,13 @@ subscription](https://github.com/features/copilot/plans) 來使用。
 
 #### 可選配置
 
-如果您發現 Helicone 的功能或模型未透過 OpenCode 自動配置，您始終可以自行配置。
+如果您發現 Helicone 的功能或模型未透過 Weapon 自動配置，您始終可以自行配置。
 
 這是 [Helicone's Model Directory](https://helicone.ai/models)，您將需要它來獲取要添加的模型的 ID。
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -981,9 +981,9 @@ subscription](https://github.com/features/copilot/plans) 來使用。
 
 Helicone 支援快取、使用者追蹤和工作階段管理等功能的自定義標頭。使用 `options.headers` 將它們添加到您的供應商配置中：
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -992,7 +992,7 @@ Helicone 支援快取、使用者追蹤和工作階段管理等功能的自定�
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "weapon",
         },
       },
     },
@@ -1002,21 +1002,21 @@ Helicone 支援快取、使用者追蹤和工作階段管理等功能的自定�
 
 ##### 工作階段追蹤
 
-Helicone 的 [Sessions](https://docs.helicone.ai/features/sessions) 功能可讓您將相關的 LLM 請求分組在一起。使用 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 外掛自動將每個 OpenCode 對話記錄為 Helicone 中的工作階段。
+Helicone 的 [Sessions](https://docs.helicone.ai/features/sessions) 功能可讓您將相關的 LLM 請求分組在一起。使用 [weapon-helicone-session](https://github.com/H2Shami/weapon-helicone-session) 外掛自動將每個 Weapon 對話記錄為 Helicone 中的工作階段。
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g weapon-helicone-session
 ```
 
 將其添加到您的配置中。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["weapon-helicone-session"]
 }
 ```
 
-該外掛將 `Helicone-Session-Id` 和 `Helicone-Session-Name` 標頭注入您的請求中。在 Helicone 的 Sessions 頁面中，您將看到每個 OpenCode 對話都列為單獨的工作階段。
+該外掛將 `Helicone-Session-Id` 和 `Helicone-Session-Name` 標頭注入您的請求中。在 Helicone 的 Sessions 頁面中，您將看到每個 Weapon 對話都列為單獨的工作階段。
 
 ##### 常見 Helicone 標頭
 
@@ -1033,11 +1033,11 @@ npm install -g opencode-helicone-session
 
 ### llama.cpp
 
-您可以透過 [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server 公用程式配置 OpenCode 以使用本地模型
+您可以透過 [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server 公用程式配置 Weapon 以使用本地模型
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="weapon.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1100,11 +1100,11 @@ IO.NET 提供了 17 種針對各種使用案例進行最佳化的模型：
 
 ### LM Studio
 
-您可以透過 LM Studio 配置 OpenCode 以使用本地模型。
+您可以透過 LM Studio 配置 Weapon 以使用本地模型。
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="weapon.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1217,15 +1217,15 @@ IO.NET 提供了 17 種針對各種使用案例進行最佳化的模型：
 
 ### Ollama
 
-您可以透過 Ollama 配置 OpenCode 以使用本地模型。
+您可以透過 Ollama 配置 Weapon 以使用本地模型。
 
 :::tip
-Ollama 可以自動為 OpenCode 配置自身。詳情請參閱 [Ollama integration docs](https://docs.ollama.com/integrations/opencode)。
+Ollama 可以自動為 Weapon 配置自身。詳情請參閱 [Ollama integration docs](https://docs.ollama.com/integrations/weapon)。
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="weapon.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1259,13 +1259,13 @@ Ollama 可以自動為 OpenCode 配置自身。詳情請參閱 [Ollama integrati
 
 ### Ollama Cloud
 
-要將 Ollama Cloud 與 OpenCode 結合使用：
+要將 Ollama Cloud 與 Weapon 結合使用：
 
 1. 前往 [https://ollama.com/](https://ollama.com/) 並登入或建立帳戶。
 
 2. 導覽到 **Settings** > **Keys**，然後單擊 **Add API Key** 以生成新的 API 金鑰。
 
-3. 複製 API 金鑰以在 OpenCode 中使用。
+3. 複製 API 金鑰以在 Weapon 中使用。
 
 4. 執行 `/connect` 指令並搜尋 **Ollama Cloud**。
 
@@ -1282,7 +1282,7 @@ Ollama 可以自動為 OpenCode 配置自身。詳情請參閱 [Ollama integrati
    └ enter
    ```
 
-6. **Important**：在 OpenCode 中使用雲端模型之前，您必須將模型資訊拉取到本地：
+6. **Important**：在 Weapon 中使用雲端模型之前，您必須將模型資訊拉取到本地：
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1329,19 +1329,19 @@ Ollama 可以自動為 OpenCode 配置自身。詳情請參閱 [Ollama integrati
 
 ---
 
-### OpenCode Zen
+### Weapon Zen
 
-OpenCode Zen 是 OpenCode 團隊提供的經過測試和驗證的模型列表。 [了解更多](/docs/zen)。
+Weapon Zen 是 Weapon 團隊提供的經過測試和驗證的模型列表。 [了解更多](/docs/zen)。
 
-1. 登入 **<a href={console}>OpenCode Zen</a>** 並單擊 **Create API Key**。
+1. 登入 **<a href={console}>Weapon Zen</a>** 並單擊 **Create API Key**。
 
-2. 執行 `/connect` 指令並搜尋 **OpenCode Zen**。
+2. 執行 `/connect` 指令並搜尋 **Weapon Zen**。
 
    ```txt
    /connect
    ```
 
-3. 輸入您的 OpenCode API 金鑰。
+3. 輸入您的 Weapon API 金鑰。
 
    ```txt
    ┌ API key
@@ -1383,11 +1383,11 @@ OpenCode Zen 是 OpenCode 團隊提供的經過測試和驗證的模型列表。
    /models
    ```
 
-   您還可以透過 OpenCode 配置添加其他模型。
+   您還可以透過 Weapon 配置添加其他模型。
 
-   ```json title="opencode.json" {6}
+   ```json title="weapon.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1398,11 +1398,11 @@ OpenCode Zen 是 OpenCode 團隊提供的經過測試和驗證的模型列表。
    }
    ```
 
-5. 您還可以透過 OpenCode 配置自定義它們。這是指定供應商的範例
+5. 您還可以透過 Weapon 配置自定義它們。這是指定供應商的範例
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1450,7 +1450,7 @@ SAP AI Core 透過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
    或者設定 `AICORE_SERVICE_KEY` 環境變數：
 
    ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' weapon
    ```
 
    或者將其添加到您的 bash 設定檔中：
@@ -1462,7 +1462,7 @@ SAP AI Core 透過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
 4. （可選）設定部署 ID 和資源組：
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group weapon
    ```
 
    :::note
@@ -1506,7 +1506,7 @@ SAP AI Core 透過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
 
 ### Scaleway
 
-要將 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) 與 OpenCode 一起使用：
+要將 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) 與 Weapon 一起使用：
 
 1. 前往 [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) 生成新的 API 金鑰。
 
@@ -1614,11 +1614,11 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
    /models
    ```
 
-您還可以透過 OpenCode 配置自定義模型。以下是指定供應商路由順序的範例。
+您還可以透過 Weapon 配置自定義模型。以下是指定供應商路由順序的範例。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1724,11 +1724,11 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
    /models
    ```
 
-   您還可以透過 OpenCode 配置添加其他模型。
+   您還可以透過 Weapon 配置添加其他模型。
 
-   ```json title="opencode.json" {6}
+   ```json title="weapon.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1746,7 +1746,7 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
 要添加 `/connect` 指令中未列出的任何 **OpenAI-compatible** 供應商：
 
 :::tip
-您可以將任何與 OpenAI 相容的供應商與 OpenCode 結合使用。大多數現代 AI 供應商都提供與 OpenAI 相容的 API。
+您可以將任何與 OpenAI 相容的供應商與 Weapon 結合使用。大多數現代 AI 供應商都提供與 OpenAI 相容的 API。
 :::
 
 1. 執行 `/connect` 指令並向下捲動到 **Other**。
@@ -1785,18 +1785,18 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in weapon.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. 在專案目錄中建立或更新 `opencode.json` 檔案：
+4. 在專案目錄中建立或更新 `weapon.json` 檔案：
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="weapon.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1832,9 +1832,9 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
 
 以下是設定 `apiKey`、`headers` 和模型 `limit` 選項的範例。
 
-```json title="opencode.json" {9,11,17-20}
+```json title="weapon.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1867,7 +1867,7 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
 - **limit.context**：模型接受的最大輸入 tokens。
 - **limit.output**：模型可以生成的最大 tokens。
 
-`limit` 欄位允許 OpenCode 了解您還剩下多少上下文。標準供應商會自動從 models.dev 中提取這些內容。
+`limit` 欄位允許 Weapon 了解您還剩下多少上下文。標準供應商會自動從 models.dev 中提取這些內容。
 
 ---
 
@@ -1875,12 +1875,12 @@ Vercel AI Gateway 可讓您透過統一端點存取來自 OpenAI、Anthropic、G
 
 如果您在配置供應商時遇到問題，請檢查以下內容：
 
-1. **檢查 auth 設定**：執行 `opencode auth list` 以查看憑證是否
+1. **檢查 auth 設定**：執行 `weapon auth list` 以查看憑證是否
    供應商的配置已添加到您的配置中。
 
    這不適用於 Amazon Bedrock 等依賴環境變數進行身分驗證的供應商。
 
-2. 對於自定義供應商，請檢查 OpenCode 配置並：
-   - 確保 `/connect` 指令中使用的供應商 ID 與 OpenCode 配置中的 ID 匹配。
+2. 對於自定義供應商，請檢查 Weapon 配置並：
+   - 確保 `/connect` 指令中使用的供應商 ID 與 Weapon 配置中的 ID 匹配。
    - 正確的 npm 套件用於供應商。例如，對 Cerebras 使用 `@ai-sdk/cerebras`。對於所有其他 OpenAI 相容供應商，請使用 `@ai-sdk/openai-compatible`。
    - 檢查 `options.baseURL` 欄位中使用了正確的 API 端點。

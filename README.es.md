@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://weapon.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="// WEAPON //">
     </picture>
   </a>
 </p>
 <p align="center">El agente de programación con IA de código abierto.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://weapon.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://www.npmjs.com/package/weapon-ai"><img alt="npm" src="https://img.shields.io/npm/v/weapon-ai?style=flat-square" /></a>
+  <a href="https://github.com/anomalyco/weapon/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/weapon/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
   <a href="README.tr.md">Türkçe</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Weapon Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://weapon.ai)
 
 ---
 
@@ -42,17 +42,17 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://weapon.ai/install | bash
 
 # Gestores de paquetes
-npm i -g opencode-ai@latest        # o bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS y Linux (recomendado, siempre al día)
-brew install opencode              # macOS y Linux (fórmula oficial de brew, se actualiza menos)
-paru -S opencode-bin               # Arch Linux
-mise use -g opencode               # cualquier sistema
-nix run nixpkgs#opencode           # o github:anomalyco/opencode para la rama dev más reciente
+npm i -g weapon-ai@latest        # o bun/pnpm/yarn
+scoop install weapon             # Windows
+choco install weapon             # Windows
+brew install anomalyco/tap/weapon # macOS y Linux (recomendado, siempre al día)
+brew install weapon              # macOS y Linux (fórmula oficial de brew, se actualiza menos)
+paru -S weapon-bin               # Arch Linux
+mise use -g weapon               # cualquier sistema
+nix run nixpkgs#weapon           # o github:anomalyco/weapon para la rama dev más reciente
 ```
 
 > [!TIP]
@@ -60,40 +60,40 @@ nix run nixpkgs#opencode           # o github:anomalyco/opencode para la rama de
 
 ### App de escritorio (BETA)
 
-OpenCode también está disponible como aplicación de escritorio. Descárgala directamente desde la [página de releases](https://github.com/anomalyco/opencode/releases) o desde [opencode.ai/download](https://opencode.ai/download).
+Weapon también está disponible como aplicación de escritorio. Descárgala directamente desde la [página de releases](https://github.com/anomalyco/weapon/releases) o desde [weapon.ai/download](https://weapon.ai/download).
 
 | Plataforma            | Descarga                              |
 | --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
+| macOS (Apple Silicon) | `weapon-desktop-darwin-aarch64.dmg` |
+| macOS (Intel)         | `weapon-desktop-darwin-x64.dmg`     |
+| Windows               | `weapon-desktop-windows-x64.exe`    |
 | Linux                 | `.deb`, `.rpm`, o AppImage            |
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
+brew install --cask weapon-desktop
 # Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+scoop bucket add extras; scoop install extras/weapon-desktop
 ```
 
 #### Directorio de instalación
 
 El script de instalación respeta el siguiente orden de prioridad para la ruta de instalación:
 
-1. `$OPENCODE_INSTALL_DIR` - Directorio de instalación personalizado
+1. `$WEAPON_INSTALL_DIR` - Directorio de instalación personalizado
 2. `$XDG_BIN_DIR` - Ruta compatible con la especificación XDG Base Directory
 3. `$HOME/bin` - Directorio binario estándar del usuario (si existe o se puede crear)
-4. `$HOME/.opencode/bin` - Alternativa por defecto
+4. `$HOME/.weapon/bin` - Alternativa por defecto
 
 ```bash
 # Ejemplos
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+WEAPON_INSTALL_DIR=/usr/local/bin curl -fsSL https://weapon.ai/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://weapon.ai/install | bash
 ```
 
 ### Agents
 
-OpenCode incluye dos agents integrados que puedes alternar con la tecla `Tab`.
+Weapon incluye dos agents integrados que puedes alternar con la tecla `Tab`.
 
 - **build** - Por defecto, agent con acceso completo para trabajo de desarrollo
 - **plan** - Agent de solo lectura para análisis y exploración de código
@@ -104,19 +104,19 @@ OpenCode incluye dos agents integrados que puedes alternar con la tecla `Tab`.
 Además, incluye un subagent **general** para búsquedas complejas y tareas de varios pasos.
 Se usa internamente y se puede invocar con `@general` en los mensajes.
 
-Más información sobre [agents](https://opencode.ai/docs/agents).
+Más información sobre [agents](https://weapon.ai/docs/agents).
 
 ### Documentación
 
-Para más información sobre cómo configurar OpenCode, [**ve a nuestra documentación**](https://opencode.ai/docs).
+Para más información sobre cómo configurar Weapon, [**ve a nuestra documentación**](https://weapon.ai/docs).
 
 ### Contribuir
 
-Si te interesa contribuir a OpenCode, lee nuestras [docs de contribución](./CONTRIBUTING.md) antes de enviar un pull request.
+Si te interesa contribuir a Weapon, lee nuestras [docs de contribución](./CONTRIBUTING.md) antes de enviar un pull request.
 
-### Construyendo sobre OpenCode
+### Construyendo sobre Weapon
 
-Si estás trabajando en un proyecto relacionado con OpenCode y usas "opencode" como parte del nombre; por ejemplo, "opencode-dashboard" u "opencode-mobile", agrega una nota en tu README para aclarar que no está construido por el equipo de OpenCode y que no está afiliado con nosotros de ninguna manera.
+Si estás trabajando en un proyecto relacionado con Weapon y usas "weapon" como parte del nombre; por ejemplo, "weapon-dashboard" u "weapon-mobile", agrega una nota en tu README para aclarar que no está construido por el equipo de Weapon y que no está afiliado con nosotros de ninguna manera.
 
 ### FAQ
 
@@ -125,11 +125,11 @@ Si estás trabajando en un proyecto relacionado con OpenCode y usas "opencode" c
 Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias clave:
 
 - 100% open source
-- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://opencode.ai/zen); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
+- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [Weapon Zen](https://weapon.ai/zen); Weapon se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
 - Soporte LSP listo para usar
-- Un enfoque en la TUI. OpenCode está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
-- Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar OpenCode en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.
+- Un enfoque en la TUI. Weapon está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
+- Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar Weapon en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.
 
 ---
 
-**Únete a nuestra comunidad** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Únete a nuestra comunidad** [Discord](https://discord.gg/weapon) | [X.com](https://x.com/weapon)

@@ -1,9 +1,9 @@
 ---
 title: Condivisione
-description: Condividi le tue conversazioni OpenCode.
+description: Condividi le tue conversazioni Weapon.
 ---
 
-La funzione di condivisione di OpenCode ti permette di creare link pubblici alle tue conversazioni, cosi puoi collaborare con i colleghi o chiedere aiuto ad altre persone.
+La funzione di condivisione di Weapon ti permette di creare link pubblici alle tue conversazioni, cosi puoi collaborare con i colleghi o chiedere aiuto ad altre persone.
 
 :::note
 Le conversazioni condivise sono accessibili pubblicamente a chiunque abbia il link.
@@ -13,7 +13,7 @@ Le conversazioni condivise sono accessibili pubblicamente a chiunque abbia il li
 
 ## Come funziona
 
-Quando condividi una conversazione, OpenCode:
+Quando condividi una conversazione, Weapon:
 
 1. Crea un URL pubblico univoco per la sessione
 2. Sincronizza la cronologia della conversazione sui nostri server
@@ -23,13 +23,13 @@ Quando condividi una conversazione, OpenCode:
 
 ## Condivisione
 
-OpenCode supporta tre modalita di condivisione che controllano come vengono condivise le conversazioni:
+Weapon supporta tre modalita di condivisione che controllano come vengono condivise le conversazioni:
 
 ---
 
 ### Manuale (predefinito)
 
-Per impostazione predefinita, OpenCode usa la condivisione manuale. Le sessioni non vengono condivise automaticamente, ma puoi condividerle manualmente con il comando `/share`:
+Per impostazione predefinita, Weapon usa la condivisione manuale. Le sessioni non vengono condivise automaticamente, ma puoi condividerle manualmente con il comando `/share`:
 
 ```
 /share
@@ -39,7 +39,7 @@ Questo genera un URL univoco che viene copiato negli appunti.
 
 Per impostare esplicitamente la modalita manuale nel tuo [file di config](/docs/config):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ Per impostare esplicitamente la modalita manuale nel tuo [file di config](/docs/
 
 Puoi abilitare la condivisione automatica per tutte le nuove conversazioni impostando l'opzione `share` su `"auto"` nel tuo [file di config](/docs/config):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Con la condivisione automatica attiva, ogni nuova conversazione verra condivisa 
 
 Puoi disabilitare completamente la condivisione impostando l'opzione `share` su `"disabled"` nel tuo [file di config](/docs/config):
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Per applicarlo al tuo team in un progetto specifico, aggiungilo a `opencode.json` nel progetto e versionalo su Git.
+Per applicarlo al tuo team in un progetto specifico, aggiungilo a `weapon.json` nel progetto e versionalo su Git.
 
 ---
 
@@ -124,4 +124,4 @@ Per deploy enterprise, la condivisione puo essere:
 - **Limitata** ai soli utenti autenticati tramite SSO
 - **Self-hosted** sulla tua infrastruttura
 
-[Scopri di piu](/docs/enterprise) su come usare opencode nella tua organizzazione.
+[Scopri di piu](/docs/enterprise) su come usare weapon nella tua organizzazione.

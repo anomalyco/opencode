@@ -1,8 +1,8 @@
 import { Accessor } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { createOpencodeClient, type Message } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { createWeaponClient, type Message } from "@weapon-ai/sdk/v2/client"
+import { showToast } from "@weapon-ai/ui/toast"
+import { base64Encode } from "@weapon-ai/util/encode"
 import { useLocal } from "@/context/local"
 import { usePrompt, type ImageAttachmentPart, type Prompt } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
@@ -171,7 +171,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        client = createOpencodeClient({
+        client = createWeaponClient({
           baseUrl: sdk.url,
           fetch: platform.fetch,
           directory: sessionDirectory,

@@ -1,30 +1,30 @@
 ---
 title: プロバイダー
-description: OpenCode で LLM プロバイダーを使用する。
+description: Weapon で LLM プロバイダーを使用する。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカルモデルの実行をサポートします。
+Weapon は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカルモデルの実行をサポートします。
 
 プロバイダーを追加するには、次のことを行う必要があります。
 
 1. `/connect` コマンドを使用して、プロバイダーの API キーを追加します。
-2. OpenCode 設定でプロバイダーを構成します。
+2. Weapon 設定でプロバイダーを構成します。
 
 ---
 
 ### 認証情報
 
 `/connect` コマンドを使用してプロバイダーの API キーを追加すると、それらは保存されます
-`~/.local/share/opencode/auth.json`で。
+`~/.local/share/weapon/auth.json`で。
 
 ---
 
 ### 設定
 
-OpenCode の `provider` セクションを通じてプロバイダーをカスタマイズできます。
+Weapon の `provider` セクションを通じてプロバイダーをカスタマイズできます。
 config.
 
 ---
@@ -33,9 +33,9 @@ config.
 
 `baseURL` オプションを設定することで、任意のプロバイダーのベース URL をカスタマイズできます。これは、プロキシサービスまたはカスタムエンドポイントを使用する場合に便利です。
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ config.
 
 ---
 
-## OpenCode Zen
+## Weapon Zen
 
-OpenCode Zen は、OpenCode チームが提供するモデルのリストです。
-OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
+Weapon Zen は、Weapon チームが提供するモデルのリストです。
+Weapon で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
 
 :::tip
-初めての方は、OpenCode Zen から始めることをお勧めします。
+初めての方は、Weapon Zen から始めることをお勧めします。
 :::
 
-1. TUI で `/connect` コマンドを実行し、opencode を選択して、[opencode.ai/auth](https://opencode.ai/auth) で認証します。
+1. TUI で `/connect` コマンドを実行し、weapon を選択して、[weapon.ai/auth](https://weapon.ai/auth) で認証します。
 
    ```txt
    /connect
@@ -80,7 +80,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
    /models
    ```
 
-これは OpenCode の他のプロバイダーと同様に機能し、使用は完全にオプションです。
+これは Weapon の他のプロバイダーと同様に機能し、使用は完全にオプションです。
 
 ---
 
@@ -124,7 +124,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 
 ### Amazon Bedrock
 
-OpenCode で Amazon Bedrock を使用するには:
+Weapon で Amazon Bedrock を使用するには:
 
 1. Amazon Bedrock コンソールの **モデルカタログ** に移動してリクエストします。
    必要なモデルにアクセスします。
@@ -137,17 +137,17 @@ Amazon Bedrock で必要なモデルにアクセスできる必要がありま�
 
    #### 環境変数 (クイックスタート)
 
-opencode の実行中に次の環境変数のいずれかを設定します。
+weapon の実行中に次の環境変数のいずれかを設定します。
 
 ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY weapon
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile weapon
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX weapon
 ```
 
 または、それらを bash プロファイルに追加します。
@@ -159,11 +159,11 @@ opencode の実行中に次の環境変数のいずれかを設定します。
 
 #### 設定ファイル (推奨)
 
-プロジェクト固有の設定または永続的な設定の場合は、`opencode.json` を使用します。
+プロジェクト固有の設定または永続的な設定の場合は、`weapon.json` を使用します。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -189,9 +189,9 @@ opencode の実行中に次の環境変数のいずれかを設定します。
 
 Bedrock の VPC エンドポイントを使用している場合:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -235,9 +235,9 @@ Amazon Bedrock は次の認証優先度を使用します。
 :::note
 カスタム推論プロファイルの場合、キーでモデルとプロバイダー名を使用し、`id` プロパティを arn に設定します。これにより、正しいキャッシュが保証されます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -282,7 +282,7 @@ Amazon Bedrock は次の認証優先度を使用します。
    ```
 
 :::info
-OpenCode での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com) によって正式に許可されていませんが、一般的に機能します。
+Weapon での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com) によって正式に許可されていませんが、一般的に機能します。
 :::
 
 ##### APIキーの使用
@@ -306,7 +306,7 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
 :::note
-OpenCode が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
+Weapon が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
 3. `/connect` コマンドを実行し、**Azure** を検索します。
@@ -327,7 +327,7 @@ OpenCode が正しく動作するには、デプロイメント名がモデル�
 5. リソース名を環境変数として設定します。
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX weapon
    ```
 
 または、bash プロファイルに追加します。
@@ -353,7 +353,7 @@ OpenCode が正しく動作するには、デプロイメント名がモデル�
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
 :::note
-OpenCode が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
+Weapon が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
 3. `/connect` コマンドを実行し、**Azure Cognitive Services** を検索します。
@@ -374,7 +374,7 @@ OpenCode が正しく動作するには、デプロイメント名がモデル�
 5. リソース名を環境変数として設定します。
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX weapon
    ```
 
 または、bash プロファイルに追加します。
@@ -485,11 +485,11 @@ Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じ�
    /models
    ```
 
-OpenCode 設定を通じてモデルを追加することもできます。
+Weapon 設定を通じてモデルを追加することもできます。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
@@ -666,7 +666,7 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブツ
 
 1.  [GitLab ユーザー設定 > アクセス Tokens](https://gitlab.com/-/user_settings/personal_access_tokens) に移動します。
 2.  **新しいトークンを追加** をクリックします
-3.  名前: `OpenCode`、スコープ: `api`
+3.  名前: `Weapon`、スコープ: `api`
 4.  トークンをコピーします（`glpat-`で始まる）
 5.  ターミナルに入力してください
 
@@ -684,16 +684,16 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブツ
 
 :::note
 必要がない場合は、「GITLAB_TOKEN」環境変数を指定することもできます。
-トークンを OpenCode 認証ストレージに保存します。
+トークンを Weapon 認証ストレージに保存します。
 :::
 
 ##### 自己ホスト型 GitLab
 
 :::note[コンプライアンスメモ]
-OpenCode は、セッションタイトルの生成などの一部の AI タスクに小規模なモデルを使用します。
-デフォルトでは、Zen によってホストされる gpt-5-nano を使用するように構成されています。 OpenCode をロックするには
+Weapon は、セッションタイトルの生成などの一部の AI タスクに小規模なモデルを使用します。
+デフォルトでは、Zen によってホストされる gpt-5-nano を使用するように構成されています。 Weapon をロックするには
 自分の GitLab でホストされているインスタンスのみを使用するには、次の行を
-`opencode.json` ファイル。セッション共有を無効にすることもお勧めします。
+`weapon.json` ファイル。セッション共有を無効にすることもお勧めします。
 
 ```json
 {
@@ -754,11 +754,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### 設定
 
-`opencode.json` を通じてカスタマイズします。
+`weapon.json` を通じてカスタマイズします。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -777,10 +777,10 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 GitLab ツール (マージリクエスト、問題、パイプライン、CI/CD など) にアクセスするには:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["@gitlab/weapon-gitlab-plugin"]
 }
 ```
 
@@ -790,7 +790,7 @@ GitLab ツール (マージリクエスト、問題、パイプライン、CI/CD
 
 ### GitHub Copilot
 
-GitHub Copilot サブスクリプションを OpenCode で使用するには:
+GitHub Copilot サブスクリプションを Weapon で使用するには:
 
 :::note
 一部のモデルでは [Pro+] が必要になる場合があります。
@@ -828,7 +828,7 @@ subscription](https://github.com/features/copilot/plans) を使用します。
 
 ### Google Vertex AI
 
-OpenCode で Google Vertex AI を使用するには:
+Weapon で Google Vertex AI を使用するには:
 
 1. Google Cloud Console の **Model Garden** に移動し、
    お住まいの地域で利用可能なモデル。
@@ -844,10 +844,10 @@ Vertex AI API が有効になっている Google Cloud プロジェクトが必�
      - `GOOGLE_APPLICATION_CREDENTIALS`: サービスアカウントの JSON キーファイルへのパス
      - gcloud CLI を使用して認証する: `gcloud auth application-default login`
 
-opencode の実行中に設定します。
+weapon の実行中に設定します。
 
 ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id weapon
 ```
 
 または、それらを bash プロファイルに追加します。
@@ -957,13 +957,13 @@ opencode の実行中に設定します。
 
 #### オプションの設定
 
-OpenCode を通じて自動的に構成されていない Helicone の機能またはモデルを見つけた場合は、いつでも自分で構成できます。
+Weapon を通じて自動的に構成されていない Helicone の機能またはモデルを見つけた場合は、いつでも自分で構成できます。
 
 これは [Helicone のモデルディレクトリ](https://helicone.ai/models) です。追加するモデルの ID を取得するためにこれが必要になります。
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -989,9 +989,9 @@ OpenCode を通じて自動的に構成されていない Helicone の機能ま�
 
 Helicone は、キャッシュ、ユーザー追跡、セッション管理などの機能のカスタムヘッダーをサポートしています。 `options.headers` を使用してプロバイダー設定に追加します。
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/weapon/weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1000,7 +1000,7 @@ Helicone は、キャッシュ、ユーザー追跡、セッション管理な�
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "weapon",
         },
       },
     },
@@ -1010,21 +1010,21 @@ Helicone は、キャッシュ、ユーザー追跡、セッション管理な�
 
 ##### セッション追跡
 
-Helicone の [Sessions](https://docs.helicone.ai/features/sessions) 機能を使用すると、関連する LLM リクエストをグループ化できます。 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) プラグインを使用して、各 OpenCode 会話を Helicone のセッションとして自動的に記録します。
+Helicone の [Sessions](https://docs.helicone.ai/features/sessions) 機能を使用すると、関連する LLM リクエストをグループ化できます。 [weapon-helicone-session](https://github.com/H2Shami/weapon-helicone-session) プラグインを使用して、各 Weapon 会話を Helicone のセッションとして自動的に記録します。
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g weapon-helicone-session
 ```
 
 それを設定に追加します。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["weapon-helicone-session"]
 }
 ```
 
-プラグインは、リクエストに `Helicone-Session-Id` ヘッダーと `Helicone-Session-Name` ヘッダーを挿入します。 Helicone のセッションページでは、OpenCode の各会話が個別のセッションとしてリストされています。
+プラグインは、リクエストに `Helicone-Session-Id` ヘッダーと `Helicone-Session-Name` ヘッダーを挿入します。 Helicone のセッションページでは、Weapon の各会話が個別のセッションとしてリストされています。
 
 ##### 一般的なヘリコーンヘッダー
 
@@ -1041,11 +1041,11 @@ npm install -g opencode-helicone-session
 
 ### llama.cpp
 
-[llama.cpp の s](https://github.com/ggml-org/llama.cpp) llama-server ユーティリティ] を通じて、ローカルモデルを使用するように opencode を構成できます。
+[llama.cpp の s](https://github.com/ggml-org/llama.cpp) llama-server ユーティリティ] を通じて、ローカルモデルを使用するように weapon を構成できます。
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="weapon.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1108,11 +1108,11 @@ IO.NET は、さまざまなユースケースに最適化された 17 のモデ
 
 ### LM Studio
 
-LM Studio を通じてローカルモデルを使用するように opencode を構成できます。
+LM Studio を通じてローカルモデルを使用するように weapon を構成できます。
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="weapon.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1225,15 +1225,15 @@ Moonshot AI の Kim K2 を使用するには:
 
 ### Ollama
 
-Ollama を通じてローカルモデルを使用するように opencode を構成できます。
+Ollama を通じてローカルモデルを使用するように weapon を構成できます。
 
 :::tip
-Ollama は OpenCode 用に自動的に構成できます。詳細については、[Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
+Ollama は Weapon 用に自動的に構成できます。詳細については、[Ollama 統合 docs](https://docs.ollama.com/integrations/weapon)」を参照してください。
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="weapon.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1267,13 +1267,13 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 
 ### Ollama Cloud
 
-OpenCode で Ollama Cloud を使用するには:
+Weapon で Ollama Cloud を使用するには:
 
 1. [https://ollama.com/](https://ollama.com/) にアクセスしてサインインするか、アカウントを作成します。
 
 2. [**設定**] > [キー**] に移動し、[**API キーの追加**] をクリックして新しい API キーを生成します。
 
-3. OpenCode で使用するために API キーをコピーします。
+3. Weapon で使用するために API キーをコピーします。
 
 4. `/connect` コマンドを実行し、**Ollama Cloud** を検索します。
 
@@ -1290,7 +1290,7 @@ OpenCode で Ollama Cloud を使用するには:
    └ enter
    ```
 
-6. **重要**: OpenCode でクラウドモデルを使用する前に、モデル情報をローカルに取得する必要があります。
+6. **重要**: Weapon でクラウドモデルを使用する前に、モデル情報をローカルに取得する必要があります。
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1337,19 +1337,19 @@ OpenCode で Ollama Cloud を使用するには:
 
 ---
 
-### OpenCode Zen
+### Weapon Zen
 
-OpenCode Zen は、OpenCode チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](/docs/zen)。
+Weapon Zen は、Weapon チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](/docs/zen)。
 
-1. **<a href={console}>OpenCode Zen</a>** にサインインし、**API キーの作成** をクリックします。
+1. **<a href={console}>Weapon Zen</a>** にサインインし、**API キーの作成** をクリックします。
 
-2. `/connect` コマンドを実行し、**OpenCode Zen** を検索します。
+2. `/connect` コマンドを実行し、**Weapon Zen** を検索します。
 
    ```txt
    /connect
    ```
 
-3. OpenCode API キーを入力します。
+3. Weapon API キーを入力します。
 
    ```txt
    ┌ API key
@@ -1391,11 +1391,11 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
    /models
    ```
 
-OpenCode 設定を通じて追加のモデルを追加することもできます。
+Weapon 設定を通じて追加のモデルを追加することもできます。
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1406,11 +1406,11 @@ OpenCode 設定を通じて追加のモデルを追加することもできま�
 }
 ```
 
-5. OpenCode 設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
+5. Weapon 設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
 
-   ```json title="opencode.json"
+   ```json title="weapon.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1458,7 +1458,7 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 または、`AICORE_SERVICE_KEY` 環境変数を設定します。
 
 ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' weapon
 ```
 
 または、bash プロファイルに追加します。
@@ -1470,7 +1470,7 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 4. 必要に応じて、デプロイメント ID とリソースグループを設定します。
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group weapon
    ```
 
 :::note
@@ -1514,7 +1514,7 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 
 ### Scaleway
 
-[Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) を Opencode で使用するには:
+[Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) を Weapon で使用するには:
 
 1. [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) に移動して、新しい API キーを生成します。
 
@@ -1622,11 +1622,11 @@ Vercel AI Gateway を使用すると、統合エンドポイントを通じて O
    /models
    ```
 
-OpenCode 設定を通じてモデルをカスタマイズすることもできます。プロバイダーのルーティング順序を指定する例を次に示します。
+Weapon 設定を通じてモデルをカスタマイズすることもできます。プロバイダーのルーティング順序を指定する例を次に示します。
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1732,11 +1732,11 @@ OpenCode 設定を通じてモデルをカスタマイズすることもでき�
    /models
    ```
 
-OpenCode 設定を通じて追加のモデルを追加することもできます。
+Weapon 設定を通じて追加のモデルを追加することもできます。
 
-```json title="opencode.json" {6}
+```json title="weapon.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "zenmux": {
       "models": {
@@ -1754,7 +1754,7 @@ OpenCode 設定を通じて追加のモデルを追加することもできま�
 `/connect` コマンドにリストされていない **OpenAI 互換**プロバイダーを追加するには:
 
 :::tip
-OpenAI と互換性のある任意のプロバイダーを OpenCode で使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
+OpenAI と互換性のある任意のプロバイダーを Weapon で使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
 :::
 
 1. `/connect` コマンドを実行し、**その他**まで下にスクロールします。
@@ -1793,18 +1793,18 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in weapon.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. プロジェクトディレクトリで `opencode.json` ファイルを作成または更新します。
+4. プロジェクトディレクトリで `weapon.json` ファイルを作成または更新します。
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="weapon.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://weapon.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1841,9 +1841,9 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 
 次に、`apiKey`、`headers`、およびモデル `limit` オプションを設定する例を示します。
 
-```json title="opencode.json" {9,11,17-20}
+```json title="weapon.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1876,7 +1876,7 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 - **limit.context**: モデルが受け入れる最大入力トークン。
 - **limit.output**: モデルが生成できる最大出力トークン。
 
-`limit` フィールドを使用すると、OpenCode はコンテキストがどのくらい残っているかを理解できます。標準プロバイダーは、これらを models.dev から自動的に取得します。
+`limit` フィールドを使用すると、Weapon はコンテキストがどのくらい残っているかを理解できます。標準プロバイダーは、これらを models.dev から自動的に取得します。
 
 ---
 
@@ -1884,12 +1884,12 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 
 プロバイダーの設定で問題が発生した場合は、次の点を確認してください。
 
-1. **認証設定を確認します**: `opencode auth list` を実行して、資格情報が正しいかどうかを確認します。
+1. **認証設定を確認します**: `weapon auth list` を実行して、資格情報が正しいかどうかを確認します。
    プロバイダー用のものが設定に追加されます。
 
 これは、認証に環境変数に依存する Amazon Bedrock のようなプロバイダーには当てはまりません。
 
-2. カスタムプロバイダーの場合は、OpenCode 設定を確認し、次のことを行います。
-   - `/connect` コマンドで使用されるプロバイダー ID が、OpenCode 設定内の ID と一致することを確認してください。
+2. カスタムプロバイダーの場合は、Weapon 設定を確認し、次のことを行います。
+   - `/connect` コマンドで使用されるプロバイダー ID が、Weapon 設定内の ID と一致することを確認してください。
    - プロバイダーには適切な npm パッケージが使用されます。たとえば、Cerebras には `@ai-sdk/cerebras` を使用します。他のすべての OpenAI 互換プロバイダーの場合は、`@ai-sdk/openai-compatible` を使用します。
    - `options.baseURL` フィールドで正しい API エンドポイントが使用されていることを確認してください。

@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Typsicherer JS-Client fuer den opencode-Server.
+description: Typsicherer JS-Client fuer den weapon-Server.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Das opencode JS/TS SDK bietet einen typsicheren Client fuer die Server-API.
-Damit kannst du Integrationen bauen und opencode programmatisch steuern.
+Das weapon JS/TS SDK bietet einen typsicheren Client fuer die Server-API.
+Damit kannst du Integrationen bauen und weapon programmatisch steuern.
 
 [Mehr zum Server](/docs/server). Beispiele findest du in den [Community-Projekten](/docs/ecosystem#projects).
 
@@ -18,19 +18,19 @@ Damit kannst du Integrationen bauen und opencode programmatisch steuern.
 Installiere das SDK ueber npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @weapon-ai/sdk
 ```
 
 ---
 
 ## Client erstellen
 
-Erstelle eine opencode-Instanz:
+Erstelle eine weapon-Instanz:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createWeapon()
 ```
 
 Das startet Server und Client.
@@ -50,12 +50,12 @@ Das startet Server und Client.
 ## Config
 
 Du kannst ein Konfigurationsobjekt uebergeben, um das Verhalten anzupassen.
-`opencode.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
+`weapon.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const opencode = await createOpencode({
+const weapon = await createWeapon({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -63,19 +63,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${weapon.server.url}`)
 
-opencode.server.close()
+weapon.server.close()
 ```
 
 ## Nur Client
 
-Wenn opencode bereits laeuft, kannst du nur einen Client erstellen und verbinden:
+Wenn weapon bereits laeuft, kannst du nur einen Client erstellen und verbinden:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createWeaponClient } from "@weapon-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createWeaponClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -98,7 +98,7 @@ Das SDK bringt TypeScript-Definitionen fuer alle API-Typen mit.
 Du kannst sie direkt importieren:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@weapon-ai/sdk"
 ```
 
 Alle Typen werden aus der OpenAPI-Spezifikation des Servers generiert und sind in der <a href={typesUrl}>Typdatei</a> verfuegbar.
@@ -306,7 +306,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*weapon" },
 })
 
 const files = await client.find.files({

@@ -3,7 +3,7 @@ title: Dozvole
 description: Kontrolirajte koje radnje zahtijevaju odobrenje za pokretanje.
 ---
 
-OpenCode koristi `permission` konfiguraciju da odluči da li će se određena radnja pokrenuti automatski, zatražiti od vas ili biti blokirana.
+Weapon koristi `permission` konfiguraciju da odluči da li će se određena radnja pokrenuti automatski, zatražiti od vas ili biti blokirana.
 Od `v1.1.1`, naslijeđena `tools` logička konfiguracija je zastarjela i spojena je u `permission`. Stara `tools` konfiguracija je još uvijek podržana za kompatibilnost unatrag.
 
 ---
@@ -22,9 +22,9 @@ Svako pravilo dozvole rješava jedno od:
 
 Dozvole možete postaviti globalno (sa `*`) i nadjačati određene alate.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -35,9 +35,9 @@ Dozvole možete postaviti globalno (sa `*`) i nadjačati određene alate.
 
 Također možete postaviti sve dozvole odjednom:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": "allow"
 }
 ```
@@ -48,9 +48,9 @@ Također možete postaviti sve dozvole odjednom:
 
 Za većinu dozvola, možete koristiti objekt za primjenu različitih radnji na osnovu unosa alata.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -87,13 +87,13 @@ Možete koristiti `~` ili `$HOME` na početku obrasca da referencirate svoj poč
 
 ### Vanjski direktoriji
 
-Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje izvan radnog direktorija gdje je OpenCode pokrenut. Ovo se odnosi na bilo koji alat koji uzima putanju kao ulaz (na primjer `read`, `edit`, `list`, `glob`, `grep` i mnoge `bash` komande).
+Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje izvan radnog direktorija gdje je Weapon pokrenut. Ovo se odnosi na bilo koji alat koji uzima putanju kao ulaz (na primjer `read`, `edit`, `list`, `glob`, `grep` i mnoge `bash` komande).
 Proširenje kuće (poput `~/...`) utiče samo na način na koji je obrazac napisan. Ne čini vanjsku stazu dijelom trenutnog radnog prostora, tako da staze izvan radnog direktorija i dalje moraju biti dozvoljene preko `external_directory`.
 Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -104,9 +104,9 @@ Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
 Svaki direktorij koji je ovdje dozvoljen nasljeđuje iste zadane postavke kao trenutni radni prostor. Pošto je [`read` zadano na `allow`](#defaults), čitanje je također dozvoljeno za unose pod `external_directory` osim ako se ne poništi. Dodajte eksplicitna pravila kada bi alat trebao biti ograničen na ovim stazama, kao što je blokiranje uređivanja uz zadržavanje čitanja:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -122,7 +122,7 @@ Držite ovu listu fokusiranom na pouzdane putanje, a dodatna allow/deny pravila 
 
 ## Dostupne dozvole
 
-Dozvole OpenCode su označene imenom alata, plus nekoliko sigurnosnih mjera:
+Dozvole Weapon su označene imenom alata, plus nekoliko sigurnosnih mjera:
 
 - `read` — čitanje datoteke (odgovara putanji datoteke)
 - `edit` — sve izmjene fajlova (pokriva `edit`, `write`, `patch`, `multiedit`)
@@ -143,13 +143,13 @@ Dozvole OpenCode su označene imenom alata, plus nekoliko sigurnosnih mjera:
 
 ## Zadane postavke
 
-Ako ništa ne navedete, OpenCode počinje od dozvoljenih zadanih vrijednosti:
+Ako ništa ne navedete, Weapon počinje od dozvoljenih zadanih vrijednosti:
 
 - Većina dozvola je zadana na `"allow"`.
 - `doom_loop` i `external_directory` zadano na `"ask"`.
 - `read` je `"allow"`, ali `.env` fajlovi su po defaultu odbijeni:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "permission": {
     "read": {
@@ -166,10 +166,10 @@ Ako ništa ne navedete, OpenCode počinje od dozvoljenih zadanih vrijednosti:
 
 ## Šta radi “Ask”
 
-Kada OpenCode zatraži odobrenje, korisničko sučelje nudi tri ishoda:
+Kada Weapon zatraži odobrenje, korisničko sučelje nudi tri ishoda:
 
 - `once` — odobri samo ovaj zahtjev
-- `always` — odobri buduće zahtjeve koji odgovaraju predloženim obrascima (za ostatak trenutne OpenCode sesije)
+- `always` — odobri buduće zahtjeve koji odgovaraju predloženim obrascima (za ostatak trenutne Weapon sesije)
 - `reject` — odbiti zahtjev
   Skup obrazaca koje bi `always` odobrio pruža alat (na primjer, bash odobrenja obično stavljaju na bijelu listu sigurni prefiks komande kao što je `git status*`).
 
@@ -182,9 +182,9 @@ Možete nadjačati dozvole po agentu. Dozvole agenta su spojene sa globalnom kon
 Pogledajte gornji odjeljak [Granularna pravila (sintaksa objekata)](#granular-rules-object-syntax) za detaljnije primjere podudaranja uzoraka.
 :::
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -212,7 +212,7 @@ Pogledajte gornji odjeljak [Granularna pravila (sintaksa objekata)](#granular-ru
 
 Također možete konfigurirati dozvole agenta u Markdownu:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/weapon/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

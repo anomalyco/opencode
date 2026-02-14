@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session.diff"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "diff": {
+          "type": "array",
+          "items": {
+            "$ref": "./FileDiff.json"
+          }
+        }
+      },
+      "required": [
+        "sessionID",
+        "diff"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

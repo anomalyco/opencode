@@ -437,7 +437,7 @@ pub fn run() {
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
-        .arg("opencode-cli")
+        .arg("weapon-cli")
         .output();
 
     let mut builder = tauri::Builder::default()
@@ -566,10 +566,10 @@ async fn initialize(app: AppHandle) {
     // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
     // Then in the loading task, we wait for sqlite migration to complete before
     // starting our health check against the server, otherwise long migrations could result in a timeout.
-    let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
+    let sqlite_enabled = option_env!("WEAPON_SQLITE").is_some();
     let sqlite_done = (sqlite_enabled && !sqlite_file_exists()).then(|| {
         tracing::info!(
-            path = %opencode_db_path().expect("failed to get db path").display(),
+            path = %weapon_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
         );
 
@@ -624,7 +624,7 @@ async fn initialize(app: AppHandle) {
                                 let _ = child.kill();
 
                                 return Err(format!(
-                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{}",
+                                    "Failed to spawn Weapon Server ({err}). Logs:\n{}",
                                     get_logs()
                                 ));
                             }
@@ -771,9 +771,9 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 }
 
 fn get_sidecar_port() -> u32 {
-    option_env!("OPENCODE_PORT")
+    option_env!("WEAPON_PORT")
         .map(|s| s.to_string())
-        .or_else(|| std::env::var("OPENCODE_PORT").ok())
+        .or_else(|| std::env::var("WEAPON_PORT").ok())
         .and_then(|port_str| port_str.parse().ok())
         .unwrap_or_else(|| {
             TcpListener::bind("127.0.0.1:0")
@@ -785,14 +785,14 @@ fn get_sidecar_port() -> u32 {
 }
 
 fn sqlite_file_exists() -> bool {
-    let Ok(path) = opencode_db_path() else {
+    let Ok(path) = weapon_db_path() else {
         return true;
     };
 
     path.exists()
 }
 
-fn opencode_db_path() -> Result<PathBuf, &'static str> {
+fn weapon_db_path() -> Result<PathBuf, &'static str> {
     let xdg_data_home = env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty());
 
     let data_home = match xdg_data_home {
@@ -803,7 +803,7 @@ fn opencode_db_path() -> Result<PathBuf, &'static str> {
         }
     };
 
-    Ok(data_home.join("opencode").join("opencode.db"))
+    Ok(data_home.join("weapon").join("weapon.db"))
 }
 
 // Creates a `once` listener for the specified event and returns a future that resolves

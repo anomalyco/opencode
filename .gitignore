@@ -16,13 +16,13 @@ ts-dist
 .serena/
 refs
 Session.vim
-opencode.json
+weapon.json
 a.out
 target
 .scripts
 
 # Local dev files
-opencode-dev
+weapon-dev
 logs/
 *.bun-build
 .nixd.json

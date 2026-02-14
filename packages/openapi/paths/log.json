@@ -1,0 +1,88 @@
+{
+  "post": {
+    "operationId": "app.log",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "summary": "Write log",
+    "description": "Write a log entry to the server logs with specified level and metadata.",
+    "responses": {
+      "200": {
+        "description": "Log entry written successfully",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "400": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/BadRequestError.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "description": "Service name for the log entry",
+                "type": "string"
+              },
+              "level": {
+                "description": "Log level",
+                "type": "string",
+                "enum": [
+                  "debug",
+                  "info",
+                  "error",
+                  "warn"
+                ]
+              },
+              "message": {
+                "description": "Log message",
+                "type": "string"
+              },
+              "extra": {
+                "description": "Additional metadata for the log entry",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "service",
+              "level",
+              "message"
+            ]
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/log/post.js"
+        }
+      }
+    ]
+  }
+}

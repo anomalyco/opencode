@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: ไคลเอนต์ JS ประเภทที่ปลอดภัยสำหรับเซิร์ฟเวอร์ opencode
+description: ไคลเอนต์ JS ประเภทที่ปลอดภัยสำหรับเซิร์ฟเวอร์ weapon
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK จัดเตรียมไคลเอ็นต์ประเภทที่ปลอดภัยสำหรับการโต้ตอบกับเซิร์ฟเวอร์
-ใช้เพื่อสร้างการบูรณาการและควบคุม opencode โดยทางโปรแกรม
+weapon JS/TS SDK จัดเตรียมไคลเอ็นต์ประเภทที่ปลอดภัยสำหรับการโต้ตอบกับเซิร์ฟเวอร์
+ใช้เพื่อสร้างการบูรณาการและควบคุม weapon โดยทางโปรแกรม
 
 [เรียนรู้เพิ่มเติม](/docs/server) เกี่ยวกับวิธีการทำงานของเซิร์ฟเวอร์ ตัวอย่างเช่น ลองดู [โครงการ](/docs/ecosystem#โครงการ) ที่สร้างโดยชุมชน
 
@@ -18,19 +18,19 @@ opencode JS/TS SDK จัดเตรียมไคลเอ็นต์ปร�
 ติดตั้ง SDK จาก npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @weapon-ai/sdk
 ```
 
 ---
 
 ## สร้างไคลเอนต์
 
-สร้างอินสแตนซ์ของ opencode:
+สร้างอินสแตนซ์ของ weapon:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createWeapon()
 ```
 
 สิ่งนี้จะเริ่มต้นทั้งเซิร์ฟเวอร์และไคลเอนต์
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## การกำหนดค่า
 
-คุณสามารถส่งผ่านออบเจ็กต์การกำหนดค่าเพื่อปรับแต่งลักษณะการทำงานได้ อินสแตนซ์ยังคงรับ `opencode.json` ของคุณ แต่คุณสามารถแทนที่หรือเพิ่มการกำหนดค่าแบบอินไลน์ได้:
+คุณสามารถส่งผ่านออบเจ็กต์การกำหนดค่าเพื่อปรับแต่งลักษณะการทำงานได้ อินสแตนซ์ยังคงรับ `weapon.json` ของคุณ แต่คุณสามารถแทนที่หรือเพิ่มการกำหนดค่าแบบอินไลน์ได้:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createWeapon } from "@weapon-ai/sdk"
 
-const opencode = await createOpencode({
+const weapon = await createWeapon({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${weapon.server.url}`)
 
-opencode.server.close()
+weapon.server.close()
 ```
 
 ## ลูกค้าเท่านั้น
 
-หากคุณมีอินสแตนซ์ opencode ที่ทำงานอยู่แล้ว คุณสามารถสร้างอินสแตนซ์ไคลเอ็นต์เพื่อเชื่อมต่อได้:
+หากคุณมีอินสแตนซ์ weapon ที่ทำงานอยู่แล้ว คุณสามารถสร้างอินสแตนซ์ไคลเอ็นต์เพื่อเชื่อมต่อได้:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createWeaponClient } from "@weapon-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createWeaponClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK มีคำจำกัดความ TypeScript สำหรับ API ประเภททั้งหมด นำเข้าโดยตรง:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@weapon-ai/sdk"
 ```
 
 ทุกประเภทสร้างขึ้นจากข้อกำหนด OpenAPI ของเซิร์ฟเวอร์และมีอยู่ใน <a href={typesUrl}>ไฟล์ประเภท</a>
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*weapon" },
 })
 
 const files = await client.find.files({

@@ -1,0 +1,60 @@
+{
+  "post": {
+    "operationId": "session.fork",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "directory",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "sessionID",
+        "schema": {
+          "type": "string",
+          "pattern": "^ses.*"
+        },
+        "required": true
+      }
+    ],
+    "summary": "Fork session",
+    "description": "Create a new session by forking an existing session at a specific message point.",
+    "responses": {
+      "200": {
+        "description": "200",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "../components/schemas/Session.json"
+            }
+          }
+        }
+      }
+    },
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/session_{sessionID}_fork/post.js"
+        }
+      }
+    ]
+  }
+}

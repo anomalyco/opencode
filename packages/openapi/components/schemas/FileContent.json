@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "binary"
+      ]
+    },
+    "content": {
+      "type": "string"
+    },
+    "diff": {
+      "type": "string"
+    },
+    "patch": {
+      "type": "object",
+      "properties": {
+        "oldFileName": {
+          "type": "string"
+        },
+        "newFileName": {
+          "type": "string"
+        },
+        "oldHeader": {
+          "type": "string"
+        },
+        "newHeader": {
+          "type": "string"
+        },
+        "hunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "oldStart": {
+                "type": "number"
+              },
+              "oldLines": {
+                "type": "number"
+              },
+              "newStart": {
+                "type": "number"
+              },
+              "newLines": {
+                "type": "number"
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "oldStart",
+              "oldLines",
+              "newStart",
+              "newLines",
+              "lines"
+            ]
+          }
+        },
+        "index": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "oldFileName",
+        "newFileName",
+        "hunks"
+      ]
+    },
+    "encoding": {
+      "type": "string",
+      "const": "base64"
+    },
+    "mimeType": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "content"
+  ]
+}

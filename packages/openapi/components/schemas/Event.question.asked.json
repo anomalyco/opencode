@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "question.asked"
+    },
+    "properties": {
+      "$ref": "./QuestionRequest.json"
+    }
+  },
+  "required": [
+    "type",
+    "properties"
+  ]
+}

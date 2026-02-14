@@ -1,19 +1,19 @@
 ---
 title: เซิร์ฟเวอร์
-description: โต้ตอบกับเซิร์ฟเวอร์ opencode ผ่าน HTTP
+description: โต้ตอบกับเซิร์ฟเวอร์ weapon ผ่าน HTTP
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-คำสั่ง `opencode serve` รันเซิร์ฟเวอร์ HTTP ที่ไม่มีหัวซึ่งเปิดเผยตำแหน่งข้อมูล OpenAPI ที่ไคลเอนต์ opencode สามารถใช้ได้
+คำสั่ง `weapon serve` รันเซิร์ฟเวอร์ HTTP ที่ไม่มีหัวซึ่งเปิดเผยตำแหน่งข้อมูล OpenAPI ที่ไคลเอนต์ weapon สามารถใช้ได้
 
 ---
 
 ### การใช้งาน
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+weapon serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### ตัวเลือก
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | พอร์ตที่จะฟัง                            | `4096`           |
 | `--hostname`    | ชื่อโฮสต์ที่จะฟัง                        | `127.0.0.1`      |
 | `--mdns`        | เปิดใช้งานการค้นพบ mDNS                  | `false`          |
-| `--mdns-domain` | ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS    | `opencode.local` |
+| `--mdns-domain` | ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS    | `weapon.local` |
 | `--cors`        | ต้นกำเนิดเบราว์เซอร์เพิ่มเติมที่จะอนุญาต | `[]`             |
 
 `--cors` สามารถส่งผ่านได้หลายครั้ง:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+weapon serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### การรับรองความถูกต้อง
 
-ตั้งค่า `OPENCODE_SERVER_PASSWORD` เพื่อปกป้องเซิร์ฟเวอร์ด้วย HTTP การตรวจสอบสิทธิ์ขั้นพื้นฐาน ชื่อผู้ใช้มีค่าเริ่มต้นเป็น `opencode` หรือตั้งค่า `OPENCODE_SERVER_USERNAME` เพื่อแทนที่ชื่อผู้ใช้ สิ่งนี้ใช้ได้กับทั้ง `opencode serve` และ `opencode web`
+ตั้งค่า `WEAPON_SERVER_PASSWORD` เพื่อปกป้องเซิร์ฟเวอร์ด้วย HTTP การตรวจสอบสิทธิ์ขั้นพื้นฐาน ชื่อผู้ใช้มีค่าเริ่มต้นเป็น `weapon` หรือตั้งค่า `WEAPON_SERVER_USERNAME` เพื่อแทนที่ชื่อผู้ใช้ สิ่งนี้ใช้ได้กับทั้ง `weapon serve` และ `weapon web`
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+WEAPON_SERVER_PASSWORD=your-password weapon serve
 ```
 
 ---
 
 ### มันทำงานอย่างไร
 
-เมื่อคุณรัน `opencode` มันจะเริ่มต้น TUI และเซิร์ฟเวอร์ โดยที่ TUI คือ
+เมื่อคุณรัน `weapon` มันจะเริ่มต้น TUI และเซิร์ฟเวอร์ โดยที่ TUI คือ
 ลูกค้าที่พูดคุยกับเซิร์ฟเวอร์ เซิร์ฟเวอร์เปิดเผยข้อมูลจำเพาะของ OpenAPI 3.1
 จุดสิ้นสุด ตำแหน่งข้อมูลนี้ยังใช้เพื่อสร้าง [SDK](/docs/sdk)
 
 :::tip
-ใช้เซิร์ฟเวอร์ opencode เพื่อโต้ตอบกับ opencode โดยทางโปรแกรม
+ใช้เซิร์ฟเวอร์ weapon เพื่อโต้ตอบกับ weapon โดยทางโปรแกรม
 :::
 
-สถาปัตยกรรมนี้ช่วยให้ opencode รองรับไคลเอนต์หลายตัว และช่วยให้คุณสามารถโต้ตอบกับ opencode โดยทางโปรแกรมได้
+สถาปัตยกรรมนี้ช่วยให้ weapon รองรับไคลเอนต์หลายตัว และช่วยให้คุณสามารถโต้ตอบกับ weapon โดยทางโปรแกรมได้
 
-คุณสามารถเรียกใช้ `opencode serve` เพื่อเริ่มเซิร์ฟเวอร์แบบสแตนด์อโลน ถ้าคุณมี
-opencode TUI ทำงาน `opencode serve` จะเริ่มเซิร์ฟเวอร์ใหม่
+คุณสามารถเรียกใช้ `weapon serve` เพื่อเริ่มเซิร์ฟเวอร์แบบสแตนด์อโลน ถ้าคุณมี
+weapon TUI ทำงาน `weapon serve` จะเริ่มเซิร์ฟเวอร์ใหม่
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI ทำงาน `opencode serve` จะเริ่มเซิร�
 
 เมื่อคุณเริ่ม TUI มันจะสุ่มกำหนดพอร์ตและชื่อโฮสต์ คุณสามารถผ่าน `--hostname` และ `--port` [ธง](/docs/cli) แทนได้ จากนั้นใช้สิ่งนี้เพื่อเชื่อมต่อกับเซิร์ฟเวอร์
 
-ตำแหน่งข้อมูล [`/tui`](#tui) สามารถใช้เพื่อขับเคลื่อน TUI ผ่านเซิร์ฟเวอร์ ตัวอย่างเช่น คุณสามารถกรอกข้อมูลล่วงหน้าหรือเรียกใช้พร้อมท์ได้ การตั้งค่านี้ถูกใช้โดยปลั๊กอิน OpenCode [IDE](/docs/ide)
+ตำแหน่งข้อมูล [`/tui`](#tui) สามารถใช้เพื่อขับเคลื่อน TUI ผ่านเซิร์ฟเวอร์ ตัวอย่างเช่น คุณสามารถกรอกข้อมูลล่วงหน้าหรือเรียกใช้พร้อมท์ได้ การตั้งค่านี้ถูกใช้โดยปลั๊กอิน Weapon [IDE](/docs/ide)
 
 ---
 
@@ -83,7 +83,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-เซิร์ฟเวอร์ opencode เปิดเผย API ต่อไปนี้
+เซิร์ฟเวอร์ weapon เปิดเผย API ต่อไปนี้
 
 ---
 

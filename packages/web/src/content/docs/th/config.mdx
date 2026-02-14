@@ -1,21 +1,21 @@
 ---
 title: การกำหนดค่า
-description: การใช้การกำหนดค่า OpenCode JSON
+description: การใช้การกำหนดค่า Weapon JSON
 ---
 
-คุณสามารถกำหนดค่า OpenCode ได้โดยใช้ไฟล์กำหนดค่า JSON
+คุณสามารถกำหนดค่า Weapon ได้โดยใช้ไฟล์กำหนดค่า JSON
 
 ---
 
 ## รูปแบบ
 
-OpenCode รองรับทั้งรูปแบบ **JSON** และ **JSONC** (JSON พร้อมความคิดเห็น)
+Weapon รองรับทั้งรูปแบบ **JSON** และ **JSONC** (JSON พร้อมความคิดเห็น)
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "weapon",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -34,7 +34,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ไฟล์การกำหนดค่าจะถูกรวมเข้าด้วยกัน โดยไม่มีการแทนที่ การตั้งค่าจากตำแหน่งการกำหนดค่าต่อไปนี้จะรวมกัน การกำหนดค่าในภายหลังจะแทนที่การกำหนดค่าก่อนหน้าสำหรับคีย์ที่ขัดแย้งกันเท่านั้น การตั้งค่าที่ไม่ขัดแย้งจากการกำหนดค่าทั้งหมดจะยังคงอยู่
 
-ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `theme: "opencode"` และ `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสามรายการไว้ด้วย
+ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `theme: "weapon"` และ `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสามรายการไว้ด้วย
 
 ---
 
@@ -42,30 +42,30 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 แหล่งที่มาของการกำหนดค่าถูกโหลดตามลำดับนี้ (แหล่งที่มาภายหลังจะแทนที่แหล่งที่มาก่อนหน้า):
 
-1. **การกำหนดค่าระยะไกล** (จาก `.well-known/opencode`) - ค่าเริ่มต้นขององค์กร
-2. **การกำหนดค่าสากล** (`~/.config/opencode/opencode.json`) - การตั้งค่าของผู้ใช้
-3. **การกำหนดค่าแบบกำหนดเอง** (`OPENCODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
-4. **การกำหนดค่าโครงการ** (`opencode.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
-5. **`.opencode` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
-6. **การกำหนดค่าแบบอินไลน์** (`OPENCODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
+1. **การกำหนดค่าระยะไกล** (จาก `.well-known/weapon`) - ค่าเริ่มต้นขององค์กร
+2. **การกำหนดค่าสากล** (`~/.config/weapon/weapon.json`) - การตั้งค่าของผู้ใช้
+3. **การกำหนดค่าแบบกำหนดเอง** (`WEAPON_CONFIG` env var) - การแทนที่แบบกำหนดเอง
+4. **การกำหนดค่าโครงการ** (`weapon.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
+5. **`.weapon` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
+6. **การกำหนดค่าแบบอินไลน์** (`WEAPON_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
 
 ซึ่งหมายความว่าการกำหนดค่าโปรเจ็กต์สามารถแทนที่ค่าเริ่มต้นส่วนกลางได้ และการกำหนดค่าส่วนกลางสามารถแทนที่ค่าเริ่มต้นขององค์กรระยะไกลได้
 
 :::note
-ไดเรกทอรี `.opencode` และ `~/.config/opencode` ใช้ **ชื่อพหูพจน์** สำหรับไดเรกทอรีย่อย: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` และ `themes/` ชื่อเอกพจน์ (เช่น `agent/`) ยังรองรับความเข้ากันได้แบบย้อนหลังด้วย
+ไดเรกทอรี `.weapon` และ `~/.config/weapon` ใช้ **ชื่อพหูพจน์** สำหรับไดเรกทอรีย่อย: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` และ `themes/` ชื่อเอกพจน์ (เช่น `agent/`) ยังรองรับความเข้ากันได้แบบย้อนหลังด้วย
 :::
 
 ---
 
 ### ระยะไกล
 
-องค์กรสามารถจัดเตรียมการกำหนดค่าเริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/opencode` สิ่งนี้จะถูกดึงออกมาโดยอัตโนมัติเมื่อคุณตรวจสอบสิทธิ์กับผู้ให้บริการที่รองรับ
+องค์กรสามารถจัดเตรียมการกำหนดค่าเริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/weapon` สิ่งนี้จะถูกดึงออกมาโดยอัตโนมัติเมื่อคุณตรวจสอบสิทธิ์กับผู้ให้บริการที่รองรับ
 
 โหลดการกำหนดค่าระยะไกลก่อน โดยทำหน้าที่เป็นเลเยอร์พื้นฐาน แหล่งการกำหนดค่าอื่นๆ ทั้งหมด (ส่วนกลาง โปรเจ็กต์) สามารถแทนที่ค่าเริ่มต้นเหล่านี้ได้
 
 ตัวอย่างเช่น หากองค์กรของคุณมีเซิร์ฟเวอร์ MCP ที่ถูกปิดใช้งานตามค่าเริ่มต้น:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/weapon"
 {
   "mcp": {
     "jira": {
@@ -79,7 +79,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 คุณสามารถเปิดใช้งานเซิร์ฟเวอร์เฉพาะในการกำหนดค่าภายในเครื่องของคุณได้:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "mcp": {
     "jira": {
@@ -95,7 +95,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### ทั่วโลก
 
-วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/opencode/opencode.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ธีม ผู้ให้บริการ หรือปุ่มลัด
+วางการกำหนดค่า Weapon ส่วนกลางของคุณใน `~/.config/weapon/weapon.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ธีม ผู้ให้บริการ หรือปุ่มลัด
 
 การกำหนดค่าส่วนกลางจะแทนที่ค่าเริ่มต้นขององค์กรระยะไกล
 
@@ -103,13 +103,13 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### ต่อโครงการ
 
-เพิ่ม `opencode.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
+เพิ่ม `weapon.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
 
 :::tip
 วางการกำหนดค่าเฉพาะโปรเจ็กต์ไว้ที่รากของโปรเจ็กต์ของคุณ
 :::
 
-เมื่อ OpenCode เริ่มต้นระบบ จะค้นหาไฟล์กำหนดค่าในไดเร็กทอรีปัจจุบันหรือข้ามไปยังไดเร็กทอรี Git ที่ใกล้ที่สุด
+เมื่อ Weapon เริ่มต้นระบบ จะค้นหาไฟล์กำหนดค่าในไดเร็กทอรีปัจจุบันหรือข้ามไปยังไดเร็กทอรี Git ที่ใกล้ที่สุด
 
 นอกจากนี้ยังปลอดภัยที่จะตรวจสอบใน Git และใช้สคีมาเดียวกันกับสคีมาระดับโลก
 
@@ -117,11 +117,11 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### เส้นทางที่กำหนดเอง
 
-ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `OPENCODE_CONFIG`
+ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `WEAPON_CONFIG`
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export WEAPON_CONFIG=/path/to/my/custom-config.json
+weapon run "Hello world"
 ```
 
 มีการโหลดการกำหนดค่าแบบกำหนดเองระหว่างการกำหนดค่าส่วนกลางและโครงการตามลำดับความสำคัญ
@@ -130,23 +130,23 @@ opencode run "Hello world"
 
 ### ไดเรกทอรีที่กำหนดเอง
 
-ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `OPENCODE_CONFIG_DIR`
+ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `WEAPON_CONFIG_DIR`
 ตัวแปรสภาพแวดล้อม ไดเร็กทอรีนี้จะถูกค้นหาตัวแทน, คำสั่ง,
-โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.opencode` มาตรฐานและควร
+โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.weapon` มาตรฐานและควร
 เป็นไปตามโครงสร้างเดียวกัน
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export WEAPON_CONFIG_DIR=/path/to/my/config-directory
+weapon run "Hello world"
 ```
 
-ไดเร็กทอรีที่กำหนดเองถูกโหลดหลังจากไดเร็กทอรี config ส่วนกลางและ `.opencode` ดังนั้นจึง **สามารถแทนที่** การตั้งค่าได้
+ไดเร็กทอรีที่กำหนดเองถูกโหลดหลังจากไดเร็กทอรี config ส่วนกลางและ `.weapon` ดังนั้นจึง **สามารถแทนที่** การตั้งค่าได้
 
 ---
 
 ## สคีมา
 
-ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`opencode.ai/config.json`**](https://opencode.ai/config.json)
+ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`weapon.ai/config.json`**](https://weapon.ai/config.json)
 
 ผู้แก้ไขของคุณควรสามารถตรวจสอบและเติมข้อความอัตโนมัติตามสคีมาได้
 
@@ -156,9 +156,9 @@ opencode run "Hello world"
 
 คุณสามารถกำหนดการตั้งค่าเฉพาะ TUI ผ่านตัวเลือก `tui`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -181,11 +181,11 @@ opencode run "Hello world"
 
 ### เซิร์ฟเวอร์
 
-คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `opencode serve` และ `opencode web` ผ่านตัวเลือก `server`
+คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `weapon serve` และ `weapon web` ผ่านตัวเลือก `server`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -200,8 +200,8 @@ opencode run "Hello world"
 
 - `port` - ​​พอร์ตสำหรับฟัง
 - `hostname` - ​​ชื่อโฮสต์ที่จะฟัง เมื่อเปิดใช้งาน `mdns` และไม่ได้ตั้งชื่อโฮสต์ ค่าเริ่มต้นจะเป็น `0.0.0.0`
-- `mdns` - ​​เปิดใช้งานการค้นหาบริการ mDNS ซึ่งช่วยให้อุปกรณ์อื่นๆ บนเครือข่ายค้นพบเซิร์ฟเวอร์ OpenCode ของคุณได้
-- `mdnsDomain` - ​​ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS ค่าเริ่มต้นเป็น `opencode.local` มีประโยชน์สำหรับการเรียกใช้หลายอินสแตนซ์บนเครือข่ายเดียวกัน
+- `mdns` - ​​เปิดใช้งานการค้นหาบริการ mDNS ซึ่งช่วยให้อุปกรณ์อื่นๆ บนเครือข่ายค้นพบเซิร์ฟเวอร์ Weapon ของคุณได้
+- `mdnsDomain` - ​​ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS ค่าเริ่มต้นเป็น `weapon.local` มีประโยชน์สำหรับการเรียกใช้หลายอินสแตนซ์บนเครือข่ายเดียวกัน
 - `cors` - ​​ต้นกำเนิดเพิ่มเติมเพื่ออนุญาต CORS เมื่อใช้เซิร์ฟเวอร์ HTTP จากไคลเอนต์ที่ใช้เบราว์เซอร์ ค่าจะต้องเป็นต้นกำเนิดแบบเต็ม (สคีมา + โฮสต์ + พอร์ตเสริม) เช่น `https://app.example.com`
 
 [เรียนรู้เพิ่มเติมเกี่ยวกับเซิร์ฟเวอร์ที่นี่](/docs/server)
@@ -212,9 +212,9 @@ opencode run "Hello world"
 
 คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `tools`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -228,24 +228,24 @@ opencode run "Hello world"
 
 ### Models
 
-คุณสามารถกำหนดค่าผู้ให้บริการและรุ่นที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `provider`, `model` และ `small_model`
+คุณสามารถกำหนดค่าผู้ให้บริการและรุ่นที่คุณต้องการใช้ในการกำหนดค่า Weapon ของคุณได้ผ่านตัวเลือก `provider`, `model` และ `small_model`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-ตัวเลือก `small_model` จะกำหนดค่าโมเดลแยกต่างหากสำหรับงานที่ไม่ซับซ้อน เช่น การสร้างชื่อเรื่อง ตามค่าเริ่มต้น OpenCode จะพยายามใช้โมเดลที่ถูกกว่าหากมีให้บริการจากผู้ให้บริการของคุณ ไม่เช่นนั้นโมเดลจะกลับไปเป็นโมเดลหลักของคุณ
+ตัวเลือก `small_model` จะกำหนดค่าโมเดลแยกต่างหากสำหรับงานที่ไม่ซับซ้อน เช่น การสร้างชื่อเรื่อง ตามค่าเริ่มต้น Weapon จะพยายามใช้โมเดลที่ถูกกว่าหากมีให้บริการจากผู้ให้บริการของคุณ ไม่เช่นนั้นโมเดลจะกลับไปเป็นโมเดลหลักของคุณ
 
 ตัวเลือกผู้ให้บริการอาจรวมถึง `timeout` และ `setCacheKey`:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -272,9 +272,9 @@ opencode run "Hello world"
 
 Amazon Bedrock รองรับ AWS-การกำหนดค่าเฉพาะ:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -301,11 +301,11 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ### Themes
 
-คุณสามารถกำหนดค่าธีมที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `theme`
+คุณสามารถกำหนดค่าธีมที่คุณต้องการใช้ในการกำหนดค่า Weapon ของคุณได้ผ่านตัวเลือก `theme`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "theme": ""
 }
 ```
@@ -318,9 +318,9 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าตัวแทนเฉพาะสำหรับงานเฉพาะผ่านตัวเลือก `agent`
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -336,7 +336,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 }
 ```
 
-คุณยังสามารถกำหนดตัวแทนโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/agents/` หรือ `.opencode/agents/` [เรียนรู้เพิ่มเติมที่นี่](/docs/agents)
+คุณยังสามารถกำหนดตัวแทนโดยใช้ไฟล์ Markdown ใน `~/.config/weapon/agents/` หรือ `.weapon/agents/` [เรียนรู้เพิ่มเติมที่นี่](/docs/agents)
 
 ---
 
@@ -344,16 +344,16 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถตั้งค่าตัวแทนเริ่มต้นได้โดยใช้ตัวเลือก `default_agent` ซึ่งจะกำหนดว่าเอเจนต์ใดที่จะใช้เมื่อไม่มีการระบุอย่างชัดเจน
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "default_agent": "plan"
 }
 ```
 
-ตัวแทนเริ่มต้นจะต้องเป็นตัวแทนหลัก (ไม่ใช่ตัวแทนย่อย) ซึ่งอาจเป็นตัวแทนในตัว เช่น `"build"` หรือ `"plan"` หรือ [ตัวแทนที่กำหนดเอง](/docs/agents) ที่คุณกำหนดไว้ หากไม่มีตัวแทนที่ระบุหรือเป็นตัวแทนย่อย OpenCode จะถอยกลับไปที่ `"build"` พร้อมคำเตือน
+ตัวแทนเริ่มต้นจะต้องเป็นตัวแทนหลัก (ไม่ใช่ตัวแทนย่อย) ซึ่งอาจเป็นตัวแทนในตัว เช่น `"build"` หรือ `"plan"` หรือ [ตัวแทนที่กำหนดเอง](/docs/agents) ที่คุณกำหนดไว้ หากไม่มีตัวแทนที่ระบุหรือเป็นตัวแทนย่อย Weapon จะถอยกลับไปที่ `"build"` พร้อมคำเตือน
 
-การตั้งค่านี้ใช้กับอินเทอร์เฟซทั้งหมด: TUI, CLI (`opencode run`) แอปเดสก์ท็อป และ GitHub Action
+การตั้งค่านี้ใช้กับอินเทอร์เฟซทั้งหมด: TUI, CLI (`weapon run`) แอปเดสก์ท็อป และ GitHub Action
 
 ---
 
@@ -361,9 +361,9 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าคุณสมบัติ [แบ่งปัน](/docs/share) ได้ผ่านทางตัวเลือก `share`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "share": "manual"
 }
 ```
@@ -382,9 +382,9 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าคำสั่งที่กำหนดเองสำหรับงานซ้ำๆ ได้ผ่านตัวเลือก `command`
 
-```jsonc title="opencode.jsonc"
+```jsonc title="weapon.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -400,7 +400,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 }
 ```
 
-คุณยังสามารถกำหนดคำสั่งโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/commands/` หรือ `.opencode/commands/` [เรียนรู้เพิ่มเติมที่นี่](/docs/commands)
+คุณยังสามารถกำหนดคำสั่งโดยใช้ไฟล์ Markdown ใน `~/.config/weapon/commands/` หรือ `.weapon/commands/` [เรียนรู้เพิ่มเติมที่นี่](/docs/commands)
 
 ---
 
@@ -408,9 +408,9 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถปรับแต่งปุ่มลัดของคุณได้ผ่านตัวเลือก `keybinds`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "keybinds": {}
 }
 ```
@@ -421,11 +421,11 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ### อัปเดตอัตโนมัติ
 
-OpenCode จะดาวน์โหลดการอัปเดตใหม่โดยอัตโนมัติเมื่อเริ่มต้นระบบ คุณสามารถปิดการใช้งานนี้ได้โดยใช้ตัวเลือก `autoupdate`
+Weapon จะดาวน์โหลดการอัปเดตใหม่โดยอัตโนมัติเมื่อเริ่มต้นระบบ คุณสามารถปิดการใช้งานนี้ได้โดยใช้ตัวเลือก `autoupdate`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "autoupdate": false
 }
 ```
@@ -439,9 +439,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าตัวจัดรูปแบบโค้ดผ่านตัวเลือก `formatter`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -463,13 +463,13 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ### การอนุญาต
 
-ตามค่าเริ่มต้น opencode **อนุญาตการดำเนินการทั้งหมด** โดยไม่ต้องมีการอนุมัติอย่างชัดเจน คุณสามารถเปลี่ยนสิ่งนี้ได้โดยใช้ตัวเลือก `permission`
+ตามค่าเริ่มต้น weapon **อนุญาตการดำเนินการทั้งหมด** โดยไม่ต้องมีการอนุมัติอย่างชัดเจน คุณสามารถเปลี่ยนสิ่งนี้ได้โดยใช้ตัวเลือก `permission`
 
 ตัวอย่างเช่น เพื่อให้แน่ใจว่าเครื่องมือ `edit` และ `bash` ต้องได้รับการอนุมัติจากผู้ใช้:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -485,9 +485,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถควบคุมลักษณะการทำงานของการบีบอัดบริบทได้โดยใช้ตัวเลือก `compaction`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -504,9 +504,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่ารูปแบบการละเว้นตัวเฝ้าดูไฟล์ได้ผ่านตัวเลือก `watcher`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -521,9 +521,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าเซิร์ฟเวอร์ MCP ที่คุณต้องการใช้ผ่านตัวเลือก `mcp`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "mcp": {}
 }
 ```
@@ -534,14 +534,14 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ### ปลั๊กอิน
 
-[ปลั๊กอิน](/docs/plugins) ขยาย OpenCode ด้วยเครื่องมือที่กำหนดเอง hooks และการผสานรวม
+[ปลั๊กอิน](/docs/plugins) ขยาย Weapon ด้วยเครื่องมือที่กำหนดเอง hooks และการผสานรวม
 
-วางไฟล์ปลั๊กอินใน `.opencode/plugins/` หรือ `~/.config/opencode/plugins/` คุณยังสามารถโหลดปลั๊กอินจาก npm ผ่านตัวเลือก `plugin`
+วางไฟล์ปลั๊กอินใน `.weapon/plugins/` หรือ `~/.config/weapon/plugins/` คุณยังสามารถโหลดปลั๊กอินจาก npm ผ่านตัวเลือก `plugin`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://weapon.ai/config.json",
+  "plugin": ["weapon-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -553,9 +553,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าคำแนะนำสำหรับรุ่นที่คุณใช้ผ่านตัวเลือก `instructions`
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -569,9 +569,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถปิดการใช้งานผู้ให้บริการที่โหลดโดยอัตโนมัติผ่านตัวเลือก `disabled_providers` สิ่งนี้มีประโยชน์เมื่อคุณต้องการป้องกันไม่ให้โหลดผู้ให้บริการบางรายแม้ว่าจะมีข้อมูลประจำตัวอยู่ก็ตาม
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -592,14 +592,14 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถระบุรายชื่อผู้ให้บริการที่อนุญาตได้ผ่านตัวเลือก `enabled_providers` เมื่อตั้งค่าแล้ว เฉพาะผู้ให้บริการที่ระบุเท่านั้นที่จะเปิดใช้งาน และผู้ให้บริการอื่นๆ ทั้งหมดจะถูกละเว้น
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-สิ่งนี้มีประโยชน์เมื่อคุณต้องการจำกัด OpenCode ให้ใช้เฉพาะผู้ให้บริการบางราย แทนที่จะปิดการใช้งานทีละราย
+สิ่งนี้มีประโยชน์เมื่อคุณต้องการจำกัด Weapon ให้ใช้เฉพาะผู้ให้บริการบางราย แทนที่จะปิดการใช้งานทีละราย
 
 :::note
 `disabled_providers` มีลำดับความสำคัญมากกว่า `enabled_providers`
@@ -613,9 +613,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ปุ่ม `experimental` มีตัวเลือกที่อยู่ระหว่างการพัฒนา
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "experimental": {}
 }
 ```
@@ -636,10 +636,10 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ใช้ `{env:VARIABLE_NAME}` เพื่อทดแทนตัวแปรสภาพแวดล้อม:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://weapon.ai/config.json",
+  "model": "{env:WEAPON_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -659,9 +659,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ใช้ `{file:path/to/file}` เพื่อทดแทนเนื้อหาของไฟล์:
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

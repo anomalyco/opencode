@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sessionID": {
+      "type": "string"
+    },
+    "messageID": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "retry"
+    },
+    "attempt": {
+      "type": "number"
+    },
+    "error": {
+      "$ref": "./APIError.json"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "created"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "sessionID",
+    "messageID",
+    "type",
+    "attempt",
+    "error",
+    "time"
+  ]
+}

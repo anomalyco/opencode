@@ -1,0 +1,13 @@
+{
+  "anyOf": [
+    {
+      "$ref": "./FileSource.json"
+    },
+    {
+      "$ref": "./SymbolSource.json"
+    },
+    {
+      "$ref": "./ResourceSource.json"
+    }
+  ]
+}

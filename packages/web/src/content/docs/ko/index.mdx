@@ -1,15 +1,15 @@
 ---
 title: 소개
-description: OpenCode를 시작해 보세요.
+description: Weapon를 시작해 보세요.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/)는 터미널 기반 인터페이스, 데스크톱 앱, IDE 확장 형태로 사용할 수 있는 오픈 소스 AI 코딩 에이전트입니다.
+[**Weapon**](/)는 터미널 기반 인터페이스, 데스크톱 앱, IDE 확장 형태로 사용할 수 있는 오픈 소스 AI 코딩 에이전트입니다.
 
-![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+![weapon TUI with the weapon theme](../../../assets/lander/screenshot.png)
 
 바로 시작해 봅시다.
 
@@ -17,7 +17,7 @@ export const console = config.console
 
 ## 사전 준비
 
-터미널에서 OpenCode를 사용하려면 다음이 필요합니다.
+터미널에서 Weapon를 사용하려면 다음이 필요합니다.
 
 1. 최신 터미널 에뮬레이터 (예:)
    - [WezTerm](https://wezterm.org), 크로스 플랫폼
@@ -34,7 +34,7 @@ export const console = config.console
 가장 쉬운 설치 방법은 설치 스크립트를 사용하는 것입니다.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://weapon.ai/install | bash
 ```
 
 아래 명령으로도 설치할 수 있습니다.
@@ -45,28 +45,28 @@ curl -fsSL https://opencode.ai/install | bash
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g weapon-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g weapon-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add weapon-ai
         ```
 
       </TabItem>
@@ -76,67 +76,67 @@ curl -fsSL https://opencode.ai/install | bash
 - **macOS/Linux에서 Homebrew 사용**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install anomalyco/tap/weapon
   ```
 
-  > 최신 릴리스는 OpenCode tap 사용을 권장합니다. 공식 `brew install opencode` 포뮬러는 Homebrew 팀이 관리하므로 업데이트 주기가 더 긴 편입니다.
+  > 최신 릴리스는 Weapon tap 사용을 권장합니다. 공식 `brew install weapon` 포뮬러는 Homebrew 팀이 관리하므로 업데이트 주기가 더 긴 편입니다.
 
 - **Arch Linux에서 Paru 사용**
 
   ```bash
-  paru -S opencode-bin
+  paru -S weapon-bin
   ```
 
 #### Windows
 
 :::tip[권장: WSL 사용]
-Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl)을 사용하는 것이 가장 좋습니다. OpenCode 기능과의 호환성이 높고 성능도 더 좋습니다.
+Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl)을 사용하는 것이 가장 좋습니다. Weapon 기능과의 호환성이 높고 성능도 더 좋습니다.
 :::
 
 - **Chocolatey 사용**
 
   ```bash
-  choco install opencode
+  choco install weapon
   ```
 
 - **Scoop 사용**
 
   ```bash
-  scoop install opencode
+  scoop install weapon
   ```
 
 - **NPM 사용**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g weapon-ai
   ```
 
 - **Mise 사용**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:anomalyco/weapon
   ```
 
 - **Docker 사용**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/anomalyco/weapon
   ```
 
-Windows에서 Bun을 통한 OpenCode 설치는 아직 지원되지 않으며, 현재 지원을 준비 중입니다.
+Windows에서 Bun을 통한 Weapon 설치는 아직 지원되지 않으며, 현재 지원을 준비 중입니다.
 
-[Releases](https://github.com/anomalyco/opencode/releases)에서 바이너리를 직접 받아 설치할 수도 있습니다.
+[Releases](https://github.com/anomalyco/weapon/releases)에서 바이너리를 직접 받아 설치할 수도 있습니다.
 
 ---
 
 ## 구성
 
-OpenCode는 API 키를 설정하면 원하는 LLM 제공자를 사용할 수 있습니다.
+Weapon는 API 키를 설정하면 원하는 LLM 제공자를 사용할 수 있습니다.
 
-LLM 제공자(LLM Provider)를 처음 사용한다면 [OpenCode Zen](/docs/zen)을 추천합니다.
-OpenCode 팀이 테스트하고 검증한 모델 목록입니다.
+LLM 제공자(LLM Provider)를 처음 사용한다면 [Weapon Zen](/docs/zen)을 추천합니다.
+Weapon 팀이 테스트하고 검증한 모델 목록입니다.
 
-1. TUI에서 `/connect` 명령을 실행한 뒤 `opencode`를 선택하고 [opencode.ai/auth](https://opencode.ai/auth)로 이동합니다.
+1. TUI에서 `/connect` 명령을 실행한 뒤 `weapon`를 선택하고 [weapon.ai/auth](https://weapon.ai/auth)로 이동합니다.
 
    ```txt
    /connect
@@ -165,13 +165,13 @@ OpenCode 팀이 테스트하고 검증한 모델 목록입니다.
 cd /path/to/project
 ```
 
-그리고 OpenCode를 실행합니다.
+그리고 Weapon를 실행합니다.
 
 ```bash
-opencode
+weapon
 ```
 
-다음 명령으로 프로젝트용 OpenCode 초기화를 진행합니다.
+다음 명령으로 프로젝트용 Weapon 초기화를 진행합니다.
 
 ```bash frame="none"
 /init
@@ -183,13 +183,13 @@ opencode
 프로젝트의 `AGENTS.md`는 Git에 커밋해 두는 것을 권장합니다.
 :::
 
-그러면 OpenCode가 프로젝트 구조와 코딩 패턴을 더 잘 이해할 수 있습니다.
+그러면 Weapon가 프로젝트 구조와 코딩 패턴을 더 잘 이해할 수 있습니다.
 
 ---
 
 ## 사용법
 
-이제 OpenCode로 프로젝트 작업을 시작할 준비가 되었습니다. 무엇이든 물어보세요.
+이제 Weapon로 프로젝트 작업을 시작할 준비가 되었습니다. 무엇이든 물어보세요.
 
 AI 코딩 에이전트를 처음 쓰는 경우 도움이 되는 예시를 소개합니다.
 
@@ -197,7 +197,7 @@ AI 코딩 에이전트를 처음 쓰는 경우 도움이 되는 예시를 소개
 
 ### 질문하기
 
-OpenCode에 코드베이스 설명을 요청할 수 있습니다.
+Weapon에 코드베이스 설명을 요청할 수 있습니다.
 
 :::tip
 프로젝트 파일은 `@` 키로 퍼지 검색할 수 있습니다.
@@ -217,7 +217,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 1. **계획 만들기**
 
-   OpenCode에는 변경 작업을 비활성화하고 구현 방법을 제안만 하는 *Plan mode*가 있습니다.
+   Weapon에는 변경 작업을 비활성화하고 구현 방법을 제안만 하는 *Plan mode*가 있습니다.
 
    **Tab** 키로 전환하면 오른쪽 아래에 모드 표시가 나타납니다.
 
@@ -233,7 +233,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   OpenCode가 정확히 이해할 만큼 충분한 맥락을 주는 것이 중요합니다. 팀의 주니어 개발자에게 설명하듯 요청하면 도움이 됩니다.
+   Weapon가 정확히 이해할 만큼 충분한 맥락을 주는 것이 중요합니다. 팀의 주니어 개발자에게 설명하듯 요청하면 도움이 됩니다.
 
    :::tip
    맥락과 예시를 충분히 제공하면 원하는 결과를 얻기 쉽습니다.
@@ -252,7 +252,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    이미지를 터미널에 드래그 앤 드롭하면 프롬프트에 첨부할 수 있습니다.
    :::
 
-   OpenCode는 첨부한 이미지를 분석해 프롬프트에 포함합니다.
+   Weapon는 첨부한 이미지를 분석해 프롬프트에 포함합니다.
 
 3. **기능 구현**
 
@@ -286,7 +286,7 @@ the same logic in @packages/functions/src/settings.ts
 
 ### 변경 되돌리기
 
-예를 들어 OpenCode에 변경을 요청했다고 가정해 보겠습니다.
+예를 들어 Weapon에 변경을 요청했다고 가정해 보겠습니다.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -298,7 +298,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-OpenCode는 방금 적용한 변경을 되돌리고 원래 메시지를 다시 보여줍니다.
+Weapon는 방금 적용한 변경을 되돌리고 원래 메시지를 다시 보여줍니다.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -320,7 +320,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 공유
 
-OpenCode와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
+Weapon와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
 
 ```bash frame="none"
 /share
@@ -332,12 +332,12 @@ OpenCode와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
 대화는 기본값으로 공유되지 않습니다.
 :::
 
-아래는 OpenCode [대화 예시](https://opencode.ai/s/4XP1fce5)입니다.
+아래는 Weapon [대화 예시](https://weapon.ai/s/4XP1fce5)입니다.
 
 ---
 
 ## 사용자 지정
 
-이제 OpenCode 사용의 기본은 끝났습니다.
+이제 Weapon 사용의 기본은 끝났습니다.
 
-자신의 워크플로우에 맞추려면 [테마 선택](/docs/themes), [키바인드 사용자 지정](/docs/keybinds), [코드 포매터 설정](/docs/formatters), [커스텀 명령 작성](/docs/commands), [OpenCode 구성 조정](/docs/config)을 추천합니다.
+자신의 워크플로우에 맞추려면 [테마 선택](/docs/themes), [키바인드 사용자 지정](/docs/keybinds), [코드 포매터 설정](/docs/formatters), [커스텀 명령 작성](/docs/commands), [Weapon 구성 조정](/docs/config)을 추천합니다.

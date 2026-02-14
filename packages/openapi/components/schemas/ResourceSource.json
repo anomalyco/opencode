@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "$ref": "./FilePartSourceText.json"
+    },
+    "type": {
+      "type": "string",
+      "const": "resource"
+    },
+    "clientName": {
+      "type": "string"
+    },
+    "uri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text",
+    "type",
+    "clientName",
+    "uri"
+  ]
+}

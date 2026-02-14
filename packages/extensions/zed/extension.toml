@@ -1,36 +1,36 @@
-id = "opencode"
-name = "OpenCode"
+id = "weapon"
+name = "Weapon"
 description = "The open source coding agent."
 version = "1.1.63"
 schema_version = 1
 authors = ["Anomaly"]
-repository = "https://github.com/anomalyco/opencode"
+repository = "https://github.com/anomalyco/weapon"
 
-[agent_servers.opencode]
-name = "OpenCode"
-icon = "./icons/opencode.svg"
+[agent_servers.weapon]
+name = "Weapon"
+icon = "./icons/weapon.svg"
 
-[agent_servers.opencode.targets.darwin-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.63/opencode-darwin-arm64.zip"
-cmd = "./opencode"
+[agent_servers.weapon.targets.darwin-aarch64]
+archive = "https://github.com/anomalyco/weapon/releases/download/v1.1.63/weapon-darwin-arm64.zip"
+cmd = "./weapon"
 args = ["acp"]
 
-[agent_servers.opencode.targets.darwin-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.63/opencode-darwin-x64.zip"
-cmd = "./opencode"
+[agent_servers.weapon.targets.darwin-x86_64]
+archive = "https://github.com/anomalyco/weapon/releases/download/v1.1.63/weapon-darwin-x64.zip"
+cmd = "./weapon"
 args = ["acp"]
 
-[agent_servers.opencode.targets.linux-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.63/opencode-linux-arm64.tar.gz"
-cmd = "./opencode"
+[agent_servers.weapon.targets.linux-aarch64]
+archive = "https://github.com/anomalyco/weapon/releases/download/v1.1.63/weapon-linux-arm64.tar.gz"
+cmd = "./weapon"
 args = ["acp"]
 
-[agent_servers.opencode.targets.linux-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.63/opencode-linux-x64.tar.gz"
-cmd = "./opencode"
+[agent_servers.weapon.targets.linux-x86_64]
+archive = "https://github.com/anomalyco/weapon/releases/download/v1.1.63/weapon-linux-x64.tar.gz"
+cmd = "./weapon"
 args = ["acp"]
 
-[agent_servers.opencode.targets.windows-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.63/opencode-windows-x64.zip"
-cmd = "./opencode.exe"
+[agent_servers.weapon.targets.windows-x86_64]
+archive = "https://github.com/anomalyco/weapon/releases/download/v1.1.63/weapon-windows-x64.zip"
+cmd = "./weapon.exe"
 args = ["acp"]

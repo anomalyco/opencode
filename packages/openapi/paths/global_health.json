@@ -1,0 +1,40 @@
+{
+  "get": {
+    "operationId": "global.health",
+    "summary": "Get health",
+    "description": "Get health information about the OpenCode server.",
+    "responses": {
+      "200": {
+        "description": "Health information",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "healthy": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "healthy",
+                "version"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "x-codeSamples": [
+      {
+        "lang": "js",
+        "source": {
+          "$ref": "../code_samples/js/global_health/get.js"
+        }
+      }
+    ]
+  }
+}

@@ -1,9 +1,9 @@
 ---
 title: เครื่องมือที่กำหนดเอง
-description: สร้างเครื่องมือที่ LLM สามารถเรียกใช้ใน opencode
+description: สร้างเครื่องมือที่ LLM สามารถเรียกใช้ใน weapon
 ---
 
-เครื่องมือแบบกำหนดเองคือฟังก์ชันที่คุณสร้างขึ้นซึ่ง LLM สามารถเรียกใช้ระหว่างการสนทนาได้ โดยทำงานร่วมกับ [เครื่องมือในตัว](/docs/tools) ของ opencode เช่น `read`, `write` และ `bash`
+เครื่องมือแบบกำหนดเองคือฟังก์ชันที่คุณสร้างขึ้นซึ่ง LLM สามารถเรียกใช้ระหว่างการสนทนาได้ โดยทำงานร่วมกับ [เครื่องมือในตัว](/docs/tools) ของ weapon เช่น `read`, `write` และ `bash`
 
 ---
 
@@ -17,8 +17,8 @@ description: สร้างเครื่องมือที่ LLM สา�
 
 สามารถกำหนดได้:
 
-- ภายในเครื่องโดยวางไว้ในไดเรกทอรี `.opencode/tools/` ของโครงการของคุณ
-- หรือทั่วโลกโดยวางไว้ที่ `~/.config/opencode/tools/`
+- ภายในเครื่องโดยวางไว้ในไดเรกทอรี `.weapon/tools/` ของโครงการของคุณ
+- หรือทั่วโลกโดยวางไว้ที่ `~/.config/weapon/tools/`
 
 ---
 
@@ -26,8 +26,8 @@ description: สร้างเครื่องมือที่ LLM สา�
 
 วิธีที่ง่ายที่สุดในการสร้างเครื่องมือคือการใช้ตัวช่วย `tool()` ซึ่งให้ความปลอดภัยและการตรวจสอบประเภท
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/database.ts" {1}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 คุณยังสามารถส่งออกเครื่องมือหลายรายการจากไฟล์เดียวได้ การส่งออกแต่ละครั้งจะกลายเป็น **เครื่องมือแยกต่างหาก** โดยมีชื่อ **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/math.ts"
+import { tool } from "@weapon-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 เครื่องมือได้รับบริบทเกี่ยวกับเซสชันปัจจุบัน:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/project.ts" {8}
+import { tool } from "@weapon-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ export default tool({
 
 ขั้นแรก สร้างเครื่องมือเป็นสคริปต์ Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".weapon/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 จากนั้นสร้างคำจำกัดความของเครื่องมือที่เรียกใช้:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".weapon/tools/python-add.ts" {10}
+import { tool } from "@weapon-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".weapon/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

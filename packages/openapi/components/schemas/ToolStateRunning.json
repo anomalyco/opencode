@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "running"
+    },
+    "input": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "title": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "start"
+      ]
+    }
+  },
+  "required": [
+    "status",
+    "input",
+    "time"
+  ]
+}

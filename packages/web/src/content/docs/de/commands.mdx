@@ -17,9 +17,9 @@ Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie 
 
 Erstellen Sie Markdown-Dateien im Verzeichnis `commands/`, um benutzerdefinierte Befehle zu definieren.
 
-Erstellen Sie `.opencode/commands/test.md`:
+Erstellen Sie `.weapon/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Verwenden Sie den Befehl, indem Sie `/` folgen vom Befehlsnamen eingeben.
 
 ## Konfiguration
 
-Sie können benutzerdefinierte Befehle über die OpenCode-Konfiguration hinzufügen oder indem Sie Markdown-Dateien im Verzeichnis `commands/` erstellen.
+Sie können benutzerdefinierte Befehle über die Weapon-Konfiguration hinzufügen oder indem Sie Markdown-Dateien im Verzeichnis `commands/` erstellen.
 
 ---
 
 ### JSON
 
-Verwenden Sie die Option `command` in Ihrem OpenCode [config](/docs/config):
+Verwenden Sie die Option `command` in Ihrem Weapon [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="weapon.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://weapon.ai/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Jetzt können Sie diesen Befehl im TUI ausführen:
 
 Sie können Befehle auch mithilfe von Markdown-Dateien definieren. Platzieren Sie sie in:
 
-- Global: `~/.config/opencode/commands/`
-- Pro Projekt: `.opencode/commands/`
+- Global: `~/.config/weapon/commands/`
+- Pro Projekt: `.weapon/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/weapon/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Die Eingabeaufforderungen für die benutzerdefinierten Befehle unterstützen meh
 
 Übergeben Sie Argumente an Befehle mithilfe des Platzhalters `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".weapon/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Sie können auch über Positionsparameter auf einzelne Argumente zugreifen:
 
 Zum Beispiel:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".weapon/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Verwenden Sie _!`command`_, um die Ausgabe [bash command](/docs/tui#bash-command
 
 So erstellen Sie beispielsweise einen benutzerdefinierten Befehl, der die Testabdeckung analysiert:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".weapon/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Oder um die letzten Änderungen zu überprüfen:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".weapon/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Befehle werden im Stammverzeichnis Ihres Projekts ausgeführt und ihre Ausgabe w
 
 Fügen Sie Dateien in Ihren Befehl ein, indem Sie `@` folgend vom Dateinamen verwenden.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".weapon/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Schauen wir uns die Konfigurationsmöglichkeiten im Detail an.
 
 Die Option `template` die Eingabeaufforderung, die an LLM gesendet wird, wenn der Befehl ausgeführt wird.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Dies ist eine **erforderliche** Konfigurationsoption.
 
 Verwenden Sie die Option `description`, um eine kurze Beschreibung der Funktion des Befehls bereitzustellen.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Verwenden Sie die `agent`-Konfiguration, um optional anzugeben, welche [agent](/
 Wenn es sich um einen [subagent](/docs/agents/#subagents) handelt, löst der Befehl standardmäßig einen Subagentenaufruf aus.
 Um dieses Verhalten zu deaktivieren, setzen Sie `subtask` auf `false`.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Verwenden Sie den booleschen Wert `subtask`, um zu erzwingen, dass der Befehl ei
 Dies ist nützlich, wenn Sie möchten, dass der Befehl Ihren primären Kontext nicht verunreinigt und den Agenten dazu zwingt, als Subagent zu fungieren.
 auch wenn `mode` in der [agent](/docs/agents)-Konfiguration auf `primary` gesetzt ist.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Dies ist eine **optionale** Konfigurationsoption.
 
 Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Befehl zu überschreiben.
 
-```json title="opencode.json"
+```json title="weapon.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Dies ist eine **optionale** Konfigurationsoption.
 
 ## Integriert
 
-OpenCode enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [mehr erfahren](/docs/tui#commands).
+Weapon enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [mehr erfahren](/docs/tui#commands).
 
 :::note
 Benutzerdefinierte Befehle können integrierte Befehle überschreiben.

@@ -1,8 +1,8 @@
-import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
-import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
+import { Database, eq, and, sql, inArray } from "@weapon-ai/console-core/drizzle/index.js"
+import { IpRateLimitTable } from "@weapon-ai/console-core/schema/ip.sql.js"
 import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
-import { ZenData } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@weapon-ai/console-core/model.js"
 
 export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, headers: Headers) {
   if (!limit) return
