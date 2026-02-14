@@ -1,0 +1,219 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "bg": "#0F1F1C",
+    "bgPanel": "#0C1A17",
+    "bgElement": "#1A332E",
+    "fg": "#D4E0D9",
+    "fgMuted": "#4F6359",
+    "moss": "#8CB060",
+    "teal": "#4D8C7D",
+    "paleGreen": "#B8D8BE",
+    "mist": "#A3BFA8",
+    "border": "#4F63594D",
+    "red": "#E67E80",
+    "yellow": "#DBBC7F"
+  },
+  "theme": {
+    "primary": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "secondary": {
+      "dark": "teal",
+      "light": "teal"
+    },
+    "accent": {
+      "dark": "paleGreen",
+      "light": "paleGreen"
+    },
+    "error": {
+      "dark": "red",
+      "light": "red"
+    },
+    "warning": {
+      "dark": "yellow",
+      "light": "yellow"
+    },
+    "success": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "info": {
+      "dark": "paleGreen",
+      "light": "paleGreen"
+    },
+    "text": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "textMuted": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "background": {
+      "dark": "bg",
+      "light": "bg"
+    },
+    "backgroundPanel": {
+      "dark": "bgPanel",
+      "light": "bgPanel"
+    },
+    "backgroundElement": {
+      "dark": "bgElement",
+      "light": "bgElement"
+    },
+    "border": {
+      "dark": "border",
+      "light": "border"
+    },
+    "borderActive": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "borderSubtle": {
+      "dark": "bgElement",
+      "light": "bgElement"
+    },
+    "diffAdded": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "diffRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffContext": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "diffHunkHeader": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "diffHighlightAdded": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "diffHighlightRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffAddedBg": {
+      "dark": "#1D3A34",
+      "light": "#1D3A34"
+    },
+    "diffRemovedBg": {
+      "dark": "#3F191A",
+      "light": "#3F191A"
+    },
+    "diffContextBg": {
+      "dark": "bgPanel",
+      "light": "bgPanel"
+    },
+    "diffLineNumber": {
+      "dark": "border",
+      "light": "border"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#162620",
+      "light": "#162620"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#26161a",
+      "light": "#26161a"
+    },
+    "markdownText": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "markdownHeading": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "markdownLink": {
+      "dark": "paleGreen",
+      "light": "paleGreen"
+    },
+    "markdownLinkText": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "markdownCode": {
+      "dark": "teal",
+      "light": "teal"
+    },
+    "markdownBlockQuote": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "markdownEmph": {
+      "dark": "yellow",
+      "light": "yellow"
+    },
+    "markdownStrong": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "markdownHorizontalRule": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "markdownListItem": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "markdownListEnumeration": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "markdownImage": {
+      "dark": "teal",
+      "light": "teal"
+    },
+    "markdownImageText": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "markdownCodeBlock": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "syntaxComment": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "syntaxKeyword": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "syntaxFunction": {
+      "dark": "paleGreen",
+      "light": "paleGreen"
+    },
+    "syntaxVariable": {
+      "dark": "mist",
+      "light": "mist"
+    },
+    "syntaxString": {
+      "dark": "teal",
+      "light": "teal"
+    },
+    "syntaxNumber": {
+      "dark": "yellow",
+      "light": "yellow"
+    },
+    "syntaxType": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "syntaxOperator": {
+      "dark": "moss",
+      "light": "moss"
+    },
+    "syntaxPunctuation": {
+      "dark": "fg",
+      "light": "fg"
+    }
+  }
+}
