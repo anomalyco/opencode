@@ -809,32 +809,26 @@ export namespace ProviderTransform {
       // - `<upstream slug>`: provider-specific model options (anthropic/openai/...)
       // We keep `gateway` as-is and route every other top-level option under the
       // model-derived upstream slug so variants/options can stay flat internally.
-      const parse = (id: string) => {
-        const i = id.indexOf("/")
-        if (i <= 0) return undefined
-        return id.slice(0, i)
-      }
-
-      const slug = parse(model.api.id)
-      const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
+      const i = model.api.id.indexOf("/")
+      const slug = i > 0 ? model.api.id.slice(0, i) : undefined
       const gateway = options.gateway
+      const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
+      const has = Object.keys(rest).length > 0
 
-      if (!slug) {
-        if (!gateway) return { gateway: rest }
-        if (typeof gateway === "object" && gateway !== null && !Array.isArray(gateway)) {
-          return { gateway: { ...gateway, ...rest } }
+      const result: Record<string, any> = {}
+      if (gateway !== undefined) result.gateway = gateway
+
+      if (has) {
+        if (slug) {
+          result[slug] = rest
+        } else if (gateway && typeof gateway === "object" && !Array.isArray(gateway)) {
+          result.gateway = { ...gateway, ...rest }
+        } else {
+          result.gateway = rest
         }
-        if (Object.keys(rest).length === 0) return { gateway }
-        return { gateway: rest }
       }
 
-      if (Object.keys(rest).length === 0) {
-        if (gateway === undefined) return {}
-        return { gateway }
-      }
-
-      if (gateway === undefined) return { [slug]: rest }
-      return { gateway, [slug]: rest }
+      return result
     }
 
     const key = sdkKey(model.api.npm) ?? model.providerID
