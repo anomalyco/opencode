@@ -7,7 +7,9 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
+import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -30,7 +32,9 @@ export type SessionCommandContext = {
   language: ReturnType<typeof useLanguage>
   local: ReturnType<typeof useLocal>
   permission: ReturnType<typeof usePermission>
+  platform: ReturnType<typeof usePlatform>
   prompt: ReturnType<typeof usePrompt>
+  server: ReturnType<typeof useServer>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   terminal: ReturnType<typeof useTerminal>
@@ -169,6 +173,40 @@ export const useSessionCommands = (input: SessionCommandContext) => {
         input.view().terminal.open()
       },
     }),
+    terminalCommand({
+      id: "terminal.openGhostty",
+      title: input.language.t("command.terminal.openGhostty"),
+      description: input.language.t("command.terminal.openGhostty.description"),
+      disabled: input.platform.platform !== "desktop" || !input.platform.openPath || !input.server.isLocal(),
+      onSelect: () => {
+        const directory = input.sdk.directory
+        if (!directory) return
+        Promise.resolve(input.platform.openPath?.(directory, "Ghostty")).catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            title: input.language.t("common.requestFailed"),
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+      },
+    }),
+    terminalCommand({
+      id: "terminal.openWezTerm",
+      title: input.language.t("command.terminal.openWezTerm"),
+      description: input.language.t("command.terminal.openWezTerm.description"),
+      disabled: input.platform.platform !== "desktop" || !input.platform.openInEditor || !input.server.isLocal(),
+      onSelect: () => {
+        const directory = input.sdk.directory
+        if (!directory) return
+        Promise.resolve(input.platform.openInEditor?.("WezTerm", directory)).catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            title: input.language.t("common.requestFailed"),
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+      },
+    }),
     viewCommand({
       id: "steps.toggle",
       title: input.language.t("command.steps.toggle"),
@@ -189,7 +227,7 @@ export const useSessionCommands = (input: SessionCommandContext) => {
       id: "message.previous",
       title: input.language.t("command.message.previous"),
       description: input.language.t("command.message.previous.description"),
-      keybind: "mod+arrowup",
+      keybind: "mod+shift+arrowup",
       disabled: !input.params.id,
       onSelect: () => input.navigateMessageByOffset(-1),
     }),
@@ -197,7 +235,7 @@ export const useSessionCommands = (input: SessionCommandContext) => {
       id: "message.next",
       title: input.language.t("command.message.next"),
       description: input.language.t("command.message.next.description"),
-      keybind: "mod+arrowdown",
+      keybind: "mod+shift+arrowdown",
       disabled: !input.params.id,
       onSelect: () => input.navigateMessageByOffset(1),
     }),

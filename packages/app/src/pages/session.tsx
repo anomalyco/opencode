@@ -36,6 +36,8 @@ import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
@@ -102,6 +104,8 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const permission = usePermission()
+  const platform = usePlatform()
+  const server = useServer()
 
   const permRequest = createMemo(() => {
     const sessionID = params.id
@@ -921,7 +925,9 @@ export default function Page() {
     language,
     local,
     permission,
+    platform,
     prompt,
+    server,
     sdk,
     sync,
     terminal,

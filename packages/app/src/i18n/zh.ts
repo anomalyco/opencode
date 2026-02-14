@@ -71,6 +71,10 @@ export const dict = {
 
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",
+  "command.terminal.openGhostty": "在 Ghostty 中打开",
+  "command.terminal.openGhostty.description": "在 Ghostty 中打开当前项目目录",
+  "command.terminal.openWezTerm": "在 WezTerm 中打开",
+  "command.terminal.openWezTerm.description": "在 WezTerm 中打开当前项目目录",
 
   "command.steps.toggle": "切换步骤",
   "command.steps.toggle.description": "显示或隐藏当前消息的步骤",

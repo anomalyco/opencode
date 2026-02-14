@@ -35,6 +35,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "wezterm",
   "xcode",
   "android-studio",
   "powershell",
@@ -53,6 +54,7 @@ const MAC_APPS = [
   { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "wezterm", label: "WezTerm", icon: "wezterm", openWith: "WezTerm" },
   { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
   { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
   { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
@@ -282,6 +284,12 @@ export function SessionHeader() {
     const directory = projectDirectory()
     if (!directory) return
     if (!canOpen()) return
+    if (app === "wezterm" && platform.openInEditor) {
+      Promise.resolve(platform.openInEditor("WezTerm", directory)).catch((err: unknown) =>
+        showRequestError(language, err),
+      )
+      return
+    }
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
