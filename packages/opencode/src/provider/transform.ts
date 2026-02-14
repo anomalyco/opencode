@@ -172,7 +172,7 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  function applyCaching(msgs: ModelMessage[], providerID: string): ModelMessage[] {
+  function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
@@ -195,7 +195,7 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = providerID === "anthropic" || providerID.includes("bedrock")
+      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -254,14 +254,15 @@ export namespace ProviderTransform {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
     if (
-      model.providerID === "anthropic" ||
-      model.api.id.includes("anthropic") ||
-      model.api.id.includes("claude") ||
-      model.id.includes("anthropic") ||
-      model.id.includes("claude") ||
-      model.api.npm === "@ai-sdk/anthropic"
+      (model.providerID === "anthropic" ||
+        model.api.id.includes("anthropic") ||
+        model.api.id.includes("claude") ||
+        model.id.includes("anthropic") ||
+        model.id.includes("claude") ||
+        model.api.npm === "@ai-sdk/anthropic") &&
+      model.api.npm !== "@ai-sdk/gateway"
     ) {
-      msgs = applyCaching(msgs, model.providerID)
+      msgs = applyCaching(msgs, model)
     }
 
     // Remap providerOptions keys from stored providerID to expected SDK key
@@ -764,6 +765,10 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = input.sessionID
     }
 
+    if (input.model.api.npm === "@ai-sdk/gateway") {
+      result["caching"] = "auto"
+    }
+
     return result
   }
 
@@ -803,7 +808,11 @@ export namespace ProviderTransform {
       return { [key]: options }
     }
 
-    const key = model.api.id.includes("/") ? model.api.id.split("/")[0] : (sdkKey(model.api.npm) ?? model.providerID)
+    const key = iife(() => {
+      if (model.api.id.includes("/")) return model.api.id.split("/")[0]
+      if (model.id.includes("/")) return model.id.split("/")[0]
+      return sdkKey(model.api.npm) ?? model.providerID
+    })
 
     const rest = { ...options }
     const gate = rest.gateway
