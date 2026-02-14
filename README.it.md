@@ -50,7 +50,8 @@ scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS e Linux (consigliato, sempre aggiornato)
 brew install opencode              # macOS e Linux (formula brew ufficiale, aggiornata meno spesso)
-paru -S opencode-bin               # Arch Linux
+sudo pacman -S opencode            # Arch Linux (Stable)
+paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Qualsiasi OS
 nix run nixpkgs#opencode           # oppure github:anomalyco/opencode per l’ultima branch di sviluppo
 ```
