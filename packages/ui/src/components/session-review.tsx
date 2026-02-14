@@ -1,4 +1,5 @@
 import { Accordion } from "./accordion"
+import { Button } from "./button"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
