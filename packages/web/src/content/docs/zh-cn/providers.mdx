@@ -85,7 +85,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 
 ## 目录
 
-讓我们詳細瞭解一些提供商。如果您想将提供商添加到
+让我们详细了解一些提供商。如果您想将提供商添加到
 列表，请随时开启PR。
 
 :::note
@@ -156,7 +156,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    export AWS_REGION=us-east-1
    ```
 
-   #### 配置文件（推薦）
+   #### 配置文件（推荐）
 
    For project-specific or persistent configuration, use `opencode.json`:
 
@@ -174,13 +174,13 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    }
    ```
 
-   **可用選項：**
+   **可用选项：**
    - `region` - AWS 区域（例如 `us-east-1`、`eu-west-1`）
    - `profile` - 来自 `~/.aws/credentials` 的 AWS 命名配置档案
    - `endpoint` - VPC 节点节点的自定义节点 URL（通用 `baseURL` 选项的别名）
 
    :::提示
-   配置文件選項优先于环境变量。
+   配置文件选项优先于环境变量。
    :::
 
    #### 高阶：VPC 端点
@@ -206,13 +206,13 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    `endpoint` 选项是通用 `baseURL` 选项的别名，使用 AWS 术语特定。如果同时指定了 `endpoint` 和 `baseURL`，则 `endpoint` 优先。
    :::
 
-   #### 認證方式
+   #### 认证方式
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**：创建IAM用户并在AWS控制台中生成访问金币。
    - **`AWS_PROFILE`**：使用 `~/.aws/credentials` 中的命名配置文件。首先配置 `aws configure --profile my-profile` 或 `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**：从 Amazon Bedrock 控制台生成长期 API 密钥
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**：适用于 EKS IRSA（服务账户的 IAM 角色）或具有 OIDC 联合的其他 Kubernetes 环境。使用服务账户注释时，这些环境变量由 Kubernetes 自动注入。
 
-   #### 認證优先顺序
+   #### 认证优先顺序
 
    Amazon Bedrock 使用以下身份验证优先顺序：
    1. **不记名Tokens** - `AWS_BEARER_TOKEN_BEDROCK`环境变化数据或来自`/connect`Tokens的Tokens
@@ -663,7 +663,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    2. 单击**添加新Tokens**
    3. Name: `OpenCode`, Scopes: `api`
    4. 复制Tokens（以 `glpat-` 发起人）
-   5. 在终端中輸入
+   5. 在终端中输入
 
 3. 执行 `/models` 命令查看可用模型。
 
@@ -834,7 +834,7 @@ Google Vertex AI 与 opencode 结合使用：
 2. 设置所需的环境变量：
    - `GOOGLE_CLOUD_PROJECT`：您的Google云专案ID
    - `VERTEX_LOCATION`（可选）：Vertex AI的区域（默认为`global`）
-   - 身份验证（选择一項）：
+   - 身份验证（选择一项）：
      - `GOOGLE_APPLICATION_CREDENTIALS`：服务帐户 JSON 密钥文件的路径
      - 使用 gcloud CLI 进行身份验证：`gcloud auth application-default login`
 
@@ -903,7 +903,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
    /connect
    ```
 
-3. 輸入您的擁抱臉標記。
+3. 输入您的 Hugging Face API 密钥。
 
    ```txt
    ┌ API key
@@ -949,7 +949,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 For more providers and advanced features like caching and rate limiting, check the [Helicone documentation](https://docs.helicone.ai).
 
-#### 可選配置
+#### 可选配置
 
 如果您发现Helicone的某些功能或模型未通过opencode自动配置，您始终可以自行配置。
 
@@ -979,7 +979,7 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
 }
 ```
 
-#### 自定義標頭
+#### 自定义标头
 
 Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义标头。使用 `options.headers` 将它们添加到您提供的方案配置中：
 
@@ -1002,7 +1002,7 @@ Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义�
 }
 ```
 
-##### 会话跟蹤
+##### 会话跟踪
 
 Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each opencode conversation as a session in Helicone.
 
@@ -1022,7 +1022,7 @@ npm install -g opencode-helicone-session
 
 ##### 常见螺旋接头
 
-| 標題                       | 描述                                                  |
+| 标题                       | 描述                                                  |
 | -------------------------- | ----------------------------------------------------- |
 | `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)              |
 | `Helicone-User-Id`         | 点击用户跟踪指标                                      |
@@ -1635,9 +1635,9 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 }
 ```
 
-一些有用的路由選項：
+一些有用的路由选项：
 
-| 選項                | 描述                   |
+| 选项                | 描述                   |
 | ------------------- | ---------------------- |
 | `order`             | 提供商尝试顺序         |
 | `only`              | 限制特定提供商         |
@@ -1816,7 +1816,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    }
    ```
 
-   以下是配置選項：
+   以下是配置选项：
    - **npm**：要使用AI的SDK包，`@ai-sdk/openai-compatible`用于OpenAI兼容的事业
    - **名称**：UI中的显示名称。
    - **模型**：可用模型。
@@ -1824,7 +1824,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    - **options.apiKey**：如果不使用身份验证，可以选择设置API 密钥。
    - **options.headers**：可选择设置自定义标头。
 
-   有關高階選項的更多資訊，请參見下面的示例。
+   有关高阶选项的更多资讯，请参见下面的示例。
 
 5. 执行 `/models` 命令，您提供的自定义程序和模型将出现在选择列表中。
 
@@ -1875,7 +1875,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ## 故障排除
 
-如果您在配置提供商時遇到問題，请检查以下內容：
+如果您在配置提供商时遇到问题，请检查以下内容：
 
 1. **Check the auth setup**: Run `opencode auth list` to see if the credentials
    提供商的配置已添加到您的配置中。
