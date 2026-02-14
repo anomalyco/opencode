@@ -69,6 +69,7 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      metadata: row.metadata ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -94,6 +95,7 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      metadata: info.metadata ?? null,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -148,6 +150,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     })
     .meta({
       ref: "Session",
@@ -195,6 +198,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        metadata: z.record(z.string(), z.string()).optional(),
       })
       .optional(),
     async (input) => {
@@ -203,6 +207,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        metadata: input?.metadata,
       })
     },
   )
@@ -270,6 +275,7 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    metadata?: Record<string, string>
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
@@ -280,6 +286,7 @@ export namespace Session {
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
+      metadata: input.metadata,
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -377,6 +384,27 @@ export namespace Session {
         const row = db
           .update(SessionTable)
           .set({ time_archived: input.time })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
+  export const setMetadata = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      metadata: z.record(z.string(), z.string()).optional(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ metadata: input.metadata ?? null })
           .where(eq(SessionTable.id, input.sessionID))
           .returning()
           .get()

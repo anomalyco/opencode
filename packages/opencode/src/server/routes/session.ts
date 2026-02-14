@@ -270,6 +270,7 @@ export const SessionRoutes = lazy(() =>
               archived: z.number().optional(),
             })
             .optional(),
+          metadata: z.record(z.string(), z.string()).optional(),
         }),
       ),
       async (c) => {
@@ -282,6 +283,9 @@ export const SessionRoutes = lazy(() =>
         }
         if (updates.time?.archived !== undefined) {
           session = await Session.setArchived({ sessionID, time: updates.time.archived })
+        }
+        if (updates.metadata !== undefined) {
+          session = await Session.setMetadata({ sessionID, metadata: updates.metadata })
         }
 
         return c.json(session)
