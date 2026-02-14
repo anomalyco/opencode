@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -390,7 +390,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const projects = server.projects.list()
+      const worktrees = globalSync.data.project
+        .filter((project) => project.id !== "global")
+        .map((project) => project.worktree)
+        .filter((worktree): worktree is string => !!worktree)
+      const known = new Set(worktrees.map(rootFor))
+      if (known.size === 0) return
+
+      const projects = untrack(() => server.projects.list())
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
@@ -406,6 +413,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
 
           if (project.expanded) server.projects.expand(root)
+        }
+
+        for (const worktree of known) {
+          if (seen.has(worktree)) continue
+          server.projects.open(worktree)
+          seen.add(worktree)
         }
       })
     })
