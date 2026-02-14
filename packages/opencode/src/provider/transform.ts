@@ -361,7 +361,7 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
+        if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       case "@ai-sdk/gateway":
@@ -763,6 +763,9 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = input.sessionID
     }
 
+    if (input.model.providerID === "openrouter") {
+      result["prompt_cache_key"] = input.sessionID
+    }
     if (input.model.api.npm === "@ai-sdk/gateway") {
       result["gateway"] = {
         caching: "auto",
