@@ -80,7 +80,8 @@ const cli = yargs(hideBin(process.argv))
     })
 
     const marker = path.join(Global.Path.data, "opencode.db")
-    if (opts._[0] !== "serve" && !(await Bun.file(marker).exists())) {
+    const cmd = opts._[0]
+    if (cmd !== "serve" && cmd !== "upgrade" && !(await Bun.file(marker).exists())) {
       console.log("Performing one time database migration, may take a few minutes...")
       const tty = process.stdout.isTTY
       const width = 36
