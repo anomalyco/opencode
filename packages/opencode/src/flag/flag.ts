@@ -28,6 +28,7 @@ export namespace Flag {
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export declare const OPENCODE_CLIENT: string
+  export declare const OPENCODE_ENABLE_ACP_QUESTION_TOOL: boolean
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
 
@@ -90,6 +91,17 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_ENABLE_ACP_QUESTION_TOOL
+// This must be evaluated at access time, not module load time,
+// because ACP integrations may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_ENABLE_ACP_QUESTION_TOOL", {
+  get() {
+    return truthy("OPENCODE_ENABLE_ACP_QUESTION_TOOL")
   },
   enumerable: true,
   configurable: false,
