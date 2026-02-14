@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
@@ -94,6 +94,38 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let streamErrorLogged = false
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+    let isStale = false
+    let defer: ReturnType<typeof setTimeout> | undefined
+
+    const sync = () => {
+      emitter.emit("global", { type: "resume", properties: {} } as unknown as Event)
+    }
+
+    const resume = () => {
+      if (defer) return
+      defer = setTimeout(() => {
+        defer = undefined
+        if (!isStale) return
+        isStale = false
+        sync()
+      }, 100)
+    }
+
+    const freeze = () => {
+      isStale = true
+      void flush()
+    }
+
+    const resumed = () => resume()
+
+    const visible = () => {
+      if (document.visibilityState !== "visible") {
+        isStale = true
+        return
+      }
+      resume()
+    }
+
     void (async () => {
       while (!abort.signal.aborted) {
         try {
@@ -108,6 +140,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               })
             },
           })
+          streamErrorLogged = false
+          if (isStale) {
+            isStale = false
+            sync()
+          }
           let yielded = Date.now()
           for await (const event of events.stream) {
             streamErrorLogged = false
@@ -145,9 +182,18 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     })().finally(flush)
 
-    onCleanup(() => {
-      abort.abort()
-      flush()
+    onMount(() => {
+      document.addEventListener("freeze", freeze)
+      document.addEventListener("resume", resumed)
+      document.addEventListener("visibilitychange", visible)
+
+      onCleanup(() => {
+        document.removeEventListener("freeze", freeze)
+        document.removeEventListener("resume", resumed)
+        document.removeEventListener("visibilitychange", visible)
+        abort.abort()
+        flush()
+      })
     })
 
     const sdk = createOpencodeClient({
