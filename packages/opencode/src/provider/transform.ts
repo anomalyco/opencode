@@ -825,7 +825,7 @@ export namespace ProviderTransform {
           return { gateway: { ...gateway, ...rest } }
         }
         if (Object.keys(rest).length === 0) return { gateway }
-        return { gateway: { value: gateway, ...rest } }
+        return { gateway: rest }
       }
 
       if (Object.keys(rest).length === 0) {

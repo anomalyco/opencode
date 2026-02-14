@@ -289,7 +289,7 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
-  test("uses model id provider slug when gateway api id is unscoped", () => {
+  test("falls back to gateway key when gateway api id is unscoped", () => {
     const model = createModel({
       id: "anthropic/claude-sonnet-4",
       providerID: "vercel",
@@ -301,7 +301,7 @@ describe("ProviderTransform.providerOptions", () => {
     })
 
     expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
-      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+      gateway: { thinking: { type: "enabled", budgetTokens: 12_000 } },
     })
   })
 
