@@ -436,6 +436,11 @@ export function SessionTurn(
     if (s.type !== "retry") return
     return s
   })
+  const isRetryFreeUsageLimitError = createMemo(() => {
+    const r = retry()
+    if (!r) return false
+    return r.message.includes("Free usage exceeded")
+  })
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
@@ -691,10 +696,22 @@ export function SessionTurn(
                                   {(() => {
                                     const r = retry()
                                     if (!r) return ""
-                                    const msg = unwrap(r.message)
+                                    const msg = isRetryFreeUsageLimitError()
+                                      ? i18n.t("ui.sessionTurn.error.freeUsageExceeded")
+                                      : unwrap(r.message)
                                     return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
                                   })()}
                                 </span>
+                                <Show when={isRetryFreeUsageLimitError()}>
+                                  <a
+                                    href="https://opencode.ai/zen"
+                                    target="_blank"
+                                    class="retry-error-link"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {i18n.t("ui.sessionTurn.error.addCredits")}
+                                  </a>
+                                </Show>
                                 <span data-slot="session-turn-retry-seconds">
                                   · {i18n.t("ui.sessionTurn.retry.retrying")}
                                   {store.retrySeconds > 0
