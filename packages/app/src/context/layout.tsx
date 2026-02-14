@@ -356,12 +356,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
+    const normalizePath = (directory: string) => {
+      const normalized = directory.replaceAll("\\", "/").replace(/\/+$/, "")
+      if (/^[a-z]:\//i.test(normalized)) return normalized.toLowerCase()
+      return normalized
+    }
+
     const roots = createMemo(() => {
       const map = new Map<string, string>()
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
+          map.set(normalizePath(sandbox), normalizePath(project.worktree))
         }
       }
       return map
@@ -369,24 +375,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const rootFor = (directory: string) => {
       const map = roots()
-      if (map.size === 0) return directory
+      const origin = normalizePath(directory)
+      if (map.size === 0) return origin
 
       const visited = new Set<string>()
-      const chain = [directory]
+      const chain = [origin]
 
       while (chain.length) {
         const current = chain[chain.length - 1]
-        if (!current) return directory
+        if (!current) return origin
 
         const next = map.get(current)
         if (!next) return current
 
-        if (visited.has(next)) return directory
+        if (visited.has(next)) return origin
         visited.add(next)
         chain.push(next)
       }
 
-      return directory
+      return origin
     }
 
     createEffect(() => {
@@ -394,30 +401,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         .filter((project) => project.id !== "global")
         .map((project) => project.worktree)
         .filter((worktree): worktree is string => !!worktree)
+      const raw = new Map(worktrees.map((worktree) => [normalizePath(worktree), worktree]))
       const known = new Set(worktrees.map(rootFor))
       if (known.size === 0) return
 
       const projects = untrack(() => server.projects.list())
-      const seen = new Set(projects.map((project) => project.worktree))
+      const seen = new Set(projects.map((project) => normalizePath(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
+          const worktree = normalizePath(project.worktree)
           const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
+          if (root === worktree) continue
 
           server.projects.close(project.worktree)
 
           if (!seen.has(root)) {
-            server.projects.open(root)
+            server.projects.open(raw.get(root) ?? root)
             seen.add(root)
           }
 
-          if (project.expanded) server.projects.expand(root)
+          if (project.expanded) server.projects.expand(raw.get(root) ?? root)
         }
 
         for (const worktree of known) {
           if (seen.has(worktree)) continue
-          server.projects.open(worktree)
+          server.projects.open(raw.get(worktree) ?? worktree)
           seen.add(worktree)
         }
       })
