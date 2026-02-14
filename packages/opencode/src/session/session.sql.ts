@@ -31,6 +31,7 @@ export const SessionTable = sqliteTable(
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
+    time_ttl: integer(),
   },
   (table) => [index("session_project_idx").on(table.project_id), index("session_parent_idx").on(table.parent_id)],
 )

@@ -75,6 +75,7 @@ export namespace Session {
         updated: row.time_updated,
         compacting: row.time_compacting ?? undefined,
         archived: row.time_archived ?? undefined,
+        ttl: row.time_ttl ?? undefined,
       },
     }
   }
@@ -100,6 +101,7 @@ export namespace Session {
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
       time_archived: info.time.archived,
+      time_ttl: info.time.ttl,
     }
   }
 
@@ -140,6 +142,7 @@ export namespace Session {
         updated: z.number(),
         compacting: z.number().optional(),
         archived: z.number().optional(),
+        ttl: z.number().optional(),
       }),
       permission: PermissionNext.Ruleset.optional(),
       revert: z
@@ -188,6 +191,12 @@ export namespace Session {
       z.object({
         sessionID: z.string().optional(),
         error: MessageV2.Assistant.shape.error,
+      }),
+    ),
+    TtlExpired: BusEvent.define(
+      "session.ttl_expired",
+      z.object({
+        info: Info,
       }),
     ),
   }
