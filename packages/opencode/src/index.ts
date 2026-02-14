@@ -22,6 +22,7 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
+import { DiscoverCommand } from "./cli/cmd/discover"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
@@ -125,6 +126,7 @@ let cli = yargs(hideBin(process.argv))
   .command(McpCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
+  .command(DiscoverCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
