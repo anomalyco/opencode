@@ -372,7 +372,33 @@ export const googleJavaFormat: Info = {
   async enabled() {
     if (Bun.which("google-java-format")) return true
 
-    const found = await Filesystem.findUp("google-java-format-all-deps.jar", Instance.directory, Instance.worktree)
-    return found.length > 0
+    const jarFound = await Filesystem.findUp("google-java-format-all-deps.jar", Instance.directory, Instance.worktree)
+    if (jarFound.length > 0) return true
+
+    const pomFiles = await Filesystem.findUp("pom.xml", Instance.directory, Instance.worktree)
+    for (const pom of pomFiles) {
+      const content = await Bun.file(pom).text()
+      if (content.includes("spotless") && content.includes("google-java-format")) {
+        return true
+      }
+    }
+
+    const gradleFiles = await Filesystem.findUp("build.gradle", Instance.directory, Instance.worktree)
+    for (const gradle of gradleFiles) {
+      const content = await Bun.file(gradle).text()
+      if (content.includes("spotless") && content.includes("google-java-format")) {
+        return true
+      }
+    }
+
+    const gradleKtsFiles = await Filesystem.findUp("build.gradle.kts", Instance.directory, Instance.worktree)
+    for (const gradle of gradleKtsFiles) {
+      const content = await Bun.file(gradle).text()
+      if (content.includes("spotless") && content.includes("google-java-format")) {
+        return true
+      }
+    }
+
+    return false
   },
 }
