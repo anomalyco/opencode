@@ -108,6 +108,26 @@ const DOCS_SEGMENT = new Set([
   "zh-tw",
 ])
 
+const DOCS_LOCALE = {
+  ar: "ar",
+  da: "da",
+  de: "de",
+  en: "en",
+  es: "es",
+  fr: "fr",
+  it: "it",
+  ja: "ja",
+  ko: "ko",
+  nb: "no",
+  "pt-br": "br",
+  root: "en",
+  ru: "ru",
+  th: "th",
+  tr: "tr",
+  "zh-cn": "zh",
+  "zh-tw": "zht",
+} as const satisfies Record<string, Locale>
+
 function suffix(pathname: string) {
   const index = pathname.search(/[?#]/)
   if (index === -1) {
@@ -130,7 +150,12 @@ export function docs(locale: Locale, pathname: string) {
     return `${next.path}${next.suffix}`
   }
 
-  if (value === "root") return `${next.path}${next.suffix}`
+  if (value === "root") {
+    if (next.path === "/docs/en") return `/docs${next.suffix}`
+    if (next.path === "/docs/en/") return `/docs/${next.suffix}`
+    if (next.path.startsWith("/docs/en/")) return `/docs/${next.path.slice("/docs/en/".length)}${next.suffix}`
+    return `${next.path}${next.suffix}`
+  }
 
   if (next.path === "/docs") return `/docs/${value}${next.suffix}`
   if (next.path === "/docs/") return `/docs/${value}/${next.suffix}`
@@ -152,6 +177,15 @@ export function parseLocale(value: unknown): Locale | null {
 
 export function fromPathname(pathname: string) {
   return parseLocale(fix(pathname).split("/")[1])
+}
+
+export function fromDocsPathname(pathname: string) {
+  const next = fix(pathname)
+  const value = next.split("/")[2]?.toLowerCase()
+  if (!value) return null
+  if (!next.startsWith("/docs/")) return null
+  if (!(value in DOCS_LOCALE)) return null
+  return DOCS_LOCALE[value as keyof typeof DOCS_LOCALE]
 }
 
 export function strip(pathname: string) {
@@ -271,6 +305,9 @@ export function localeFromRequest(request: Request) {
 
   const fromPath = fromPathname(new URL(request.url).pathname)
   if (fromPath) return fromPath
+
+  const fromDocsPath = fromDocsPathname(new URL(request.url).pathname)
+  if (fromDocsPath) return fromDocsPath
 
   return (
     localeFromCookieHeader(request.headers.get("cookie")) ??
