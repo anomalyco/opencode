@@ -959,6 +959,14 @@ ToolRegistry.register({
       const result = costs(sid, data.store)
       return { tokens, usage, own: result.own, total: result.total, missing: result.missing }
     })
+    createEffect(() => {
+      const missing = stats()?.missing
+      if (missing && missing.length > 0) {
+        for (const id of missing) {
+          data.syncSession?.(id)
+        }
+      }
+    })
 
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">

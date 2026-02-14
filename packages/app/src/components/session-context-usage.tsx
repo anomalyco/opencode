@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { Match, Show, Switch, createMemo, createEffect } from "solid-js"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
@@ -45,6 +45,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all, sync.data))
+  createEffect(() => {
+    const missing = metrics().missing
+    if (missing.length > 0) {
+      for (const id of missing) {
+        sync.session.sync(id)
+      }
+    }
+  })
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
     const agent = usd().format(metrics().ownCost)
@@ -95,16 +103,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     <Show when={params.id}>
       <Tooltip value={tooltipValue()} placement="top">
         <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
+          <Match when={variant() === "indicator"}>
+            <div class="flex items-center gap-1.5">
+              {circle()}
+              <span class="text-12-regular text-text-weak">{cost()}</span>
+            </div>
+          </Match>
           <Match when={true}>
             <Button
               type="button"
               variant="ghost"
-              class="size-6"
+              class="h-6 px-1 flex items-center gap-1.5"
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             >
               {circle()}
+              <span class="text-12-regular text-text-weak">{cost()}</span>
             </Button>
           </Match>
         </Switch>

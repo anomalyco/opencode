@@ -192,6 +192,15 @@ export function Session() {
       })
   })
 
+  createEffect(() => {
+    const result = costs(route.sessionID, sync.data)
+    if (result.missing.length > 0) {
+      for (const id of result.missing) {
+        sync.session.sync(id)
+      }
+    }
+  })
+
   const toast = useToast()
   const sdk = useSDK()
 
@@ -1882,14 +1891,22 @@ function Task(props: ToolProps<typeof TaskTool>) {
             </text>
             <Show when={props.metadata.sessionId}>
               {(sessionId) => {
-                const result = costs(sessionId(), sync.data)
-                const total = new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                }).format(result.total)
+                const result = createMemo(() => costs(sessionId(), sync.data))
+                const own = createMemo(() =>
+                  new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(result().own),
+                )
+                const total = createMemo(() =>
+                  new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(result().total),
+                )
                 return (
                   <text style={{ fg: theme.textMuted }}>
-                    ({total}){result.missing.length > 0 ? " (loaded)" : ""}
+                    ({total})
                   </text>
                 )
               }}

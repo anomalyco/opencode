@@ -105,6 +105,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
   )
 
   const metrics = createMemo(() => getSessionContextMetrics(props.messages(), sync.data.provider.all, sync.data))
+  createEffect(() => {
+    const missing = metrics().missing
+    if (missing.length > 0) {
+      for (const id of missing) {
+        sync.session.sync(id)
+      }
+    }
+  })
   const ctx = createMemo(() => metrics().context)
   const formatter = createMemo(() => createSessionContextFormatter(language.locale()))
 
