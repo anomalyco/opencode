@@ -156,8 +156,7 @@
   }
 
   [data-slot="user-message-text"] {
-    display: inline-block;
-    white-space: pre-wrap;
+    position: relative;
     word-break: break-word;
     overflow: hidden;
     background: light-dark(#d4ee77, var(--surface-weak));
@@ -193,6 +192,37 @@
     [data-component="tooltip-trigger"] {
       display: inline-flex;
       width: fit-content;
+    }
+
+    [data-component="markdown"] {
+      line-height: var(--line-height-large);
+
+      p {
+        margin: 0;
+      }
+
+      p + p {
+        margin-top: 0.45rem;
+      }
+
+      ul,
+      ol {
+        margin-top: 0.35rem;
+        margin-bottom: 0.5rem;
+      }
+
+      li {
+        margin-bottom: 0.3rem;
+      }
+
+      li:last-child {
+        margin-bottom: 0;
+      }
+
+      pre {
+        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
     }
   }
 
