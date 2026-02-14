@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `time_ttl` integer;
