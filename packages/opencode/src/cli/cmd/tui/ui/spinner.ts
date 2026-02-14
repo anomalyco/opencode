@@ -243,7 +243,7 @@ export function deriveInactiveColor(brightColor: ColorInput, factor: number = 0.
   return RGBA.fromValues(baseRgba.r, baseRgba.g, baseRgba.b, factor)
 }
 
-export type KnightRiderStyle = "blocks" | "diamonds"
+export type KnightRiderStyle = "blocks" | "diamonds" | "pulsatingCircle"
 
 export interface KnightRiderOptions {
   width?: number
@@ -262,6 +262,12 @@ export interface KnightRiderOptions {
   enableFading?: boolean
   /** Minimum alpha value when fading (default: 0, range: 0-1) */
   minAlpha?: number
+  /** Number of frames for pulse animation (default: 20) */
+  pulseFrames?: number
+  /** Minimum alpha for pulse animation (default: 0.2) */
+  pulseMinAlpha?: number
+  /** Maximum alpha for pulse animation (default: 1.0) */
+  pulseMaxAlpha?: number
 }
 
 /**
@@ -270,8 +276,15 @@ export interface KnightRiderOptions {
  * @returns Array of frame strings
  */
 export function createFrames(options: KnightRiderOptions = {}): string[] {
+  const style = options.style ?? "pulsatingCircle"
+
+  // PulseDot style: single character, opacity changes via color generator
+  if (style === "pulsatingCircle") {
+    const pulseFrames = options.pulseFrames ?? 20
+    return Array.from({ length: pulseFrames }, () => "●")
+  }
+
   const width = options.width ?? 8
-  const style = options.style ?? "diamonds"
   const holdStart = options.holdStart ?? 30
   const holdEnd = options.holdEnd ?? 9
 
@@ -334,6 +347,29 @@ export function createFrames(options: KnightRiderOptions = {}): string[] {
  * @returns ColorGenerator function
  */
 export function createColors(options: KnightRiderOptions = {}): ColorGenerator {
+  const style = options.style ?? "pulsatingCircle"
+
+  // PulseDot style: single character with pulsing opacity
+  if (style === "pulsatingCircle") {
+    const pulseFrames = options.pulseFrames ?? 20
+    const minAlpha = options.pulseMinAlpha ?? 0.2
+    const maxAlpha = options.pulseMaxAlpha ?? 1.0
+    const baseColor = options.color
+      ? options.color instanceof RGBA
+        ? options.color
+        : RGBA.fromHex(options.color as string)
+      : RGBA.fromHex("#ff0000")
+
+    return (frameIndex: number, _charIndex: number, totalFrames: number, _totalChars: number) => {
+      // Sine wave for smooth pulsing: 0 -> 1 -> 0
+      const progress = (frameIndex % totalFrames) / totalFrames
+      const sineValue = Math.sin(progress * Math.PI * 2)
+      // Map sine (-1 to 1) to alpha range (minAlpha to maxAlpha)
+      const alpha = minAlpha + ((sineValue + 1) / 2) * (maxAlpha - minAlpha)
+      return RGBA.fromValues(baseColor.r, baseColor.g, baseColor.b, alpha)
+    }
+  }
+
   const holdStart = options.holdStart ?? 30
   const holdEnd = options.holdEnd ?? 9
 

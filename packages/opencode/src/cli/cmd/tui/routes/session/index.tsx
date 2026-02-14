@@ -7,6 +7,8 @@ import {
   For,
   Match,
   on,
+  onCleanup,
+  onMount,
   Show,
   Switch,
   useContext,
@@ -31,6 +33,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { formatDuration } from "@/util/format"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -65,10 +68,13 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
+import { DialogAlert } from "../../ui/dialog-alert"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
+import "opentui-spinner/solid"
+import { createColors, createFrames } from "../../ui/spinner"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
@@ -100,6 +106,12 @@ const context = createContext<{
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  sessionStatus: () =>
+    | { type: "idle" }
+    | { type: "busy" }
+    | { type: "retry"; attempt: number; message: string; next: number }
+  statusIndicatorDef: () => { frames: string[]; color: any }
+  animationsEnabled: () => boolean
 }>()
 
 function use() {
@@ -139,6 +151,8 @@ export function Session() {
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
   })
+
+  const sessionStatus = createMemo(() => sync.data.session_status?.[route.sessionID] ?? { type: "idle" })
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
@@ -298,6 +312,43 @@ export function Session() {
   }
 
   const local = useLocal()
+
+  const statusIndicatorDef = createMemo(() => {
+    const color = local.agent.color(local.agent.current().name)
+    const style = kv.get("indicator_style", "pulsatingCircle") as "pulsatingCircle" | "blocks" | "diamonds"
+    if (style === "pulsatingCircle") {
+      return {
+        frames: createFrames({
+          color,
+          style: "pulsatingCircle",
+          pulseFrames: 24,
+          pulseMinAlpha: 0.25,
+          pulseMaxAlpha: 1.0,
+        }),
+        color: createColors({
+          color,
+          style: "pulsatingCircle",
+          pulseFrames: 24,
+          pulseMinAlpha: 0.25,
+          pulseMaxAlpha: 1.0,
+        }),
+      }
+    }
+    return {
+      frames: createFrames({
+        color,
+        style,
+        inactiveFactor: 0.6,
+        minAlpha: 0.3,
+      }),
+      color: createColors({
+        color,
+        style,
+        inactiveFactor: 0.6,
+        minAlpha: 0.3,
+      }),
+    }
+  })
 
   function moveChild(direction: number) {
     if (children().length === 1) return
@@ -968,6 +1019,9 @@ export function Session() {
         showDetails,
         diffWrapMode,
         sync,
+        sessionStatus,
+        statusIndicatorDef,
+        animationsEnabled,
       }}
     >
       <box flexDirection="row">
@@ -1253,10 +1307,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const ctx = use()
+  const dialog = useDialog()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  const inProgress = createMemo(() => {
+    return props.last && !final() && !props.message.error
   })
 
   const duration = createMemo(() => {
@@ -1300,25 +1360,98 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
-              >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+          <box paddingLeft={3} flexDirection="row" gap={1} marginTop={1}>
+            <Show
+              when={inProgress()}
+              fallback={
+                <text>
+                  <span
+                    style={{
+                      fg:
+                        props.message.error?.name === "MessageAbortedError"
+                          ? theme.textMuted
+                          : local.agent.color(props.message.agent),
+                    }}
+                  >
+                    ▣
+                  </span>
+                </text>
+              }
+            >
+              <Show when={ctx.animationsEnabled()} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                <spinner
+                  color={ctx.statusIndicatorDef().color}
+                  frames={ctx.statusIndicatorDef().frames}
+                  interval={40}
+                />
+              </Show>
+            </Show>
+            <text>
+              <span style={{ fg: theme.text }}> {Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+              </Show>
+              <Show when={inProgress()}>
+                <Switch>
+                  <Match when={ctx.sessionStatus().type === "busy"}>
+                    <span style={{ fg: theme.textMuted }}> · </span>
+                    <span style={{ fg: theme.text }}>esc</span>
+                    <span style={{ fg: theme.textMuted }}> to interrupt</span>
+                  </Match>
+                  <Match when={ctx.sessionStatus().type === "retry"}>
+                    {(() => {
+                      const retry = () => {
+                        const s = ctx.sessionStatus()
+                        if (s.type !== "retry") return
+                        return s
+                      }
+                      const [seconds, setSeconds] = createSignal(0)
+                      onMount(() => {
+                        const timer = setInterval(() => {
+                          const next = retry()?.next
+                          if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                        }, 1000)
+                        onCleanup(() => clearInterval(timer))
+                      })
+                      const message = () => {
+                        const r = retry()
+                        if (!r) return ""
+                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                          return "gemini is way too hot right now"
+                        if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                        return r.message
+                      }
+                      const isTruncated = () => {
+                        const r = retry()
+                        if (!r) return false
+                        return r.message.length > 120
+                      }
+                      const handleClick = () => {
+                        const r = retry()
+                        if (r && isTruncated()) {
+                          DialogAlert.show(dialog, "Retry Error", r.message)
+                        }
+                      }
+                      return (
+                        <>
+                          <span style={{ fg: theme.textMuted }}> · </span>
+                          <box onMouseUp={handleClick}>
+                            <text fg={theme.error}>
+                              {message()}
+                              {isTruncated() ? " (click to expand)" : ""} [retrying{" "}
+                              {formatDuration(seconds()) ? `in ${formatDuration(seconds())} ` : ""}attempt #
+                              {retry()?.attempt}]
+                            </text>
+                          </box>
+                        </>
+                      )
+                    })()}
+                  </Match>
+                </Switch>
               </Show>
             </text>
           </box>

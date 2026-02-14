@@ -8,6 +8,7 @@ import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGua
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
@@ -640,6 +641,44 @@ function App() {
       onSelect: (dialog) => {
         kv.set("animations_enabled", !kv.get("animations_enabled", true))
         dialog.clear()
+      },
+    },
+    {
+      title: "Status indicator style",
+      value: "app.indicator.style",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("indicator_style", "pulsatingCircle")
+        const options = [
+          {
+            value: "pulsatingCircle",
+            title: "●  Pulsating circle",
+            description: current === "pulsatingCircle" ? "current" : undefined,
+            onSelect: () => {
+              kv.set("indicator_style", "pulsatingCircle")
+              dialog.clear()
+            },
+          },
+          {
+            value: "blocks",
+            title: "■  Blocks scanner",
+            description: current === "blocks" ? "current" : undefined,
+            onSelect: () => {
+              kv.set("indicator_style", "blocks")
+              dialog.clear()
+            },
+          },
+          {
+            value: "diamonds",
+            title: "◆  Diamonds scanner",
+            description: current === "diamonds" ? "current" : undefined,
+            onSelect: () => {
+              kv.set("indicator_style", "diamonds")
+              dialog.clear()
+            },
+          },
+        ]
+        dialog.replace(() => <DialogSelect title="Status Indicator Style" options={options} />)
       },
     },
     {
