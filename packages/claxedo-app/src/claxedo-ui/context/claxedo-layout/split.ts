@@ -44,7 +44,14 @@ export function createSplitActions(input: {
     direction: (() => store.split.direction) as Accessor<"h" | "v">,
     sizes: (() => store.split.sizes) as Accessor<number[]>,
     focusedId: (() => store.split.focusedId) as Accessor<string | undefined>,
-    groups: (() => store.groups) as Accessor<GroupState[]>,
+    groups: (() => {
+      const fg = store.split.focusedId
+      if (!fg || store.groups.length <= 1) return store.groups
+      const focused = store.groups.find((g) => g.id === fg)
+      if (!focused || store.groups[0] === focused) return store.groups
+      return [focused, ...store.groups.filter((g) => g.id !== fg)]
+    }) as Accessor<GroupState[]>,
+    orderedGroups: (() => store.groups) as Accessor<GroupState[]>,
     hidden: (() => !!store.split.hidden) as Accessor<boolean>,
 
     setFocus(groupId: string) {

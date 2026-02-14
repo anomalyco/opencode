@@ -475,7 +475,7 @@ function RailLayoutInner(props: RailLayoutProps) {
       category: "View",
       keybind: "mod+alt+ArrowLeft",
       onSelect: () => {
-        const groups = claxedo.split.groups()
+        const groups = claxedo.split.orderedGroups()
         const focusedId = claxedo.split.focusedId()
         const idx = groups.findIndex((g) => g.id === focusedId)
         if (idx > 0) claxedo.split.setFocus(groups[idx - 1].id)
@@ -487,7 +487,7 @@ function RailLayoutInner(props: RailLayoutProps) {
       category: "View",
       keybind: "mod+alt+ArrowRight",
       onSelect: () => {
-        const groups = claxedo.split.groups()
+        const groups = claxedo.split.orderedGroups()
         const focusedId = claxedo.split.focusedId()
         const idx = groups.findIndex((g) => g.id === focusedId)
         if (idx < groups.length - 1) claxedo.split.setFocus(groups[idx + 1].id)
@@ -541,7 +541,7 @@ function RailLayoutInner(props: RailLayoutProps) {
   const workspaceBarProjects = createMemo((): WorkspaceBarProject[] => {
     // Get all open tabs from all groups
     const allTabs: TabItem[] = []
-    for (const group of claxedo.split.groups()) {
+    for (const group of claxedo.split.orderedGroups()) {
       const tabs = claxedo.groupTabs(group.id)
       allTabs.push(...tabs.items())
     }
@@ -693,7 +693,7 @@ function RailLayoutInner(props: RailLayoutProps) {
             {(() => {
               // When split is hidden, only show the primary (first) group
               const visibleGroups = createMemo(() => {
-                const groups = claxedo.split.groups()
+                const groups = claxedo.split.orderedGroups()
                 if (claxedo.split.hidden()) {
                   const focused = groups.find((g) => g.id === claxedo.split.focusedId())
                   return [focused ?? groups[0]].filter(Boolean)

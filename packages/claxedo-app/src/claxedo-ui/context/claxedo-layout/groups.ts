@@ -166,7 +166,11 @@ export function createGroupAccessors(input: {
     },
     () => {
       const g = focusedGroup()
-      return g?.tabs.activeId ?? null
+      const id = g?.tabs.activeId ?? null
+      // In split mode, empty groups are intentional — return a sentinel to
+      // prevent the "ensure active tab" effect from auto-creating a session.
+      if (!id && store.groups.length > 1) return "__split_empty__"
+      return id
     },
     () => {
       const g = focusedGroup()
