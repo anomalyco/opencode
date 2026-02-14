@@ -32,6 +32,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { ContextUsageTool } from "./context"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -127,6 +128,7 @@ export namespace ToolRegistry {
           TaskTool,
           WebFetchTool,
           TodoWriteTool,
+          ContextUsageTool,
           WebSearchTool,
           CodeSearchTool,
           SkillTool,
