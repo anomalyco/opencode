@@ -46,6 +46,7 @@ import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { ContextUsageTool } from "./context"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -201,6 +202,7 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          context: Tool.init(ContextUsageTool),
         })
 
         return {
@@ -217,6 +219,7 @@ export const layer: Layer.Layer<
             tool.task,
             tool.fetch,
             tool.todo,
+            tool.context,
             tool.search,
             tool.skill,
             tool.patch,

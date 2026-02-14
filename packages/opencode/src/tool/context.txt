@@ -1,0 +1,1 @@
+Check your current context window usage. Returns the total token count, the percentage of the context window used, and the context limit. Use this to monitor how much of your context window remains before deciding whether to compact or adjust your approach.
