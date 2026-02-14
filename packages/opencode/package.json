@@ -15,7 +15,8 @@
     "lint": "echo 'Running lint checks...' && bun test --coverage",
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
-    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
+    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
+    "db": "bun drizzle-kit"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -42,6 +43,8 @@
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
+    "drizzle-kit": "1.0.0-beta.12-a5629fb",
+    "drizzle-orm": "1.0.0-beta.12-a5629fb",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -100,6 +103,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
+    "drizzle-orm": "1.0.0-beta.12-a5629fb",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
@@ -122,5 +126,8 @@
     "yargs": "18.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
+  },
+  "overrides": {
+    "drizzle-orm": "1.0.0-beta.12-a5629fb"
   }
 }
