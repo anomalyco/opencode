@@ -689,6 +689,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
+
+    // Notify plugins of input change
+    const sessionID = params.sessionID
+    if (sessionID && rawText.length > 0) {
+      sdk.client.plugin
+        .inputChanged({
+          sessionID,
+          text: rawText,
+        })
+        .catch(() => {})
+    }
   }
 
   const addPart = (part: ContentPart) => {
