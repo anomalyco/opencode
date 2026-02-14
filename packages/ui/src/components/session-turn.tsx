@@ -20,6 +20,7 @@ import { Card } from "./card"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { Tooltip } from "./tooltip"
+import { Tag } from "./tag"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
@@ -292,6 +293,7 @@ export function SessionTurn(
   )
 
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
+  const identityMessage = createMemo(() => lastAssistantMessage() ?? assistantMessages()[0])
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
   const errorText = createMemo(() => {
@@ -638,6 +640,21 @@ export function SessionTurn(
                       {/* Trigger (sticky) */}
                       <Show when={working() || hasSteps()}>
                         <div data-slot="session-turn-response-trigger">
+                          <Show when={identityMessage()}>
+                            {(assistant) => (
+                              <div data-slot="session-turn-model-meta" aria-live="off">
+                                <Tag size="normal" data-slot="session-turn-meta-agent">
+                                  {assistant().agent}
+                                </Tag>
+                                <Tag size="normal" data-slot="session-turn-meta-provider">
+                                  {assistant().providerID}
+                                </Tag>
+                                <Tag size="normal" data-slot="session-turn-meta-model">
+                                  {assistant().modelID}
+                                </Tag>
+                              </div>
+                            )}
+                          </Show>
                           <Button
                             data-expandable={assistantMessages().length > 0}
                             data-slot="session-turn-collapsible-trigger-content"
