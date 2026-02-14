@@ -764,7 +764,9 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.npm === "@ai-sdk/gateway") {
-      result["caching"] = "auto"
+      result["gateway"] = {
+        caching: "auto",
+      }
     }
 
     return result
@@ -801,6 +803,40 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+    if (model.api.npm === "@ai-sdk/gateway") {
+      // Gateway providerOptions are split across two namespaces:
+      // - `gateway`: gateway-native routing/caching controls
+      // - `<upstream slug>`: provider-specific model options (anthropic/openai/...)
+      // We keep `gateway` as-is and route every other top-level option under the
+      // model-derived upstream slug so variants/options can stay flat internally.
+      const parse = (id: string) => {
+        const i = id.indexOf("/")
+        if (i <= 0) return undefined
+        return id.slice(0, i)
+      }
+
+      const slug = parse(model.api.id)
+      const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
+      const gateway = options.gateway
+
+      if (!slug) {
+        if (!gateway) return { gateway: rest }
+        if (typeof gateway === "object" && gateway !== null && !Array.isArray(gateway)) {
+          return { gateway: { ...gateway, ...rest } }
+        }
+        if (Object.keys(rest).length === 0) return { gateway }
+        return { gateway: { value: gateway, ...rest } }
+      }
+
+      if (Object.keys(rest).length === 0) {
+        if (gateway === undefined) return {}
+        return { gateway }
+      }
+
+      if (gateway === undefined) return { [slug]: rest }
+      return { gateway, [slug]: rest }
+    }
+
     const key = sdkKey(model.api.npm) ?? model.providerID
     return { [key]: options }
   }
