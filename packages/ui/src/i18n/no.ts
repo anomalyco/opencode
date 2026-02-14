@@ -71,6 +71,7 @@ export const dict: Record<Keys, string> = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhenting",
   "ui.tool.shell": "Shell",
+  "ui.tool.powershell": "PowerShell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",

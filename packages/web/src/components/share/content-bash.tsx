@@ -8,15 +8,16 @@ interface Props {
   output: string
   description?: string
   expand?: boolean
+  tool?: string
 }
 
 export function ContentBash(props: Props) {
   const messages = useShareMessages()
   const [commandHtml] = createResource(
-    () => props.command,
-    async (command) => {
+    () => ({ command: props.command, tool: props.tool }),
+    async ({ command, tool }) => {
       return codeToHtml(command || "", {
-        lang: "bash",
+        lang: tool === "pwsh" ? "powershell" : "bash",
         themes: {
           light: "github-light",
           dark: "github-dark",

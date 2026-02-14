@@ -226,6 +226,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.shell"),
         subtitle: input.description,
       }
+    case "pwsh":
+      return {
+        icon: "console",
+        title: i18n.t("ui.tool.powershell"),
+        subtitle: input.description,
+      }
     case "edit":
       return {
         icon: "code-lines",
@@ -1092,6 +1098,29 @@ ToolRegistry.register({
         <div data-component="tool-output" data-scrollable>
           <Markdown
             text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
+          />
+        </div>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "pwsh",
+  render(props) {
+    const i18n = useI18n()
+    return (
+      <BasicTool
+        {...props}
+        icon="console"
+        trigger={{
+          title: i18n.t("ui.tool.powershell"),
+          subtitle: props.input.description,
+        }}
+      >
+        <div data-component="tool-output" data-scrollable>
+          <Markdown
+            text={`\`\`\`command\nPS> ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>

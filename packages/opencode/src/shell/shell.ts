@@ -64,4 +64,6 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  export const pwsh = lazy(() => Bun.which("pwsh") ?? undefined)
 }
