@@ -34,6 +34,13 @@ export namespace Project {
           start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
         })
         .optional(),
+      worktreeSettings: z
+        .object({
+          baseBranch: z.string().optional(),
+          symlinks: z.array(z.string()).optional(),
+          copies: z.array(z.string()).optional(),
+        })
+        .optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -70,6 +77,13 @@ export namespace Project {
       },
       sandboxes: row.sandboxes,
       commands: row.commands ?? undefined,
+      worktreeSettings: row.worktree_settings
+        ? {
+            baseBranch: row.worktree_settings.base_branch,
+            symlinks: row.worktree_settings.symlinks,
+            copies: row.worktree_settings.copies,
+          }
+        : undefined,
     }
   }
 
@@ -237,6 +251,13 @@ export namespace Project {
       time_initialized: result.time.initialized,
       sandboxes: result.sandboxes,
       commands: result.commands,
+      worktree_settings: result.worktreeSettings
+        ? {
+            base_branch: result.worktreeSettings.baseBranch,
+            symlinks: result.worktreeSettings.symlinks,
+            copies: result.worktreeSettings.copies,
+          }
+        : undefined,
     }
     const updateSet = {
       worktree: result.worktree,
@@ -248,6 +269,13 @@ export namespace Project {
       time_initialized: result.time.initialized,
       sandboxes: result.sandboxes,
       commands: result.commands,
+      worktree_settings: result.worktreeSettings
+        ? {
+            base_branch: result.worktreeSettings.baseBranch,
+            symlinks: result.worktreeSettings.symlinks,
+            copies: result.worktreeSettings.copies,
+          }
+        : undefined,
     }
     Database.use((db) =>
       db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
@@ -347,6 +375,7 @@ export namespace Project {
       name: z.string().optional(),
       icon: Info.shape.icon.optional(),
       commands: Info.shape.commands.optional(),
+      worktreeSettings: Info.shape.worktreeSettings.optional(),
     }),
     async (input) => {
       const result = Database.use((db) =>
@@ -357,6 +386,13 @@ export namespace Project {
             icon_url: input.icon?.url,
             icon_color: input.icon?.color,
             commands: input.commands,
+            worktree_settings: input.worktreeSettings
+              ? {
+                  base_branch: input.worktreeSettings.baseBranch,
+                  symlinks: input.worktreeSettings.symlinks,
+                  copies: input.worktreeSettings.copies,
+                }
+              : undefined,
             time_updated: Date.now(),
           })
           .where(eq(ProjectTable.id, input.projectID))

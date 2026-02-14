@@ -48,6 +48,8 @@ export namespace Worktree {
   export const CreateInput = z
     .object({
       name: z.string().optional(),
+      branch: z.string().optional(),
+      baseBranch: z.string().optional(),
       startCommand: z
         .string()
         .optional()
@@ -265,17 +267,29 @@ export namespace Worktree {
     return process.platform === "win32" ? normalized.toLowerCase() : normalized
   }
 
-  async function candidate(root: string, base?: string) {
+  async function candidate(root: string, input?: { name?: string; branch?: string }) {
+    const base = input?.name ? slug(input.name) : ""
+
+    if (input?.branch) {
+      const ref = `refs/heads/${input.branch}`
+      const branchCheck = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
+      if (branchCheck.exitCode === 0) {
+        throw new NameGenerationFailedError({ message: `Branch ${input.branch} already exists` })
+      }
+    }
+
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
-      const branch = `opencode/${name}`
+      const branch = input?.branch ?? `opencode/${name}`
       const directory = path.join(root, name)
 
       if (await exists(directory)) continue
 
-      const ref = `refs/heads/${branch}`
-      const branchCheck = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
-      if (branchCheck.exitCode === 0) continue
+      if (!input?.branch) {
+        const ref = `refs/heads/${branch}`
+        const branchCheck = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
+        if (branchCheck.exitCode === 0) continue
+      }
 
       return Info.parse({ name, branch, directory })
     }
@@ -331,6 +345,15 @@ export namespace Worktree {
     }, 0)
   }
 
+  async function resolveBaseBranch(input?: string) {
+    if (input) return input
+    if (Instance.project.worktreeSettings?.baseBranch) return Instance.project.worktreeSettings.baseBranch
+
+    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree)
+    if (mainCheck.exitCode === 0) return "main"
+    return "master"
+  }
+
   export const create = fn(CreateInput.optional(), async (input) => {
     if (Instance.project.vcs !== "git") {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
@@ -340,14 +363,41 @@ export namespace Worktree {
     await fs.mkdir(root, { recursive: true })
 
     const base = input?.name ? slug(input.name) : ""
-    const info = await candidate(root, base || undefined)
+    const info = await candidate(root, { name: base || undefined, branch: input?.branch })
 
-    const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
+    const baseBranch = await resolveBaseBranch(input?.baseBranch)
+    const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory} ${baseBranch}`
       .quiet()
       .nothrow()
       .cwd(Instance.worktree)
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
+    }
+
+    const settings = Instance.project.worktreeSettings
+    if (settings) {
+      if (settings.symlinks) {
+        for (const item of settings.symlinks) {
+          const src = path.resolve(Instance.worktree, item)
+          const dst = path.resolve(info.directory, item)
+          if (await exists(src)) {
+            await fs.mkdir(path.dirname(dst), { recursive: true })
+            await fs.symlink(src, dst).catch((e) => log.warn("failed to symlink", { src, dst, error: String(e) }))
+          }
+        }
+      }
+      if (settings.copies) {
+        for (const item of settings.copies) {
+          const src = path.resolve(Instance.worktree, item)
+          const dst = path.resolve(info.directory, item)
+          if (await exists(src)) {
+            await fs.mkdir(path.dirname(dst), { recursive: true })
+            await fs
+              .cp(src, dst, { recursive: true })
+              .catch((e) => log.warn("failed to copy", { src, dst, error: String(e) }))
+          }
+        }
+      }
     }
 
     await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)

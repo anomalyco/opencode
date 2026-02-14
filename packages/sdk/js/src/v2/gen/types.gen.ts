@@ -34,6 +34,11 @@ export type Project = {
      */
     start?: string
   }
+  worktreeSettings?: {
+    baseBranch?: string
+    symlinks?: Array<string>
+    copies?: Array<string>
+  }
   time: {
     created: number
     updated: number
@@ -2030,6 +2035,8 @@ export type Worktree = {
 
 export type WorktreeCreateInput = {
   name?: string
+  branch?: string
+  baseBranch?: string
   /**
    * Additional startup script to run after the project's start command
    */
@@ -2439,6 +2446,11 @@ export type ProjectUpdateData = {
        * Startup script to run when creating a new workspace (worktree)
        */
       start?: string
+    }
+    worktreeSettings?: {
+      baseBranch?: string
+      symlinks?: Array<string>
+      copies?: Array<string>
     }
   }
   path: {

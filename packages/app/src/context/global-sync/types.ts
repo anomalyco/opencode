@@ -29,6 +29,11 @@ export type ProjectMeta = {
   commands?: {
     start?: string
   }
+  worktreeSettings?: {
+    baseBranch?: string
+    symlinks?: string[]
+    copies?: string[]
+  }
 }
 
 export type State = {

@@ -54,6 +54,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogCreateWorkspace } from "@/components/dialog-create-workspace"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -993,7 +994,9 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const project = currentProject()
           if (!project) return
-          return createWorkspace(project)
+          dialog.show(() => (
+            <DialogCreateWorkspace project={project} onCreate={(input) => createWorkspace(project, input)} />
+          ))
         },
       },
       {
@@ -1584,10 +1587,13 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", undefined)
   }
 
-  const createWorkspace = async (project: LocalProject) => {
+  const createWorkspace = async (
+    project: LocalProject,
+    input?: { name?: string; branch?: string; baseBranch?: string },
+  ) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree })
+      .create({ directory: project.worktree, worktreeCreateInput: input })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -1822,7 +1828,16 @@ export default function Layout(props: ParentProps) {
                         keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                        <Button
+                          size="large"
+                          icon="plus-small"
+                          class="w-full"
+                          onClick={() =>
+                            dialog.show(() => (
+                              <DialogCreateWorkspace project={p()} onCreate={(input) => createWorkspace(p(), input)} />
+                            ))
+                          }
+                        >
                           {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>

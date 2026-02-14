@@ -28,6 +28,9 @@ export function DialogEditProject(props: { project: LocalProject }) {
     color: props.project.icon?.color || "pink",
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
+    baseBranch: props.project.worktreeSettings?.baseBranch ?? "",
+    symlinks: props.project.worktreeSettings?.symlinks?.join("\n") ?? "",
+    copies: props.project.worktreeSettings?.copies?.join("\n") ?? "",
     saving: false,
     dragOver: false,
     iconHover: false,
@@ -79,6 +82,21 @@ export function DialogEditProject(props: { project: LocalProject }) {
         setStore("saving", true)
         const name = store.name.trim() === folderName() ? "" : store.name.trim()
         const start = store.startup.trim()
+        const baseBranch = store.baseBranch.trim()
+        const symlinks = store.symlinks
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const copies = store.copies
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+
+        const worktreeSettings = {
+          baseBranch: baseBranch || undefined,
+          symlinks: symlinks.length > 0 ? symlinks : undefined,
+          copies: copies.length > 0 ? copies : undefined,
+        }
 
         if (props.project.id && props.project.id !== "global") {
           await globalSDK.client.project.update({
@@ -87,6 +105,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             name,
             icon: { color: store.color, override: store.iconUrl },
             commands: { start },
+            worktreeSettings,
           })
           globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
           dialog.close()
@@ -97,6 +116,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
           name,
           icon: { color: store.color, override: store.iconUrl || undefined },
           commands: { start: start || undefined },
+          worktreeSettings,
         })
         dialog.close()
       })
@@ -239,6 +259,36 @@ export function DialogEditProject(props: { project: LocalProject }) {
             onChange={(v) => setStore("startup", v)}
             spellcheck={false}
             class="max-h-14 w-full overflow-y-auto font-mono text-xs"
+          />
+
+          <TextField
+            type="text"
+            label={language.t("dialog.project.edit.worktree.baseBranch")}
+            placeholder={language.t("dialog.project.edit.worktree.baseBranch.placeholder")}
+            value={store.baseBranch}
+            onChange={(v) => setStore("baseBranch", v)}
+          />
+
+          <TextField
+            multiline
+            label={language.t("dialog.project.edit.worktree.symlinks")}
+            description={language.t("dialog.project.edit.worktree.symlinks.description")}
+            placeholder={language.t("dialog.project.edit.worktree.symlinks.placeholder")}
+            value={store.symlinks}
+            onChange={(v) => setStore("symlinks", v)}
+            spellcheck={false}
+            class="max-h-24 w-full overflow-y-auto font-mono text-xs"
+          />
+
+          <TextField
+            multiline
+            label={language.t("dialog.project.edit.worktree.copies")}
+            description={language.t("dialog.project.edit.worktree.copies.description")}
+            placeholder={language.t("dialog.project.edit.worktree.copies.placeholder")}
+            value={store.copies}
+            onChange={(v) => setStore("copies", v)}
+            spellcheck={false}
+            class="max-h-24 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 
