@@ -11,7 +11,7 @@ For examples, check out the [plugins](/docs/ecosystem#plugins) created by the co
 
 ## Use a plugin
 
-There are two ways to load plugins.
+There are three ways to load plugins.
 
 ---
 
@@ -23,6 +23,40 @@ Place JavaScript or TypeScript files in the plugin directory.
 - `~/.config/opencode/plugins/` - Global plugins
 
 Files in these directories are automatically loaded at startup.
+#### bug awareness
+If the plugin needs dependencies then the dependency resolution might not work correctly.
+*workaround*: Reference the plugin entry point explicitly in `opencode.json`.
+
+#### another limitation
+The entry point of the plugins have to be always directly in the `plugins` directory, entry points of subdirectories in the `plugins` directory won't be discovered.
+*workaround*: Reference the plugin entry point explicitly in `opencode.json`.
+
+---
+
+### From global files referenced in config
+
+Place JavaScript or TypeScript files anywhere on the disk.
+Reference the entry point in `opencode.json` config.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///absolute/path/to/plugin/entry_point"]
+}
+```
+
+Config files are discovered in multiple places.
+
+- Global config (`~/.config/opencode/opencode.json`)
+- Hidden project config (`.opencode/opencode.json`)
+- Project config (`opencode.json`)
+
+#### Dependencies
+
+If the plugin needs external dependencies, they should be installed in `node_modules` of the plugin directory using a `package.json` in the plugin directory and `bun install` in the plugin directory.
+You can try to declare the plugin dependencies in `package.json` of the `.opencode` folder to skip the `bun install` step but this is not always working because of dependency plath resolution, especially if the plugin is bundled.
+You can also try to use the `package.json` of the project directly but this has not been tested and is maybe not officially supported.
+Just try what works and hope for the best.
 
 ---
 
