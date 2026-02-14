@@ -1596,9 +1596,15 @@ export default function Layout(props: ParentProps) {
       .create({ directory: project.worktree, worktreeCreateInput: input })
       .then((x) => x.data)
       .catch((err) => {
+        let description = errorMessage(err, language.t("common.requestFailed"))
+        const invalidRefMatch = description.match(/invalid reference: (.+)/)
+        if (invalidRefMatch) {
+          description = language.t("workspace.create.failed.invalidReference", { ref: invalidRefMatch[1] })
+        }
+
         showToast({
           title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
+          description,
         })
         return undefined
       })

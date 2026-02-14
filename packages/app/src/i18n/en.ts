@@ -790,6 +790,7 @@ export const dict = {
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Failed to create workspace",
+  "workspace.create.failed.invalidReference": "Branch or reference not found: {{ref}}",
   "dialog.workspace.create.title": "Create new workspace",
   "dialog.workspace.create.name": "Workspace name",
   "dialog.workspace.create.name.placeholder": "Optional (randomly generated)",
