@@ -648,10 +648,12 @@ export function setupResizeHandlers(
     coordinator.request("window-resize")
   }
 
-  // Track container visibility transitions. When the container goes from
-  // 0x0 to non-zero (e.g., tab switch from display:none), xterm's cached
-  // cell dimensions may be 0 from the initial open(). Nudge fontSize to
-  // force xterm to re-measure cells so fitAddon.fit() can work.
+  // Track container size transitions. Nudge fontSize to force xterm to
+  // re-measure cell metrics when:
+  //   1. Container goes from 0x0 to non-zero (tab switch from display:none)
+  //   2. Container width changes significantly (>20%) — e.g., pane split
+  // Without the nudge, xterm's WebGL renderer caches stale cell dimensions
+  // and text appears garbled after a split.
   let lastObservedWidth = 0
   let lastObservedHeight = 0
 
@@ -662,8 +664,14 @@ export function setupResizeHandlers(
     const width = entry?.contentRect?.width ?? container.clientWidth
     const height = entry?.contentRect?.height ?? container.clientHeight
 
-    if (lastObservedWidth === 0 && lastObservedHeight === 0 && width > 0 && height > 0) {
-      // Container just became visible — force cell re-measurement
+    const wasZero = lastObservedWidth === 0 && lastObservedHeight === 0
+    const significantWidthChange =
+      lastObservedWidth > 0 &&
+      width > 0 &&
+      Math.abs(width - lastObservedWidth) / lastObservedWidth > 0.2
+
+    if ((wasZero && width > 0 && height > 0) || significantWidthChange) {
+      // Force cell re-measurement so fitAddon.fit() uses correct metrics
       const fs = xterm.options.fontSize ?? 14
       xterm.options.fontSize = fs + 0.001
       xterm.options.fontSize = fs

@@ -16,7 +16,7 @@
  * └────────┴────────────────────────────────────────────────────┘
  */
 
-import { For, Show, createMemo, createSignal, type ParentProps, type JSX, type Accessor } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, type ParentProps, type JSX, type Accessor } from "solid-js"
 import { DragDropProvider, DragDropSensors, DragOverlay, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useClaxedoLayout, ClaxedoLayoutProvider, type TabItem } from "../context/claxedo-layout"
@@ -101,10 +101,11 @@ export type RailLayoutProps = ParentProps<{
 
   /**
    * Callback to create a new terminal
+   * @param workspaceDir - The workspace directory to create the terminal in
    * @param command - Optional command to run in the terminal (e.g., "claude --dangerously-skip-permissions")
    * @param title - Optional title for the terminal tab (e.g., "Claude", "Codex")
    */
-  onNewTerminal?: (command?: string, title?: string) => void
+  onNewTerminal?: (workspaceDir: string, command?: string, title?: string) => void
 
   /**
    * Callback when a tab is selected
@@ -213,7 +214,11 @@ function GroupPanel(gp: GroupPanelProps) {
             if (!dir) return
             gp.props.onNewSession?.(dir)
           }}
-          onNewTerminal={gp.props.onNewTerminal}
+          onNewTerminal={(command, title) => {
+            const dir = wt.default() ?? gp.props.activeWorkspaceId ?? tabs().active()?.directory
+            if (!dir) return
+            gp.props.onNewTerminal?.(dir, command, title)
+          }}
           onTabSelect={gp.props.onTabSelect}
           onSettings={gp.props.onSettings}
           onSidebarToggle={() => {
@@ -359,6 +364,16 @@ function RailLayoutInner(props: RailLayoutProps) {
   const server = useServer()
 
   const sidebarPinned = () => claxedo.rail.pinned()
+
+  // Dispatch terminal fit when workspace-level split state changes
+  // (toggle split, show/hide split). Deferred to skip the initial mount.
+  createEffect(on(
+    () => [claxedo.split.active(), claxedo.split.hidden()],
+    () => {
+      setTimeout(() => window.dispatchEvent(new Event("opencode:terminal-fit")), 150)
+    },
+    { defer: true },
+  ))
 
   // Mobile sidebar state - separate from desktop pinned state
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false)

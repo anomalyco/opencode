@@ -573,11 +573,9 @@ describe("terminal mount/unmount tracking during focus operations", () => {
 // ---------------------------------------------------------------------------
 
 describe("terminal mount stability during pane split operations", () => {
-  test("in-tab vertical split remounts existing terminal (paneRoot reference changes)", async () => {
-    // When a leaf pane becomes a split, paneRoot() returns a new object.
-    // renderState() can't match prev.paneRoot === pane → new key →
-    // <Show keyed> tears down and rebuilds the entire portal subtree.
-    // This causes the existing terminal to unmount+remount (visible flicker).
+  test("in-tab vertical split preserves existing terminal (no remount)", async () => {
+    // FlatPaneRenderer uses <For> with stable leaf IDs, so when a leaf pane
+    // becomes a split, the existing terminal stays mounted — no teardown/rebuild.
     const tab: Tab = {
       id: "tab-1",
       type: "terminal",
@@ -614,10 +612,10 @@ describe("terminal mount stability during pane split operations", () => {
     })
 
     await waitFor(() => {
-      // pty-1 remounts: paneRoot changed → renderState new object → <Show keyed> teardown+rebuild
-      expect(mountCounts.get("pty-1")).toBe(2)
-      expect(unmountCounts.get("pty-1")).toBe(1)
-      // pty-2 mounts for the first time inside the new subtree
+      // pty-1 stays mounted: <For> preserves element for unchanged leaf ID
+      expect(mountCounts.get("pty-1")).toBe(1)
+      expect(unmountCounts.get("pty-1") ?? 0).toBe(0)
+      // pty-2 mounts for the first time
       expect(mountCounts.get("pty-2")).toBe(1)
       expect(unmountCounts.get("pty-2") ?? 0).toBe(0)
     })
@@ -676,8 +674,9 @@ describe("terminal mount stability during pane split operations", () => {
     })
   })
 
-  test("closing one pane from split remounts surviving terminal", async () => {
-    // Collapsing split→leaf changes paneRoot reference → same remount issue as split.
+  test("closing one pane from split preserves surviving terminal (no remount)", async () => {
+    // FlatPaneRenderer uses <For> — collapsing split→leaf only removes the
+    // closed leaf; the surviving leaf stays mounted.
     const tab: Tab = {
       id: "tab-1",
       type: "terminal",
@@ -720,10 +719,10 @@ describe("terminal mount stability during pane split operations", () => {
     })
 
     await waitFor(() => {
-      // pty-1 remounts because paneRoot changed (split→leaf)
-      expect(mountCounts.get("pty-1")).toBe(2)
-      expect(unmountCounts.get("pty-1")).toBe(1)
-      // pty-2 was unmounted when the portal subtree was torn down
+      // pty-1 stays mounted: <For> preserves element for unchanged leaf ID
+      expect(mountCounts.get("pty-1")).toBe(1)
+      expect(unmountCounts.get("pty-1") ?? 0).toBe(0)
+      // pty-2 was unmounted when removed from the leaf list
       expect(unmountCounts.get("pty-2")).toBe(1)
     })
   })
@@ -896,11 +895,10 @@ describe("terminal mount stability during pane split operations", () => {
     })
   })
 
-  test("consecutive splits cause one remount per split (cascading jank)", async () => {
-    // Each pane tree change triggers a full portal teardown+rebuild.
-    // After N splits, every terminal that was present before that split
-    // accumulates +1 mount cycle. This is the "cascading jank" scenario
-    // users experience as progressively worse flicker with each split.
+  test("consecutive splits cause zero remounts (no cascading jank)", async () => {
+    // FlatPaneRenderer uses <For> with stable leaf IDs, so each split
+    // only adds a new terminal without remounting existing ones.
+    // No cascading jank regardless of split count.
     const tab: Tab = {
       id: "tab-1",
       type: "terminal",
@@ -937,7 +935,7 @@ describe("terminal mount stability during pane split operations", () => {
     })
 
     await waitFor(() => {
-      expect(mountCounts.get("pty-1")).toBe(2) // remounted
+      expect(mountCounts.get("pty-1")).toBe(1) // preserved
       expect(mountCounts.get("pty-2")).toBe(1) // fresh mount
     })
 
@@ -964,13 +962,11 @@ describe("terminal mount stability during pane split operations", () => {
     })
 
     await waitFor(() => {
-      // After 2 splits, pty-1 has mounted 3 times (initial + 2 remounts)
-      expect(mountCounts.get("pty-1")).toBe(3)
-      expect(unmountCounts.get("pty-1")).toBe(2)
-      // pty-2 stays mounted through the second split (no portal subtree remount)
+      // All terminals mounted exactly once — zero remounts
+      expect(mountCounts.get("pty-1")).toBe(1)
+      expect(unmountCounts.get("pty-1") ?? 0).toBe(0)
       expect(mountCounts.get("pty-2")).toBe(1)
       expect(unmountCounts.get("pty-2") ?? 0).toBe(0)
-      // pty-3 mounted once during second split
       expect(mountCounts.get("pty-3")).toBe(1)
       expect(unmountCounts.get("pty-3") ?? 0).toBe(0)
     })

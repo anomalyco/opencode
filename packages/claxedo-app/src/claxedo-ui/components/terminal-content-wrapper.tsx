@@ -102,6 +102,54 @@ export function paneInStore(
   return ids.every(has)
 }
 
+export type LeafRect = { id: string; top: number; left: number; width: number; height: number }
+export type SplitHandle = { path: string; dir: "h" | "v"; position: number; top: number; left: number; width: number; height: number }
+
+/** Compute absolute positions (0-1 fractions) for each leaf in the pane tree. */
+export function computeLeafRects(pane: import("../context/claxedo-layout").Pane): LeafRect[] {
+  const result: LeafRect[] = []
+  function walk(node: import("../context/claxedo-layout").Pane, top: number, left: number, width: number, height: number) {
+    if (node.t === "leaf") {
+      result.push({ id: node.id, top, left, width, height })
+      return
+    }
+    if (node.dir === "v") {
+      const aWidth = width * node.size
+      walk(node.a, top, left, aWidth, height)
+      walk(node.b, top, left + aWidth, width - aWidth, height)
+    } else {
+      const aHeight = height * node.size
+      walk(node.a, top, left, width, aHeight)
+      walk(node.b, top + aHeight, left, width, height - aHeight)
+    }
+  }
+  walk(pane, 0, 0, 1, 1)
+  return result
+}
+
+/** Extract drag handle positions from the pane tree. */
+export function computeSplitHandles(pane: import("../context/claxedo-layout").Pane): SplitHandle[] {
+  const handles: SplitHandle[] = []
+  function walk(node: import("../context/claxedo-layout").Pane, top: number, left: number, width: number, height: number, path: string) {
+    if (node.t === "leaf") return
+    if (node.dir === "v") {
+      const splitX = left + width * node.size
+      handles.push({ path, dir: "v", position: node.size, top, left: splitX, width: 0, height })
+      const aWidth = width * node.size
+      walk(node.a, top, left, aWidth, height, path + "a")
+      walk(node.b, top, left + aWidth, width - aWidth, height, path + "b")
+    } else {
+      const splitY = top + height * node.size
+      handles.push({ path, dir: "h", position: node.size, top: splitY, left, width, height: 0 })
+      const aHeight = height * node.size
+      walk(node.a, top, left, width, aHeight, path + "a")
+      walk(node.b, top + aHeight, left, width, height - aHeight, path + "b")
+    }
+  }
+  walk(pane, 0, 0, 1, 1, "")
+  return handles
+}
+
 export function pickPendingSplitTarget(
   known: ReadonlySet<string> | undefined,
   all: Array<{ id: string }>,
@@ -418,6 +466,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
               splitTimer = undefined
             }
             setPane(undefined)
+            setTimeout(() => window.dispatchEvent(new Event("opencode:terminal-fit")), 150)
           })
           .promise.catch(() => {})
         continue
@@ -820,6 +869,10 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
           const value = origin()
           if (!value) return
           focus(props.id, tab, value)
+          // Dispatch fit so xterm re-measures and refreshes after pane focus.
+          // Without this, the WebGL renderer can show stale/garbled text
+          // because no resize event fires on click (container size unchanged).
+          window.dispatchEvent(new Event("opencode:terminal-fit"))
         }}
       >
         <div class="shrink-0 h-8 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger/60 backdrop-blur select-none">
@@ -995,7 +1048,13 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         claxedo.terminal.resize({ tab: d.tab, path: d.path, size: next })
       }
 
-      const up = () => setDrag(undefined)
+      const up = () => {
+        if (drag()) {
+          delete document.documentElement.dataset.terminalResizeSuspended
+          window.dispatchEvent(new Event("opencode:terminal-fit"))
+        }
+        setDrag(undefined)
+      }
 
       window.addEventListener("pointermove", move)
       window.addEventListener("pointerup", up)
@@ -1013,6 +1072,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       const rect = elt.parentElement?.getBoundingClientRect()
       if (!rect) return
       const start = row() ? event.clientX : event.clientY
+      document.documentElement.dataset.terminalResizeSuspended = "1"
       setDrag({ tab, path: props.path, dir: props.node.dir, start, size: size(), rect })
     }
 
@@ -1059,6 +1119,105 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       {(id) => <LeafNode id={id} tabId={props.tabId} />}
     </Show>
   )
+
+  /**
+   * Flat pane renderer — uses <For> for stable leaf terminals.
+   *
+   * Unlike the recursive Node → SplitNode tree, this renders all leaves
+   * in a flat list with absolute positioning. <For> with string IDs
+   * preserves existing leaf elements when new leaves are added (split),
+   * preventing terminal remount (serialize/restore) that garbles text.
+   */
+  const FlatPaneRenderer = (props: { pane: () => import("../context/claxedo-layout").Pane; tabId: string }) => {
+    // Stable list of leaf IDs — <For> preserves elements for unchanged IDs
+    const leafIds = createMemo(() => paneLeafIds(props.pane()))
+
+    // Map from leaf ID to its computed rect (0-1 fractions)
+    const rectMap = createMemo(() => {
+      const rects = computeLeafRects(props.pane())
+      const m = new Map<string, LeafRect>()
+      for (const r of rects) m.set(r.id, r)
+      return m
+    })
+
+    // Split drag handles
+    const handles = createMemo(() => computeSplitHandles(props.pane()))
+
+    return (
+      <div class="relative size-full" style={{ background: "rgba(255,255,255,0.1)" }}>
+        {/* Terminal leaves — stable via <For> with string IDs */}
+        <For each={leafIds()}>
+          {(id) => {
+            const rect = () => rectMap().get(id) ?? { top: 0, left: 0, width: 1, height: 1 }
+            return (
+              <div
+                class="absolute overflow-hidden"
+                style={{
+                  top: `${rect().top * 100}%`,
+                  left: `${rect().left * 100}%`,
+                  width: `${rect().width * 100}%`,
+                  height: `${rect().height * 100}%`,
+                }}
+              >
+                <LeafNode id={id} tabId={props.tabId} />
+              </div>
+            )
+          }}
+        </For>
+        {/* Drag handles for split boundaries */}
+        <For each={handles()}>
+          {(h) => (
+            <div
+              class="absolute z-10"
+              style={{
+                ...(h.dir === "v"
+                  ? {
+                      top: `${h.top * 100}%`,
+                      left: `calc(${h.left * 100}% - 3px)`,
+                      width: "6px",
+                      height: `${h.height * 100}%`,
+                      cursor: "col-resize",
+                    }
+                  : {
+                      top: `calc(${h.top * 100}% - 3px)`,
+                      left: `${h.left * 100}%`,
+                      width: `${h.width * 100}%`,
+                      height: "6px",
+                      cursor: "row-resize",
+                    }),
+              }}
+              onPointerDown={(event) => {
+                const tab = props.tabId
+                if (!tab) return
+                const parentRect = (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect()
+                if (!parentRect) return
+                const start = h.dir === "v" ? event.clientX : event.clientY
+                const initSize = h.position
+                document.documentElement.dataset.terminalResizeSuspended = "1"
+
+                const move = (e: PointerEvent) => {
+                  const delta = (h.dir === "v" ? e.clientX : e.clientY) - start
+                  const span = h.dir === "v" ? parentRect.width : parentRect.height
+                  if (!span) return
+                  claxedo.terminal.resize({ tab, path: h.path, size: initSize + delta / span })
+                }
+
+                const up = () => {
+                  delete document.documentElement.dataset.terminalResizeSuspended
+                  window.dispatchEvent(new Event("opencode:terminal-fit"))
+                  window.removeEventListener("pointermove", move)
+                  window.removeEventListener("pointerup", up)
+                }
+
+                window.addEventListener("pointermove", move)
+                window.addEventListener("pointerup", up)
+              }}
+            />
+          )}
+        </For>
+      </div>
+    )
+  }
 
   const root = createMemo(() => {
     const tab = activeTerminalTabId()
@@ -1257,7 +1416,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
                     </Show>
                   }
                 >
-                  {(pane) => <Node node={pane() as import("../context/claxedo-layout").Pane} path="" tabId={props.tabId} />}
+                  {(pane) => <FlatPaneRenderer pane={() => pane() as import("../context/claxedo-layout").Pane} tabId={props.tabId} />}
                 </Show>
               </div>
             </Portal>
