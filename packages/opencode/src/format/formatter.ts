@@ -367,12 +367,12 @@ export const ormolu: Info = {
 
 export const googleJavaFormat: Info = {
   name: "google-java-format",
-  command: ["google-java-format", "$FILE"],
+  command: ["java", "-jar", "google-java-format-all-deps.jar", "$FILE"],
   extensions: [".java"],
   async enabled() {
     if (Bun.which("google-java-format")) return true
 
-    const jarNames = ["google-java-format.jar", "google-java-format-all-deps.jar"]
+    const jarNames = ["google-java-format-all-deps.jar", "google-java-format.jar"]
     for (const jar of jarNames) {
       const found = await Filesystem.findUp(jar, Instance.directory, Instance.worktree)
       if (found.length > 0) return true
