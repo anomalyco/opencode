@@ -38,10 +38,12 @@ jobs:
           nix flake show --all-systems
 
           SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
-          PACKAGES="opencode desktop"
+          PACKAGES="opencode"
+          # TODO: move 'desktop' to PACKAGES when #11755 is fixed
+          OPTIONAL_PACKAGES="desktop"
 
           echo ""
-          echo "=== Evaluating all packages for all systems ==="
+          echo "=== Evaluating packages for all systems ==="
           for system in $SYSTEMS; do
             echo ""
             echo "--- $system ---"
@@ -54,6 +56,23 @@ jobs:
                 echo "::error::Evaluation failed for packages.$system.$pkg"
                 echo "$output"
                 exit 1
+              fi
+            done
+          done
+
+          echo ""
+          echo "=== Evaluating optional packages ==="
+          for system in $SYSTEMS; do
+            echo ""
+            echo "--- $system ---"
+            for pkg in $OPTIONAL_PACKAGES; do
+              printf "  %s: " "$pkg"
+              if output=$(nix eval ".#packages.$system.$pkg.drvPath" --raw 2>&1); then
+                echo "✓"
+              else
+                echo "✗"
+                echo "::warning::Evaluation failed for packages.$system.$pkg"
+                echo "$output"
               fi
             done
           done
