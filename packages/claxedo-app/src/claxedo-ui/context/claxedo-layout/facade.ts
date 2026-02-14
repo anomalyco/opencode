@@ -213,7 +213,7 @@ export function createClaxedoLayoutFacade(input: {
 
         // Free the color assignment so it can be reused
         if (store.worktreeColorMap[directory]) {
-          setStore("worktreeColorMap", directory, undefined)
+          setStore("worktreeColorMap", directory, undefined!)
         }
       })
     },
