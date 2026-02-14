@@ -9,6 +9,7 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
+import { Locale } from "@/util/locale"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -42,9 +43,7 @@ export function Header() {
       style: "currency",
       currency: "USD",
     })
-    const agent = formatter.format(result.own)
-    const total = formatter.format(result.total)
-    const formatted = `(current agent ${agent}; total ${total})`
+    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
     return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
   })
 

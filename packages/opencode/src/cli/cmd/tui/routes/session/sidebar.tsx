@@ -43,10 +43,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const cost = createMemo(() => {
     const result = costs(props.sessionID, sync.data)
-    const formatted = new Intl.NumberFormat("en-US", {
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(result.total)
+    })
+    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
     return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
   })
 

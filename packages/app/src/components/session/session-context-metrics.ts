@@ -1,4 +1,4 @@
-import { costs } from "@opencode-ai/util/cost"
+import { costs, type CostStore } from "@opencode-ai/util/cost"
 import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
 
 type Provider = {
@@ -41,22 +41,14 @@ const tokenTotal = (msg: AssistantMessage) => {
   return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
 }
 
-const lastAssistantWithTokens = (messages: Message[]) => {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]
-    if (msg.role !== "assistant") continue
-    if (tokenTotal(msg) <= 0) continue
-    return msg
-  }
-}
+const lastAssistantWithTokens = (messages: Message[]) =>
+  messages.findLast(
+    (msg): msg is AssistantMessage => msg.role === "assistant" && tokenTotal(msg as AssistantMessage) > 0,
+  )
 
-const build = (
-  messages: Message[] = [],
-  providers: Provider[] = [],
-  store?: { message: Record<string, any[]>; part: Record<string, any[]> },
-): Metrics => {
+const build = (messages: Message[] = [], providers: Provider[] = [], store?: CostStore): Metrics => {
   const id = messages[0]?.sessionID
-  const result = store && id ? costs(id, store as any) : undefined
+  const result = store && id ? costs(id, store) : undefined
 
   const totalCost = result
     ? result.total
@@ -94,10 +86,6 @@ const build = (
   }
 }
 
-export function getSessionContextMetrics(
-  messages: Message[] = [],
-  providers: Provider[] = [],
-  store?: { message: Record<string, any[]>; part: Record<string, any[]> },
-) {
+export function getSessionContextMetrics(messages: Message[] = [], providers: Provider[] = [], store?: CostStore) {
   return build(messages, providers, store)
 }

@@ -78,4 +78,8 @@ export namespace Locale {
     const template = count === 1 ? singular : plural
     return template.replace("{}", count.toString())
   }
+
+  export function costBreakdown(agentCost: string, totalCost: string): string {
+    return `(agent ${agentCost}; total ${totalCost})`
+  }
 }
