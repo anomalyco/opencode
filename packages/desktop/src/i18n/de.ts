@@ -11,18 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Updateprüfung fehlgeschlagen",
   "desktop.updater.checkFailed.message": "Updates konnten nicht geprüft werden",
   "desktop.updater.none.title": "Kein Update verfügbar",
-  "desktop.updater.none.message": "Sie verwenden bereits die neueste Version von OpenCode",
+  "desktop.updater.none.message": "Sie verwenden bereits die neueste Version von CyberStrike",
   "desktop.updater.downloadFailed.title": "Update fehlgeschlagen",
   "desktop.updater.downloadFailed.message": "Update konnte nicht heruntergeladen werden",
   "desktop.updater.downloaded.title": "Update heruntergeladen",
   "desktop.updater.downloaded.prompt":
-    "Version {{version}} von OpenCode wurde heruntergeladen. Möchten Sie sie installieren und neu starten?",
+    "Version {{version}} von CyberStrike wurde heruntergeladen. Möchten Sie sie installieren und neu starten?",
   "desktop.updater.installFailed.title": "Update fehlgeschlagen",
   "desktop.updater.installFailed.message": "Update konnte nicht installiert werden",
 
   "desktop.cli.installed.title": "CLI installiert",
   "desktop.cli.installed.message":
-    "CLI wurde in {{path}} installiert\n\nStarten Sie Ihr Terminal neu, um den Befehl 'opencode' zu verwenden.",
+    "CLI wurde in {{path}} installiert\n\nStarten Sie Ihr Terminal neu, um den Befehl 'cyberstrike' zu verwenden.",
   "desktop.cli.failed.title": "Installation fehlgeschlagen",
   "desktop.cli.failed.message": "CLI konnte nicht installiert werden: {{error}}",
 }

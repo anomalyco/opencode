@@ -1,9 +1,9 @@
 ---
 title: دعم ACP
-description: استخدم OpenCode في أي محرر متوافق مع ACP.
+description: استخدم CyberStrike في أي محرر متوافق مع ACP.
 ---
 
-يدعم OpenCode بروتوكول [Agent Client Protocol](https://agentclientprotocol.com) أو (ACP)، مما يتيح لك استخدامه مباشرة في المحررات وبيئات التطوير المتكاملة (IDEs) المتوافقة.
+يدعم CyberStrike بروتوكول [Agent Client Protocol](https://agentclientprotocol.com) أو (ACP)، مما يتيح لك استخدامه مباشرة في المحررات وبيئات التطوير المتكاملة (IDEs) المتوافقة.
 
 :::tip
 للاطلاع على قائمة بالمحررات والأدوات التي تدعم ACP، راجع [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 
 ## الإعداد
 
-لاستخدام OpenCode عبر ACP، اضبط محررك ليشغّل الأمر `opencode acp`.
+لاستخدام CyberStrike عبر ACP، اضبط محررك ليشغّل الأمر `cyberstrike acp`.
 
-يشغّل هذا الأمر OpenCode كعملية فرعية متوافقة مع ACP تتواصل مع محررك عبر JSON-RPC باستخدام stdio.
+يشغّل هذا الأمر CyberStrike كعملية فرعية متوافقة مع ACP تتواصل مع محررك عبر JSON-RPC باستخدام stdio.
 
 فيما يلي أمثلة لمحررات شائعة تدعم ACP.
 
@@ -30,8 +30,8 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "CyberStrike": {
+      "command": "cyberstrike",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "CyberStrike",
               "command": {
-                "command": "opencode",
+                "command": "cyberstrike",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "CyberStrike": {
+      "command": "/absolute/path/bin/cyberstrike",
       "args": ["acp"]
     }
   }
 }
 ```
 
-لفتحه، اختر الوكيل الجديد 'OpenCode' من محدد الوكلاء في AI Chat.
+لفتحه، اختر الوكيل الجديد 'CyberStrike' من محدد الوكلاء في AI Chat.
 
 ---
 
@@ -93,8 +93,8 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        CYBERSTRIKE_API_KEY = os.getenv("CYBERSTRIKE_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 
 ### CodeCompanion.nvim
 
-لاستخدام OpenCode كوكيل ACP في [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)، أضف التالي إلى إعدادات Neovim:
+لاستخدام CyberStrike كوكيل ACP في [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)، أضف التالي إلى إعدادات Neovim:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "cyberstrike",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-يضبط هذا الإعداد CodeCompanion لاستخدام OpenCode كوكيل ACP للدردشة.
+يضبط هذا الإعداد CodeCompanion لاستخدام CyberStrike كوكيل ACP للدردشة.
 
-إذا احتجت إلى تمرير متغيرات البيئة (مثل `OPENCODE_API_KEY`)، فارجع إلى [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ضمن توثيق CodeCompanion.nvim للاطلاع على التفاصيل كاملة.
+إذا احتجت إلى تمرير متغيرات البيئة (مثل `CYBERSTRIKE_API_KEY`)، فارجع إلى [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ضمن توثيق CodeCompanion.nvim للاطلاع على التفاصيل كاملة.
 
 ## الدعم
 
-يعمل OpenCode عبر ACP بالطريقة نفسها التي يعمل بها في terminal. جميع الميزات مدعومة:
+يعمل CyberStrike عبر ACP بالطريقة نفسها التي يعمل بها في terminal. جميع الميزات مدعومة:
 
 :::note
 بعض أوامر الشرطة المائلة المضمنة مثل `/undo` و`/redo` غير مدعومة حاليا.
@@ -150,7 +150,7 @@ require("codecompanion").setup({
 
 - الأدوات المضمنة (عمليات الملفات، أوامر terminal، إلخ.)
 - الأدوات المخصصة وأوامر الشرطة المائلة
-- خوادم MCP المضبوطة في إعدادات OpenCode
+- خوادم MCP المضبوطة في إعدادات CyberStrike
 - قواعد خاصة بالمشروع من `AGENTS.md`
 - المنسقات (formatters) والمدققات (linters) المخصصة
 - نظام الوكلاء والأذونات

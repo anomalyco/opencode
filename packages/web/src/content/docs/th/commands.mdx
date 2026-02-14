@@ -17,9 +17,9 @@ description: คำสั่งที่กำหนดเองสำหรั�
 
 สร้างไฟล์ Markdown ในไดเร็กทอรี `commands/` เพื่อกำหนดคำสั่งของคุณ
 
-สร้าง `.opencode/commands/test.md`:
+สร้าง `.cyberstrike/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -48,11 +48,11 @@ Frontmatter กำหนดคุณสมบัติของคำสั่�
 
 ### JSON
 
-ใช้ส่วน `command` ในไฟล์ [config](/docs/config) ของ OpenCode:
+ใช้ส่วน `command` ในไฟล์ [config](/docs/config) ของ CyberStrike:
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Frontmatter กำหนดคุณสมบัติของคำสั่�
 
 หากต้องการกำหนดคำสั่งด้วยไฟล์ Markdown ให้วางไฟล์ไว้ใน:
 
-- ระดับผู้ใช้ (Global): `~/.config/opencode/commands/`
-- ระดับโปรเจ็กต์: `.opencode/commands/`
+- ระดับผู้ใช้ (Global): `~/.config/cyberstrike/commands/`
+- ระดับโปรเจ็กต์: `.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -111,7 +111,7 @@ Focus on the failing tests and suggest fixes.
 
 คุณสามารถส่งผ่านอาร์กิวเมนต์ไปยังคำสั่งของคุณได้โดยใช้ `$ARGUMENTS`
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -137,7 +137,7 @@ Include proper typing and basic structure.
 
 ตัวอย่าง:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -166,7 +166,7 @@ with the following content: $3
 
 ตัวอย่างเช่น การรันชุดทดสอบและรวมผลลัพธ์:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -179,7 +179,7 @@ Based on these results, suggest improvements to increase coverage.
 
 หรือตรวจสอบการเปลี่ยนแปลงล่าสุดใน git:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -198,7 +198,7 @@ Review these changes and suggest any improvements.
 
 คุณสามารถรวมเนื้อหาไฟล์ในคำสั่งของคุณโดยใช้ `@` นำหน้าชื่อไฟล์
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -221,7 +221,7 @@ Check for performance issues and suggest improvements.
 
 `template` กำหนดพรอมต์ที่จะถูกส่งไปยัง LLM เมื่อเรียกใช้คำสั่ง
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Check for performance issues and suggest improvements.
 
 ใช้ตัวเลือก `description` เพื่อให้คำอธิบายโดยย่อเกี่ยวกับสิ่งที่คำสั่งทำ
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -257,7 +257,7 @@ Check for performance issues and suggest improvements.
 
 ใช้ `agent` เพื่อระบุว่า [เอเจนต์](/docs/agents) ใดควรดำเนินการคำสั่งนี้
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -277,7 +277,7 @@ Check for performance issues and suggest improvements.
 
 การตั้งค่านี้จะป้องกันไม่ให้คำสั่งรบกวนบริบทหลักของเซสชัน และจะ **บังคับ** ให้เอเจนต์ใช้โหมดที่เหมาะสม
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -295,7 +295,7 @@ Check for performance issues and suggest improvements.
 
 ใช้ `model` เพื่อกำหนดโมเดลเฉพาะสำหรับคำสั่งนี้
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -311,7 +311,7 @@ Check for performance issues and suggest improvements.
 
 ### Built-ins (ในตัว)
 
-OpenCode มีคำสั่งในตัวหลายคำสั่ง เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
+CyberStrike มีคำสั่งในตัวหลายคำสั่ง เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
 
 :::note
 คุณสามารถเขียนทับคำสั่งในตัวได้โดยกำหนดคำสั่งที่กำหนดเองด้วยชื่อเดียวกัน

@@ -4,14 +4,14 @@ description: Different modes for different use cases.
 ---
 
 :::caution
-Modes are now configured through the `agent` option in the opencode config. The
+Modes are now configured through the `agent` option in the cyberstrike config. The
 `mode` option is now deprecated. [Learn more](/docs/agents).
 :::
 
-Modes in opencode allow you to customize the behavior, tools, and prompts for different use cases.
+Modes in cyberstrike allow you to customize the behavior, tools, and prompts for different use cases.
 
 It comes with two built-in modes: **build** and **plan**. You can customize
-these or configure your own through the opencode config.
+these or configure your own through the cyberstrike config.
 
 You can switch between modes during a session or configure them in your config file.
 
@@ -19,7 +19,7 @@ You can switch between modes during a session or configure them in your config f
 
 ## Built-in
 
-opencode comes with two built-in modes.
+cyberstrike comes with two built-in modes.
 
 ---
 
@@ -34,7 +34,7 @@ Build is the **default** mode with all tools enabled. This is the standard mode 
 A restricted mode designed for planning and analysis. In plan mode, the following tools are disabled by default:
 
 - `write` - Cannot create new files
-- `edit` - Cannot modify existing files, except for files located at `.opencode/plans/*.md` to detail the plan itself
+- `edit` - Cannot modify existing files, except for files located at `.cyberstrike/plans/*.md` to detail the plan itself
 - `patch` - Cannot apply patches
 - `bash` - Cannot execute shell commands
 
@@ -56,11 +56,11 @@ You can customize the built-in modes or create your own through configuration. M
 
 ### JSON Configuration
 
-Configure modes in your `opencode.json` config file:
+Configure modes in your `cyberstrike.json` config file:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ Configure modes in your `opencode.json` config file:
 
 You can also define modes using markdown files. Place them in:
 
-- Global: `~/.config/opencode/modes/`
-- Project: `.opencode/modes/`
+- Global: `~/.config/cyberstrike/modes/`
+- Project: `.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Let's look at these configuration options in detail.
 
 Use the `model` config to override the default model for this mode. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Use the `model` config to override the default model for this mode. Useful for u
 
 Control the randomness and creativity of the AI's responses with the `temperature` config. Lower values make responses more focused and deterministic, while higher values increase creativity and variability.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Temperature values typically range from 0.0 to 1.0:
 - **0.3-0.5**: Balanced responses with some creativity, good for general development tasks
 - **0.6-1.0**: More creative and varied responses, useful for brainstorming and exploration
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Temperature values typically range from 0.0 to 1.0:
 }
 ```
 
-If no temperature is specified, opencode uses model-specific defaults (typically 0 for most models, 0.55 for Qwen models).
+If no temperature is specified, cyberstrike uses model-specific defaults (typically 0 for most models, 0.55 for Qwen models).
 
 ---
 
@@ -181,7 +181,7 @@ If no temperature is specified, opencode uses model-specific defaults (typically
 
 Specify a custom system prompt file for this mode with the `prompt` config. The prompt file should contain instructions specific to the mode's purpose.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ Specify a custom system prompt file for this mode with the `prompt` config. The 
 ```
 
 This path is relative to where the config file is located. So this works for
-both the global opencode config and the project specific config.
+both the global cyberstrike config and the project specific config.
 
 ---
 
@@ -247,9 +247,9 @@ You can create your own custom modes by adding them to the configuration. Here a
 
 ### Using JSON configuration
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -268,9 +268,9 @@ You can create your own custom modes by adding them to the configuration. Here a
 
 ### Using markdown files
 
-Create mode files in `.opencode/modes/` for project-specific modes or `~/.config/opencode/modes/` for global modes:
+Create mode files in `.cyberstrike/modes/` for project-specific modes or `~/.config/cyberstrike/modes/` for global modes:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

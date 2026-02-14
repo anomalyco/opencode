@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI options and commands.
+description: CyberStrike CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-The OpenCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
+The CyberStrike CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-But it also accepts commands as documented on this page. This allows you to interact with OpenCode programmatically.
+But it also accepts commands as documented on this page. This allows you to interact with CyberStrike programmatically.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+cyberstrike run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Start the OpenCode terminal user interface.
+Start the CyberStrike terminal user interface.
 
 ```bash
-opencode [project]
+cyberstrike [project]
 ```
 
 #### Flags
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Commands
 
-The OpenCode CLI also has the following commands.
+The CyberStrike CLI also has the following commands.
 
 ---
 
 ### agent
 
-Manage agents for OpenCode.
+Manage agents for CyberStrike.
 
 ```bash
-opencode agent [command]
+cyberstrike agent [command]
 ```
 
 ---
 
 ### attach
 
-Attach a terminal to an already running OpenCode backend server started via `serve` or `web` commands.
+Attach a terminal to an already running CyberStrike backend server started via `serve` or `web` commands.
 
 ```bash
-opencode attach [url]
+cyberstrike attach [url]
 ```
 
-This allows using the TUI with a remote OpenCode backend. For example:
+This allows using the TUI with a remote CyberStrike backend. For example:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+cyberstrike web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+cyberstrike attach http://10.20.30.40:4096
 ```
 
 #### Flags
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Create a new agent with custom configuration.
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 This command will guide you through creating a new agent with a custom system prompt and tool configuration.
@@ -102,7 +102,7 @@ This command will guide you through creating a new agent with a custom system pr
 List all available agents.
 
 ```bash
-opencode agent list
+cyberstrike agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Command to manage credentials and login for providers.
 
 ```bash
-opencode auth [command]
+cyberstrike auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+CyberStrike is powered by the provider list at [Models.dev](https://models.dev), so you can use `cyberstrike auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/cyberstrike/auth.json`.
 
 ```bash
-opencode auth login
+cyberstrike auth login
 ```
 
-When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When CyberStrike starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
@@ -134,13 +134,13 @@ When OpenCode starts up it loads the providers from the credentials file. And if
 Lists all the authenticated providers as stored in the credentials file.
 
 ```bash
-opencode auth list
+cyberstrike auth list
 ```
 
 Or the short version.
 
 ```bash
-opencode auth ls
+cyberstrike auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Logs you out of a provider by clearing it from the credentials file.
 
 ```bash
-opencode auth logout
+cyberstrike auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Manage the GitHub agent for repository automation.
 
 ```bash
-opencode github [command]
+cyberstrike github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Install the GitHub agent in your repository.
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 This sets up the necessary GitHub Actions workflow and guides you through the configuration process. [Learn more](/docs/github).
@@ -182,7 +182,7 @@ This sets up the necessary GitHub Actions workflow and guides you through the co
 Run the GitHub agent. This is typically used in GitHub Actions.
 
 ```bash
-opencode github run
+cyberstrike github run
 ```
 
 ##### Flags
@@ -199,7 +199,7 @@ opencode github run
 Manage Model Context Protocol servers.
 
 ```bash
-opencode mcp [command]
+cyberstrike mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Add an MCP server to your configuration.
 
 ```bash
-opencode mcp add
+cyberstrike mcp add
 ```
 
 This command will guide you through adding either a local or remote MCP server.
@@ -221,13 +221,13 @@ This command will guide you through adding either a local or remote MCP server.
 List all configured MCP servers and their connection status.
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Or use the short version.
 
 ```bash
-opencode mcp ls
+cyberstrike mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Authenticate with an OAuth-enabled MCP server.
 
 ```bash
-opencode mcp auth [name]
+cyberstrike mcp auth [name]
 ```
 
 If you don't provide a server name, you'll be prompted to select from available OAuth-capable servers.
@@ -245,13 +245,13 @@ If you don't provide a server name, you'll be prompted to select from available 
 You can also list OAuth-capable servers and their authentication status.
 
 ```bash
-opencode mcp auth list
+cyberstrike mcp auth list
 ```
 
 Or use the short version.
 
 ```bash
-opencode mcp auth ls
+cyberstrike mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Remove OAuth credentials for an MCP server.
 
 ```bash
-opencode mcp logout [name]
+cyberstrike mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Debug OAuth connection issues for an MCP server.
 
 ```bash
-opencode mcp debug <name>
+cyberstrike mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 List all available models from configured providers.
 
 ```bash
-opencode models [provider]
+cyberstrike models [provider]
 ```
 
 This command displays all models available across your configured providers in the format `provider/model`.
@@ -291,7 +291,7 @@ This is useful for figuring out the exact model name to use in [your config](/do
 You can optionally pass a provider ID to filter models by that provider.
 
 ```bash
-opencode models anthropic
+cyberstrike models anthropic
 ```
 
 #### Flags
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Refresh the models cache from models.dev                     |
 | `--verbose` | Use more verbose model output (includes metadata like costs) |
 
-Use the `--refresh` flag to update the cached model list. This is useful when new models have been added to a provider and you want to see them in OpenCode.
+Use the `--refresh` flag to update the cached model list. This is useful when new models have been added to a provider and you want to see them in CyberStrike.
 
 ```bash
-opencode models --refresh
+cyberstrike models --refresh
 ```
 
 ---
 
 ### run
 
-Run opencode in non-interactive mode by passing a prompt directly.
+Run cyberstrike in non-interactive mode by passing a prompt directly.
 
 ```bash
-opencode run [message..]
+cyberstrike run [message..]
 ```
 
 This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "cyberstrike run"
+cyberstrike run Explain the use of context in Go
 ```
 
-You can also attach to a running `opencode serve` instance to avoid MCP server cold boot times on every run:
+You can also attach to a running `cyberstrike serve` instance to avoid MCP server cold boot times on every run:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+cyberstrike serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+cyberstrike run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flags
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`  | File(s) to attach to message                                            |
 | `--format`   |       | Format: default (formatted) or json (raw JSON events)                   |
 | `--title`    |       | Title for the session (uses truncated prompt if no value provided)      |
-| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)       |
+| `--attach`   |       | Attach to a running cyberstrike server (e.g., http://localhost:4096)       |
 | `--port`     |       | Port for the local server (defaults to random port)                     |
 
 ---
 
 ### serve
 
-Start a headless OpenCode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
+Start a headless CyberStrike server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
 
 ```bash
-opencode serve
+cyberstrike serve
 ```
 
-This starts an HTTP server that provides API access to opencode functionality without the TUI interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+This starts an HTTP server that provides API access to cyberstrike functionality without the TUI interface. Set `CYBERSTRIKE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `cyberstrike`).
 
 #### Flags
 
@@ -375,20 +375,20 @@ This starts an HTTP server that provides API access to opencode functionality wi
 
 ### session
 
-Manage OpenCode sessions.
+Manage CyberStrike sessions.
 
 ```bash
-opencode session [command]
+cyberstrike session [command]
 ```
 
 ---
 
 #### list
 
-List all OpenCode sessions.
+List all CyberStrike sessions.
 
 ```bash
-opencode session list
+cyberstrike session list
 ```
 
 ##### Flags
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Show token usage and cost statistics for your OpenCode sessions.
+Show token usage and cost statistics for your CyberStrike sessions.
 
 ```bash
-opencode stats
+cyberstrike stats
 ```
 
 #### Flags
@@ -424,7 +424,7 @@ opencode stats
 Export session data as JSON.
 
 ```bash
-opencode export [sessionID]
+cyberstrike export [sessionID]
 ```
 
 If you don't provide a session ID, you'll be prompted to select from available sessions.
@@ -433,30 +433,30 @@ If you don't provide a session ID, you'll be prompted to select from available s
 
 ### import
 
-Import session data from a JSON file or OpenCode share URL.
+Import session data from a JSON file or CyberStrike share URL.
 
 ```bash
-opencode import <file>
+cyberstrike import <file>
 ```
 
-You can import from a local file or an OpenCode share URL.
+You can import from a local file or an CyberStrike share URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+cyberstrike import session.json
+cyberstrike import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Start a headless OpenCode server with a web interface.
+Start a headless CyberStrike server with a web interface.
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-This starts an HTTP server and opens a web browser to access OpenCode through a web interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+This starts an HTTP server and opens a web browser to access CyberStrike through a web interface. Set `CYBERSTRIKE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `cyberstrike`).
 
 #### Flags
 
@@ -474,7 +474,7 @@ This starts an HTTP server and opens a web browser to access OpenCode through a 
 Start an ACP (Agent Client Protocol) server.
 
 ```bash
-opencode acp
+cyberstrike acp
 ```
 
 This command starts an ACP server that communicates via stdin/stdout using nd-JSON.
@@ -491,10 +491,10 @@ This command starts an ACP server that communicates via stdin/stdout using nd-JS
 
 ### uninstall
 
-Uninstall OpenCode and remove all related files.
+Uninstall CyberStrike and remove all related files.
 
 ```bash
-opencode uninstall
+cyberstrike uninstall
 ```
 
 #### Flags
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Updates opencode to the latest version or a specific version.
+Updates cyberstrike to the latest version or a specific version.
 
 ```bash
-opencode upgrade [target]
+cyberstrike upgrade [target]
 ```
 
 To upgrade to the latest version.
 
 ```bash
-opencode upgrade
+cyberstrike upgrade
 ```
 
 To upgrade to a specific version.
 
 ```bash
-opencode upgrade v0.1.48
+cyberstrike upgrade v0.1.48
 ```
 
 #### Flags
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Global Flags
 
-The opencode CLI takes the following global flags.
+The cyberstrike CLI takes the following global flags.
 
 | Flag           | Short | Description                          |
 | -------------- | ----- | ------------------------------------ |
@@ -551,34 +551,34 @@ The opencode CLI takes the following global flags.
 
 ## Environment variables
 
-OpenCode can be configured using environment variables.
+CyberStrike can be configured using environment variables.
 
 | Variable                              | Type    | Description                                       |
 | ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Automatically share sessions                      |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows            |
-| `OPENCODE_CONFIG`                     | string  | Path to config file                               |
-| `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                          |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
-| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                           |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads            |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                        |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction              |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources       |
-| `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Disable file time checking for optimization       |
-| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
-| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
+| `CYBERSTRIKE_AUTO_SHARE`                 | boolean | Automatically share sessions                      |
+| `CYBERSTRIKE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows            |
+| `CYBERSTRIKE_CONFIG`                     | string  | Path to config file                               |
+| `CYBERSTRIKE_CONFIG_DIR`                 | string  | Path to config directory                          |
+| `CYBERSTRIKE_CONFIG_CONTENT`             | string  | Inline json config content                        |
+| `CYBERSTRIKE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
+| `CYBERSTRIKE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
+| `CYBERSTRIKE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
+| `CYBERSTRIKE_PERMISSION`                 | string  | Inlined json permissions config                   |
+| `CYBERSTRIKE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                           |
+| `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads            |
+| `CYBERSTRIKE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                        |
+| `CYBERSTRIKE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction              |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
+| `CYBERSTRIKE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources       |
+| `CYBERSTRIKE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
+| `CYBERSTRIKE_DISABLE_FILETIME_CHECK`     | boolean | Disable file time checking for optimization       |
+| `CYBERSTRIKE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
+| `CYBERSTRIKE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
+| `CYBERSTRIKE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
+| `CYBERSTRIKE_SERVER_USERNAME`            | string  | Override basic auth username (default `cyberstrike`) |
+| `CYBERSTRIKE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
 
 ---
 
@@ -588,16 +588,16 @@ These environment variables enable experimental features that may change or be r
 
 | Variable                                        | Type    | Description                             |
 | ----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Enable all experimental features        |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Enable icon discovery                   |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disable copy on select in TUI           |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Default timeout for bash commands in ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Max output tokens for LLM responses     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Enable file watcher for entire dir      |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Enable oxfmt formatter                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Enable experimental LSP tool            |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disable file watcher                    |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Enable experimental Exa features        |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable experimental LSP type checking   |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Enable experimental markdown features   |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |
+| `CYBERSTRIKE_EXPERIMENTAL`                         | boolean | Enable all experimental features        |
+| `CYBERSTRIKE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Enable icon discovery                   |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disable copy on select in TUI           |
+| `CYBERSTRIKE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Default timeout for bash commands in ms |
+| `CYBERSTRIKE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Max output tokens for LLM responses     |
+| `CYBERSTRIKE_EXPERIMENTAL_FILEWATCHER`             | boolean | Enable file watcher for entire dir      |
+| `CYBERSTRIKE_EXPERIMENTAL_OXFMT`                   | boolean | Enable oxfmt formatter                  |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL`                | boolean | Enable experimental LSP tool            |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disable file watcher                    |
+| `CYBERSTRIKE_EXPERIMENTAL_EXA`                     | boolean | Enable experimental Exa features        |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable experimental LSP type checking   |
+| `CYBERSTRIKE_EXPERIMENTAL_MARKDOWN`                | boolean | Enable experimental markdown features   |
+| `CYBERSTRIKE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |

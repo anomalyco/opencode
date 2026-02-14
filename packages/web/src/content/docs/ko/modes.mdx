@@ -4,14 +4,14 @@ description: 다양한 사용 사례를 위한 다양한 모드.
 ---
 
 :::caution
-모드는 opencode 설정에서 `agent` 옵션을 통해 구성되어 있습니다. 더 보기
+모드는 cyberstrike 설정에서 `agent` 옵션을 통해 구성되어 있습니다. 더 보기
 `mode` 옵션이 이제 비활성화되었습니다. [더 알아보기](/docs/agents).
 :::
 
-opencode의 모드는 다른 사용 사례에 대한 행동, 도구 및 프롬프트를 사용자 정의 할 수 있습니다.
+cyberstrike의 모드는 다른 사용 사례에 대한 행동, 도구 및 프롬프트를 사용자 정의 할 수 있습니다.
 
 그것은 두 개의 내장 모드와 함께 제공됩니다 : ** 빌드 ** 및 ** 계획 **. 사용자 정의 할 수 있습니다.
-opencode config를 통해 자체를 구성합니다.
+cyberstrike config를 통해 자체를 구성합니다.
 
 세션 중에 모드를 전환하거나 구성 파일에서 구성할 수 있습니다.
 
@@ -19,7 +19,7 @@ opencode config를 통해 자체를 구성합니다.
 
 ## 내장
 
-opencode는 2개의 붙박이 형태로 옵니다.
+cyberstrike는 2개의 붙박이 형태로 옵니다.
 
 ---
 
@@ -34,7 +34,7 @@ opencode는 2개의 붙박이 형태로 옵니다.
 계획 및 분석을 위해 설계된 제한 모드. 계획 모드에서 다음 도구는 기본적으로 비활성화됩니다:
 
 - `write` - 새로운 파일을 만들 수 없습니다
-- `edit` - `.opencode/plans/*.md`에 위치한 파일을 제외하고 기존 파일을 수정할 수 없습니다.
+- `edit` - `.cyberstrike/plans/*.md`에 위치한 파일을 제외하고 기존 파일을 수정할 수 없습니다.
 - `patch` - 패치 적용
 - `bash` - shell 명령을 실행할 수 없습니다
 
@@ -56,11 +56,11 @@ Tab 키를 사용하여 세션 중에 모드를 전환할 수 있습니다. 또�
 
 ### JSON 구성
 
-`opencode.json` 설정 파일에서 모드 구성:
+`cyberstrike.json` 설정 파일에서 모드 구성:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ Tab 키를 사용하여 세션 중에 모드를 전환할 수 있습니다. 또�
 
 Markdown 파일을 사용하여 모드를 정의할 수 있습니다. 그들에 게:
 
-- 글로벌: `~/.config/opencode/modes/`
-- 프로젝트: `.opencode/modes/`
+- 글로벌: `~/.config/cyberstrike/modes/`
+- 프로젝트: `.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 
 `model` config를 사용하여 이 모드의 기본 모델을 무시합니다. 다른 작업에 최적화 된 다른 모델을 사용하는 데 유용합니다. 예를 들어, 계획을위한 빠른 모델, 구현을위한 더 많은 모델.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 
 `temperature` config와 AI의 응답의 임의성과 창의성을 제어합니다. 더 낮은 값은 더 집중하고 세심한 응답을 만듭니다. 더 높은 값은 창의력과 가변성을 증가하면서.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -154,7 +154,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 - **0.0-0.2**: 매우 집중하고 신중한 응답, 코드 분석 및 계획에 이상 -**0.3-0.5**: 일부 창의력과 균형 잡힌 응답, 일반 개발 작업에 좋은
 - **0.6-1.0**: 더 창조적이고 다양한 응답, 브레인스토밍 및 탐험에 유용한
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -172,7 +172,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 }
 ```
 
-온도가 지정되지 않은 경우, opencode는 모델별 기본 (일반적으로 0 대부분의 모델에 대한, 0.55 Qwen 모델)을 사용합니다.
+온도가 지정되지 않은 경우, cyberstrike는 모델별 기본 (일반적으로 0 대부분의 모델에 대한, 0.55 Qwen 모델)을 사용합니다.
 
 ---
 
@@ -180,7 +180,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 
 `prompt` config를 가진 이 형태를 위한 주문 체계 prompt 파일을 지정하십시오. prompt 파일은 모드의 목적에 특정한 지시를 포함해야 합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -191,7 +191,7 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 ```
 
 이 경로는 config 파일이 있는 곳에 관계됩니다. 그래서이 작품
-글로벌 opencode config 및 프로젝트 특정 구성 모두.
+글로벌 cyberstrike config 및 프로젝트 특정 구성 모두.
 
 ---
 
@@ -246,9 +246,9 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 
 ### JSON 구성 사용
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -267,9 +267,9 @@ Markdown 파일 이름은 모드 이름 (예 : `review.md`는 `review` 모드를
 
 ### markdown 파일 사용
 
-프로젝트 별 모드 또는 `~/.config/opencode/modes/`의 모드 파일을 만들 수 있습니다.
+프로젝트 별 모드 또는 `~/.config/cyberstrike/modes/`의 모드 파일을 만들 수 있습니다.
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -293,7 +293,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

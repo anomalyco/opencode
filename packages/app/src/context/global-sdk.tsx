@@ -1,5 +1,5 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createCyberstrikeClient, type Event } from "@cyberstrike-io/sdk/v2/client"
+import { createSimpleContext } from "@cyberstrike-io/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import { usePlatform } from "./platform"
@@ -12,13 +12,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const platform = usePlatform()
     const abort = new AbortController()
 
-    const password = typeof window === "undefined" ? undefined : window.__OPENCODE__?.serverPassword
+    const password = typeof window === "undefined" ? undefined : window.__CYBERSTRIKE__?.serverPassword
 
     const auth = (() => {
       if (!password) return
       if (!server.isLocal()) return
       return {
-        Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+        Authorization: `Basic ${btoa(`cyberstrike:${password}`)}`,
       }
     })()
 
@@ -33,7 +33,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     })()
 
-    const eventSdk = createOpencodeClient({
+    const eventSdk = createCyberstrikeClient({
       baseUrl: server.url,
       signal: abort.signal,
       fetch: eventFetch,
@@ -150,7 +150,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       flush()
     })
 
-    const sdk = createOpencodeClient({
+    const sdk = createCyberstrikeClient({
       baseUrl: server.url,
       fetch: platform.fetch,
       throwOnError: true,

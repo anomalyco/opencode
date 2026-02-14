@@ -1,9 +1,9 @@
 ---
 title: Deling
-description: Del dine OpenCode-samtaler.
+description: Del dine CyberStrike-samtaler.
 ---
 
-Delingsfunksjonen i OpenCode lar deg lage offentlige lenker til dine OpenCode-samtaler, slik at du kan samarbeide med lagkamerater eller få hjelp fra andre.
+Delingsfunksjonen i CyberStrike lar deg lage offentlige lenker til dine CyberStrike-samtaler, slik at du kan samarbeide med lagkamerater eller få hjelp fra andre.
 
 :::note
 Delte samtaler er offentlig tilgjengelige for alle med linken.
@@ -13,7 +13,7 @@ Delte samtaler er offentlig tilgjengelige for alle med linken.
 
 ## Slik fungerer det
 
-Når du deler en samtale, OpenCode:
+Når du deler en samtale, CyberStrike:
 
 1. Oppretter en unik offentlig URL for økten din
 2. Synkroniserer samtaleloggen din til serverne våre
@@ -23,13 +23,13 @@ Når du deler en samtale, OpenCode:
 
 ## Deling
 
-OpenCode støtter tre delingsmoduser som kontrollerer hvordan samtaler deles:
+CyberStrike støtter tre delingsmoduser som kontrollerer hvordan samtaler deles:
 
 ---
 
 ### Manuell (standard)
 
-Som standard bruker OpenCode manuell delingsmodus. Økter deles ikke automatisk, men du kan dele dem manuelt ved å bruke kommandoen `/share`:
+Som standard bruker CyberStrike manuell delingsmodus. Økter deles ikke automatisk, men du kan dele dem manuelt ved å bruke kommandoen `/share`:
 
 ```
 /share
@@ -39,7 +39,7 @@ Dette vil generere en unik URL som vil bli kopiert til utklippstavlen din.
 
 For å eksplisitt angi manuell modus i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ For å eksplisitt angi manuell modus i [konfigurasjonsfilen](/docs/config):
 
 Du kan aktivere automatisk deling for alle nye samtaler ved å sette alternativet `share` til `"auto"` i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Med automatisk deling aktivert, vil hver nye samtale automatisk bli delt og en k
 
 Du kan deaktivere deling helt ved å sette alternativet `share` til `"disabled"` i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-For å håndheve dette på tvers av teamet ditt for et gitt prosjekt, legg det til `opencode.json` i prosjektet ditt og sjekk det inn i Git.
+For å håndheve dette på tvers av teamet ditt for et gitt prosjekt, legg det til `cyberstrike.json` i prosjektet ditt og sjekk det inn i Git.
 
 ---
 
@@ -125,4 +125,4 @@ For bedriftsimplementeringer kan delingsfunksjonen være:
 - **Begrenset** til brukere som kun er autentisert gjennom SSO
 - **Selv-hostet** på din egen infrastruktur
 
-[Finn ut mer](/docs/enterprise) om bruk av opencode i organisasjonen din.
+[Finn ut mer](/docs/enterprise) om bruk av cyberstrike i organisasjonen din.

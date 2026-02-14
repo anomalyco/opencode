@@ -59,7 +59,7 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 ### Using Fixtures
 
 - `page` - Playwright page
-- `sdk` - OpenCode SDK client for API calls
+- `sdk` - CyberStrike SDK client for API calls
 - `gotoSession(sessionID?)` - Navigate to session
 
 ### Helper Functions

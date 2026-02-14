@@ -3,11 +3,11 @@ title: Raccourcis clavier
 description: Personnalisez vos raccourcis clavier.
 ---
 
-OpenCode a une liste de raccourcis clavier que vous pouvez personnaliser via la configuration OpenCode.
+CyberStrike a une liste de raccourcis clavier que vous pouvez personnaliser via la configuration CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode a une liste de raccourcis clavier que vous pouvez personnaliser via la 
 
 ## Touche Leader
 
-OpenCode utilise une touche `leader` pour la plupart des raccourcis clavier. Cela évite les conflits dans votre terminal.
+CyberStrike utilise une touche `leader` pour la plupart des raccourcis clavier. Cela évite les conflits dans votre terminal.
 
 Par défaut, `ctrl+x` est la touche leader et la plupart des actions nécessitent que vous appuyiez d'abord sur la touche leader, puis sur le raccourci. Par exemple, pour démarrer une nouvelle session, appuyez d'abord sur `ctrl+x`, puis sur `n`.
 
@@ -119,9 +119,9 @@ Vous n'avez pas besoin d'utiliser une touche leader pour vos raccourcis clavier,
 
 Vous pouvez désactiver un raccourci clavier en ajoutant la clé à votre configuration avec la valeur `none`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Vous pouvez désactiver un raccourci clavier en ajoutant la clé à votre config
 
 ## Raccourcis de saisie desktop
 
-Le champ de saisie de l'application de bureau OpenCode prend en charge les raccourcis courants de style Readline/Emacs pour l'édition de texte. Ceux-ci sont intégrés et actuellement non configurables via `opencode.json`.
+Le champ de saisie de l'application de bureau CyberStrike prend en charge les raccourcis courants de style Readline/Emacs pour l'édition de texte. Ceux-ci sont intégrés et actuellement non configurables via `cyberstrike.json`.
 
 | Raccourci | Actions                                                   |
 | --------- | --------------------------------------------------------- |

@@ -1,19 +1,19 @@
 ---
 title: Сервер
-description: Взаимодействуйте с сервером opencode через HTTP.
+description: Взаимодействуйте с сервером cyberstrike через HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Команда `opencode serve` запускает автономный HTTP-сервер, который предоставляет конечную точку OpenAPI, которую может использовать клиент с открытым кодом.
+Команда `cyberstrike serve` запускает автономный HTTP-сервер, который предоставляет конечную точку OpenAPI, которую может использовать клиент с открытым кодом.
 
 ---
 
 ### Использование
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Параметры
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port to listen on                   | `4096`           |
 | `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
 | `--mdns`        | Enable mDNS discovery               | `false`          |
-| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--mdns-domain` | Custom domain name for mDNS service | `cyberstrike.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
 
 `--cors` можно передать несколько раз:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Аутентификация
 
-Установите `OPENCODE_SERVER_PASSWORD`, чтобы защитить сервер с помощью базовой аутентификации HTTP. Имя пользователя по умолчанию — `opencode` или установите `OPENCODE_SERVER_USERNAME`, чтобы переопределить его. Это относится как к `opencode serve`, так и к `opencode web`.
+Установите `CYBERSTRIKE_SERVER_PASSWORD`, чтобы защитить сервер с помощью базовой аутентификации HTTP. Имя пользователя по умолчанию — `cyberstrike` или установите `CYBERSTRIKE_SERVER_USERNAME`, чтобы переопределить его. Это относится как к `cyberstrike serve`, так и к `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### Как это работает
 
-Когда вы запускаете `opencode`, он запускает TUI и сервер. Где находится TUI
+Когда вы запускаете `cyberstrike`, он запускает TUI и сервер. Где находится TUI
 клиент, который общается с сервером. Сервер предоставляет спецификацию OpenAPI 3.1.
 конечная точка. Эта конечная точка также используется для создания файла [SDK](/docs/sdk).
 
 :::tip
-Используйте сервер opencode для программного взаимодействия с открытым кодом.
+Используйте сервер cyberstrike для программного взаимодействия с открытым кодом.
 :::
 
 Эта архитектура позволяет открытому коду поддерживать несколько клиентов и позволяет программно взаимодействовать с открытым кодом.
 
-Вы можете запустить `opencode serve`, чтобы запустить автономный сервер. Если у вас есть
-TUI с открытым кодом запущен, `opencode serve` запустит новый сервер.
+Вы можете запустить `cyberstrike serve`, чтобы запустить автономный сервер. Если у вас есть
+TUI с открытым кодом запущен, `cyberstrike serve` запустит новый сервер.
 
 ---
 
@@ -65,7 +65,7 @@ TUI с открытым кодом запущен, `opencode serve` запуст
 
 Когда вы запускаете TUI, он случайным образом назначает порт и имя хоста. Вместо этого вы можете передать `--hostname` и `--port` [flags](/docs/cli). Затем используйте это для подключения к его серверу.
 
-Конечную точку [`/tui`](#tui) можно использовать для управления TUI через сервер. Например, вы можете предварительно заполнить или запустить подсказку. Эта настройка используется плагинами opencode [IDE](/docs/ide).
+Конечную точку [`/tui`](#tui) можно использовать для управления TUI через сервер. Например, вы можете предварительно заполнить или запустить подсказку. Эта настройка используется плагинами cyberstrike [IDE](/docs/ide).
 
 ---
 
@@ -83,7 +83,7 @@ For example, `http://localhost:4096/doc`. Use the spec to generate clients or in
 
 ## API
 
-Сервер opencode предоставляет следующие API.
+Сервер cyberstrike предоставляет следующие API.
 
 ---
 

@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: 使用 opencode 终端用户界面。
+description: 使用 cyberstrike 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
+cyberstrike 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
 
-执行opencode启动当前目录的TUI。
+执行cyberstrike启动当前目录的TUI。
 
 ```bash
-opencode
+cyberstrike
 ```
 
 或者您可以为特定的工作目录启动它。
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 进入TUI后，您可以查看消息进行提示。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 opencode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 cyberstrike TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-将提供商添加到 opencode。你可以从可用提供商中选择，并添加它们的 API 密钥。
+将提供商添加到 cyberstrike。你可以从可用提供商中选择，并添加它们的 API 密钥。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出opencode。 _别名_：`/quit`、`/q`
+退出cyberstrike。 _别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -355,11 +355,11 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ## 配置
 
-您可以使用 opencode 配置文件自定义 TUI 行为。
+您可以使用 cyberstrike 配置文件自定义 TUI 行为。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

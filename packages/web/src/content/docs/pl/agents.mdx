@@ -15,7 +15,7 @@ Możesz przełączać się między agentami podczas sesji lub wywoływać ich za
 
 ## Typy
 
-W OpenCode obowiązuje zasada dwóch typów agentów: Primary (Główni) i Subagents (Subagenci).
+W CyberStrike obowiązuje zasada dwóch typów agentów: Primary (Główni) i Subagents (Subagenci).
 
 ---
 
@@ -27,7 +27,7 @@ Główni asystenci, z którymi prowadzisz interakcję. Możesz przełączać si�
 Użyj klawisza **Tab**, aby przełączać się między agentami podczas sesji.
 :::
 
-OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy się im poniżej.
+CyberStrike zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy się im poniżej.
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy
 
 Subagenci to asystenci pomocniczy, których mogą przywoływać agenci główni w celu wykonania konkretnych zadań. Możesz także wywoływać ich ręcznie, **wzmiankując ich (@)** w swoich wiadomościach.
 
-OpenCode ma dwóch wbudowanych subagentów: **General** i **Explore**. Przyjrzymy się im poniżej.
+CyberStrike ma dwóch wbudowanych subagentów: **General** i **Explore**. Przyjrzymy się im poniżej.
 
 ---
 
 ## Wbudowane
 
-OpenCode ma dwa wbudowane agenty główne i dwa wbudowane subagenty.
+CyberStrike ma dwa wbudowane agenty główne i dwa wbudowane subagenty.
 
 ---
 
@@ -135,11 +135,11 @@ Możesz tworzyć własnych agentów lub dostosowywać istniejących. Agentów mo
 
 ### JSON
 
-Skonfiguruj agenta w pliku `opencode.json`:
+Skonfiguruj agenta w pliku `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -180,10 +180,10 @@ Skonfiguruj agenta w pliku `opencode.json`:
 
 Możesz także definiować agentów za pomocą plików markdown. Przechowuj je w:
 
-- Globalnie: `~/.config/opencode/agents/`
-- W projekcie: `.opencode/agents/`
+- Globalnie: `~/.config/cyberstrike/agents/`
+- W projekcie: `.cyberstrike/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -219,7 +219,7 @@ Przyjrzyjmy się szczegółowo opcjom konfiguracji.
 
 Użyj `description`, aby krótko opisać, co robi agent i kiedy go używać.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -239,7 +239,7 @@ Kontroluj losowość i kreatywność odpowiedzi LLM za pomocą konfiguracji `tem
 
 Niższe wartości sprawiają, że odpowiedzi są bardziej skupione i deterministyczne, podczas gdy wyższe wartości wprowadzają więcej różnorodności i kreatywności.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -258,7 +258,7 @@ Wartość temperatury zwykle waha się od 0.0 do 1.0:
 - **0.3-0.5**: Zrównoważone odpowiedzi, dobre do ogólnych zadań programistycznych
 - **0.6-1.0**: Bardziej kreatywne i zróżnicowane odpowiedzi, przydatne podczas burzy mózgów i eksploracji
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "analyze": {
@@ -276,7 +276,7 @@ Wartość temperatury zwykle waha się od 0.0 do 1.0:
 }
 ```
 
-Jeśli nie zostanie skonfigurowana, OpenCode używa wartości domyślnej dla danego modelu; 0 dla modeli rozumowania (reasoning models), 0.55 dla modeli Qwen.
+Jeśli nie zostanie skonfigurowana, CyberStrike używa wartości domyślnej dla danego modelu; 0 dla modeli rozumowania (reasoning models), 0.55 dla modeli Qwen.
 
 ---
 
@@ -286,7 +286,7 @@ Kontroluj maksymalną liczbę iteracji, jaką agent może wykonać, zanim popros
 
 Jeśli ta opcja nie zostanie skonfigurowana, agent będzie kontynuował iterację, dopóki model nie zakończy zadania lub użytkownik nie przerwie działania.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "quick-thinker": {
@@ -310,7 +310,7 @@ Starsze pole `maxSteps` jest przestarzałe. Zamiast tego użyj `steps`.
 
 Ustaw na `true`, aby wyłączyć agenta.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -326,7 +326,7 @@ Ustaw na `true`, aby wyłączyć agenta.
 
 Podaj niestandardowy prompt systemowy dla tego agenta za pomocą konfiguracji `prompt`. Prompt powinien zawierać instrukcje dotyczące celu i zachowania agenta.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -336,7 +336,7 @@ Podaj niestandardowy prompt systemowy dla tego agenta za pomocą konfiguracji `p
 }
 ```
 
-Ścieżka jest względna do miejsca, w którym znajduje się plik konfiguracyjny. Działa to zarówno w przypadku globalnej konfiguracji OpenCode, jak i konfiguracji specyficznej dla projektu.
+Ścieżka jest względna do miejsca, w którym znajduje się plik konfiguracyjny. Działa to zarówno w przypadku globalnej konfiguracji CyberStrike, jak i konfiguracji specyficznej dla projektu.
 
 ---
 
@@ -348,7 +348,7 @@ Użyj `model`, aby określić model dla tego agenta. Przydatne do używania ró�
 Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigurowanego globalnie](/docs/config#models), a agenci podrzędni używają modelu agenta, który ich wywołał.
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -358,7 +358,7 @@ Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigu
 }
 ```
 
-Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/model-id`. Na przykład, [OpenCode Zen](/docs/zen), użyj `opencode/gpt-5.1-codex` dla GPT 5.1 Codex.
+Identyfikator modelu jest taki sam, jak w konfiguracji CyberStrike w `provider/model-id`. Na przykład, [CyberStrike Zen](/docs/zen), użyj `cyberstrike/gpt-5.1-codex` dla GPT 5.1 Codex.
 
 ---
 
@@ -366,9 +366,9 @@ Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/mode
 
 Kontroluj, które narzędzia są dostępne dla tego agenta, za pomocą konfiguracji `tools`. Możesz włączyć lub wyłączyć określone narzędzia, ustawiając je na `true` lub `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="cyberstrike.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -390,9 +390,9 @@ Konfiguracja specyficzna dla agenta nadpisuje konfigurację globalną.
 
 Możesz także używać symboli wieloznacznych (wildcards), aby kontrolować wiele narzędzi jednocześnie. Na przykład, aby wyłączyć wszystkie narzędzia z serwera MCP:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -417,9 +417,9 @@ Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykony
 - `"allow"` — Zezwalaj na użycie bez zatwierdzenia
 - `"deny"` — Zabroń użycia narzędzia
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -428,9 +428,9 @@ Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykony
 
 Możesz nadpisać to dla każdego agenta.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="cyberstrike.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -446,7 +446,7 @@ Możesz nadpisać to dla każdego agenta.
 
 Można to również ustawić w agentach Markdown.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -465,9 +465,9 @@ Only analyze code and suggest changes.
 
 Możesz to skonfigurować szczegółowo dla poleceń bash.
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -483,9 +483,9 @@ Możesz to skonfigurować szczegółowo dla poleceń bash.
 
 Można to połączyć z globalnym symbolem wieloznacznym.
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -501,9 +501,9 @@ Można to połączyć z globalnym symbolem wieloznacznym.
 Możesz także użyć symbolu wieloznacznego `*`, aby zarządzać wszystkimi innymi poleceniami.
 Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jest sprawdzany na końcu.
 
-```json title="opencode.json" {8}
+```json title="cyberstrike.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -525,7 +525,7 @@ Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jes
 
 Kontroluj tryb agenta za pomocą konfiguracji `mode`. Opcja `mode` określa, w jaki sposób agent może być używany.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -543,7 +543,7 @@ Opcję `mode` można ustawić na `primary`, `subagent` lub `all`. Jeśli nie pod
 
 Ukryj subagenta w menu autouzupełniania `@` za pomocą `hidden: true`. Przydatne w przypadku subagentów narzędziowych, którzy powinni być wywoływani tylko programowo przez innych agentów, a nie bezpośrednio przez użytkownika.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "internal-helper": {
@@ -566,7 +566,7 @@ Dotyczy tylko agentów z `mode: subagent`.
 
 Kontroluj, których subagentów może wywołać ten agent za pomocą narzędzia zadania, używając `permission.task`. Używa wzorców glob do elastycznego dopasowywania.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "orchestrator": {
@@ -601,7 +601,7 @@ Dostosuj wygląd agenta w interfejsie użytkownika za pomocą opcji `color`. Wp�
 
 Użyj kodu hex (np. `#FF5733`) lub nazwy koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "creative": {
@@ -620,7 +620,7 @@ Użyj kodu hex (np. `#FF5733`) lub nazwy koloru motywu: `primary`, `secondary`, 
 
 Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla temperatury w celu kontrolowania losowości.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "brainstorm": {
@@ -640,7 +640,7 @@ Wszelkie inne konfiguracje w agentach są **przekazywane bezpośrednio** do dost
 
 Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłek rozumowania:
 
-```json title="opencode.json" {6,7}
+```json title="cyberstrike.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -656,7 +656,7 @@ Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłe
 Te dodatkowe właściwości zależą od modelu i dostawcy. Sprawdź dokumentację swojego dostawcy pod kątem dostępnych parametrów.
 
 :::tip
-Uruchom `opencode models`, aby zobaczyć dostępne modele.
+Uruchom `cyberstrike models`, aby zobaczyć dostępne modele.
 :::
 
 ---
@@ -666,7 +666,7 @@ Uruchom `opencode models`, aby zobaczyć dostępne modele.
 Możesz stworzyć nowych agentów interaktywnie za pomocą polecenia:
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 Poprowadzi Cię to przez proces:
@@ -696,14 +696,14 @@ Oto kilka typowych zastosowań różnych agentów:
 Oto kilka przykładowych agentów, którzy mogą być przydatni.
 
 :::tip
-Masz agenta, którym warto się podzielić? [Prześlij PR](https://github.com/anomalyco/opencode).
+Masz agenta, którym warto się podzielić? [Prześlij PR](https://github.com/CyberStrikeus/cyberstrike).
 :::
 
 ---
 
 ### Agent Documentation
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/cyberstrike/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -725,7 +725,7 @@ Focus on:
 
 ### Security Auditor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/cyberstrike/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

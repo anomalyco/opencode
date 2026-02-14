@@ -1,4 +1,4 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { createCyberstrikeClient } from "@cyberstrike-io/sdk/v2/client"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -67,7 +67,7 @@ export async function checkServerHealth(
       .catch(() => ({ healthy: false }))
   }
   const attempt = (count: number): Promise<ServerHealth> =>
-    createOpencodeClient({
+    createCyberstrikeClient({
       baseUrl: url,
       fetch,
       signal,

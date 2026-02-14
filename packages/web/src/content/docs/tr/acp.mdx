@@ -1,9 +1,9 @@
 ---
 title: ACP Desteği
-description: opencode'u ACP uyumlu herhangi bir editörde kullanın.
+description: cyberstrike'u ACP uyumlu herhangi bir editörde kullanın.
 ---
 
-opencode, [Agent Client Protocol](https://agentclientprotocol.com) veya (ACP) dosyalarını destekleyerek onu doğrudan uyumlu editörlerde ve IDE'lerde kullanmanızı sağlar.
+cyberstrike, [Agent Client Protocol](https://agentclientprotocol.com) veya (ACP) dosyalarını destekleyerek onu doğrudan uyumlu editörlerde ve IDE'lerde kullanmanızı sağlar.
 
 :::tip
 ACP'yi destekleyen editörlerin ve araçların listesi için [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)'e bakın.
@@ -15,9 +15,9 @@ ACP, kod editörleri ile AI kodlama ajanları arasındaki iletişimi standartla�
 
 ## Yapılandırma
 
-opencode'u ACP aracılığıyla kullanmak için düzenleyicinizi `opencode acp` komutunu çalıştıracak şekilde yapılandırın.
+cyberstrike'u ACP aracılığıyla kullanmak için düzenleyicinizi `cyberstrike acp` komutunu çalıştıracak şekilde yapılandırın.
 
-Komut, opencode'u, editörünüzle stdio aracılığıyla JSON-RPC üzerinden iletişim kuran ACP uyumlu bir alt süreç olarak başlatır.
+Komut, cyberstrike'u, editörünüzle stdio aracılığıyla JSON-RPC üzerinden iletişim kuran ACP uyumlu bir alt süreç olarak başlatır.
 
 Aşağıda ACP'yi destekleyen popüler düzenleyicilere ilişkin örnekler verilmiştir.
 
@@ -30,8 +30,8 @@ Aşağıda ACP'yi destekleyen popüler düzenleyicilere ilişkin örnekler veril
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "CyberStrike": {
+      "command": "cyberstrike",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ Açmak için **Komut Paleti**'ndeki `agent: new thread` eylemini kullanın.
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "CyberStrike",
               "command": {
-                "command": "opencode",
+                "command": "cyberstrike",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ Açmak için **Komut Paleti**'ndeki `agent: new thread` eylemini kullanın.
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "CyberStrike": {
+      "command": "/absolute/path/bin/cyberstrike",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Açmak için AI Chat agent seçicisindeki yeni 'OpenCode' ajanını kullanın.
+Açmak için AI Chat agent seçicisindeki yeni 'CyberStrike' ajanını kullanın.
 
 ---
 
@@ -93,8 +93,8 @@ Açmak için AI Chat agent seçicisindeki yeni 'OpenCode' ajanını kullanın.
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ Ortam değişkenlerini iletmeniz gerekiyor:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        CYBERSTRIKE_API_KEY = os.getenv("CYBERSTRIKE_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ Ortam değişkenlerini iletmeniz gerekiyor:
 
 ### CodeCompanion.nvim
 
-opencode'u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)'de ACP ajanı olarak kullanmak için Neovim yapılandırmanıza aşağıdakileri ekleyin:
+cyberstrike'u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)'de ACP ajanı olarak kullanmak için Neovim yapılandırmanıza aşağıdakileri ekleyin:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "cyberstrike",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-Bu yapılandırma, CodeCompanion'ı opencode'u sohbet için ACP ajanı olarak kullanacak şekilde ayarlar.
+Bu yapılandırma, CodeCompanion'ı cyberstrike'u sohbet için ACP ajanı olarak kullanacak şekilde ayarlar.
 
-Ortam değişkenlerini (`OPENCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
+Ortam değişkenlerini (`CYBERSTRIKE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
 
 ## Destek
 
-opencode, terminalde olduğu gibi ACP aracılığıyla aynı şekilde çalışır. Tüm özellikler desteklenir:
+cyberstrike, terminalde olduğu gibi ACP aracılığıyla aynı şekilde çalışır. Tüm özellikler desteklenir:
 
 :::note
 `/undo` ve `/redo` gibi bazı yerleşik slash komutları şu anda desteklenmemektedir.
@@ -150,7 +150,7 @@ opencode, terminalde olduğu gibi ACP aracılığıyla aynı şekilde çalışı
 
 - Yerleşik araçlar (dosya işlemleri, terminal komutları vb.)
 - Özel araçlar ve slash komutları
-- opencode yapılandırmanızda yapılandırılmış MCP sunucuları
+- cyberstrike yapılandırmanızda yapılandırılmış MCP sunucuları
 - `AGENTS.md`'dan projeye özel kurallar
 - Özel biçimlendiriciler ve linter'lar
 - Aracılar ve izin sistemi

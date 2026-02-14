@@ -8,7 +8,7 @@ jobs:
   check-standards:
     if: |
       github.event.pull_request.user.login != 'actions-user' &&
-      github.event.pull_request.user.login != 'opencode' &&
+      github.event.pull_request.user.login != 'cyberstrike' &&
       github.event.pull_request.user.login != 'rekram1-node' &&
       github.event.pull_request.user.login != 'thdxr' &&
       github.event.pull_request.user.login != 'kommander' &&
@@ -16,7 +16,7 @@ jobs:
       github.event.pull_request.user.login != 'fwang' &&
       github.event.pull_request.user.login != 'adamdotdevin' &&
       github.event.pull_request.user.login != 'iamdavidhill' &&
-      github.event.pull_request.user.login != 'opencode-agent[bot]'
+      github.event.pull_request.user.login != 'cyberstrike-agent[bot]'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -86,7 +86,7 @@ jobs:
             - \`refactor:\` or \`refactor(scope):\` code refactoring
             - \`test:\` or \`test(scope):\` adding or updating tests
 
-            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
+            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`cyberstrike\`).
 
             See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
               return;

@@ -1,19 +1,19 @@
 ---
 title: Servidor
-description: Interaja com o servidor opencode via HTTP.
+description: Interaja com o servidor cyberstrike via HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-O comando `opencode serve` executa um servidor HTTP sem cabeça que expõe um endpoint OpenAPI que um cliente opencode pode usar.
+O comando `cyberstrike serve` executa um servidor HTTP sem cabeça que expõe um endpoint OpenAPI que um cliente cyberstrike pode usar.
 
 ---
 
 ### Uso
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opções
@@ -23,38 +23,38 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Porta para escutar                                | `4096`           |
 | `--hostname`    | Nome do host para escutar                         | `127.0.0.1`      |
 | `--mdns`        | Habilitar descoberta mDNS                         | `false`          |
-| `--mdns-domain` | Nome de domínio personalizado para o serviço mDNS | `opencode.local` |
+| `--mdns-domain` | Nome de domínio personalizado para o serviço mDNS | `cyberstrike.local` |
 | `--cors`        | Origens adicionais de navegador a permitir        | `[]`             |
 
 `--cors` pode ser passado várias vezes:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Autenticação
 
-Defina `OPENCODE_SERVER_PASSWORD` para proteger o servidor com autenticação básica HTTP. O nome de usuário padrão é `opencode`, ou defina `OPENCODE_SERVER_USERNAME` para substituí-lo. Isso se aplica tanto ao `opencode serve` quanto ao `opencode web`.
+Defina `CYBERSTRIKE_SERVER_PASSWORD` para proteger o servidor com autenticação básica HTTP. O nome de usuário padrão é `cyberstrike`, ou defina `CYBERSTRIKE_SERVER_USERNAME` para substituí-lo. Isso se aplica tanto ao `cyberstrike serve` quanto ao `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### Como funciona
 
-Quando você executa `opencode`, ele inicia um TUI e um servidor. Onde o TUI é o cliente que se comunica com o servidor. O servidor expõe um endpoint de especificação OpenAPI 3.1. Este endpoint também é usado para gerar um [SDK](/docs/sdk).
+Quando você executa `cyberstrike`, ele inicia um TUI e um servidor. Onde o TUI é o cliente que se comunica com o servidor. O servidor expõe um endpoint de especificação OpenAPI 3.1. Este endpoint também é usado para gerar um [SDK](/docs/sdk).
 
 :::tip
-Use o servidor opencode para interagir com o opencode programaticamente.
+Use o servidor cyberstrike para interagir com o cyberstrike programaticamente.
 :::
 
-Essa arquitetura permite que o opencode suporte múltiplos clientes e permite que você interaja com o opencode programaticamente.
+Essa arquitetura permite que o cyberstrike suporte múltiplos clientes e permite que você interaja com o cyberstrike programaticamente.
 
-Você pode executar `opencode serve` para iniciar um servidor autônomo. Se você tiver o TUI do opencode em execução, `opencode serve` iniciará um novo servidor.
+Você pode executar `cyberstrike serve` para iniciar um servidor autônomo. Se você tiver o TUI do cyberstrike em execução, `cyberstrike serve` iniciará um novo servidor.
 
 ---
 
@@ -62,7 +62,7 @@ Você pode executar `opencode serve` para iniciar um servidor autônomo. Se voc�
 
 Quando você inicia o TUI, ele atribui aleatoriamente uma porta e um nome de host. Você pode passar os [flags](/docs/cli) `--hostname` e `--port`. Em seguida, use isso para se conectar ao seu servidor.
 
-O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do opencode [IDE](/docs/ide).
+O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do cyberstrike [IDE](/docs/ide).
 
 ---
 
@@ -80,7 +80,7 @@ Por exemplo, `http://localhost:4096/doc`. Use a especificação para gerar clien
 
 ## APIs
 
-O servidor opencode expõe as seguintes APIs.
+O servidor cyberstrike expõe as seguintes APIs.
 
 ---
 

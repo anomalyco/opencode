@@ -36,7 +36,7 @@ export const dict = {
   "email.subscribe": "S'abonner",
   "email.success": "Presque terminé - vérifiez votre boîte de réception et confirmez votre adresse e-mail",
 
-  "notFound.title": "Introuvable | OpenCode",
+  "notFound.title": "Introuvable | CyberStrike",
   "notFound.heading": "404 - Page introuvable",
   "notFound.home": "Accueil",
   "notFound.docs": "Documentation",
@@ -76,21 +76,21 @@ export const dict = {
   "error.reloadAmountMin": "Le montant de recharge doit être d'au moins {{amount}} $",
   "error.reloadTriggerMin": "Le seuil de déclenchement doit être d'au moins {{amount}} $",
 
-  "home.title": "OpenCode | L'agent de code IA open source",
+  "home.title": "CyberStrike | L'agent de code IA open source",
 
-  "temp.title": "OpenCode | Agent de code IA conçu pour le terminal",
+  "temp.title": "CyberStrike | Agent de code IA conçu pour le terminal",
   "temp.hero.title": "L'agent de code IA conçu pour le terminal",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "CyberStrike Zen",
   "temp.getStarted": "Commencer",
   "temp.feature.native.title": "TUI Native",
   "temp.feature.native.body": "Une interface terminal native, réactive et thémable",
   "temp.feature.zen.beforeLink": "Une",
   "temp.feature.zen.link": "liste organisée de modèles",
-  "temp.feature.zen.afterLink": "fournie par OpenCode",
+  "temp.feature.zen.afterLink": "fournie par CyberStrike",
   "temp.feature.models.beforeLink": "Prend en charge plus de 75 fournisseurs LLM via",
   "temp.feature.models.afterLink": ", y compris les modèles locaux",
-  "temp.screenshot.caption": "OpenCode TUI avec le thème tokyonight",
-  "temp.screenshot.alt": "OpenCode TUI avec le thème tokyonight",
+  "temp.screenshot.caption": "CyberStrike TUI avec le thème tokyonight",
+  "temp.screenshot.alt": "CyberStrike TUI avec le thème tokyonight",
 
   "home.banner.badge": "Nouveau",
   "home.banner.text": "Application desktop disponible en bêta",
@@ -105,9 +105,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Options d'installation",
 
-  "home.what.title": "Qu'est-ce que OpenCode ?",
+  "home.what.title": "Qu'est-ce que CyberStrike ?",
   "home.what.body":
-    "OpenCode est un agent open source qui vous aide à écrire du code dans votre terminal, IDE ou desktop.",
+    "CyberStrike est un agent open source qui vous aide à écrire du code dans votre terminal, IDE ou desktop.",
   "home.what.lsp.title": "LSP activé",
   "home.what.lsp.body": "Charge automatiquement les bons LSP pour le LLM",
   "home.what.multiSession.title": "Multi-session",
@@ -126,43 +126,43 @@ export const dict = {
 
   "home.growth.title": "L'agent de code IA open source",
   "home.growth.body":
-    "Avec plus de <strong>{{stars}}</strong> étoiles sur GitHub, <strong>{{contributors}}</strong> contributeurs et plus de <strong>{{commits}}</strong> commits, OpenCode est utilisé et approuvé par plus de <strong>{{monthlyUsers}}</strong> développeurs chaque mois.",
+    "Avec plus de <strong>{{stars}}</strong> étoiles sur GitHub, <strong>{{contributors}}</strong> contributeurs et plus de <strong>{{commits}}</strong> commits, CyberStrike est utilisé et approuvé par plus de <strong>{{monthlyUsers}}</strong> développeurs chaque mois.",
   "home.growth.githubStars": "Étoiles GitHub",
   "home.growth.contributors": "Contributeurs",
   "home.growth.monthlyDevs": "Devs mensuels",
 
   "home.privacy.title": "Conçu pour la confidentialité",
   "home.privacy.body":
-    "OpenCode ne stocke ni votre code ni vos données de contexte, afin de pouvoir fonctionner dans des environnements sensibles à la confidentialité.",
+    "CyberStrike ne stocke ni votre code ni vos données de contexte, afin de pouvoir fonctionner dans des environnements sensibles à la confidentialité.",
   "home.privacy.learnMore": "En savoir plus sur",
   "home.privacy.link": "la confidentialité",
 
-  "home.faq.q1": "Qu'est-ce que OpenCode ?",
+  "home.faq.q1": "Qu'est-ce que CyberStrike ?",
   "home.faq.a1":
-    "OpenCode est un agent open source qui vous aide à écrire et exécuter du code avec n'importe quel modèle d'IA. Il est disponible en interface terminal, application desktop ou extension IDE.",
-  "home.faq.q2": "Comment utiliser OpenCode ?",
+    "CyberStrike est un agent open source qui vous aide à écrire et exécuter du code avec n'importe quel modèle d'IA. Il est disponible en interface terminal, application desktop ou extension IDE.",
+  "home.faq.q2": "Comment utiliser CyberStrike ?",
   "home.faq.a2.before": "Le moyen le plus simple de commencer est de lire l'",
   "home.faq.a2.link": "intro",
-  "home.faq.q3": "Ai-je besoin d'abonnements IA supplémentaires pour utiliser OpenCode ?",
+  "home.faq.q3": "Ai-je besoin d'abonnements IA supplémentaires pour utiliser CyberStrike ?",
   "home.faq.a3.p1":
-    "Pas forcément : OpenCode propose des modèles gratuits que vous pouvez utiliser sans créer de compte.",
+    "Pas forcément : CyberStrike propose des modèles gratuits que vous pouvez utiliser sans créer de compte.",
   "home.faq.a3.p2.beforeZen": "En plus, vous pouvez utiliser des modèles populaires pour le code en créant un compte",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Nous encourageons l'utilisation de Zen, mais OpenCode fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
+    "Nous encourageons l'utilisation de Zen, mais CyberStrike fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
   "home.faq.a3.p4.beforeLocal": "Vous pouvez même connecter vos",
   "home.faq.a3.p4.localLink": "modèles locaux",
-  "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec OpenCode ?",
+  "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec CyberStrike ?",
   "home.faq.a4.p1":
-    "Oui, OpenCode prend en charge les abonnements des principaux fournisseurs. Vous pouvez utiliser Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
-  "home.faq.q5": "Puis-je utiliser OpenCode uniquement dans le terminal ?",
-  "home.faq.a5.beforeDesktop": "Plus maintenant ! OpenCode est désormais disponible en application pour",
+    "Oui, CyberStrike prend en charge les abonnements des principaux fournisseurs. Vous pouvez utiliser Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
+  "home.faq.q5": "Puis-je utiliser CyberStrike uniquement dans le terminal ?",
+  "home.faq.a5.beforeDesktop": "Plus maintenant ! CyberStrike est désormais disponible en application pour",
   "home.faq.a5.desktop": "desktop",
   "home.faq.a5.and": "et",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "Combien coûte OpenCode ?",
+  "home.faq.q6": "Combien coûte CyberStrike ?",
   "home.faq.a6":
-    "OpenCode est 100% gratuit. Il inclut aussi des modèles gratuits. Des coûts supplémentaires peuvent s'appliquer si vous connectez un autre fournisseur.",
+    "CyberStrike est 100% gratuit. Il inclut aussi des modèles gratuits. Des coûts supplémentaires peuvent s'appliquer si vous connectez un autre fournisseur.",
   "home.faq.q7": "Qu'en est-il des données et de la confidentialité ?",
   "home.faq.a7.p1":
     "Vos données ne sont stockées que lorsque vous utilisez nos modèles gratuits ou créez des liens partageables.",
@@ -170,8 +170,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "nos modèles",
   "home.faq.a7.p2.and": "et",
   "home.faq.a7.p2.shareLink": "les pages de partage",
-  "home.faq.q8": "OpenCode est-il open source ?",
-  "home.faq.a8.p1": "Oui, OpenCode est entièrement open source. Le code source est public sur",
+  "home.faq.q8": "CyberStrike est-il open source ?",
+  "home.faq.a8.p1": "Oui, CyberStrike est entièrement open source. Le code source est public sur",
   "home.faq.a8.p2": "sous la",
   "home.faq.a8.mitLicense": "Licence MIT",
   "home.faq.a8.p3":
@@ -179,23 +179,23 @@ export const dict = {
 
   "home.zenCta.title": "Accédez à des modèles fiables et optimisés pour les agents de code",
   "home.zenCta.body":
-    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
+    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que CyberStrike a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
   "home.zenCta.link": "En savoir plus sur Zen",
 
-  "zen.title": "OpenCode Zen | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
+  "zen.title": "CyberStrike Zen | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
   "zen.hero.title": "Modèles fiables et optimisés pour les agents de code",
   "zen.hero.body":
-    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
+    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que CyberStrike a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
 
-  "zen.faq.q1": "Qu'est-ce que OpenCode Zen ?",
+  "zen.faq.q1": "Qu'est-ce que CyberStrike Zen ?",
   "zen.faq.a1":
-    "Zen est un ensemble sélectionné de modèles d'IA testés et benchmarkés pour les agents de code, créé par l'équipe derrière OpenCode.",
+    "Zen est un ensemble sélectionné de modèles d'IA testés et benchmarkés pour les agents de code, créé par l'équipe derrière CyberStrike.",
   "zen.faq.q2": "Qu'est-ce qui rend Zen plus précis ?",
   "zen.faq.a2":
     "Zen ne propose que des modèles testés et benchmarkés spécifiquement pour les agents de code. Vous n'utiliseriez pas un couteau à beurre pour couper un steak ; n'utilisez pas de mauvais modèles pour coder.",
   "zen.faq.q3": "Zen est-il moins cher ?",
   "zen.faq.a3":
-    "Zen n'est pas à but lucratif. Zen vous facture au prix coûtant des fournisseurs de modèles. Plus Zen est utilisé, plus OpenCode peut négocier de meilleurs tarifs et vous les répercuter.",
+    "Zen n'est pas à but lucratif. Zen vous facture au prix coûtant des fournisseurs de modèles. Plus Zen est utilisé, plus CyberStrike peut négocier de meilleurs tarifs et vous les répercuter.",
   "zen.faq.q4": "Combien coûte Zen ?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "facture par requête",
@@ -204,7 +204,7 @@ export const dict = {
     "Votre coût total dépend de l'usage, et vous pouvez définir des limites de dépense mensuelles dans votre",
   "zen.faq.a4.p2.accountLink": "compte",
   "zen.faq.a4.p3":
-    "Pour couvrir les coûts, OpenCode ajoute uniquement de petits frais de traitement de paiement de 1,23 $ par recharge de 20 $.",
+    "Pour couvrir les coûts, CyberStrike ajoute uniquement de petits frais de traitement de paiement de 1,23 $ par recharge de 20 $.",
   "zen.faq.q5": "Et pour les données et la confidentialité ?",
   "zen.faq.a5.beforeExceptions":
     "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs appliquent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
@@ -215,7 +215,7 @@ export const dict = {
   "zen.faq.a7": "Oui, vous pouvez désactiver la facturation à tout moment et utiliser votre solde restant.",
   "zen.faq.q8": "Puis-je utiliser Zen avec d'autres agents de code ?",
   "zen.faq.a8":
-    "Zen fonctionne très bien avec OpenCode, mais vous pouvez utiliser Zen avec n'importe quel agent. Suivez les instructions de configuration dans votre agent préféré.",
+    "Zen fonctionne très bien avec CyberStrike, mais vous pouvez utiliser Zen avec n'importe quel agent. Suivez les instructions de configuration dans votre agent préféré.",
 
   "zen.cta.start": "Commencez avec Zen",
   "zen.pricing.title": "Ajoutez 20 $ de solde Pay as you go",
@@ -226,13 +226,13 @@ export const dict = {
   "zen.problem.body":
     "Il existe de nombreux modèles disponibles, mais seuls quelques-uns fonctionnent bien avec les agents de code. La plupart des fournisseurs les configurent différemment avec des résultats variables.",
   "zen.problem.subtitle":
-    "Nous résolvons ce problème pour tout le monde, pas seulement pour les utilisateurs de OpenCode.",
+    "Nous résolvons ce problème pour tout le monde, pas seulement pour les utilisateurs de CyberStrike.",
   "zen.problem.item1": "Test des modèles sélectionnés et consultation de leurs équipes",
   "zen.problem.item2": "Collaboration avec les fournisseurs pour garantir une livraison correcte",
   "zen.problem.item3": "Benchmark de toutes les combinaisons modèle-fournisseur que nous recommandons",
   "zen.how.title": "Comment fonctionne Zen",
   "zen.how.body":
-    "Bien que nous vous suggérions d'utiliser Zen avec OpenCode, vous pouvez utiliser Zen avec n'importe quel agent.",
+    "Bien que nous vous suggérions d'utiliser Zen avec CyberStrike, vous pouvez utiliser Zen avec n'importe quel agent.",
   "zen.how.step1.title": "Inscrivez-vous et ajoutez un solde de 20 $",
   "zen.how.step1.beforeLink": "suivez les",
   "zen.how.step1.link": "instructions de configuration",
@@ -246,11 +246,11 @@ export const dict = {
     "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
-  "black.meta.title": "OpenCode Black | Accédez aux meilleurs modèles de code au monde",
-  "black.meta.description": "Accédez à Claude, GPT, Gemini et plus avec les forfaits d'abonnement OpenCode Black.",
+  "black.meta.title": "CyberStrike Black | Accédez aux meilleurs modèles de code au monde",
+  "black.meta.description": "Accédez à Claude, GPT, Gemini et plus avec les forfaits d'abonnement CyberStrike Black.",
   "black.hero.title": "Accédez aux meilleurs modèles de code au monde",
   "black.hero.subtitle": "Y compris Claude, GPT, Gemini et plus",
-  "black.title": "OpenCode Black | Tarification",
+  "black.title": "CyberStrike Black | Tarification",
   "black.plan.icon20": "Forfait Black 20",
   "black.plan.icon100": "Forfait Black 100",
   "black.plan.icon200": "Forfait Black 200",
@@ -269,10 +269,10 @@ export const dict = {
   "black.action.continue": "Continuer",
   "black.finePrint.beforeTerms": "Les prix affichés n'incluent pas les taxes applicables",
   "black.finePrint.terms": "Conditions d'utilisation",
-  "black.workspace.title": "OpenCode Black | Sélectionner un espace de travail",
+  "black.workspace.title": "CyberStrike Black | Sélectionner un espace de travail",
   "black.workspace.selectPlan": "Sélectionnez un espace de travail pour ce forfait",
   "black.workspace.name": "Espace de travail {{n}}",
-  "black.subscribe.title": "S'abonner à OpenCode Black",
+  "black.subscribe.title": "S'abonner à CyberStrike Black",
   "black.subscribe.paymentMethod": "Méthode de paiement",
   "black.subscribe.loadingPaymentForm": "Chargement du formulaire de paiement...",
   "black.subscribe.selectWorkspaceToContinue": "Sélectionnez un espace de travail pour continuer",
@@ -284,9 +284,9 @@ export const dict = {
   "black.subscribe.processing": "Traitement...",
   "black.subscribe.submit": "S'abonner ${{plan}}",
   "black.subscribe.form.chargeNotice": "Vous ne serez débité que lorsque votre abonnement sera activé",
-  "black.subscribe.success.title": "Vous êtes sur la liste d'attente OpenCode Black",
+  "black.subscribe.success.title": "Vous êtes sur la liste d'attente CyberStrike Black",
   "black.subscribe.success.subscriptionPlan": "Forfait d'abonnement",
-  "black.subscribe.success.planName": "OpenCode Black {{plan}}",
+  "black.subscribe.success.planName": "CyberStrike Black {{plan}}",
   "black.subscribe.success.amount": "Montant",
   "black.subscribe.success.amountValue": "{{plan}} $ par mois",
   "black.subscribe.success.paymentMethod": "Méthode de paiement",
@@ -312,15 +312,15 @@ export const dict = {
     "Accédez à des modèles configurés pour des performances optimales - pas de rétrogradation ni de routage vers des fournisseurs moins chers.",
   "workspace.newUser.feature.lockin.title": "Pas de verrouillage",
   "workspace.newUser.feature.lockin.body":
-    "Utilisez Zen avec n'importe quel agent de code et continuez à utiliser d'autres fournisseurs avec OpenCode quand vous le souhaitez.",
+    "Utilisez Zen avec n'importe quel agent de code et continuez à utiliser d'autres fournisseurs avec CyberStrike quand vous le souhaitez.",
   "workspace.newUser.copyApiKey": "Copier la clé API",
   "workspace.newUser.copyKey": "Copier la clé",
   "workspace.newUser.copied": "Copié !",
   "workspace.newUser.step.enableBilling": "Activer la facturation",
   "workspace.newUser.step.login.before": "Exécuter",
-  "workspace.newUser.step.login.after": "et sélectionnez OpenCode",
+  "workspace.newUser.step.login.after": "et sélectionnez CyberStrike",
   "workspace.newUser.step.pasteKey": "Collez votre clé API",
-  "workspace.newUser.step.models.before": "Démarrez OpenCode et exécutez",
+  "workspace.newUser.step.models.before": "Démarrez CyberStrike et exécutez",
   "workspace.newUser.step.models.after": "pour sélectionner un modèle",
 
   "workspace.models.title": "Modèles",
@@ -364,10 +364,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "abo",
 
   "workspace.keys.title": "Clés API",
-  "workspace.keys.subtitle": "Gérez vos clés API pour accéder aux services OpenCode.",
+  "workspace.keys.subtitle": "Gérez vos clés API pour accéder aux services CyberStrike.",
   "workspace.keys.create": "Créer une clé API",
   "workspace.keys.placeholder": "Entrez le nom de la clé",
-  "workspace.keys.empty": "Créer une clé API OpenCode Gateway",
+  "workspace.keys.empty": "Créer une clé API CyberStrike Gateway",
   "workspace.keys.table.name": "Nom",
   "workspace.keys.table.key": "Clé",
   "workspace.keys.table.createdBy": "Créé par",
@@ -472,7 +472,7 @@ export const dict = {
   "workspace.black.time.minutes": "minutes",
   "workspace.black.time.fewSeconds": "quelques secondes",
   "workspace.black.subscription.title": "Abonnement",
-  "workspace.black.subscription.message": "Vous êtes abonné à OpenCode Black pour {{plan}} $ par mois.",
+  "workspace.black.subscription.message": "Vous êtes abonné à CyberStrike Black pour {{plan}} $ par mois.",
   "workspace.black.subscription.manage": "Gérer l'abonnement",
   "workspace.black.subscription.rollingUsage": "Utilisation 5 heures",
   "workspace.black.subscription.weeklyUsage": "Utilisation hebdomadaire",
@@ -481,9 +481,9 @@ export const dict = {
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
   "workspace.black.waitlist.title": "Liste d'attente",
   "workspace.black.waitlist.joined":
-    "Vous êtes sur la liste d'attente pour le forfait OpenCode Black à {{plan}} $ par mois.",
+    "Vous êtes sur la liste d'attente pour le forfait CyberStrike Black à {{plan}} $ par mois.",
   "workspace.black.waitlist.ready":
-    "Nous sommes prêts à vous inscrire au forfait OpenCode Black à {{plan}} $ par mois.",
+    "Nous sommes prêts à vous inscrire au forfait CyberStrike Black à {{plan}} $ par mois.",
   "workspace.black.waitlist.leave": "Quitter la liste d'attente",
   "workspace.black.waitlist.leaving": "Sortie...",
   "workspace.black.waitlist.left": "Quitté",
@@ -493,15 +493,15 @@ export const dict = {
   "workspace.black.waitlist.enrollNote":
     "Lorsque vous cliquez sur S'inscrire, votre abonnement démarre immédiatement et votre carte sera débitée.",
 
-  "download.title": "OpenCode | Téléchargement",
-  "download.meta.description": "Téléchargez OpenCode pour macOS, Windows et Linux",
-  "download.hero.title": "Télécharger OpenCode",
+  "download.title": "CyberStrike | Téléchargement",
+  "download.meta.description": "Téléchargez CyberStrike pour macOS, Windows et Linux",
+  "download.hero.title": "Télécharger CyberStrike",
   "download.hero.subtitle": "Disponible en bêta pour macOS, Windows et Linux",
   "download.hero.button": "Télécharger pour {{os}}",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Bêta)",
-  "download.section.extensions": "Extensions OpenCode",
-  "download.section.integrations": "Intégrations OpenCode",
+  "download.section.terminal": "CyberStrike Terminal",
+  "download.section.desktop": "CyberStrike Desktop (Bêta)",
+  "download.section.extensions": "Extensions CyberStrike",
+  "download.section.integrations": "Intégrations CyberStrike",
   "download.action.download": "Télécharger",
   "download.action.install": "Installer",
 
@@ -512,27 +512,27 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Pas forcément, mais probablement. Vous aurez besoin d'un abonnement IA si vous voulez connecter OpenCode à un fournisseur payant, mais vous pouvez travailler avec des",
+    "Pas forcément, mais probablement. Vous aurez besoin d'un abonnement IA si vous voulez connecter CyberStrike à un fournisseur payant, mais vous pouvez travailler avec des",
   "download.faq.a3.localLink": "modèles locaux",
   "download.faq.a3.afterLocal.beforeZen": "gratuitement. Même si nous encourageons les utilisateurs à utiliser",
   "download.faq.a3.afterZen":
-    ", OpenCode fonctionne avec tous les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
+    ", CyberStrike fonctionne avec tous les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
 
-  "download.faq.a5.p1": "OpenCode est 100% gratuit à utiliser.",
+  "download.faq.a5.p1": "CyberStrike est 100% gratuit à utiliser.",
   "download.faq.a5.p2.beforeZen":
-    "Les coûts supplémentaires viendront de votre abonnement à un fournisseur de modèle. Même si OpenCode fonctionne avec n'importe quel fournisseur, nous recommandons d'utiliser",
+    "Les coûts supplémentaires viendront de votre abonnement à un fournisseur de modèle. Même si CyberStrike fonctionne avec n'importe quel fournisseur, nous recommandons d'utiliser",
   "download.faq.a5.p2.afterZen": ".",
 
   "download.faq.a6.p1":
-    "Vos données et informations ne sont stockées que lorsque vous créez des liens partageables dans OpenCode.",
+    "Vos données et informations ne sont stockées que lorsque vous créez des liens partageables dans CyberStrike.",
   "download.faq.a6.p2.beforeShare": "En savoir plus sur",
   "download.faq.a6.shareLink": "les pages de partage",
 
-  "enterprise.title": "OpenCode | Solutions entreprise pour votre organisation",
-  "enterprise.meta.description": "Contactez OpenCode pour des solutions entreprise",
+  "enterprise.title": "CyberStrike | Solutions entreprise pour votre organisation",
+  "enterprise.meta.description": "Contactez CyberStrike pour des solutions entreprise",
   "enterprise.hero.title": "Votre code vous appartient",
   "enterprise.hero.body1":
-    "OpenCode fonctionne de manière sécurisée au sein de votre organisation, sans stocker de données ni de contexte, et sans restrictions de licence ni revendications de propriété. Démarrez un essai avec votre équipe, puis déployez-le dans votre organisation en l'intégrant à votre SSO et à votre passerelle IA interne.",
+    "CyberStrike fonctionne de manière sécurisée au sein de votre organisation, sans stocker de données ni de contexte, et sans restrictions de licence ni revendications de propriété. Démarrez un essai avec votre équipe, puis déployez-le dans votre organisation en l'intégrant à votre SSO et à votre passerelle IA interne.",
   "enterprise.hero.body2": "Dites-nous comment nous pouvons vous aider.",
   "enterprise.form.name.label": "Nom complet",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -546,29 +546,29 @@ export const dict = {
   "enterprise.form.sending": "Envoi...",
   "enterprise.form.success": "Message envoyé, nous vous contacterons bientôt.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",
+  "enterprise.faq.q1": "Qu'est-ce que CyberStrike Enterprise ?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise s'adresse aux organisations qui veulent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Cela est possible grâce à une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.",
-  "enterprise.faq.q2": "Comment démarrer avec OpenCode Enterprise ?",
+    "CyberStrike Enterprise s'adresse aux organisations qui veulent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Cela est possible grâce à une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.",
+  "enterprise.faq.q2": "Comment démarrer avec CyberStrike Enterprise ?",
   "enterprise.faq.a2":
-    "Commencez simplement par un essai interne avec votre équipe. Par défaut, OpenCode ne stocke pas votre code ni vos données de contexte, ce qui facilite la prise en main. Ensuite, contactez-nous pour discuter des tarifs et des options de mise en œuvre.",
+    "Commencez simplement par un essai interne avec votre équipe. Par défaut, CyberStrike ne stocke pas votre code ni vos données de contexte, ce qui facilite la prise en main. Ensuite, contactez-nous pour discuter des tarifs et des options de mise en œuvre.",
   "enterprise.faq.q3": "Comment fonctionne la tarification entreprise ?",
   "enterprise.faq.a3":
     "Nous proposons une tarification entreprise par siège. Si vous avez votre propre passerelle LLM, nous ne facturons pas les tokens utilisés. Pour plus de détails, contactez-nous pour un devis sur mesure en fonction des besoins de votre organisation.",
-  "enterprise.faq.q4": "Mes données sont-elles sécurisées avec OpenCode Enterprise ?",
+  "enterprise.faq.q4": "Mes données sont-elles sécurisées avec CyberStrike Enterprise ?",
   "enterprise.faq.a4":
-    "Oui. OpenCode ne stocke pas votre code ni vos données de contexte. Tout le traitement se fait localement ou via des appels API directs vers votre fournisseur d'IA. Avec une configuration centralisée et une intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.",
+    "Oui. CyberStrike ne stocke pas votre code ni vos données de contexte. Tout le traitement se fait localement ou via des appels API directs vers votre fournisseur d'IA. Avec une configuration centralisée et une intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.",
 
-  "brand.title": "OpenCode | Marque",
-  "brand.meta.description": "Guide de marque OpenCode",
+  "brand.title": "CyberStrike | Marque",
+  "brand.meta.description": "Guide de marque CyberStrike",
   "brand.heading": "Guide de marque",
-  "brand.subtitle": "Ressources et éléments pour vous aider à travailler avec la marque OpenCode.",
+  "brand.subtitle": "Ressources et éléments pour vous aider à travailler avec la marque CyberStrike.",
   "brand.downloadAll": "Télécharger tous les assets",
 
-  "changelog.title": "OpenCode | Changelog",
-  "changelog.meta.description": "Notes de version et changelog d'OpenCode",
+  "changelog.title": "CyberStrike | Changelog",
+  "changelog.meta.description": "Notes de version et changelog d'CyberStrike",
   "changelog.hero.title": "Changelog",
-  "changelog.hero.subtitle": "Nouvelles mises à jour et améliorations pour OpenCode",
+  "changelog.hero.subtitle": "Nouvelles mises à jour et améliorations pour CyberStrike",
   "changelog.empty": "Aucune entrée de changelog trouvée.",
   "changelog.viewJson": "Voir le JSON",
 

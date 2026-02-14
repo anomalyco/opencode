@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Worktree } from "./worktree"
 
-const dir = (name: string) => `/tmp/opencode-worktree-${name}-${crypto.randomUUID()}`
+const dir = (name: string) => `/tmp/cyberstrike-worktree-${name}-${crypto.randomUUID()}`
 
 describe("Worktree", () => {
   test("normalizes trailing slashes", () => {

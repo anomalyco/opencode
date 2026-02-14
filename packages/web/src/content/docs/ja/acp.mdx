@@ -1,9 +1,9 @@
 ---
 title: ACP サポート
-description: ACP 互換エディターで OpenCode を使用します。
+description: ACP 互換エディターで CyberStrike を使用します。
 ---
 
-OpenCode は [Agent Client Protocol](https://agentclientprotocol.com) または (ACP) をサポートしているため、互換性のあるエディターや IDE で直接使用できます。
+CyberStrike は [Agent Client Protocol](https://agentclientprotocol.com) または (ACP) をサポートしているため、互換性のあるエディターや IDE で直接使用できます。
 
 :::tip
 ACP をサポートするエディターとツールのリストについては、[ACP progress report](https://zed.dev/blog/acp-progress-report#available-now) を参照してください。
@@ -14,9 +14,9 @@ ACP は、コードエディターと AI コーディングエージェント間
 
 ## 設定
 
-ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実行するようにエディタを設定します。
+ACP 経由で CyberStrike を使用するには、`cyberstrike acp` コマンドを実行するようにエディタを設定します。
 
-このコマンドは、stdio 経由で JSON-RPC 経由でエディターと通信する ACP 互換のサブプロセスとして OpenCode を開始します。
+このコマンドは、stdio 経由で JSON-RPC 経由でエディターと通信する ACP 互換のサブプロセスとして CyberStrike を開始します。
 
 以下は、ACP をサポートする一般的なエディタの例です。
 
@@ -29,8 +29,8 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "CyberStrike": {
+      "command": "cyberstrike",
       "args": ["acp"]
     }
   }
@@ -50,9 +50,9 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "CyberStrike",
               "command": {
-                "command": "opencode",
+                "command": "cyberstrike",
                 "args": ["acp"]
               }
             }
@@ -73,15 +73,15 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "CyberStrike": {
+      "command": "/absolute/path/bin/cyberstrike",
       "args": ["acp"]
     }
   }
 }
 ```
 
-これを開くには、AI Chat エージェントセレクターで新しい「OpenCode」エージェントを使用します。
+これを開くには、AI Chat エージェントセレクターで新しい「CyberStrike」エージェントを使用します。
 
 ---
 
@@ -92,8 +92,8 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" }
     }
   }
@@ -105,11 +105,11 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        CYBERSTRIKE_API_KEY = os.getenv("CYBERSTRIKE_API_KEY")
       }
     }
   }
@@ -120,14 +120,14 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 
 ### CodeCompanion.nvim
 
-[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) で OpenCode を ACP エージェントとして使用するには、以下を Neovim 構成に追加します。
+[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) で CyberStrike を ACP エージェントとして使用するには、以下を Neovim 構成に追加します。
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "cyberstrike",
         model = "claude-sonnet-4",
       },
     },
@@ -135,13 +135,13 @@ require("codecompanion").setup({
 })
 ```
 
-この構成は、OpenCode をチャットの ACP エージェントとして使用するように CodeCompanion をセットアップします。
+この構成は、CyberStrike をチャットの ACP エージェントとして使用するように CodeCompanion をセットアップします。
 
-環境変数 (`OPENCODE_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
+環境変数 (`CYBERSTRIKE_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
 
 ## サポート
 
-OpenCode は、ACP 経由でもターミナル内で動作するのと同じように動作します。すべての機能がサポートされています。
+CyberStrike は、ACP 経由でもターミナル内で動作するのと同じように動作します。すべての機能がサポートされています。
 
 :::note
 `/undo` や `/redo` などの一部の組み込みスラッシュコマンドは現在サポートされていません。
@@ -149,7 +149,7 @@ OpenCode は、ACP 経由でもターミナル内で動作するのと同じよ�
 
 - 組み込みツール (ファイル操作、ターミナルコマンドなど)
 - カスタムツールとスラッシュコマンド
-- OpenCode 設定で構成された MCP サーバー
+- CyberStrike 設定で構成された MCP サーバー
 - `AGENTS.md` のプロジェクト固有のルール
 - カスタムフォーマッタとリンター
 - エージェントと権限システム

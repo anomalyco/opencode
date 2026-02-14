@@ -4,8 +4,8 @@ import {
   type Project,
   type ProviderAuthResponse,
   type ProviderListResponse,
-  createOpencodeClient,
-} from "@opencode-ai/sdk/v2/client"
+  createCyberstrikeClient,
+} from "@cyberstrike-io/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useGlobalSDK } from "./global-sdk"
 import type { InitError } from "../pages/error"
@@ -21,8 +21,8 @@ import {
   Switch,
   Match,
 } from "solid-js"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { showToast } from "@cyberstrike-io/ui/toast"
+import { getFilename } from "@cyberstrike-io/util/path"
 import { usePlatform } from "./platform"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
@@ -58,7 +58,7 @@ function setDevStats(value: {
   evictions: number
   loadSessionsFullFetchFallback: number
 }) {
-  ;(globalThis as { __OPENCODE_GLOBAL_SYNC_STATS?: typeof value }).__OPENCODE_GLOBAL_SYNC_STATS = value
+  ;(globalThis as { __CYBERSTRIKE_GLOBAL_SYNC_STATS?: typeof value }).__CYBERSTRIKE_GLOBAL_SYNC_STATS = value
 }
 
 function createGlobalSync() {
@@ -73,7 +73,7 @@ function createGlobalSync() {
     loadSessionsFallback: 0,
   }
 
-  const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
+  const sdkCache = new Map<string, ReturnType<typeof createCyberstrikeClient>>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -132,7 +132,7 @@ function createGlobalSync() {
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
-    const sdk = createOpencodeClient({
+    const sdk = createCyberstrikeClient({
       baseUrl: globalSDK.url,
       fetch: platform.fetch,
       directory,

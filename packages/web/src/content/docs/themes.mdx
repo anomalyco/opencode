@@ -3,9 +3,9 @@ title: Themes
 description: Select a built-in theme or define your own.
 ---
 
-With OpenCode you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
+With CyberStrike you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
 
-By default, OpenCode uses our own `opencode` theme.
+By default, CyberStrike uses our own `cyberstrike` theme.
 
 ---
 
@@ -23,7 +23,7 @@ Without truecolor support, themes may appear with reduced color accuracy or fall
 
 ## Built-in themes
 
-OpenCode comes with several built-in themes.
+CyberStrike comes with several built-in themes.
 
 | Name                   | Description                                                                  |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ The `system` theme is designed to automatically adapt to your terminal's color s
 
 The system theme is for users who:
 
-- Want OpenCode to match their terminal's appearance
+- Want CyberStrike to match their terminal's appearance
 - Use custom terminal color schemes
 - Prefer a consistent look across all terminal applications
 
@@ -63,9 +63,9 @@ The system theme is for users who:
 
 You can select a theme by bringing up the theme select with the `/theme` command. Or you can specify it in your [config](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ You can select a theme by bringing up the theme select with the `/theme` command
 
 ## Custom themes
 
-OpenCode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
+CyberStrike supports a flexible JSON-based theme system that allows users to create and customize themes easily.
 
 ---
 
@@ -83,9 +83,9 @@ OpenCode supports a flexible JSON-based theme system that allows users to create
 Themes are loaded from multiple directories in the following order where later directories override earlier ones:
 
 1. **Built-in themes** - These are embedded in the binary
-2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+2. **User config directory** - Defined in `~/.config/cyberstrike/themes/*.json` or `$XDG_CONFIG_HOME/cyberstrike/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.cyberstrike/themes/*.json`
+4. **Current working directory** - Defined in `./.cyberstrike/themes/*.json`
 
 If multiple directories contain a theme with the same name, the theme from the directory with higher priority will be used.
 
@@ -98,15 +98,15 @@ To create a custom theme, create a JSON file in one of the theme directories.
 For user-wide themes:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 And for project-specific themes.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ Here's an example of a custom theme:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

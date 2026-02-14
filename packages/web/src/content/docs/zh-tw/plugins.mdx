@@ -1,9 +1,9 @@
 ---
 title: 外掛
-description: 編寫您自己的外掛來擴展 opencode。
+description: 編寫您自己的外掛來擴展 cyberstrike。
 ---
 
-外掛允許您透過掛鉤各種事件和自定義行為來擴展 opencode。您可以建立外掛來新增新功能、與外部服務整合或修改 opencode 的預設行為。
+外掛允許您透過掛鉤各種事件和自定義行為來擴展 cyberstrike。您可以建立外掛來新增新功能、與外部服務整合或修改 cyberstrike 的預設行為。
 
 例如，查看社群建立的[外掛](/docs/ecosystem#plugins)。
 
@@ -19,8 +19,8 @@ description: 編寫您自己的外掛來擴展 opencode。
 
 將 JavaScript 或 TypeScript 檔案放置在外掛目錄中。
 
-- `.opencode/plugins/` - 專案級外掛
-- `~/.config/opencode/plugins/` - 全域外掛
+- `.cyberstrike/plugins/` - 專案級外掛
+- `~/.config/cyberstrike/plugins/` - 全域外掛
 
 這些目錄中的檔案會在啟動時自動載入。
 
@@ -30,10 +30,10 @@ description: 編寫您自己的外掛來擴展 opencode。
 
 在設定檔中指定 npm 套件。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "cyberstrike-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ description: 編寫您自己的外掛來擴展 opencode。
 
 ### 外掛是如何安裝的
 
-**npm 外掛** 在啟動時使用 Bun 自動安裝。套件及其相依套件快取在 `~/.cache/opencode/node_modules/` 中。
+**npm 外掛** 在啟動時使用 Bun 自動安裝。套件及其相依套件快取在 `~/.cache/cyberstrike/node_modules/` 中。
 
 **本地外掛**直接從外掛目錄載入。要使用外部套件，您必須在設定目錄中建立 `package.json`（請參閱[相依性](#dependencies)），或將外掛發佈到 npm 和[將其添加到您的設定中](/docs/config#plugins)。
 
@@ -55,10 +55,10 @@ description: 編寫您自己的外掛來擴展 opencode。
 
 外掛從所有來源載入，所有掛鉤按順序執行。載入順序為：
 
-1. 全域設定 (`~/.config/opencode/opencode.json`)
-2. 專案設定（`opencode.json`）
-3. 全域外掛目錄 (`~/.config/opencode/plugins/`)
-4. 專案外掛目錄(`.opencode/plugins/`)
+1. 全域設定 (`~/.config/cyberstrike/cyberstrike.json`)
+2. 專案設定（`cyberstrike.json`）
+3. 全域外掛目錄 (`~/.config/cyberstrike/plugins/`)
+4. 專案外掛目錄(`.cyberstrike/plugins/`)
 
 具有相同名稱和版本的重複 npm 套件將被載入一次。但是，本地外掛和名稱相似的 npm 外掛都是分開載入的。
 
@@ -75,7 +75,7 @@ description: 編寫您自己的外掛來擴展 opencode。
 
 本地外掛和自定義工具可以使用外部 npm 套件。將 `package.json` 添加到您的設定目錄，其中包含您需要的相依套件。
 
-```json title=".opencode/package.json"
+```json title=".cyberstrike/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ description: 編寫您自己的外掛來擴展 opencode。
 }
 ```
 
-opencode 在啟動時執行 `bun install` 來安裝這些。然後您的外掛和工具就可以匯入它們。
+cyberstrike 在啟動時執行 `bun install` 來安裝這些。然後您的外掛和工具就可以匯入它們。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### 基本結構
 
-```js title=".opencode/plugins/example.js"
+```js title=".cyberstrike/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`：當前專案資訊。
 - `directory`：當前工作目錄。
 - `worktree`：git 工作樹路徑。
-- `client`：用於與 AI 互動的 opencode SDK 客戶端。
+- `client`：用於與 AI 互動的 cyberstrike SDK 客戶端。
 - `$`：Bun 的 [shell API](https://bun.com/docs/runtime/shell) 用於執行指令。
 
 ---
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 對於 TypeScript 外掛，您可以從外掛套件中匯入類型：
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## 範例
 
-以下是一些可用於擴展 opencode 的外掛範例。
+以下是一些可用於擴展 cyberstrike 的外掛範例。
 
 ---
 
@@ -219,13 +219,13 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 當某些事件發生時發送通知：
 
-```js title=".opencode/plugins/notification.js"
+```js title=".cyberstrike/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "cyberstrike"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 我們使用 `osascript` 在 macOS 上執行 AppleScript。這裡我們用它來發送通知。
 
 :::note
-如果您使用 opencode 桌面應用程式，它可以在回應準備就緒或工作階段出錯時自動發送系統通知。
+如果您使用 cyberstrike 桌面應用程式，它可以在回應準備就緒或工作階段出錯時自動發送系統通知。
 :::
 
 ---
 
 ### .env 保護
 
-阻止 opencode 讀取 `.env` 檔案：
+阻止 cyberstrike 讀取 `.env` 檔案：
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".cyberstrike/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 將環境變數注入所有 shell 執行（AI 工具和使用者終端機）：
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".cyberstrike/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### 自定義工具
 
-外掛還可以向 opencode 添加自定義工具：
+外掛還可以向 cyberstrike 添加自定義工具：
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@cyberstrike-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` 輔助程式建立一個 opencode 可以呼叫的自定義工具。它採用 Zod 模式函式並返回一個工具定義：
+`tool` 輔助程式建立一個 cyberstrike 可以呼叫的自定義工具。它採用 Zod 模式函式並返回一個工具定義：
 
 - `description`：該工具的作用
 - `args`：工具參數的 Zod 模式
 - `execute`：呼叫工具時執行的函式
 
-您的自定義工具將可與內建工具一起用於 opencode。
+您的自定義工具將可與內建工具一起用於 cyberstrike。
 
 ---
 
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 使用 `client.app.log()` 而不是 `console.log` 進行結構化記錄：
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-等級：`debug`、`info`、`warn`、`error`。詳情請參閱 [SDK 文件](https://opencode.ai/docs/sdk)。
+等級：`debug`、`info`、`warn`、`error`。詳情請參閱 [SDK 文件](https://cyberstrike.io/docs/sdk)。
 
 ---
 
@@ -335,8 +335,8 @@ export const MyPlugin = async ({ client }) => {
 
 自定義壓縮工作階段時包含的上下文：
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 您還可以透過設定 `output.prompt` 來完全替換壓縮提示：
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Brug af OpenCode-terminalbrugergrænsefladen.
+description: Brug af CyberStrike-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
+CyberStrike giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-At køre OpenCode starter TUI for den nuværende mappe.
+At køre CyberStrike starter TUI for den nuværende mappe.
 
 ```bash
-opencode
+cyberstrike
 ```
 
 Eller du kan starte den for en bestemt arbejdsmappe.
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 Når du er i TUI, kan du spørge den med en besked.
@@ -57,7 +57,7 @@ Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
+Når du bruger CyberStrike TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
+Tilføj en udbyder til CyberStrike. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Skift visning af værktøjsudførelsesdetaljer.
 
 ### exit
 
-Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+Afslut CyberStrike. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ Nogle editorer kræver kommandolinjeargumenter for at køre i blokeringstilstand
 
 ## Konfigurer
 
-Du kan tilpasse TUI-adfærden gennem OpenCode-konfigurationsfilen.
+Du kan tilpasse TUI-adfærden gennem CyberStrike-konfigurationsfilen.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

@@ -1,19 +1,19 @@
 ---
 title: 서버
-description: HTTP를 통해 OpenCode 서버와 상호 작용합니다.
+description: HTTP를 통해 CyberStrike 서버와 상호 작용합니다.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 명령은 opencode 클라이언트가 사용할 수 있는 OpenAPI 엔드포인트를 노출하는 headless HTTP 서버를 실행합니다.
+`cyberstrike serve` 명령은 cyberstrike 클라이언트가 사용할 수 있는 OpenAPI 엔드포인트를 노출하는 headless HTTP 서버를 실행합니다.
 
 ---
 
 ### 사용법
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### 옵션
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | 수신 대기할 포트                      | `4096`           |
 | `--hostname`    | 수신 대기할 호스트명                  | `127.0.0.1`      |
 | `--mdns`        | mDNS 탐지 활성화                      | `false`          |
-| `--mdns-domain` | mDNS 서비스의 사용자 지정 도메인 이름 | `opencode.local` |
+| `--mdns-domain` | mDNS 서비스의 사용자 지정 도메인 이름 | `cyberstrike.local` |
 | `--cors`        | 허용할 추가 브라우저 origin           | `[]`             |
 
 `--cors`는 다수 시간을 통과될 수 있습니다:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 인증
 
-`OPENCODE_SERVER_PASSWORD`를 설정하여 서버를 HTTP Basic auth로 보호합니다. `opencode` 또는 `OPENCODE_SERVER_USERNAME`를 오버라이드로 설정하는 사용자의 기본값. 이것은 `opencode serve`와 `opencode web` 둘 다에 적용합니다.
+`CYBERSTRIKE_SERVER_PASSWORD`를 설정하여 서버를 HTTP Basic auth로 보호합니다. `cyberstrike` 또는 `CYBERSTRIKE_SERVER_USERNAME`를 오버라이드로 설정하는 사용자의 기본값. 이것은 `cyberstrike serve`와 `cyberstrike web` 둘 다에 적용합니다.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### 작동 방식
 
-`opencode`를 실행하면 TUI와 서버를 시작합니다. TUI는 어디에 있습니까?
+`cyberstrike`를 실행하면 TUI와 서버를 시작합니다. TUI는 어디에 있습니까?
 서버와 대화하는 클라이언트. 서버는 OpenAPI 3.1 spec을 노출
 끝점. 이 엔드포인트는 [SDK](/docs/sdk)을 생성하는 데도 사용됩니다.
 
 :::tip
-opencode 서버를 사용하여 opencode programmatically와 상호 작용합니다.
+cyberstrike 서버를 사용하여 cyberstrike programmatically와 상호 작용합니다.
 :::
 
-이 아키텍처는 opencode 지원 여러 클라이언트를 허용하고 opencode programmatically와 상호 작용 할 수 있습니다.
+이 아키텍처는 cyberstrike 지원 여러 클라이언트를 허용하고 cyberstrike programmatically와 상호 작용 할 수 있습니다.
 
-독립 서버를 시작하려면 `opencode serve`를 실행할 수 있습니다. 당신이 있는 경우에
-opencode TUI 실행, `opencode serve` 새로운 서버를 시작합니다.
+독립 서버를 시작하려면 `cyberstrike serve`를 실행할 수 있습니다. 당신이 있는 경우에
+cyberstrike TUI 실행, `cyberstrike serve` 새로운 서버를 시작합니다.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI 실행, `opencode serve` 새로운 서버를 시작합니다.
 
 TUI를 시작하면 무작위로 포트와 호스트 이름을 할당합니다. 대신 `--hostname`와 `--port` [flags](/docs/cli)에서 전달할 수 있습니다. 그런 다음 서버에 연결하십시오.
 
-[`/tui`](#tui) 엔드포인트는 서버를 통해 TUI를 구동하는 데 사용될 수 있습니다. 예를 들어 미리 작성하거나 프롬프트를 실행할 수 있습니다. 이 설정은 opencode [IDE](/docs/ide) 플러그인에 의해 사용됩니다.
+[`/tui`](#tui) 엔드포인트는 서버를 통해 TUI를 구동하는 데 사용될 수 있습니다. 예를 들어 미리 작성하거나 프롬프트를 실행할 수 있습니다. 이 설정은 cyberstrike [IDE](/docs/ide) 플러그인에 의해 사용됩니다.
 
 ---
 
@@ -83,7 +83,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-opencode 서버는 다음과 같은 API를 노출합니다.
+cyberstrike 서버는 다음과 같은 API를 노출합니다.
 
 ---
 

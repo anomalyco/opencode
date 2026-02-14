@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Użyj opencode w problemach z GitHubem i zastosujch ściągnięcia.
+description: Użyj cyberstrike w problemach z GitHubem i zastosujch ściągnięcia.
 ---
 
-opencode integruje się z przepływem pracy w GitHub. Wspomnij o `/opencode` lub `/oc` w swoim komentarzu, a opencode wykonaj zadania w ramach modułu uruchamiającego GitHub Actions.
+cyberstrike integruje się z przepływem pracy w GitHub. Wspomnij o `/cyberstrike` lub `/oc` w swoim komentarzu, a cyberstrike wykonaj zadania w ramach modułu uruchamiającego GitHub Actions.
 
 ---
 
 ## Cechy
 
-- **Problem związany z segregacją**: Poproś opencode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
-- **Napraw i zaimplementuj**: Poproś opencode o naprawienie problemu lub zaimplementowanie funkcji. Będzie dostępny w następnym oddziale i wysyłać PR ze stosowaniem dodatku.
-- **Bezpieczny**: opencode działa w modułach sprzętowych GitHuba.
+- **Problem związany z segregacją**: Poproś cyberstrike o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
+- **Napraw i zaimplementuj**: Poproś cyberstrike o naprawienie problemu lub zaimplementowanie funkcji. Będzie dostępny w następnym oddziale i wysyłać PR ze stosowaniem dodatku.
+- **Bezpieczny**: cyberstrike działa w modułach sprzętowych GitHuba.
 
 ---
 
@@ -20,7 +20,7 @@ opencode integruje się z przepływem pracy w GitHub. Wspomnij o `/opencode` lub
 Uruchomione dalsze postępowanie w przypadku wystąpienia w repozytorium GitHub:
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 Aby przeprowadzić Cię przez proces instalacji aplikacji GitHub, utwórz działanie i skonfiguruj wpisy tajnych.
@@ -33,14 +33,14 @@ Można też uszkodzić to rozwiązanie.
 
 1. **Zainstaluj aplikację GitHub**
 
-   Wejdź na [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). wystąpienie się, że jest natychmiastowe w repozytorium usuwam.
+   Wejdź na [**github.com/apps/cyberstrike-agent**](https://github.com/apps/cyberstrike-agent). wystąpienie się, że jest natychmiastowe w repozytorium usuwam.
 
 2. **Dodaj przepływ pracy**
 
-   Dodaj zdalny plik pracy do `.github/workflows/opencode.yml` w swoim repozytorium. wystąpił, że ustawiłeś sędziego `model` i wymagany klucz API w `env`.
+   Dodaj zdalny plik pracy do `.github/workflows/cyberstrike.yml` w swoim repozytorium. wystąpił, że ustawiłeś sędziego `model` i wymagany klucz API w `env`.
 
-   ```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+   ```yml title=".github/workflows/cyberstrike.yml" {24,26}
+   name: cyberstrike
 
    on:
      issue_comment:
@@ -49,10 +49,10 @@ Można też uszkodzić to rozwiązanie.
        types: [created]
 
    jobs:
-     opencode:
+     cyberstrike:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/cyberstrike')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -63,8 +63,8 @@ Można też uszkodzić to rozwiązanie.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+          - name: Run CyberStrike
+           uses: CyberStrikeus/cyberstrike/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -81,13 +81,13 @@ Można też uszkodzić to rozwiązanie.
 
 ## Konfiguracja
 
-- `model`: Model używany z opencode. Przyjmuje format `provider/model`. To **wymagane**.
+- `model`: Model używany z cyberstrike. Przyjmuje format `provider/model`. To **wymagane**.
 - `agent`: Agent, którego należy używać. Musi być odległym agentem. Wraca do `default_agent` z konfiguracją lub `"build"`, jeśli nie został znaleziony.
-- `share`: Czyć funkcję sesji opencode. Domyślnie **true** dla repozytoriów publicznych.
-- `prompt`: Opcjonalny niestandardowy monit o zastąpienie przestrzegania zachowania. Wykorzystanie tego, aby dostosować sposób przetwarzania przez opencode.
-- `token`: opcjonalny token dostępu GitHub podstawowe operacje, takie jak tworzenie komentarzy, zatwierdzanie zmian i otwieranie zastosowania ściągnięcia. Domyślnie opencode używa tokena dostępu do instalacji z aplikacji opencode GitHub, więc zatwierdzenia, komentarze i zasady ściągnięcia widoczne jako źródło z aplikacji.
+- `share`: Czyć funkcję sesji cyberstrike. Domyślnie **true** dla repozytoriów publicznych.
+- `prompt`: Opcjonalny niestandardowy monit o zastąpienie przestrzegania zachowania. Wykorzystanie tego, aby dostosować sposób przetwarzania przez cyberstrike.
+- `token`: opcjonalny token dostępu GitHub podstawowe operacje, takie jak tworzenie komentarzy, zatwierdzanie zmian i otwieranie zastosowania ściągnięcia. Domyślnie cyberstrike używa tokena dostępu do instalacji z aplikacji cyberstrike GitHub, więc zatwierdzenia, komentarze i zasady ściągnięcia widoczne jako źródło z aplikacji.
 
-  Alternatywnie możesz użyć [wbudowanego `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) modułu uruchamiającego GitHub Action bez instalacji aplikacji opencode GitHub. Pamiętaj tylko o przyznaniu wymaganych mocy w przepływie pracy:
+  Alternatywnie możesz użyć [wbudowanego `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) modułu uruchamiającego GitHub Action bez instalacji aplikacji cyberstrike GitHub. Pamiętaj tylko o przyznaniu wymaganych mocy w przepływie pracy:
 
   ```yaml
   permissions:
@@ -103,30 +103,30 @@ Można też uszkodzić to rozwiązanie.
 
 ## Obsługiwane wydarzenia
 
-opencode może zostać wywołany przez zdarzenie GitHub:
+cyberstrike może zostać wywołany przez zdarzenie GitHub:
 
 | Typ zdarzenia                 | Wywołane przez                                   | Szczegóły                                                                                                                                             |
 | ----------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Skomentuj problem lub PR                         | Wspomnij o `/opencode` lub `/oc` w swoim komentarzu. opencode odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną.  |
-| `pull_request_review_comment` | Komentarz określonym kodem w PR                  | Wspomnij o `/opencode` lub `/oc` podczas przeglądania kodu. opencode źródło pochodzenia, numery linii i kontekst różnicowy.                           |
-| `issues`                      | Wydanie otwarte lub edytowane                    | Automatycznie wyzwalaj opencode po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                                                  |
-| `pull_request`                | PR otwarty lub zaktualizowany                    | Automatycznie wyzwalaj opencode, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.         |
-| `schedule`                    | Harmonogram oparty na Cron                       | Uruchom opencode zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją). |
-| `workflow_dispatch`           | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom opencode na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                                    |
+| `issue_comment`               | Skomentuj problem lub PR                         | Wspomnij o `/cyberstrike` lub `/oc` w swoim komentarzu. cyberstrike odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną.  |
+| `pull_request_review_comment` | Komentarz określonym kodem w PR                  | Wspomnij o `/cyberstrike` lub `/oc` podczas przeglądania kodu. cyberstrike źródło pochodzenia, numery linii i kontekst różnicowy.                           |
+| `issues`                      | Wydanie otwarte lub edytowane                    | Automatycznie wyzwalaj cyberstrike po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                                                  |
+| `pull_request`                | PR otwarty lub zaktualizowany                    | Automatycznie wyzwalaj cyberstrike, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.         |
+| `schedule`                    | Harmonogram oparty na Cron                       | Uruchom cyberstrike zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją). |
+| `workflow_dispatch`           | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom cyberstrike na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                                    |
 
 ### Przykład harmonogramu
 
-Uruchamiaj opencode zgodnie z harmonogramem, aby wykonać zautomatyzowane zadania:
+Uruchamiaj cyberstrike zgodnie z harmonogramem, aby wykonać zautomatyzowane zadania:
 
-```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+```yaml title=".github/workflows/cyberstrike-scheduled.yml"
+name: Scheduled CyberStrike Task
 
 on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
 
 jobs:
-  opencode:
+  cyberstrike:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -139,8 +139,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+      - name: Run CyberStrike
+        uses: CyberStrikeus/cyberstrike/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-W przypadku wystąpienia danych wyjściowych `prompt` są **wymagane**, które nie są dostarczane, z których można wyodrębnić instrukcje. Zaplanowane przepływomierze pracy bez kontekstu użytkownika, który został uruchomiony, więc przepływ pracy musi `contents: write` i `pull-requests: write`, wystąpisz, że opencode utworzył główne lub PR.
+W przypadku wystąpienia danych wyjściowych `prompt` są **wymagane**, które nie są dostarczane, z których można wyodrębnić instrukcje. Zaplanowane przepływomierze pracy bez kontekstu użytkownika, który został uruchomiony, więc przepływ pracy musi `contents: write` i `pull-requests: write`, wystąpisz, że cyberstrike utworzył główne lub PR.
 
 ---
 
@@ -158,8 +158,8 @@ W przypadku wystąpienia danych wyjściowych `prompt` są **wymagane**, które n
 
 Automatycznie przeglądaj żądania ściągnięcia po ich otwarciu lub aktualizacji:
 
-```yaml title=".github/workflows/opencode-review.yml"
-name: opencode-review
+```yaml title=".github/workflows/cyberstrike-review.yml"
+name: cyberstrike-review
 
 on:
   pull_request:
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: CyberStrikeus/cyberstrike/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-W przypadku zdarzenia `pull_request`, jeśli nie podano `prompt`, opencode użytkownika przeglądającego ściągnięcie.
+W przypadku zdarzenia `pull_request`, jeśli nie podano `prompt`, cyberstrike użytkownika przeglądającego ściągnięcie.
 
 ---
 
@@ -199,7 +199,7 @@ W przypadku zdarzenia `pull_request`, jeśli nie podano `prompt`, opencode użyt
 
 Automatycznie segreguj nowe problemy. Dziesięć przykładów filtruje do kont starszych niż 30 dni w celu ograniczenia spamu:
 
-```yaml title=".github/workflows/opencode-triage.yml"
+```yaml title=".github/workflows/cyberstrike-triage.yml"
 name: Issue Triage
 
 on:
@@ -233,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: CyberStrikeus/cyberstrike/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,10 +252,10 @@ W przypadku zdarzenia `issues` wprowadzenie `prompt` jest **wymagane**, poniewa�
 
 ## Niestandardowe monity
 
-Zastąp domyślne monit, aby zastosować zachowanie opencode do twojego własnego pracy.
+Zastąp domyślne monit, aby zastosować zachowanie cyberstrike do twojego własnego pracy.
 
-```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+```yaml title=".github/workflows/cyberstrike.yml"
+- uses: CyberStrikeus/cyberstrike/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |
@@ -271,27 +271,27 @@ Jest to przepis wykonawczy, który podlega przepisom kodowania lub zakresów tem
 
 ## Przykłady
 
-Oto kilka możliwości wykorzystania opencode w GitHubie.
+Oto kilka możliwości wykorzystania cyberstrike w GitHubie.
 
 - **Wyjaśnij problem**
 
   Dodaj dziesięć komentarzy w numerze GitHub.
 
   ```
-  /opencode explain this issue
+  /cyberstrike explain this issue
   ```
 
-  opencode przeczytaj całość, zawierając dodatek z komentarzami i odpowiedzią z jasnym wyjaśnieniem.
+  cyberstrike przeczytaj całość, zawierając dodatek z komentarzami i odpowiedzią z jasnym wyjaśnieniem.
 
 - **Napraw problem**
 
   W numerze GitHub powiedz:
 
   ```
-  /opencode fix this
+  /cyberstrike fix this
   ```
 
-  A opencode utworzy nową podstawę, wdroży zmiany i zastąpi PR ze zmiany.
+  A cyberstrike utworzy nową podstawę, wdroży zmiany i zastąpi PR ze zmiany.
 
 - **Przegląd zmiany PR i wprowadzenie zmiany**
 
@@ -301,18 +301,18 @@ Oto kilka możliwości wykorzystania opencode w GitHubie.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  opencode zaimplementuje uruchomioną zmianę i zatwierdzi ją do tego samego PR.
+  cyberstrike zaimplementuje uruchomioną zmianę i zatwierdzi ją do tego samego PR.
 
 - **Przejrzyj konkretne linie kodu**
 
-  Zostaw komentarz bezpośrednio w wierszu kodu w dodatku „Pliki” PR. opencode automatyczne wykrywanie pliku, numery linii i kontekst różnicowy, aby sprawdzić odpowiedzi.
+  Zostaw komentarz bezpośrednio w wierszu kodu w dodatku „Pliki” PR. cyberstrike automatyczne wykrywanie pliku, numery linii i kontekst różnicowy, aby sprawdzić odpowiedzi.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  Komentując określone linie, opencode otrzymuje:
+  Komentując określone linie, cyberstrike otrzymuje:
   - Dokładny plik, który jest sprawdzany
   - Konkretne linie kodu
   - Otaczający kontekst różnicowy

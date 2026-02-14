@@ -1,13 +1,13 @@
 ---
 title: مجموعة تطوير البرمجيات (SDK)
-description: عميل JavaScript آمن الأنواع لخادم opencode.
+description: عميل JavaScript آمن الأنواع لخادم cyberstrike.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-توفر SDK الخاصة بـ opencode لـ JS/TS عميلا آمنا للأنواع للتفاعل مع الخادم.
-استخدمها لبناء التكاملات والتحكم في opencode برمجيا.
+توفر SDK الخاصة بـ cyberstrike لـ JS/TS عميلا آمنا للأنواع للتفاعل مع الخادم.
+استخدمها لبناء التكاملات والتحكم في cyberstrike برمجيا.
 
 [اعرف المزيد](/docs/server) حول كيفية عمل الخادم. للاطلاع على أمثلة، تفقد [المشاريع](/docs/ecosystem#projects) التي أنشأها المجتمع.
 
@@ -18,19 +18,19 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ثبّت SDK من npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @cyberstrike-ai/sdk
 ```
 
 ---
 
 ## إنشاء عميل
 
-أنشئ مثيلا من opencode:
+أنشئ مثيلا من cyberstrike:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createCyberstrike()
 ```
 
 هذا يشغّل خادما وعميلا معا.
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## الإعدادات
 
-يمكنك تمرير كائن إعدادات لتخصيص السلوك. سيستمر المثيل في التقاط `opencode.json` لديك، لكن يمكنك تجاوز الإعدادات أو إضافة إعدادات مباشرة:
+يمكنك تمرير كائن إعدادات لتخصيص السلوك. سيستمر المثيل في التقاط `cyberstrike.json` لديك، لكن يمكنك تجاوز الإعدادات أو إضافة إعدادات مباشرة:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const opencode = await createOpencode({
+const cyberstrike = await createCyberstrike({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${cyberstrike.server.url}`)
 
-opencode.server.close()
+cyberstrike.server.close()
 ```
 
 ## العميل فقط
 
-إذا كان لديك مثيل opencode يعمل بالفعل، يمكنك إنشاء مثيل عميل للاتصال به:
+إذا كان لديك مثيل cyberstrike يعمل بالفعل، يمكنك إنشاء مثيل عميل للاتصال به:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createCyberstrikeClient } from "@cyberstrike-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createCyberstrikeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 تتضمن SDK تعريفات TypeScript لجميع أنواع API. استوردها مباشرة:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@cyberstrike-ai/sdk"
 ```
 
 جميع الأنواع مولّدة من مواصفات OpenAPI الخاصة بالخادم ومتاحة في <a href={typesUrl}>ملف الأنواع</a>.
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*cyberstrike" },
 })
 
 const files = await client.find.files({

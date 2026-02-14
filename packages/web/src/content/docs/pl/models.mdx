@@ -3,13 +3,13 @@ title: Modele
 description: Konfigurowanie dostawcy i modelu LLM.
 ---
 
-opencode używa [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) do obsługi **ponad 75 dostawców LLM** i obsługi uruchamiania modeli pierwszych.
+cyberstrike używa [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) do obsługi **ponad 75 dostawców LLM** i obsługi uruchamiania modeli pierwszych.
 
 ---
 
 ## Dostawcy
 
-Dostępna usługa dostawcy jest dostępna. Jeśli otrzymasz poświadczenie dostawcy za pomocą polecenia `/connect`, będzie on dostępny po uruchomieniu opencode.
+Dostępna usługa dostawcy jest dostępna. Jeśli otrzymasz poświadczenie dostawcy za pomocą polecenia `/connect`, będzie on dostępny po uruchomieniu cyberstrike.
 
 Dowiedz się więcej o [dostawcach](/docs/providers).
 
@@ -35,7 +35,7 @@ Rozważ skorzystanie z jednego z rekomendowanych przez nas modeli.
 
 Jednak tylko kilka z nich jest dobrych przy generowaniu kodu, jak i wywołaniu narzędzia.
 
-Oto kilka modeli, które dobrze współpracują z opencode, w kolejności. (Nie jest to lista wyczerpująca i nie jest konieczna aktualna):
+Oto kilka modeli, które dobrze współpracują z cyberstrike, w kolejności. (Nie jest to lista wyczerpująca i nie jest konieczna aktualna):
 
 - GPT 5.2
 - Kodeks GPT 5.1
@@ -49,16 +49,16 @@ Oto kilka modeli, które dobrze współpracują z opencode, w kolejności. (Nie 
 ## Ustaw wartość domyślną
 
 Aby zainstalować jeden z nich jako model domyślny, możesz zainstalować klucz `model` w swoim
-opencode konfiguracja
+cyberstrike konfiguracja
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-Tutaj pełny identyfikator do `provider_id/model_id`. Na przykład, użycie [OpenCode Zen](/docs/zen), przestrzeganie `opencode/gpt-5.1-codex` dla Kodeksu GPT 5.1.
+Tutaj pełny identyfikator do `provider_id/model_id`. Na przykład, użycie [CyberStrike Zen](/docs/zen), przestrzeganie `cyberstrike/gpt-5.1-codex` dla Kodeksu GPT 5.1.
 
 Jeśli skonfigurowałeś [dostawcę zwykłegogo] (./providers#custom), `provider_id` jest kluczem z części `provider` twojej konfiguracji, a `model_id` jest kluczem z `provider.models`.
 
@@ -68,9 +68,9 @@ Jeśli skonfigurowałeś [dostawcę zwykłegogo] (./providers#custom), `provider
 
 Można globalnie skorzystać z opcji modelu poprzez plik config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="cyberstrike.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ Można także skorzystać z opcji dla dowolnych agentów, których używa się. 
 
 Można również zastosować alternatywne warianty, które wykluczają. Warianty konfiguracji ustawień konfiguracyjnych dla tego samego modelu bez tworzenia duplikatów wpisów:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="cyberstrike.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
-    "opencode": {
+    "cyberstrike": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ Można również zastosować alternatywne warianty, które wykluczają. Warianty
 
 ## Warianty
 
-Wiele modeli obsługuje wiele wariantów lub różnych wybranych. opencode jest dostarczany z podstawowymi wariantami wariantów dla dostawców.
+Wiele modeli obsługuje wiele wariantów lub różnych wybranych. cyberstrike jest dostarczany z podstawowymi wariantami wariantów dla dostawców.
 
 ### Wbudowane warianty
 
-opencode jest dostarczany z domyślnymi wariantami dla wielu dostawców:
+cyberstrike jest dostarczany z domyślnymi wariantami dla wielu dostawców:
 
 **Antropiczny**:
 
@@ -172,9 +172,9 @@ Lista ta nie jest kompletna. Wielu innych dostawców oferuje także opcję odchy
 
 Można uwzględnić warianty lub dodać własne:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="cyberstrike.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ Naciśnij klawisza `variant_cycle`, aby szybko przełączać się między warian
 
 ## Ładowanie modeli
 
-Po uruchomieniu opencode sprawdzanie modeli w następującej kolejności:
+Po uruchomieniu cyberstrike sprawdzanie modeli w następującej kolejności:
 
 1. Flaga wiersza autora `--model` lub `-m`. Format jest taki sam jak w pliku konfiguracyjnym: `provider_id/model_id`.
 
-2. Lista modeli w konstrukcji opencode.
+2. Lista modeli w konstrukcji cyberstrike.
 
-   ```json title="opencode.json"
+   ```json title="cyberstrike.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://cyberstrike.io/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

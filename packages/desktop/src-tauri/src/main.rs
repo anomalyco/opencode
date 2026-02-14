@@ -23,7 +23,7 @@ fn configure_display_backend() -> Option<String> {
         return None;
     }
 
-    let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
+    let prefer_wayland = cyberstrike_lib::linux_display::read_wayland().unwrap_or(false);
     let allow_wayland = prefer_wayland
         || matches!(
             env::var("OC_ALLOW_WAYLAND"),
@@ -90,5 +90,5 @@ fn main() {
         }
     }
 
-    opencode_lib::run()
+    cyberstrike_lib::run()
 }

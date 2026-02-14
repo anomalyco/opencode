@@ -7,7 +7,7 @@ import { fileURLToPath } from "url"
 const rootDir = fileURLToPath(new URL("../../..", import.meta.url))
 process.chdir(rootDir)
 
-const reg = process.env.REGISTRY ?? "ghcr.io/anomalyco"
+const reg = process.env.REGISTRY ?? "ghcr.io/CyberStrikeus"
 const tag = process.env.TAG ?? "24.04"
 const push = process.argv.includes("--push") || process.env.PUSH === "1"
 
@@ -22,11 +22,11 @@ const images = ["base", "bun-node", "rust", "tauri-linux", "publish"]
 const setup = async () => {
   if (!push) return
   const list = await $`docker buildx ls`.text()
-  if (list.includes("opencode")) {
-    await $`docker buildx use opencode`
+  if (list.includes("cyberstrike")) {
+    await $`docker buildx use cyberstrike`
     return
   }
-  await $`docker buildx create --name opencode --use`
+  await $`docker buildx create --name cyberstrike --use`
 }
 
 await setup()

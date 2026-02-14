@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: opencode terminal arayuzunu kullanin.
+description: cyberstrike terminal arayuzunu kullanin.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode, projelerinizde LLM ile calismak icin etkilesimli bir terminal arayuzu (TUI) sunar.
+cyberstrike, projelerinizde LLM ile calismak icin etkilesimli bir terminal arayuzu (TUI) sunar.
 
-opencode'u calistirdiginizda mevcut dizin icin TUI baslar.
+cyberstrike'u calistirdiginizda mevcut dizin icin TUI baslar.
 
 ```bash
-opencode
+cyberstrike
 ```
 
 Isterseniz belirli bir calisma dizini icin de baslatabilirsiniz.
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 TUI icinde bir mesaj yazarak istem gonderebilirsiniz.
@@ -57,7 +57,7 @@ Komut ciktiisi bir arac sonucu olarak konusmaya eklenir.
 
 ## Komutlar
 
-opencode TUI kullanirken `/` ve komut adini yazarak hizli eylemler calistirabilirsiniz. Ornek:
+cyberstrike TUI kullanirken `/` ve komut adini yazarak hizli eylemler calistirabilirsiniz. Ornek:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Mevcut slash komutlarinin tam listesi:
 
 ### connect
 
-opencode'a bir provider ekler. Mevcut provider'lari secip API anahtarlari eklemenizi saglar.
+cyberstrike'a bir provider ekler. Mevcut provider'lari secip API anahtarlari eklemenizi saglar.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Mesaj yazmak icin harici editor acar. `EDITOR` ortam degiskeninde ayarli editoru
 
 ### exit
 
-opencode'dan cikar. _Takma adlar_: `/quit`, `/q`
+cyberstrike'dan cikar. _Takma adlar_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ Bazi editorler bloklayici modda calismak icin komut satiri argumanlari ister. `-
 
 ## Yapilandirin
 
-TUI davranisini opencode config dosyanizdan ozellestirebilirsiniz.
+TUI davranisini cyberstrike config dosyanizdan ozellestirebilirsiniz.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

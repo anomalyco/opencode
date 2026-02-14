@@ -4,13 +4,13 @@ description: Modalita diverse per casi d'uso diversi.
 ---
 
 :::caution
-Le modalita ora si configurano tramite l'opzione `agent` nella configurazione di opencode. L'opzione
+Le modalita ora si configurano tramite l'opzione `agent` nella configurazione di cyberstrike. L'opzione
 `mode` e ora deprecata. [Scopri di piu](/docs/agents).
 :::
 
-Le modalita in opencode ti permettono di personalizzare comportamento, strumenti e prompt per casi d'uso diversi.
+Le modalita in cyberstrike ti permettono di personalizzare comportamento, strumenti e prompt per casi d'uso diversi.
 
-Include due modalita integrate: **build** e **plan**. Puoi personalizzarle oppure configurarne di tue tramite la configurazione di opencode.
+Include due modalita integrate: **build** e **plan**. Puoi personalizzarle oppure configurarne di tue tramite la configurazione di cyberstrike.
 
 Puoi passare da una modalita all'altra durante una sessione oppure configurarle nel file di configurazione.
 
@@ -18,7 +18,7 @@ Puoi passare da una modalita all'altra durante una sessione oppure configurarle 
 
 ## Integrate
 
-opencode include due modalita integrate.
+cyberstrike include due modalita integrate.
 
 ---
 
@@ -33,7 +33,7 @@ Build e la modalita **predefinita** con tutti gli strumenti abilitati. E la moda
 Una modalita limitata pensata per pianificazione e analisi. In modalita plan, i seguenti strumenti sono disabilitati per impostazione predefinita:
 
 - `write` - Non puo creare nuovi file
-- `edit` - Non puo modificare file esistenti, tranne i file in `.opencode/plans/*.md` per dettagliare il piano
+- `edit` - Non puo modificare file esistenti, tranne i file in `.cyberstrike/plans/*.md` per dettagliare il piano
 - `patch` - Non puo applicare patch
 - `bash` - Non puo eseguire comandi shell
 
@@ -55,11 +55,11 @@ Puoi personalizzare le modalita integrate o crearne di tue tramite configurazion
 
 ### Configurazione JSON
 
-Configura le modalita nel file di configurazione `opencode.json`:
+Configura le modalita nel file di configurazione `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -86,10 +86,10 @@ Configura le modalita nel file di configurazione `opencode.json`:
 
 Puoi anche definire modalita usando file markdown. Mettili in:
 
-- Globale: `~/.config/opencode/modes/`
-- Progetto: `.opencode/modes/`
+- Globale: `~/.config/cyberstrike/modes/`
+- Progetto: `.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -119,7 +119,7 @@ Vediamo queste opzioni di configurazione nel dettaglio.
 
 Usa la configurazione `model` per sovrascrivere il modello predefinito per questa modalita. E utile per usare modelli diversi ottimizzati per task diversi: per esempio, un modello piu veloce per la pianificazione e uno piu capace per l'implementazione.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -135,7 +135,7 @@ Usa la configurazione `model` per sovrascrivere il modello predefinito per quest
 
 Controlla casualita e creativita delle risposte dell'AI con la configurazione `temperature`. Valori piu bassi rendono le risposte piu focalizzate e deterministiche, mentre valori piu alti aumentano creativita e variabilita.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -154,7 +154,7 @@ I valori di temperatura di solito vanno da 0.0 a 1.0:
 - **0.3-0.5**: risposte bilanciate con un po' di creativita, buone per task di sviluppo generici
 - **0.6-1.0**: risposte piu creative e variabili, utili per brainstorming ed esplorazione
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -172,7 +172,7 @@ I valori di temperatura di solito vanno da 0.0 a 1.0:
 }
 ```
 
-Se non viene specificata alcuna temperatura, opencode usa i default specifici del modello (tipicamente 0 per la maggior parte dei modelli, 0.55 per i modelli Qwen).
+Se non viene specificata alcuna temperatura, cyberstrike usa i default specifici del modello (tipicamente 0 per la maggior parte dei modelli, 0.55 per i modelli Qwen).
 
 ---
 
@@ -180,7 +180,7 @@ Se non viene specificata alcuna temperatura, opencode usa i default specifici de
 
 Specifica un file di prompt di sistema personalizzato per questa modalita con la configurazione `prompt`. Il file dovrebbe contenere istruzioni specifiche per lo scopo della modalita.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -191,7 +191,7 @@ Specifica un file di prompt di sistema personalizzato per questa modalita con la
 ```
 
 Questo percorso e relativo a dove si trova il file di configurazione. Quindi funziona
-sia per la configurazione globale di opencode sia per quella specifica del progetto.
+sia per la configurazione globale di cyberstrike sia per quella specifica del progetto.
 
 ---
 
@@ -246,9 +246,9 @@ Puoi creare modalita personalizzate aggiungendole alla configurazione. Ecco esem
 
 ### Usando la configurazione JSON
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -267,9 +267,9 @@ Puoi creare modalita personalizzate aggiungendole alla configurazione. Ecco esem
 
 ### Usando file markdown
 
-Crea file di modalita in `.opencode/modes/` per modalita specifiche del progetto oppure in `~/.config/opencode/modes/` per modalita globali:
+Crea file di modalita in `.cyberstrike/modes/` per modalita specifiche del progetto oppure in `~/.config/cyberstrike/modes/` per modalita globali:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -293,7 +293,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

@@ -1,18 +1,18 @@
 ---
 title: Kurumsal
-description: opencode'u kuruluşunuzda güvenli bir şekilde kullanma.
+description: cyberstrike'u kuruluşunuzda güvenli bir şekilde kullanma.
 ---
 
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-opencode Enterprise, kodlarının ve verilerinin altyapılarından asla ayrılmamasını sağlamak isteyen kuruluşlar içindir. Bunu, SSO ve dahili AI ağ geçidinizle entegre olan merkezi bir yapılandırma kullanarak yapabilir.
+cyberstrike Enterprise, kodlarının ve verilerinin altyapılarından asla ayrılmamasını sağlamak isteyen kuruluşlar içindir. Bunu, SSO ve dahili AI ağ geçidinizle entegre olan merkezi bir yapılandırma kullanarak yapabilir.
 
 :::note
-opencode kodunuzu veya içerik verilerinizi saklamaz.
+cyberstrike kodunuzu veya içerik verilerinizi saklamaz.
 :::
 
-opencode Enterprise'ı kullanmaya başlamak için:
+cyberstrike Enterprise'ı kullanmaya başlamak için:
 
 1. Ekibinizle dahili olarak bir deneme yapın.
 2. Fiyatlandırma ve uygulama seçeneklerini görüşmek için **<a href={email}>bize ulaşın</a>**.
@@ -21,16 +21,16 @@ opencode Enterprise'ı kullanmaya başlamak için:
 
 ## Deneme
 
-opencode açık kaynaktır ve herhangi bir kodunuzu veya içerik verilerinizi saklamaz; böylece geliştiricileriniz [hemen başlayıp](/docs/) bir deneme gerçekleştirebilir.
+cyberstrike açık kaynaktır ve herhangi bir kodunuzu veya içerik verilerinizi saklamaz; böylece geliştiricileriniz [hemen başlayıp](/docs/) bir deneme gerçekleştirebilir.
 
 ---
 
 ### Veri işleme
 
-**opencode, kodunuzu veya içerik verilerinizi saklamaz.** Tüm işlemler yerel olarak veya AI sağlayıcınıza doğrudan API çağrıları yoluyla gerçekleştirilir.
+**cyberstrike, kodunuzu veya içerik verilerinizi saklamaz.** Tüm işlemler yerel olarak veya AI sağlayıcınıza doğrudan API çağrıları yoluyla gerçekleştirilir.
 
 Bu, güvendiğiniz bir sağlayıcıyı veya dahili bir sağlayıcıyı kullandığınız sürece
-AI ağ geçidi, opencode'u güvenli bir şekilde kullanabilirsiniz.
+AI ağ geçidi, cyberstrike'u güvenli bir şekilde kullanabilirsiniz.
 
 saklama alanının tek izolasyonuna bağlı `/share` özelliğidir.
 
@@ -38,15 +38,15 @@ saklama alanının tek izolasyonuna bağlı `/share` özelliğidir.
 
 #### Konuşmaları paylaşma
 
-Bir kullanıcı `/share` özelliğini etkinleştirirse, görüşme ve onunla ilişkili veriler, bu paylaşım sayfalarını opencode.ai'de barındırmak için kullandığımız hizmete gönderilir.
+Bir kullanıcı `/share` özelliğini etkinleştirirse, görüşme ve onunla ilişkili veriler, bu paylaşım sayfalarını cyberstrike.io'de barındırmak için kullandığımız hizmete gönderilir.
 
 Veriler şu anda CDN uç ağımız üzerinden sunuluyor ve kullanıcılarınızın yakınındaki uçta önbelleğe alınıyor.
 
 Deneme süreniz için bunu devre dışı bırakmanızı öneririz.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "share": "disabled"
 }
 ```
@@ -57,19 +57,19 @@ Deneme süreniz için bunu devre dışı bırakmanızı öneririz.
 
 ### Kod sahipliği
 
-**opencode tarafından üretilen tüm kodlara sahipsiniz.** Herhangi bir lisans kısıtlaması veya mülkiyet iddiası yoktur.
+**cyberstrike tarafından üretilen tüm kodlara sahipsiniz.** Herhangi bir lisans kısıtlaması veya mülkiyet iddiası yoktur.
 
 ---
 
 ## Fiyatlandırma
 
-opencode Enterprise için koltuk başına model kullanıyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan token'lar için ücret talep etmiyoruz. Fiyatlandırma ve uygulama seçenekleri hakkında daha fazla ayrıntı için **<a href={email}>bize ulaşın</a>**.
+cyberstrike Enterprise için koltuk başına model kullanıyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan token'lar için ücret talep etmiyoruz. Fiyatlandırma ve uygulama seçenekleri hakkında daha fazla ayrıntı için **<a href={email}>bize ulaşın</a>**.
 
 ---
 
 ## Dağıtım
 
-Deneme sürenizi tamamladıktan ve opencode'u şu adreste kullanmaya hazır olduğunuzda:
+Deneme sürenizi tamamladıktan ve cyberstrike'u şu adreste kullanmaya hazır olduğunuzda:
 kuruluşunuz hakkında görüşmek üzere **<a href={email}>bizimle iletişime geçebilirsiniz</a>**
 fiyatlandırma ve uygulama seçenekleri.
 
@@ -77,7 +77,7 @@ fiyatlandırma ve uygulama seçenekleri.
 
 ### Merkezi Yapılandırma
 
-opencode'u tüm organizasyonunuz için tek bir merkezi yapılandırma kullanacak şekilde ayarlayabiliriz.
+cyberstrike'u tüm organizasyonunuz için tek bir merkezi yapılandırma kullanacak şekilde ayarlayabiliriz.
 
 Bu merkezi yapılandırma, SSO sağlayıcınızla entegre olabilir ve tüm kullanıcıların yalnızca dahili AI ağ geçidinize erişmesini sağlar.
 
@@ -85,15 +85,15 @@ Bu merkezi yapılandırma, SSO sağlayıcınızla entegre olabilir ve tüm kulla
 
 ### SSO entegrasyonu
 
-Merkezi yapılandırma aracılığıyla opencode, kimlik doğrulama için kuruluşunuzun SSO sağlayıcısıyla entegre olabilir.
+Merkezi yapılandırma aracılığıyla cyberstrike, kimlik doğrulama için kuruluşunuzun SSO sağlayıcısıyla entegre olabilir.
 
-Bu, opencode'un mevcut kimlik yönetimi sisteminiz aracılığıyla dahili AI ağ geçidiniz için kimlik bilgileri almasına olanak tanır.
+Bu, cyberstrike'un mevcut kimlik yönetimi sisteminiz aracılığıyla dahili AI ağ geçidiniz için kimlik bilgileri almasına olanak tanır.
 
 ---
 
 ### Dahili AI ağ geçidi
 
-Merkezi yapılandırmayla opencode yalnızca dahili AI ağ geçidinizi kullanacak şekilde de yapılandırılabilir.
+Merkezi yapılandırmayla cyberstrike yalnızca dahili AI ağ geçidinizi kullanacak şekilde de yapılandırılabilir.
 
 Ayrıca tüm isteklerin kuruluşunuzun onaylı altyapısından geçmesini sağlayarak diğer tüm AI sağlayıcılarını devre dışı bırakabilirsiniz.
 
@@ -111,16 +111,16 @@ Bu şu anda yol haritamızda yer alıyor. İlgileniyorsanız **<a href={email}>b
 ## SSS
 
 <details>
-<summary>opencode Enterprise nedir?</summary>
+<summary>cyberstrike Enterprise nedir?</summary>
 
-opencode Enterprise, kodlarının ve verilerinin altyapılarından asla ayrılmamasını sağlamak isteyen kuruluşlar içindir. Bunu, SSO ve dahili AI ağ geçidinizle entegre olan merkezi bir yapılandırma kullanarak yapabilir.
+cyberstrike Enterprise, kodlarının ve verilerinin altyapılarından asla ayrılmamasını sağlamak isteyen kuruluşlar içindir. Bunu, SSO ve dahili AI ağ geçidinizle entegre olan merkezi bir yapılandırma kullanarak yapabilir.
 
 </details>
 
 <details>
-<summary>opencode Enterprise'a nasıl başlarım?</summary>
+<summary>cyberstrike Enterprise'a nasıl başlarım?</summary>
 
-Ekibinizle dahili bir denemeyle başlayın. opencode varsayılan olarak kodunuzu veya içerik verilerinizi saklamaz, bu da başlamayı kolaylaştırır.
+Ekibinizle dahili bir denemeyle başlayın. cyberstrike varsayılan olarak kodunuzu veya içerik verilerinizi saklamaz, bu da başlamayı kolaylaştırır.
 
 Daha sonra fiyatlandırma ve uygulama seçeneklerini görüşmek için **<a href={email}>bizimle iletişime geçin</a>**.
 
@@ -134,16 +134,16 @@ Koltuk başına kurumsal fiyatlandırma sunuyoruz. Kendi LLM ağ geçidiniz vars
 </details>
 
 <details>
-<summary>Verilerim opencode Enterprise ile güvende mi?</summary>
+<summary>Verilerim cyberstrike Enterprise ile güvende mi?</summary>
 
-Evet. opencode kodunuzu veya içerik verilerinizi saklamaz. Tüm işlemler yerel olarak veya AI sağlayıcınıza doğrudan API çağrıları yoluyla gerçekleşir. Merkezi yapılandırma ve SSO entegrasyonuyla verileriniz kuruluşunuzun altyapısında güvende kalır.
+Evet. cyberstrike kodunuzu veya içerik verilerinizi saklamaz. Tüm işlemler yerel olarak veya AI sağlayıcınıza doğrudan API çağrıları yoluyla gerçekleşir. Merkezi yapılandırma ve SSO entegrasyonuyla verileriniz kuruluşunuzun altyapısında güvende kalır.
 
 </details>
 
 <details>
 <summary>Kendi özel NPM kayıt defterimizi kullanabilir miyiz?</summary>
 
-opencode, Bun'un yerel `.npmrc` dosya desteği aracılığıyla özel npm kayıtlarını destekler. Kuruluşunuz JFrog Artifactory, Nexus veya benzeri gibi özel bir kayıt defteri kullanıyorsa, opencode'u çalıştırmadan önce geliştiricilerin kimlik doğrulamasının yapıldığından emin olun.
+cyberstrike, Bun'un yerel `.npmrc` dosya desteği aracılığıyla özel npm kayıtlarını destekler. Kuruluşunuz JFrog Artifactory, Nexus veya benzeri gibi özel bir kayıt defteri kullanıyorsa, cyberstrike'u çalıştırmadan önce geliştiricilerin kimlik doğrulamasının yapıldığından emin olun.
 
 Özel kayıt defterinizle kimlik doğrulamayı ayarlamak için:
 
@@ -151,11 +151,11 @@ opencode, Bun'un yerel `.npmrc` dosya desteği aracılığıyla özel npm kayıt
 npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
-Bu, kimlik doğrulama ayrıntılarını içeren `~/.npmrc` öğesini oluşturur. opencode otomatik olarak
+Bu, kimlik doğrulama ayrıntılarını içeren `~/.npmrc` öğesini oluşturur. cyberstrike otomatik olarak
 bunu alır.
 
 :::caution
-opencode'u çalıştırmadan önce özel kayıt defterinde oturum açmalısınız.
+cyberstrike'u çalıştırmadan önce özel kayıt defterinde oturum açmalısınız.
 :::
 
 Alternatif olarak, bir `.npmrc` dosyasını manuel olarak yapılandırabilirsiniz:
@@ -165,6 +165,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Paketlerin kurumsal kayıt defterinizden yüklenebildiğinden emin olmak için geliştiricilerin opencode'u çalıştırmadan önce özel kayıt defterinde oturum açmaları gerekir.
+Paketlerin kurumsal kayıt defterinizden yüklenebildiğinden emin olmak için geliştiricilerin cyberstrike'u çalıştırmadan önce özel kayıt defterinde oturum açmaları gerekir.
 
 </details>

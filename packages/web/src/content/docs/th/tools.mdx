@@ -3,7 +3,7 @@ title: เครื่องมือ
 description: จัดการเครื่องมือที่ LLM สามารถใช้ได้
 ---
 
-เครื่องมืออนุญาตให้ LLM ดำเนินการในโค้ดเบสของคุณ OpenCode มาพร้อมกับชุดเครื่องมือในตัว แต่คุณสามารถขยายได้ด้วย [เครื่องมือที่กำหนดเอง](/docs/custom-tools) หรือ [MCP เซิร์ฟเวอร์](/docs/mcp-servers)
+เครื่องมืออนุญาตให้ LLM ดำเนินการในโค้ดเบสของคุณ CyberStrike มาพร้อมกับชุดเครื่องมือในตัว แต่คุณสามารถขยายได้ด้วย [เครื่องมือที่กำหนดเอง](/docs/custom-tools) หรือ [MCP เซิร์ฟเวอร์](/docs/mcp-servers)
 
 ตามค่าเริ่มต้น เครื่องมือทั้งหมด **เปิดใช้งาน** และไม่จำเป็นต้องมีสิทธิ์ในการทำงาน คุณสามารถควบคุมการทำงานของเครื่องมือผ่าน [สิทธิ์](/docs/permissions)
 
@@ -13,9 +13,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ใช้ฟิลด์ `permission` เพื่อควบคุมการทำงานของเครื่องมือ คุณสามารถอนุญาต ปฏิเสธ หรือต้องการการอนุมัติสำหรับเครื่องมือแต่ละรายการได้
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -26,9 +26,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 คุณยังสามารถใช้ไวด์การ์ดเพื่อควบคุมเครื่องมือหลายรายการพร้อมกันได้ ตัวอย่างเช่น หากต้องการขออนุมัติเครื่องมือทั้งหมดจากเซิร์ฟเวอร์ MCP:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ## บิวท์อิน
 
-นี่คือเครื่องมือในตัวทั้งหมดที่มีอยู่ใน OpenCode
+นี่คือเครื่องมือในตัวทั้งหมดที่มีอยู่ใน CyberStrike
 
 ---
 
@@ -49,9 +49,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ดำเนินการคำสั่ง shell ในสภาพแวดล้อมโปรเจ็กต์ของคุณ
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -66,9 +66,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 แก้ไขไฟล์ที่มีอยู่โดยใช้การแทนที่สตริงที่แน่นอน
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -83,9 +83,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 สร้างไฟล์ใหม่หรือเขียนทับไฟล์ที่มีอยู่
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -104,9 +104,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 อ่านเนื้อหาไฟล์จากโค้ดเบสของคุณ
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "read": "allow"
   }
@@ -121,9 +121,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ค้นหาเนื้อหาไฟล์โดยใช้นิพจน์ทั่วไป
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -138,9 +138,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ค้นหาไฟล์ตามรูปแบบการจับคู่
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -155,9 +155,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 แสดงรายการไฟล์และไดเร็กทอรีในพาธที่กำหนด
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "list": "allow"
   }
@@ -173,12 +173,12 @@ description: จัดการเครื่องมือที่ LLM ส�
 โต้ตอบกับเซิร์ฟเวอร์ LSP ที่กำหนดค่าของคุณเพื่อรับฟีเจอร์อัจฉริยะด้านโค้ด เช่น คำจำกัดความ การอ้างอิง ข้อมูลโฮเวอร์ และลำดับชั้นการโทร
 
 :::note
-เครื่องมือนี้ใช้ได้เฉพาะเมื่อ `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (หรือ `OPENCODE_EXPERIMENTAL=true`)
+เครื่องมือนี้ใช้ได้เฉพาะเมื่อ `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL=true` (หรือ `CYBERSTRIKE_EXPERIMENTAL=true`)
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -195,9 +195,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ใช้แพทช์กับไฟล์
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -216,9 +216,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 โหลด [ทักษะ](/docs/skills) (ไฟล์ `SKILL.md`) และส่งคืนเนื้อหาในการสนทนา
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -231,9 +231,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 จัดการรายการสิ่งที่ต้องทำระหว่างเซสชันการเขียนโค้ด
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -252,9 +252,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 อ่านรายการสิ่งที่ต้องทำที่มีอยู่
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -273,9 +273,9 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ดึงเนื้อหาเว็บ
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -291,19 +291,19 @@ description: จัดการเครื่องมือที่ LLM ส�
 ค้นหาข้อมูลในเว็บ
 
 :::note
-เครื่องมือนี้ใช้ได้เฉพาะเมื่อใช้ผู้ให้บริการ OpenCode หรือเมื่อตัวแปรสภาพแวดล้อม `OPENCODE_ENABLE_EXA` ถูกตั้งค่าเป็นค่าความจริง (เช่น `true` หรือ `1`)
+เครื่องมือนี้ใช้ได้เฉพาะเมื่อใช้ผู้ให้บริการ CyberStrike หรือเมื่อตัวแปรสภาพแวดล้อม `CYBERSTRIKE_ENABLE_EXA` ถูกตั้งค่าเป็นค่าความจริง (เช่น `true` หรือ `1`)
 
-หากต้องการเปิดใช้งานเมื่อเปิดตัว OpenCode:
+หากต้องการเปิดใช้งานเมื่อเปิดตัว CyberStrike:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+CYBERSTRIKE_ENABLE_EXA=1 cyberstrike
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -324,9 +324,9 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ถามคำถามผู้ใช้ระหว่างการดำเนินการ
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "question": "allow"
   }

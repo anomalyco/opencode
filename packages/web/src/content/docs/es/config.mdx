@@ -1,21 +1,21 @@
 ---
 title: Configuración
-description: Usando la configuración OpenCode JSON.
+description: Usando la configuración CyberStrike JSON.
 ---
 
-Puede configurar OpenCode usando un archivo de configuración JSON.
+Puede configurar CyberStrike usando un archivo de configuración JSON.
 
 ---
 
 ## Formato
 
-OpenCode admite los formatos **JSON** y **JSONC** (JSON con comentarios).
+CyberStrike admite los formatos **JSON** y **JSONC** (JSON con comentarios).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "cyberstrike",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -34,7 +34,7 @@ Los archivos de configuración se **fusionan**, no se reemplazan.
 
 Los archivos de configuración se fusionan, no se reemplazan. Se combinan las configuraciones de las siguientes ubicaciones de configuración. Las configuraciones posteriores anulan las anteriores solo para claves en conflicto. Se conservan las configuraciones no conflictivas de todas las configuraciones.
 
-Por ejemplo, si su configuración global establece `theme: "opencode"` y `autoupdate: true`, y la configuración de su proyecto establece `model: "anthropic/claude-sonnet-4-5"`, la configuración final incluirá las tres configuraciones.
+Por ejemplo, si su configuración global establece `theme: "cyberstrike"` y `autoupdate: true`, y la configuración de su proyecto establece `model: "anthropic/claude-sonnet-4-5"`, la configuración final incluirá las tres configuraciones.
 
 ---
 
@@ -42,30 +42,30 @@ Por ejemplo, si su configuración global establece `theme: "opencode"` y `autoup
 
 Las fuentes de configuración se cargan en este orden (las fuentes posteriores anulan las anteriores):
 
-1. **Configuración remota** (de `.well-known/opencode`): valores predeterminados de la organización
-2. **Configuración global** (`~/.config/opencode/opencode.json`) - preferencias del usuario
-3. **Configuración personalizada** (`OPENCODE_CONFIG` env var): anulaciones personalizadas
-4. **Configuración del proyecto** (`opencode.json` en el proyecto): configuración específica del proyecto
-5. Directorios **`.opencode`** - agentes, comandos, complementos
-6. **Configuración en línea** (`OPENCODE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
+1. **Configuración remota** (de `.well-known/cyberstrike`): valores predeterminados de la organización
+2. **Configuración global** (`~/.config/cyberstrike/cyberstrike.json`) - preferencias del usuario
+3. **Configuración personalizada** (`CYBERSTRIKE_CONFIG` env var): anulaciones personalizadas
+4. **Configuración del proyecto** (`cyberstrike.json` en el proyecto): configuración específica del proyecto
+5. Directorios **`.cyberstrike`** - agentes, comandos, complementos
+6. **Configuración en línea** (`CYBERSTRIKE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
 
 Esto significa que las configuraciones del proyecto pueden anular los valores predeterminados globales y las configuraciones globales pueden anular los valores predeterminados de la organización remota.
 
 :::note
-Los directorios `.opencode` y `~/.config/opencode` usan **nombres en plural** para los subdirectorios: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` y `themes/`. También se admiten nombres singulares (por ejemplo, `agent/`) para compatibilidad con versiones anteriores.
+Los directorios `.cyberstrike` y `~/.config/cyberstrike` usan **nombres en plural** para los subdirectorios: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` y `themes/`. También se admiten nombres singulares (por ejemplo, `agent/`) para compatibilidad con versiones anteriores.
 :::
 
 ---
 
 ### Remoto
 
-Las organizaciones pueden proporcionar una configuración predeterminada a través del punto final `.well-known/opencode`. Esto se obtiene automáticamente cuando se autentica con un proveedor que lo admita.
+Las organizaciones pueden proporcionar una configuración predeterminada a través del punto final `.well-known/cyberstrike`. Esto se obtiene automáticamente cuando se autentica con un proveedor que lo admita.
 
 La configuración remota se carga primero y sirve como capa base. Todas las demás fuentes de configuración (global, proyecto) pueden anular estos valores predeterminados.
 
 Por ejemplo, si su organización proporciona servidores MCP que están deshabilitados de forma predeterminada:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/cyberstrike"
 {
   "mcp": {
     "jira": {
@@ -79,7 +79,7 @@ Por ejemplo, si su organización proporciona servidores MCP que están deshabili
 
 Puede habilitar servidores específicos en su configuración local:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mcp": {
     "jira": {
@@ -95,7 +95,7 @@ Puede habilitar servidores específicos en su configuración local:
 
 ### Global
 
-Coloque su configuración global OpenCode en `~/.config/opencode/opencode.json`. Utilice la configuración global para las preferencias de todo el usuario, como temas, proveedores o combinaciones de teclas.
+Coloque su configuración global CyberStrike en `~/.config/cyberstrike/cyberstrike.json`. Utilice la configuración global para las preferencias de todo el usuario, como temas, proveedores o combinaciones de teclas.
 
 La configuración global anula los valores predeterminados de la organización remota.
 
@@ -103,13 +103,13 @@ La configuración global anula los valores predeterminados de la organización r
 
 ### Por proyecto
 
-Agregue `opencode.json` en la raíz de su proyecto. La configuración del proyecto tiene la mayor prioridad entre los archivos de configuración estándar: anula las configuraciones globales y remotas.
+Agregue `cyberstrike.json` en la raíz de su proyecto. La configuración del proyecto tiene la mayor prioridad entre los archivos de configuración estándar: anula las configuraciones globales y remotas.
 
 :::tip
 Coloque la configuración específica del proyecto en la raíz de su proyecto.
 :::
 
-Cuando se inicia OpenCode, busca un archivo de configuración en el directorio actual o recorre hasta el directorio Git más cercano.
+Cuando se inicia CyberStrike, busca un archivo de configuración en el directorio actual o recorre hasta el directorio Git más cercano.
 
 Esto también es seguro para registrarlo en Git y utiliza el mismo esquema que el global.
 
@@ -117,11 +117,11 @@ Esto también es seguro para registrarlo en Git y utiliza el mismo esquema que e
 
 ### Ruta personalizada
 
-Especifique una ruta de archivo de configuración personalizada utilizando la variable de entorno `OPENCODE_CONFIG`.
+Especifique una ruta de archivo de configuración personalizada utilizando la variable de entorno `CYBERSTRIKE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export CYBERSTRIKE_CONFIG=/path/to/my/custom-config.json
+cyberstrike run "Hello world"
 ```
 
 La configuración personalizada se carga entre las configuraciones globales y del proyecto en orden de prioridad.
@@ -130,23 +130,23 @@ La configuración personalizada se carga entre las configuraciones globales y de
 
 ### Directorio personalizado
 
-Especifique un directorio de configuración personalizado usando `OPENCODE_CONFIG_DIR`
+Especifique un directorio de configuración personalizado usando `CYBERSTRIKE_CONFIG_DIR`
 variable de entorno. En este directorio se buscarán agentes, comandos,
-modos y complementos como el directorio estándar `.opencode`, y debería
+modos y complementos como el directorio estándar `.cyberstrike`, y debería
 Sigue la misma estructura.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export CYBERSTRIKE_CONFIG_DIR=/path/to/my/config-directory
+cyberstrike run "Hello world"
 ```
 
-El directorio personalizado se carga después de los directorios global config y `.opencode`, por lo que **puede anular** su configuración.
+El directorio personalizado se carga después de los directorios global config y `.cyberstrike`, por lo que **puede anular** su configuración.
 
 ---
 
 ## Esquema
 
-El archivo de configuración tiene un esquema definido en [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+El archivo de configuración tiene un esquema definido en [**`cyberstrike.io/config.json`**](https://cyberstrike.io/config.json).
 
 Su editor debería poder validar y autocompletar según el esquema.
 
@@ -156,9 +156,9 @@ Su editor debería poder validar y autocompletar según el esquema.
 
 Puede configurar ajustes específicos de TUI a través de la opción `tui`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -181,11 +181,11 @@ Opciones disponibles:
 
 ### Servidor
 
-Puede configurar los ajustes del servidor para los comandos `opencode serve` y `opencode web` a través de la opción `server`.
+Puede configurar los ajustes del servidor para los comandos `cyberstrike serve` y `cyberstrike web` a través de la opción `server`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -200,8 +200,8 @@ Opciones disponibles:
 
 - `port` - Puerto para escuchar.
 - `hostname`: nombre de host para escuchar. Cuando `mdns` está habilitado y no se establece ningún nombre de host, el valor predeterminado es `0.0.0.0`.
-- `mdns`: habilita el descubrimiento de servicios mDNS. Esto permite que otros dispositivos en la red descubran su servidor OpenCode.
-- `mdnsDomain` - Nombre de dominio personalizado para el servicio mDNS. El valor predeterminado es `opencode.local`. Útil para ejecutar múltiples instancias en la misma red.
+- `mdns`: habilita el descubrimiento de servicios mDNS. Esto permite que otros dispositivos en la red descubran su servidor CyberStrike.
+- `mdnsDomain` - Nombre de dominio personalizado para el servicio mDNS. El valor predeterminado es `cyberstrike.local`. Útil para ejecutar múltiples instancias en la misma red.
 - `cors`: orígenes adicionales para permitir CORS cuando se utiliza el servidor HTTP desde un cliente basado en navegador. Los valores deben ser orígenes completos (esquema + host + puerto opcional), por ejemplo, `https://app.example.com`.
 
 [Obtenga más información sobre el servidor aquí](/docs/server).
@@ -212,9 +212,9 @@ Opciones disponibles:
 
 Puede administrar las herramientas que un LLM puede usar a través de la opción `tools`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -228,24 +228,24 @@ Puede administrar las herramientas que un LLM puede usar a través de la opción
 
 ### Modelos
 
-Puede configurar los proveedores y modelos que desea utilizar en su configuración OpenCode a través de las opciones `provider`, `model` y `small_model`.
+Puede configurar los proveedores y modelos que desea utilizar en su configuración CyberStrike a través de las opciones `provider`, `model` y `small_model`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-La opción `small_model` configura un modelo separado para tareas livianas como la generación de títulos. De forma predeterminada, OpenCode intenta utilizar un modelo más económico si su proveedor tiene uno disponible; de ​​lo contrario, recurre a su modelo principal.
+La opción `small_model` configura un modelo separado para tareas livianas como la generación de títulos. De forma predeterminada, CyberStrike intenta utilizar un modelo más económico si su proveedor tiene uno disponible; de ​​lo contrario, recurre a su modelo principal.
 
 Las opciones de proveedores pueden incluir `timeout` y `setCacheKey`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -272,9 +272,9 @@ Algunos proveedores admiten opciones de configuración adicionales más allá de
 
 Amazon Bedrock admite la configuración específica de AWS:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -301,11 +301,11 @@ Los tokens de portador (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) tienen priorida
 
 ### Temas
 
-Puede configurar el tema que desea usar en su configuración OpenCode a través de la opción `theme`.
+Puede configurar el tema que desea usar en su configuración CyberStrike a través de la opción `theme`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": ""
 }
 ```
@@ -318,9 +318,9 @@ Puede configurar el tema que desea usar en su configuración OpenCode a través 
 
 Puedes configurar agentes especializados para tareas específicas a través de la opción `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -336,7 +336,7 @@ Puedes configurar agentes especializados para tareas específicas a través de l
 }
 ```
 
-También puede definir agentes utilizando archivos de Markdown en `~/.config/opencode/agents/` o `.opencode/agents/`. [Más información aquí](/docs/agents).
+También puede definir agentes utilizando archivos de Markdown en `~/.config/cyberstrike/agents/` o `.cyberstrike/agents/`. [Más información aquí](/docs/agents).
 
 ---
 
@@ -344,16 +344,16 @@ También puede definir agentes utilizando archivos de Markdown en `~/.config/ope
 
 Puede configurar el agente predeterminado usando la opción `default_agent`. Esto determina qué agente se utiliza cuando no se especifica ninguno explícitamente.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "default_agent": "plan"
 }
 ```
 
-El agente predeterminado debe ser un agente principal (no un subagente). Puede ser un agente integrado como `"build"` o `"plan"`, o un [agente personalizado](/docs/agents) que haya definido. Si el agente especificado no existe o es un subagente, OpenCode recurrirá a `"build"` con una advertencia.
+El agente predeterminado debe ser un agente principal (no un subagente). Puede ser un agente integrado como `"build"` o `"plan"`, o un [agente personalizado](/docs/agents) que haya definido. Si el agente especificado no existe o es un subagente, CyberStrike recurrirá a `"build"` con una advertencia.
 
-Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`), aplicación de escritorio y GitHub Acción.
+Esta configuración se aplica en todas las interfaces: TUI, CLI (`cyberstrike run`), aplicación de escritorio y GitHub Acción.
 
 ---
 
@@ -361,9 +361,9 @@ Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`)
 
 Puede configurar la función [compartir](/docs/share) a través de la opción `share`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "share": "manual"
 }
 ```
@@ -382,9 +382,9 @@ De forma predeterminada, el uso compartido está configurado en modo manual, don
 
 Puede configurar comandos personalizados para tareas repetitivas a través de la opción `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -400,7 +400,7 @@ Puede configurar comandos personalizados para tareas repetitivas a través de la
 }
 ```
 
-También puede definir comandos utilizando archivos de Markdown en `~/.config/opencode/commands/` o `.opencode/commands/`. [Más información aquí](/docs/commands).
+También puede definir comandos utilizando archivos de Markdown en `~/.config/cyberstrike/commands/` o `.cyberstrike/commands/`. [Más información aquí](/docs/commands).
 
 ---
 
@@ -408,9 +408,9 @@ También puede definir comandos utilizando archivos de Markdown en `~/.config/op
 
 Puede personalizar sus combinaciones de teclas a través de la opción `keybinds`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {}
 }
 ```
@@ -421,11 +421,11 @@ Puede personalizar sus combinaciones de teclas a través de la opción `keybinds
 
 ### Actualización automática
 
-OpenCode descargará automáticamente cualquier actualización nueva cuando se inicie. Puede desactivar esto con la opción `autoupdate`.
+CyberStrike descargará automáticamente cualquier actualización nueva cuando se inicie. Puede desactivar esto con la opción `autoupdate`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "autoupdate": false
 }
 ```
@@ -439,9 +439,9 @@ Tenga en cuenta que esto sólo funciona si no se instaló mediante un administra
 
 Puede configurar formateadores de código a través de la opción `formatter`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -463,13 +463,13 @@ Puede configurar formateadores de código a través de la opción `formatter`.
 
 ### Permisos
 
-De forma predeterminada, opencode **permite todas las operaciones** sin requerir aprobación explícita. Puede cambiar esto usando la opción `permission`.
+De forma predeterminada, cyberstrike **permite todas las operaciones** sin requerir aprobación explícita. Puede cambiar esto usando la opción `permission`.
 
 Por ejemplo, para garantizar que las herramientas `edit` y `bash` requieran la aprobación del usuario:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -485,9 +485,9 @@ Por ejemplo, para garantizar que las herramientas `edit` y `bash` requieran la a
 
 Puede controlar el comportamiento de compactación del contexto a través de la opción `compaction`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -504,9 +504,9 @@ Puede controlar el comportamiento de compactación del contexto a través de la 
 
 Puede configurar patrones de ignorancia del observador de archivos a través de la opción `watcher`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -521,9 +521,9 @@ Los patrones siguen la sintaxis global. Utilice esto para excluir directorios ru
 
 Puede configurar los servidores MCP que desee utilizar a través de la opción `mcp`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {}
 }
 ```
@@ -534,14 +534,14 @@ Puede configurar los servidores MCP que desee utilizar a través de la opción `
 
 ### Complementos
 
-Los [complementos](/docs/plugins) amplían OpenCode con herramientas, enlaces e integraciones personalizados.
+Los [complementos](/docs/plugins) amplían CyberStrike con herramientas, enlaces e integraciones personalizados.
 
-Coloque los archivos de complemento en `.opencode/plugins/` o `~/.config/opencode/plugins/`. También puedes cargar complementos desde npm a través de la opción `plugin`.
+Coloque los archivos de complemento en `.cyberstrike/plugins/` o `~/.config/cyberstrike/plugins/`. También puedes cargar complementos desde npm a través de la opción `plugin`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -553,9 +553,9 @@ Coloque los archivos de complemento en `.opencode/plugins/` o `~/.config/opencod
 
 Puedes configurar las instrucciones para el modelo que estás usando a través de la opción `instructions`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -569,9 +569,9 @@ sobre las reglas aquí](/docs/rules).
 
 Puede deshabilitar proveedores que se cargan automáticamente a través de la opción `disabled_providers`. Esto es útil cuando desea evitar que se carguen ciertos proveedores incluso si sus credenciales están disponibles.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -592,14 +592,14 @@ La opción `disabled_providers` acepta una variedad de ID de proveedores. Cuando
 
 Puede especificar una lista de proveedores permitidos a través de la opción `enabled_providers`. Cuando se establece, solo se habilitarán los proveedores especificados y se ignorarán todos los demás.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-Esto es útil cuando desea restringir OpenCode para que utilice únicamente proveedores específicos en lugar de deshabilitarlos uno por uno.
+Esto es útil cuando desea restringir CyberStrike para que utilice únicamente proveedores específicos en lugar de deshabilitarlos uno por uno.
 
 :::note
 El `disabled_providers` tiene prioridad sobre `enabled_providers`.
@@ -613,9 +613,9 @@ Si un proveedor aparece tanto en `enabled_providers` como en `disabled_providers
 
 La clave `experimental` contiene opciones que se encuentran en desarrollo activo.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "experimental": {}
 }
 ```
@@ -636,10 +636,10 @@ Puede utilizar la sustitución de variables en sus archivos de configuración pa
 
 Utilice `{env:VARIABLE_NAME}` para sustituir variables de entorno:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://cyberstrike.io/config.json",
+  "model": "{env:CYBERSTRIKE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -659,9 +659,9 @@ Si la variable de entorno no está configurada, se reemplazará con una cadena v
 
 Utilice `{file:path/to/file}` para sustituir el contenido de un archivo:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

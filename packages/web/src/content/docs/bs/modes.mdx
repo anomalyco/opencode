@@ -10,14 +10,14 @@ Načini se sada konfiguriraju preko opcije `agent` u konfiguraciji otvorenog kod
 
 Režimi u otvorenom kodu omogućavaju vam da prilagodite ponašanje, alate i upite za različite slučajeve upotrebe.
 Dolazi sa dva ugrađena načina rada: **build** i **plan**. Možete prilagoditi
-ove ili konfigurirajte svoje putem opencode config.
+ove ili konfigurirajte svoje putem cyberstrike config.
 Možete se prebacivati ​​između režima tokom sesije ili ih konfigurisati u svom konfiguracionom fajlu.
 
 ---
 
 ## Ugrađeni
 
-opencode dolazi sa dva ugrađena načina rada.
+cyberstrike dolazi sa dva ugrađena načina rada.
 
 ### Build
 
@@ -28,7 +28,7 @@ Build je **podrazumijevani** režim sa svim omogućenim alatima. Ovo je standard
 Ograničeni način rada dizajniran za planiranje i analizu. U načinu plana, sljedeći alati su onemogućeni prema zadanim postavkama:
 
 - `write` - Ne mogu kreirati nove fajlove
-- `edit` - Ne mogu modificirati postojeće fajlove, osim fajlova koji se nalaze na `.opencode/plans/*.md` radi detaljiziranja samog plana
+- `edit` - Ne mogu modificirati postojeće fajlove, osim fajlova koji se nalaze na `.cyberstrike/plans/*.md` radi detaljiziranja samog plana
 - `patch` - Ne mogu primijeniti zakrpe
 - `bash` - Ne mogu izvršiti naredbe ljuske
   Ovaj način rada je koristan kada želite da AI analizira kod, predlaže promjene ili kreira planove bez ikakvih stvarnih modifikacija u vašoj bazi kodova.
@@ -48,11 +48,11 @@ Možete prilagoditi ugrađene načine rada ili kreirati vlastite kroz konfigurac
 
 ### JSON konfiguracija
 
-Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
+Konfigurirajte načine rada u svom `cyberstrike.json` konfiguracijskom fajlu:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -79,10 +79,10 @@ Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
 
 Također možete definirati načine rada koristeći markdown datoteke. Postavite ih u:
 
-- Globalno: `~/.config/opencode/modes/`
-- Projekat: `.opencode/modes/`
+- Globalno: `~/.config/cyberstrike/modes/`
+- Projekat: `.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -111,7 +111,7 @@ Pogledajmo ove opcije konfiguracije detaljno.
 
 Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. Korisno za korištenje različitih modela optimiziranih za različite zadatke. Na primjer, brži model za planiranje, sposobniji model za implementaciju.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -127,7 +127,7 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. 
 
 Kontrolišite slučajnost i kreativnost odgovora AI pomoću `temperature` konfiguracije. Niže vrijednosti čine odgovore fokusiranijim i determinističkim, dok veće vrijednosti povećavaju kreativnost i varijabilnost.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -146,7 +146,7 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 - **0,3-0,5**: Uravnoteženi odgovori sa malo kreativnosti, dobro za opšte razvojne zadatke
 - **0,6-1,0**: kreativniji i raznovrsniji odgovori, korisni za razmišljanje i istraživanje
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -164,13 +164,13 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 }
 ```
 
-Ako temperatura nije navedena, opencode koristi podrazumijevane postavke specifične za model (obično 0 za većinu modela i 0.55 za Qwen modele).
+Ako temperatura nije navedena, cyberstrike koristi podrazumijevane postavke specifične za model (obično 0 za većinu modela i 0.55 za Qwen modele).
 
 ### Upit
 
 Navedite prilagođenu sistemsku datoteku prompta za ovaj način rada s konfiguracijom `prompt`. Datoteka s promptom treba da sadrži upute specifične za svrhu načina rada.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -233,9 +233,9 @@ Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfig
 
 ### Korištenje JSON konfiguracije
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -254,9 +254,9 @@ Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfig
 
 ### Korištenje markdown fajlova
 
-Kreirajte fajlove načina u `.opencode/modes/` za specifične načine rada ili `~/.config/opencode/modes/` za globalne načine:
+Kreirajte fajlove načina u `.cyberstrike/modes/` za specifične načine rada ili `~/.config/cyberstrike/modes/` za globalne načine:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -280,7 +280,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

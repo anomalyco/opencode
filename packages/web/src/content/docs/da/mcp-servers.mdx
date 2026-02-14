@@ -3,7 +3,7 @@ title: MCP-servere
 description: Tilføj lokale og eksterne MCP værktøjer.
 ---
 
-Du kan tilføje eksterne værktøjer til OpenCode ved hjælp af _Model Context Protocol_ eller MCP. OpenCode understøtter både lokale og eksterne servere.
+Du kan tilføje eksterne værktøjer til CyberStrike ved hjælp af _Model Context Protocol_ eller MCP. CyberStrike understøtter både lokale og eksterne servere.
 
 Når de er tilføjet, er MCP automatisk tilgængelig for LLM sammen med indbyggede værktøjer.
 
@@ -23,11 +23,11 @@ Visse MCP-servere, som GitHub MCP-servere, har en tendens til at tilføje mange 
 
 ## Aktivering
 
-Du kan definere MCP-servere i din [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
+Du kan definere MCP-servere i din [CyberStrike Config](https://cyberstrike.io/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ Du kan også deaktivere en server ved at indstille `enabled` til `false`. Dette 
 
 ### Tilsidesættelse af eksterne standarder
 
-Organisationer kan levere standard MCP-servere via deres `.well-known/opencode`-slutpunkt. Disse servere kan være deaktiveret som standard, hvilket giver brugerne mulighed for at tilmelde sig dem, de har brug for.
+Organisationer kan levere standard MCP-servere via deres `.well-known/cyberstrike`-slutpunkt. Disse servere kan være deaktiveret som standard, hvilket giver brugerne mulighed for at tilmelde sig dem, de har brug for.
 
 For at aktivere en specifik server fra din organisationers fjernkonfiguration skal du tilføje den til din lokale konfiguration med `enabled: true`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ Dine lokale konfigurationsværdier tilsidesætter fjernstandarderne. Se [config 
 
 Tilføj lokale MCP-servere ved hjælp af `type` til `"local"` i MCP-objektet.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ Kommandoen er, hvordan den lokale MCP-server starter. Du kan også sende en list
 
 For eksempel kan du tilføje test-MCP-serveren [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ Her er alle muligheder for at konfigurere en lokal MCP-server.
 
 Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
 ## OAuth
 
-OpenCode håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når en server kræver godkendelse, vil OpenCode:
+CyberStrike håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når en server kræver godkendelse, vil CyberStrike:
 
 1. Registrer 401-svaret, og start OAuth-flowet
 2. Brug **Dynamic Client Registration (RFC 7591)**, hvis det understøtter af serveren
@@ -177,9 +177,9 @@ OpenCode håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når 
 
 For de fleste OAuth-aktiverede MCP-servere kræver ingen speciel konfiguration. Bare konfigureret fjernserver:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ For de fleste OAuth-aktiverede MCP-servere kræver ingen speciel konfiguration. 
 }
 ```
 
-Hvis serveren kræver godkendelse, vil OpenCode bede dig om at godkende, når du prøver at bruge den første gang. Hvis ikke, kan du [manually trigger the flow](#authenticating) med `opencode mcp auth <server-name>`.
+Hvis serveren kræver godkendelse, vil CyberStrike bede dig om at godkende, når du prøver at bruge den første gang. Hvis ikke, kan du [manually trigger the flow](#authenticating) med `cyberstrike mcp auth <server-name>`.
 
 ---
 
@@ -197,9 +197,9 @@ Hvis serveren kræver godkendelse, vil OpenCode bede dig om at godkende, når du
 
 Hvis du har klientlegitimationsoplysninger fra MCP-serverudbyderen, kan du konfigurere dem:
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,22 +223,22 @@ Du kan manuelt udløse godkendelse eller administrere legitimationsoplysninger.
 Godkendt med en specifik MCP-server:
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 Liste over alle MCP-servere og deres godkendelsesstatus:
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Fjern gemte legitimationsoplysninger:
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, vil OpenCode opbevare tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
+Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, vil CyberStrike opbevare tokens sikkert i `~/.local/share/cyberstrike/mcp-auth.json`.
 
 ---
 
@@ -246,9 +246,9 @@ Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, 
 
 Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere, der bruger API-nøgler i stedet), skal du indstille `oauth` til `false`:
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ Hvis en ekstern MCP-server ikke kan godkendes, kan du diagnosticere problemer me
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 Kommandoen `mcp debug` viser den aktuelle godkendelsesstatus, tester HTTP-forbindelse og forsøger OAuth-opdagelsesflowet.
@@ -291,7 +291,7 @@ Kommandoen `mcp debug` viser den aktuelle godkendelsesstatus, tester HTTP-forbin
 
 ## Administration
 
-Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede værktøjer. Så du kan administrere dem gennem OpenCode-konfigurationen som ethvert andet værktøj.
+Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede værktøjer. Så du kan administrere dem gennem CyberStrike-konfigurationen som ethvert andet værktøj.
 
 ---
 
@@ -299,9 +299,9 @@ Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede vær
 
 Det betyder, at du kan aktivere eller deaktivere dem globalt.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ Det betyder, at du kan aktivere eller deaktivere dem globalt.
 
 Vi kan også bruge et globmønster til at deaktivere alle matchende MCPs.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ Hvis du har et stort antal MCP-servere, vil du måske kun aktivere dem pr. agent
 1. Deaktiver det som et værktøj globalt.
 2. Aktiver MCP-serveren som et værktøj i din [agent config](/docs/agents#tools).
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ Nedenfor er eksempler på nogle almindelige MCP-servere. Du kan indsende en PR, 
 
 Tilføj [Sentry MCP server](https://mcp.sentry.dev) for at interagere med dine Sentry-projekter og -problemer.
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ Tilføj [Sentry MCP server](https://mcp.sentry.dev) for at interagere med dine S
 Efter tilføjelse af konfigurationen skal du godkende med Sentry:
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-Dette åbner et browservindue for at fuldføre OAuth-flowet og forbinde OpenCode til din Sentry-konto.
+Dette åbner et browservindue for at fuldføre OAuth-flowet og forbinde CyberStrike til din Sentry-konto.
 
 Når du er godkendt, kan du bruge Sentry-værktøjer i dine prompter til at forespørge om problemer, projekter og fejldata.
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 Tilføj [Context7 MCP server](https://github.com/upstash/context7) for at søge i dokumenter.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Tilføj [Context7 MCP server](https://github.com/upstash/context7) for at søge 
 
 Hvis du har tilmeldt dig en gratis konto, kan du bruge din API-nøgle og få højere satsgrænser.
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 Tilføj serveren [Grep by Vercel](https://grep.app) MCP for at søge gennem kodestykker på GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

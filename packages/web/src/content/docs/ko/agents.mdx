@@ -15,7 +15,7 @@ agent는 특정 작업과 워크플로에 맞게 설정할 수 있는 전문 AI 
 
 ## 유형
 
-OpenCode의 agent는 primary agent와 subagent, 두 가지 유형으로 나뉩니다.
+CyberStrike의 agent는 primary agent와 subagent, 두 가지 유형으로 나뉩니다.
 
 ---
 
@@ -27,7 +27,7 @@ primary agent는 사용자가 직접 상호작용하는 메인 assistant입니�
 세션 중 **Tab** 키로 primary agent를 빠르게 전환할 수 있습니다.
 :::
 
-OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되어 있습니다. 아래에서 각각 살펴보겠습니다.
+CyberStrike에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되어 있습니다. 아래에서 각각 살펴보겠습니다.
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되
 
 subagent는 primary agent가 특정 작업을 위해 호출하는 전문 assistant입니다. 메시지에서 **@ mention**으로 직접 호출할 수도 있습니다.
 
-OpenCode에는 기본 제공 subagent인 **General**과 **Explore**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
+CyberStrike에는 기본 제공 subagent인 **General**과 **Explore**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
 
 ---
 
 ## 기본 제공
 
-OpenCode는 기본적으로 primary agent 2개와 subagent 2개를 제공합니다.
+CyberStrike는 기본적으로 primary agent 2개와 subagent 2개를 제공합니다.
 
 ---
 
@@ -135,11 +135,11 @@ _Mode_: `primary`
 
 ### JSON
 
-`opencode.json` config 파일에서 agent를 설정합니다.
+`cyberstrike.json` config 파일에서 agent를 설정합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -180,10 +180,10 @@ _Mode_: `primary`
 
 Markdown 파일로도 agent를 정의할 수 있습니다. 다음 위치에 두세요.
 
-- Global: `~/.config/opencode/agents/`
-- Per-project: `.opencode/agents/`
+- Global: `~/.config/cyberstrike/agents/`
+- Per-project: `.cyberstrike/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -219,7 +219,7 @@ Markdown 파일명은 agent 이름이 됩니다. 예를 들어 `review.md`는 `r
 
 `description` 옵션으로 agent의 역할과 사용 시점을 간단히 설명하세요.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -239,7 +239,7 @@ Markdown 파일명은 agent 이름이 됩니다. 예를 들어 `review.md`는 `r
 
 값이 낮을수록 응답이 더 집중되고 결정적이며, 값이 높을수록 창의성과 다양성이 커집니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -258,7 +258,7 @@ Temperature 값은 일반적으로 0.0~1.0 범위를 사용합니다.
 - **0.3-0.5**: 적당한 창의성이 섞인 균형형 응답, 일반 개발 작업에 적합
 - **0.6-1.0**: 더 창의적이고 다양한 응답, 브레인스토밍/탐색에 유용
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "analyze": {
@@ -276,7 +276,7 @@ Temperature 값은 일반적으로 0.0~1.0 범위를 사용합니다.
 }
 ```
 
-temperature를 지정하지 않으면 OpenCode는 model별 기본값을 사용합니다. 일반적으로 대부분의 model은 0, Qwen model은 0.55를 사용합니다.
+temperature를 지정하지 않으면 CyberStrike는 model별 기본값을 사용합니다. 일반적으로 대부분의 model은 0, Qwen model은 0.55를 사용합니다.
 
 ---
 
@@ -286,7 +286,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 
 이 값을 설정하지 않으면 model이 중단을 선택하거나 사용자가 세션을 중단할 때까지 agent는 계속 반복합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "quick-thinker": {
@@ -310,7 +310,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 
 `true`로 설정하면 agent를 비활성화합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -326,7 +326,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 
 `prompt` config로 해당 agent의 custom 시스템 prompt 파일을 지정합니다. prompt 파일에는 agent 목적에 맞는 지시사항을 작성하세요.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -336,7 +336,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 }
 ```
 
-이 경로는 config 파일 위치 기준의 상대 경로입니다. 따라서 전역 OpenCode config와 프로젝트별 config 모두에서 동일하게 동작합니다.
+이 경로는 config 파일 위치 기준의 상대 경로입니다. 따라서 전역 CyberStrike config와 프로젝트별 config 모두에서 동일하게 동작합니다.
 
 ---
 
@@ -348,7 +348,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 model을 지정하지 않으면 primary agent는 [전역으로 설정한 model](/docs/config#models)을 사용하고, subagent는 해당 subagent를 호출한 primary agent의 model을 사용합니다.
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -358,7 +358,7 @@ model을 지정하지 않으면 primary agent는 [전역으로 설정한 model](
 }
 ```
 
-OpenCode config의 model ID는 `provider/model-id` 형식을 사용합니다. 예를 들어 [OpenCode Zen](/docs/zen)을 사용한다면 GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용합니다.
+CyberStrike config의 model ID는 `provider/model-id` 형식을 사용합니다. 예를 들어 [CyberStrike Zen](/docs/zen)을 사용한다면 GPT 5.1 Codex에 `cyberstrike/gpt-5.1-codex`를 사용합니다.
 
 ---
 
@@ -366,9 +366,9 @@ OpenCode config의 model ID는 `provider/model-id` 형식을 사용합니다. �
 
 `tools` config로 agent에서 사용할 tool을 제어합니다. 각 tool을 `true` 또는 `false`로 설정해 활성화/비활성화할 수 있습니다.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="cyberstrike.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -390,9 +390,9 @@ agent별 config는 전역 config를 override합니다.
 
 와일드카드를 사용하면 여러 tool을 한 번에 제어할 수 있습니다. 예를 들어 MCP 서버의 모든 tool을 비활성화하려면 다음과 같이 설정합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -417,9 +417,9 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 - `"allow"` — 승인 없이 모든 작업 허용
 - `"deny"` — tool 비활성화
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -428,9 +428,9 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 이 permission은 agent별로 override할 수 있습니다.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="cyberstrike.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -446,7 +446,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 Markdown agent에서도 permission을 설정할 수 있습니다.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -465,9 +465,9 @@ Only analyze code and suggest changes.
 
 특정 bash 명령에 대해서도 permission을 설정할 수 있습니다.
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -483,9 +483,9 @@ Only analyze code and suggest changes.
 
 여기에는 glob 패턴을 사용할 수 있습니다.
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -501,9 +501,9 @@ Only analyze code and suggest changes.
 또한 `*` 와일드카드로 모든 명령의 permission을 제어할 수 있습니다.
 마지막으로 일치한 규칙이 우선하므로 `*` 와일드카드를 먼저 두고, 구체적인 규칙을 뒤에 두세요.
 
-```json title="opencode.json" {8}
+```json title="cyberstrike.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -525,7 +525,7 @@ Only analyze code and suggest changes.
 
 `mode` config로 agent 모드를 제어합니다. `mode` 옵션은 agent를 어떤 방식으로 사용할지 결정합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -543,7 +543,7 @@ Only analyze code and suggest changes.
 
 `hidden: true`를 설정하면 `@` 자동완성 메뉴에서 subagent를 숨길 수 있습니다. 다른 agent가 Task tool을 통해 programmatic으로만 호출해야 하는 내부 subagent에 유용합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "internal-helper": {
@@ -566,7 +566,7 @@ Only analyze code and suggest changes.
 
 `permission.task`로 Task tool을 통해 해당 agent가 호출할 수 있는 subagent 범위를 제어합니다. 유연한 매칭을 위해 glob 패턴을 사용합니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "orchestrator": {
@@ -601,7 +601,7 @@ Only analyze code and suggest changes.
 
 유효한 hex 색상(예: `#FF5733`) 또는 theme 색상(`primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`)을 사용하세요.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "creative": {
@@ -620,7 +620,7 @@ Only analyze code and suggest changes.
 
 `top_p` 옵션으로 응답 다양성을 제어합니다. 무작위성을 제어하는 Temperature의 대안입니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "brainstorm": {
@@ -640,7 +640,7 @@ agent config에 지정한 나머지 옵션은 모델 옵션으로 provider에 **
 
 예를 들어 OpenAI reasoning model에서는 reasoning effort를 제어할 수 있습니다.
 
-```json title="opencode.json" {6,7}
+```json title="cyberstrike.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -656,7 +656,7 @@ agent config에 지정한 나머지 옵션은 모델 옵션으로 provider에 **
 이 추가 옵션은 model 및 provider마다 다릅니다. 사용 가능한 파라미터는 provider 문서를 확인하세요.
 
 :::tip
-사용 가능한 model 목록은 `opencode models` 명령으로 확인할 수 있습니다.
+사용 가능한 model 목록은 `cyberstrike models` 명령으로 확인할 수 있습니다.
 :::
 
 ---
@@ -666,7 +666,7 @@ agent config에 지정한 나머지 옵션은 모델 옵션으로 provider에 **
 아래 명령으로 새 agent를 만들 수 있습니다.
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 이 인터랙티브 명령은 다음을 수행합니다.
@@ -696,14 +696,14 @@ opencode agent create
 실제로 유용하게 쓸 수 있는 예시 agent를 소개합니다.
 
 :::tip
-공유하고 싶은 agent가 있나요? [PR 제출하기](https://github.com/anomalyco/opencode).
+공유하고 싶은 agent가 있나요? [PR 제출하기](https://github.com/CyberStrikeus/cyberstrike).
 :::
 
 ---
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/cyberstrike/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -725,7 +725,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/cyberstrike/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

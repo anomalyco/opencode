@@ -1,9 +1,9 @@
 ---
 title: 共有
-description: OpenCode での会話を共有します。
+description: CyberStrike での会話を共有します。
 ---
 
-OpenCode の共有機能を使用すると、OpenCode の会話への公開リンクを作成できるため、チームメイトと共同作業したり、他の人から助けを得ることができます。
+CyberStrike の共有機能を使用すると、CyberStrike の会話への公開リンクを作成できるため、チームメイトと共同作業したり、他の人から助けを得ることができます。
 
 :::note
 共有された会話は、リンクを知っている人なら誰でも公開してアクセスできます。
@@ -13,7 +13,7 @@ OpenCode の共有機能を使用すると、OpenCode の会話への公開リ�
 
 ## 仕組み
 
-会話を共有するとき、OpenCode は次のことを行います。
+会話を共有するとき、CyberStrike は次のことを行います。
 
 1. セッション用の一意のパブリック URL を作成します
 2. 会話履歴をサーバーに同期します
@@ -23,13 +23,13 @@ OpenCode の共有機能を使用すると、OpenCode の会話への公開リ�
 
 ## 共有
 
-OpenCode は、会話の共有方法を制御する 3 つの共有モードをサポートしています。
+CyberStrike は、会話の共有方法を制御する 3 つの共有モードをサポートしています。
 
 ---
 
 ### 手動（デフォルト）
 
-デフォルトでは、OpenCode は手動共有モードを使用します。セッションは自動的には共有されませんが、`/share` コマンドを使用して手動で共有できます。
+デフォルトでは、CyberStrike は手動共有モードを使用します。セッションは自動的には共有されませんが、`/share` コマンドを使用して手動で共有できます。
 
 ```
 /share
@@ -39,7 +39,7 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で手動モードを明示的に設定するには:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で `share` オプションを `"auto"` に設定することで、すべての新しい会話の自動共有を有効にできます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で `share` オプションを `"disabled"` に設定することで、共有を完全に無効にすることができます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-これを特定のプロジェクトのチーム全体に強制するには、それをプロジェクトの `opencode.json` に追加し、Git にチェックインします。
+これを特定のプロジェクトのチーム全体に強制するには、それをプロジェクトの `cyberstrike.json` に追加し、Git にチェックインします。
 
 ---
 
@@ -125,4 +125,4 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 - **SSO を通じて認証されたユーザーのみに制限**
 - 独自のインフラストラクチャで **セルフホスト**
 
-[組織内での OpenCode の使用について詳しくは、](/docs/enterprise) をご覧ください。
+[組織内での CyberStrike の使用について詳しくは、](/docs/enterprise) をご覧ください。

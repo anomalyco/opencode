@@ -1,21 +1,21 @@
 ---
 title: Pravila
-description: Postavite prilagodena uputstva za opencode.
+description: Postavite prilagodena uputstva za cyberstrike.
 ---
 
-Mozete dodati prilagodena uputstva za opencode tako sto kreirate `AGENTS.md` datoteku. Ovo je slicno pravilima u Cursor-u. Sadrzi uputstva koja se ubacuju u LLM kontekst da prilagode ponasanje za vas projekat.
+Mozete dodati prilagodena uputstva za cyberstrike tako sto kreirate `AGENTS.md` datoteku. Ovo je slicno pravilima u Cursor-u. Sadrzi uputstva koja se ubacuju u LLM kontekst da prilagode ponasanje za vas projekat.
 
 ---
 
 ## Inicijalizacija
 
-Da kreirate novu `AGENTS.md` datoteku, pokrenite `/init` komandu u opencode.
+Da kreirate novu `AGENTS.md` datoteku, pokrenite `/init` komandu u cyberstrike.
 
 :::tip
 Preporuceno je da `AGENTS.md` iz projekta commitujete u Git.
 :::
 
-Ovo skenira projekat i njegov sadrzaj, razumije cemu projekat sluzi i generise `AGENTS.md`. Tako opencode bolje navigira kroz kod.
+Ovo skenira projekat i njegov sadrzaj, razumije cemu projekat sluzi i generise `AGENTS.md`. Tako cyberstrike bolje navigira kroz kod.
 
 Ako vec imate `AGENTS.md`, komanda ce pokusati da ga dopuni.
 
@@ -54,7 +54,7 @@ Ovdje dodajete uputstva specificna za projekat koja se dijele sa timom.
 
 ## Tipovi
 
-opencode podrzava citanje `AGENTS.md` datoteke sa vise lokacija. Svaka lokacija ima drugu svrhu.
+cyberstrike podrzava citanje `AGENTS.md` datoteke sa vise lokacija. Svaka lokacija ima drugu svrhu.
 
 ### Projekat
 
@@ -62,58 +62,58 @@ Stavite `AGENTS.md` u korijen projekta za pravila specificna za taj projekat. Pr
 
 ### Globalno
 
-Mozete imati i globalna pravila u `~/.config/opencode/AGENTS.md`. Ona se primjenjuju u svim opencode sesijama.
+Mozete imati i globalna pravila u `~/.config/cyberstrike/AGENTS.md`. Ona se primjenjuju u svim cyberstrike sesijama.
 
 Posto se ovo ne commituje u Git niti dijeli s timom, najbolje je da ovdje cuvate licna pravila koja LLM treba pratiti.
 
 ### Kompatibilnost s Claude Code
 
-Za korisnike koji prelaze sa Claude Code, OpenCode podrzava i Claude konvencije datoteka kao rezervu:
+Za korisnike koji prelaze sa Claude Code, CyberStrike podrzava i Claude konvencije datoteka kao rezervu:
 
 - **Pravila projekta**: `CLAUDE.md` u direktoriju projekta (koristi se ako ne postoji `AGENTS.md`)
-- **Globalna pravila**: `~/.claude/CLAUDE.md` (koristi se ako ne postoji `~/.config/opencode/AGENTS.md`)
+- **Globalna pravila**: `~/.claude/CLAUDE.md` (koristi se ako ne postoji `~/.config/cyberstrike/AGENTS.md`)
 - **Skills**: `~/.claude/skills/` — pogledajte [Agent Skills](/docs/skills/) za detalje
 
 Da iskljucite kompatibilnost sa Claude Code, postavite jednu od ovih varijabli okruzenja:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## Prioritet
 
-Kada se opencode pokrene, trazi datoteke pravila ovim redoslijedom:
+Kada se cyberstrike pokrene, trazi datoteke pravila ovim redoslijedom:
 
 1. **Lokalne datoteke** pretrazivanjem prema gore od trenutnog direktorija (`AGENTS.md`, `CLAUDE.md`)
-2. **Globalna datoteka** na `~/.config/opencode/AGENTS.md`
+2. **Globalna datoteka** na `~/.config/cyberstrike/AGENTS.md`
 3. **Claude Code datoteka** na `~/.claude/CLAUDE.md` (osim ako je iskljucena)
 
-Prva pronadena datoteka pobjeduje u svakoj kategoriji. Na primjer, ako imate i `AGENTS.md` i `CLAUDE.md`, koristi se samo `AGENTS.md`. Isto tako, `~/.config/opencode/AGENTS.md` ima prednost nad `~/.claude/CLAUDE.md`.
+Prva pronadena datoteka pobjeduje u svakoj kategoriji. Na primjer, ako imate i `AGENTS.md` i `CLAUDE.md`, koristi se samo `AGENTS.md`. Isto tako, `~/.config/cyberstrike/AGENTS.md` ima prednost nad `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Prilagođena uputstva
 
-Mozete navesti prilagodene datoteke uputstava u `opencode.json` ili globalnom `~/.config/opencode/opencode.json`. Tako vi i tim ponovo koristite postojeca pravila bez dupliranja u AGENTS.md.
+Mozete navesti prilagodene datoteke uputstava u `cyberstrike.json` ili globalnom `~/.config/cyberstrike/cyberstrike.json`. Tako vi i tim ponovo koristite postojeca pravila bez dupliranja u AGENTS.md.
 
 Primjer:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 Mozete koristiti i udaljene URL-ove za ucitavanje uputstava sa weba.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -126,22 +126,22 @@ Sve datoteke uputstava se kombinuju sa vasim `AGENTS.md` datotekama.
 
 ## Referenciranje eksternih datoteka
 
-Iako opencode ne parsira automatski reference datoteka u `AGENTS.md`, slicno ponasanje mozete dobiti na dva nacina:
+Iako cyberstrike ne parsira automatski reference datoteka u `AGENTS.md`, slicno ponasanje mozete dobiti na dva nacina:
 
-### Korištenje opencode.json
+### Korištenje cyberstrike.json
 
-Preporuceni pristup je da koristite `instructions` polje u `opencode.json`:
+Preporuceni pristup je da koristite `instructions` polje u `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### Ručna uputstva u AGENTS.md
 
-Mozete nauciti opencode da cita eksterne datoteke tako sto cete dati eksplicitna uputstva u `AGENTS.md`. Evo prakticnog primjera:
+Mozete nauciti cyberstrike da cita eksterne datoteke tako sto cete dati eksplicitna uputstva u `AGENTS.md`. Evo prakticnog primjera:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,8 +173,8 @@ Ovaj pristup vam omogucava da:
 - Kreirate modularne datoteke pravila koje se mogu ponovo koristiti
 - Dijelite pravila izmedu projekata kroz symlinkove ili git submodule
 - Drzite AGENTS.md kratkim dok upucujete na detaljne smjernice
-- Osigurate da opencode ucitava datoteke samo kad su potrebne za konkretan zadatak
+- Osigurate da cyberstrike ucitava datoteke samo kad su potrebne za konkretan zadatak
 
 :::tip
-Za monorepo projekte ili projekte sa zajednickim standardima, odrzivije je koristiti `opencode.json` sa glob obrascima (npr. `packages/*/AGENTS.md`) nego rucna uputstva.
+Za monorepo projekte ili projekte sa zajednickim standardima, odrzivije je koristiti `cyberstrike.json` sa glob obrascima (npr. `packages/*/AGENTS.md`) nego rucna uputstva.
 :::

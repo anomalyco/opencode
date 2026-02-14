@@ -3,27 +3,27 @@ import { $ } from "bun"
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
-    ocBinary: "opencode-darwin-arm64",
+    ocBinary: "cyberstrike-darwin-arm64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: "opencode-darwin-x64-baseline",
+    ocBinary: "cyberstrike-darwin-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: "opencode-windows-x64-baseline",
+    ocBinary: "cyberstrike-windows-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    ocBinary: "opencode-linux-x64-baseline",
+    ocBinary: "cyberstrike-linux-x64-baseline",
     assetExt: "tar.gz",
   },
   {
     rustTarget: "aarch64-unknown-linux-gnu",
-    ocBinary: "opencode-linux-arm64",
+    ocBinary: "cyberstrike-linux-arm64",
     assetExt: "tar.gz",
   },
 ]
@@ -41,7 +41,7 @@ export function getCurrentSidecar(target = RUST_TARGET) {
 
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
   await $`mkdir -p src-tauri/sidecars`
-  const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
+  const dest = windowsify(`src-tauri/sidecars/cyberstrike-cli-${target}`)
   await $`cp ${source} ${dest}`
 
   console.log(`Copied ${source} to ${dest}`)

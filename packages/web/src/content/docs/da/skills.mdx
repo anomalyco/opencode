@@ -3,7 +3,7 @@ title: "Agentfærdigheder"
 description: "Definer gjenbrugbar atferd via SKILL.md-definisjoner"
 ---
 
-Agentferdigheter lar OpenCode oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
+Agentferdigheter lar CyberStrike oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
 Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgængelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
 
 ---
@@ -11,10 +11,10 @@ Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet 
 ## Placer filer
 
 Opret én mappe per ferdighetsnavn og tilføj inn en `SKILL.md` i den.
-OpenCode søker etter disse stedene:
+CyberStrike søker etter disse stedene:
 
-- Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md`
-- Global konfigurasjon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Prosjektkonfigurasjon: `.cyberstrike/skills/<name>/SKILL.md`
+- Global konfigurasjon: `~/.config/cyberstrike/skills/<name>/SKILL.md`
 - Prosjekt Claude-kompatibel: `.claude/skills/<name>/SKILL.md`
 - Global Claude-kompatibel: `~/.claude/skills/<name>/SKILL.md`
 - Prosjektagent-kompatibel: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ OpenCode søker etter disse stedene:
 
 ## Forstå opdagelsen
 
-For prosjektlokale stier går OpenCode opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
-Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
+For prosjektlokale stier går CyberStrike opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
+Den laster alle matchende `skills/*/SKILL.md` i `.cyberstrike/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
 
-Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
+Globale definisjoner lastes også inn fra `~/.config/cyberstrike/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Hold det spesifikt nok til at agenten kan velge riktig.
 
 ## Brug et eksempel
 
-Lag `.opencode/skills/git-release/SKILL.md` slik:
+Lag `.cyberstrike/skills/git-release/SKILL.md` slik:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: cyberstrike
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Genkend værktøjsbeskrivelsen
 
-OpenCode viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
+CyberStrike viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
 Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Konfigurer tilladelser
 
-Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaserte tillatelser i `opencode.json`:
+Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaserte tillatelser i `cyberstrike.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For innebygde agenter** (i `opencode.json`):
+**For innebygde agenter** (i `cyberstrike.json`):
 
 ```json
 {

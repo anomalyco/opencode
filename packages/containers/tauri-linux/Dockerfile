@@ -1,4 +1,4 @@
-ARG REGISTRY=ghcr.io/anomalyco
+ARG REGISTRY=ghcr.io/CyberStrikeus
 FROM ${REGISTRY}/build/rust:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive

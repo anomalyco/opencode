@@ -3,7 +3,7 @@ title: MCP serveri
 description: Dodajte lokalne i udaljene MCP alate.
 ---
 
-Možete dodati vanjske alate u OpenCode koristeći _Model Context Protocol_, ili MCP. OpenCode podržava i lokalne i udaljene servere.
+Možete dodati vanjske alate u CyberStrike koristeći _Model Context Protocol_, ili MCP. CyberStrike podržava i lokalne i udaljene servere.
 Jednom dodani, MCP alati su automatski dostupni LLM-u zajedno sa ugrađenim alatima.
 
 ---
@@ -19,11 +19,11 @@ Određeni MCP serveri, poput GitHub MCP servera, mogu dodati mnogo tokena i lako
 
 ## Omogućavanje
 
-Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
+Možete definirati MCP servere u vašoj [CyberStrike Config](https://cyberstrike.io/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -40,12 +40,12 @@ Također možete onemogućiti server postavljanjem `enabled` na `false`. To je k
 
 ### Poništavanje udaljenih zadanih postavki
 
-Organizacije mogu obezbijediti zadane MCP servere preko svoje krajnje tačke `.well-known/opencode`. Ovi serveri mogu biti onemogućeni prema zadanim postavkama, omogućavajući korisnicima da se odluče za one koji su im potrebni.
+Organizacije mogu obezbijediti zadane MCP servere preko svoje krajnje tačke `.well-known/cyberstrike`. Ovi serveri mogu biti onemogućeni prema zadanim postavkama, omogućavajući korisnicima da se odluče za one koji su im potrebni.
 Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dodajte ga u svoju lokalnu konfiguraciju sa `enabled: true`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -62,9 +62,9 @@ Vrijednosti lokalne konfiguracije nadjačavaju udaljene zadane postavke. Pogleda
 
 Dodajte lokalne MCP servere koristeći `type` u `"local"` unutar MCP objekta.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -82,9 +82,9 @@ Dodajte lokalne MCP servere koristeći `type` u `"local"` unutar MCP objekta.
 Naredba je način na koji se pokreće lokalni MCP server. Također možete proslijediti listu varijabli okruženja.
 Na primjer, evo kako možete dodati testni [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP server.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -119,9 +119,9 @@ Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
 
 Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -152,7 +152,7 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 ## OAuth
 
-OpenCode automatski rukuje OAuth autentifikacijom za udaljene MCP servere. Kada server zahtijeva autentifikaciju, OpenCode će:
+CyberStrike automatski rukuje OAuth autentifikacijom za udaljene MCP servere. Kada server zahtijeva autentifikaciju, CyberStrike će:
 
 1. Otkrijte 401 odgovor i pokrenite OAuth tok
 2. Koristite **Dynamic Client Registration (RFC 7591)** ako podržava server
@@ -164,9 +164,9 @@ OpenCode automatski rukuje OAuth autentifikacijom za udaljene MCP servere. Kada 
 
 Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracija. Samo konfigurirajte udaljeni server:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -176,15 +176,15 @@ Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracij
 }
 ```
 
-Ako server zahtijeva autentifikaciju, OpenCode će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `opencode mcp auth <server-name>`.
+Ako server zahtijeva autentifikaciju, CyberStrike će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `cyberstrike mcp auth <server-name>`.
 
 ### Prethodno registrirano
 
 Ako imate klijentske vjerodajnice od dobavljača MCP servera, možete ih konfigurirati:
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -207,30 +207,30 @@ Možete ručno pokrenuti autentifikaciju ili upravljati vjerodajnicama.
 Autentifikacija sa određenim MCP serverom:
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 Navedite sve MCP servere i njihov status autentifikacije:
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Uklonite pohranjene vjerodajnice:
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-Komanda `mcp auth` otvara pretraživač za autorizaciju. Nakon odobrenja, OpenCode sigurno čuva tokene u `~/.local/share/opencode/mcp-auth.json`.
+Komanda `mcp auth` otvara pretraživač za autorizaciju. Nakon odobrenja, CyberStrike sigurno čuva tokene u `~/.local/share/cyberstrike/mcp-auth.json`.
 
 #### Onemogućavanje OAuth-a
 
 Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjesto toga koriste API ključeve), postavite `oauth` na `false`:
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -261,25 +261,25 @@ Ako udaljeni MCP server ne uspije u autentifikaciji, možete dijagnosticirati pr
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 Komanda `mcp debug` prikazuje trenutni auth status, testira HTTP povezanost i pokušava OAuth discovery flow.
 
 ## Upravljanje
 
-Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima. Možete njima upravljati kroz OpenCode konfiguraciju kao i bilo kojim drugim alatom.
+Vaši MCP serveri su dostupni kao alati u CyberStrike, zajedno s ugrađenim alatima. Možete njima upravljati kroz CyberStrike konfiguraciju kao i bilo kojim drugim alatom.
 
 ### Globalno
 
 To znači da ih možete omogućiti ili onemogućiti globalno.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -298,9 +298,9 @@ To znači da ih možete omogućiti ili onemogućiti globalno.
 
 Također možemo koristiti glob obrazac da onemogućimo sve odgovarajuće MCP-ove.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -326,9 +326,9 @@ Ako imate veliki broj MCP servera, možda ćete želeti da ih omogućite samo po
 1. Onemogućite ga kao alat globalno.
 2. U vašem [agent config](/docs/agents#tools), omogućite MCP server kao alat.
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -377,9 +377,9 @@ Ispod su primjeri uobičajenih MCP servera. Možete poslati PR ako želite dokum
 
 Dodajte [Sentry MCP server](https://mcp.sentry.dev) za interakciju sa vašim Sentry projektima i problemima.
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -393,10 +393,10 @@ Dodajte [Sentry MCP server](https://mcp.sentry.dev) za interakciju sa vašim Sen
 Nakon dodavanja konfiguracije, autentifikujte se sa Sentry:
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-Ovo će otvoriti prozor pretraživača da završite OAuth tok i povežete OpenCode sa vašim Sentry nalogom.
+Ovo će otvoriti prozor pretraživača da završite OAuth tok i povežete CyberStrike sa vašim Sentry nalogom.
 Nakon provjere autentičnosti, možete koristiti Sentry alate u svojim upitima za upite o problemima, projektima i podacima o greškama.
 
 ```txt "use sentry"
@@ -409,9 +409,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 Dodajte [Context7 MCP server](https://github.com/upstash/context7) za pretraživanje dokumenata.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -423,9 +423,9 @@ Dodajte [Context7 MCP server](https://github.com/upstash/context7) za pretraživ
 
 Ako ste se prijavili za besplatni račun, možete koristiti svoj API ključ i dobiti viša ograničenja stope.
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -457,9 +457,9 @@ When you need to search docs, use `context7` tools.
 
 Dodajte [Grep by Vercel](https://grep.app) MCP server za pretraživanje isječaka koda na GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

@@ -3,7 +3,7 @@ title: トラブルシューティング
 description: よくある問題とその解決方法。
 ---
 
-OpenCode の問題をデバッグするには、まず、ディスク上に保存されているログとローカルデータを確認します。
+CyberStrike の問題をデバッグするには、まず、ディスク上に保存されているログとローカルデータを確認します。
 
 ---
 
@@ -11,21 +11,21 @@ OpenCode の問題をデバッグするには、まず、ディスク上に保�
 
 ログファイルは次の場所に書き込まれます。
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
+- **macOS/Linux**: `~/.local/share/cyberstrike/log/`
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\cyberstrike\log` を貼り付けます
 
 ログファイルにはタイムスタンプ付きの名前が付けられ (例: `2025-01-09T123456.log`)、最新の 10 個のログファイルが保存されます。
 
-`--log-level` コマンドラインオプションを使用してログレベルを設定すると、より詳細なデバッグ情報を取得できます。たとえば、`opencode --log-level DEBUG`。
+`--log-level` コマンドラインオプションを使用してログレベルを設定すると、より詳細なデバッグ情報を取得できます。たとえば、`cyberstrike --log-level DEBUG`。
 
 ---
 
 ## ストレージ
 
-OpenCode は、セッションデータとその他のアプリケーションデータをディスク上の次の場所に保存します。
+CyberStrike は、セッションデータとその他のアプリケーションデータをディスク上の次の場所に保存します。
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode` を貼り付けます
+- **macOS/Linux**: `~/.local/share/cyberstrike/`
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\cyberstrike` を貼り付けます
 
 このディレクトリには次のものが含まれます。
 
@@ -39,13 +39,13 @@ OpenCode は、セッションデータとその他のアプリケーション�
 
 ## デスクトップアプリ
 
-OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイドカー) をバックグラウンドで実行します。ほとんどの問題は、誤動作しているプラグイン、破損したキャッシュ、または不正なサーバー設定によって発生します。
+CyberStrike Desktop は、ローカル CyberStrike サーバー (`cyberstrike-cli` サイドカー) をバックグラウンドで実行します。ほとんどの問題は、誤動作しているプラグイン、破損したキャッシュ、または不正なサーバー設定によって発生します。
 
 ### クイックチェック
 
 - アプリを完全に終了して再起動します。
 - アプリにエラー画面が表示された場合は、**再起動** をクリックしてエラーの詳細をコピーします。
-- macOS のみ: `OpenCode` メニュー -> **Webview をリロード** (UI が空白またはフリーズしている場合に役立ちます)。
+- macOS のみ: `CyberStrike` メニュー -> **Webview をリロード** (UI が空白またはフリーズしている場合に役立ちます)。
 
 ---
 
@@ -57,28 +57,28 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 
 グローバル設定ファイルを開き、`plugin` キーを探します。
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (または `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (古いインストール): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\opencode.jsonc` を貼り付けます
+- **macOS/Linux**: `~/.config/cyberstrike/cyberstrike.jsonc` (または `~/.config/cyberstrike/cyberstrike.json`)
+- **macOS/Linux** (古いインストール): `~/.local/share/cyberstrike/cyberstrike.jsonc`
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\cyberstrike\cyberstrike.jsonc` を貼り付けます
 
 プラグインを構成している場合は、キーを削除するか空の配列に設定して、プラグインを一時的に無効にします。
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "plugin": [],
 }
 ```
 
 #### プラグインディレクトリの確認
 
-OpenCode はディスクからローカルプラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップアプリを再起動します。
+CyberStrike はディスクからローカルプラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップアプリを再起動します。
 
 - **グローバルプラグイン**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\plugins` を貼り付けます
+  - **macOS/Linux**: `~/.config/cyberstrike/plugins/`
+  - **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\cyberstrike\plugins` を貼り付けます
 - **プロジェクトプラグイン** (プロジェクトごとの構成を使用する場合のみ)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.cyberstrike/plugins/`
 
 アプリが再び動作し始めた場合は、プラグインを 1 つずつ再度有効にして、問題の原因となっているプラ​​グインを特定します。
 
@@ -86,22 +86,22 @@ OpenCode はディスクからローカルプラグインをロードするこ�
 
 ### キャッシュをクリアする
 
-プラグインを無効にしても解決しない場合 (またはプラグインのインストールが停止した場合)、OpenCode がキャッシュを再構築できるようにキャッシュをクリアします。
+プラグインを無効にしても解決しない場合 (またはプラグインのインストールが停止した場合)、CyberStrike がキャッシュを再構築できるようにキャッシュをクリアします。
 
-1. OpenCode Desktop を完全に終了します。
+1. CyberStrike Desktop を完全に終了します。
 2. キャッシュディレクトリを削除します。
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/.cache/opencode` を貼り付け
-- **Linux**: `~/.cache/opencode` を削除します (または `rm -rf ~/.cache/opencode` を実行します)。
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.cache\opencode` を貼り付けます
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/.cache/cyberstrike` を貼り付け
+- **Linux**: `~/.cache/cyberstrike` を削除します (または `rm -rf ~/.cache/cyberstrike` を実行します)。
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.cache\cyberstrike` を貼り付けます
 
-3. OpenCode デスクトップを再起動します。
+3. CyberStrike デスクトップを再起動します。
 
 ---
 
 ### サーバー接続の問題の修正
 
-OpenCode Desktop は、独自のローカルサーバー (デフォルト) を起動することも、構成したサーバー URL に接続することもできます。
+CyberStrike Desktop は、独自のローカルサーバー (デフォルト) を起動することも、構成したサーバー URL に接続することもできます。
 
 **「接続に失敗しました」** ダイアログが表示された場合 (またはアプリがスプラッシュ画面を通過できない場合)、カスタムサーバー URL を確認してください。
 
@@ -111,13 +111,13 @@ OpenCode Desktop は、独自のローカルサーバー (デフォルト) を�
 
 #### 設定から `server.port` / `server.hostname` を削除します
 
-`opencode.json(c)` に `server` セクションが含まれている場合は、それを一時的に削除し、デスクトップアプリを再起動します。
+`cyberstrike.json(c)` に `server` セクションが含まれている場合は、それを一時的に削除し、デスクトップアプリを再起動します。
 
 #### 環境変数を確認する
 
-環境に `OPENCODE_PORT` が設定されている場合、デスクトップアプリはローカルサーバーにそのポートを使用しようとします。
+環境に `CYBERSTRIKE_PORT` が設定されている場合、デスクトップアプリはローカルサーバーにそのポートを使用しようとします。
 
-- `OPENCODE_PORT` の設定を解除して (または空きポートを選択して)、再起動します。
+- `CYBERSTRIKE_PORT` の設定を解除して (または空きポートを選択して)、再起動します。
 
 ---
 
@@ -132,21 +132,21 @@ Linux では、一部の Wayland セットアップにより、空白のウィ�
 
 ### Windows: WebView2 ランタイム
 
-Windows では、OpenCode Desktop には Microsoft Edge **WebView2 ランタイム**が必要です。アプリが空白のウィンドウで開くか、起動しない場合は、WebView2 をインストールまたは更新して、もう一度試してください。
+Windows では、CyberStrike Desktop には Microsoft Edge **WebView2 ランタイム**が必要です。アプリが空白のウィンドウで開くか、起動しない場合は、WebView2 をインストールまたは更新して、もう一度試してください。
 
 ---
 
 ### Windows: 一般的なパフォーマンスの問題
 
-Windows でパフォーマンスの低下、ファイルアクセスの問題、またはターミナルの問題が発生している場合は、[WSL (Windows Subsystem for Linux)](/docs/windows-wsl) を使用してみてください。 WSL は、OpenCode の機能とよりシームレスに連携する Linux 環境を提供します。
+Windows でパフォーマンスの低下、ファイルアクセスの問題、またはターミナルの問題が発生している場合は、[WSL (Windows Subsystem for Linux)](/docs/windows-wsl) を使用してみてください。 WSL は、CyberStrike の機能とよりシームレスに連携する Linux 環境を提供します。
 
 ---
 
 ### 通知が表示されない
 
-OpenCode Desktop では、次の場合にのみシステム通知が表示されます。
+CyberStrike Desktop では、次の場合にのみシステム通知が表示されます。
 
-- OS 設定で OpenCode の通知が有効になっており、
+- OS 設定で CyberStrike の通知が有効になっており、
 - アプリウィンドウにフォーカスがありません。
 
 ---
@@ -155,11 +155,11 @@ OpenCode Desktop では、次の場合にのみシステム通知が表示され
 
 アプリが起動せず、UI 内から設定をクリアできない場合は、デスクトップアプリの保存された状態をリセットします。
 
-1. OpenCode デスクトップを終了します。
-2. これらのファイルを見つけて削除します (これらのファイルは OpenCode デスクトップアプリのデータディレクトリにあります)。
+1. CyberStrike デスクトップを終了します。
+2. これらのファイルを見つけて削除します (これらのファイルは CyberStrike デスクトップアプリのデータディレクトリにあります)。
 
-- `opencode.settings.dat` (デスクトップのデフォルトサーバー URL)
-- `opencode.global.dat` および `opencode.workspace.*.dat` (最近のサーバー/プロジェクトなどの UI 状態)
+- `cyberstrike.settings.dat` (デスクトップのデフォルトサーバー URL)
+- `cyberstrike.global.dat` および `cyberstrike.workspace.*.dat` (最近のサーバー/プロジェクトなどの UI 状態)
 
 ディレクトリをすばやく見つけるには:
 
@@ -171,13 +171,13 @@ OpenCode Desktop では、次の場合にのみシステム通知が表示され
 
 ## ヘルプを求める
 
-OpenCode で問題が発生している場合:
+CyberStrike で問題が発生している場合:
 
 1. **GitHub で問題を報告してください**
 
 バグを報告したり、機能をリクエストしたりする最良の方法は、GitHub リポジトリを使用することです。
 
-[**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+[**github.com/CyberStrikeus/cyberstrike/issues**](https://github.com/CyberStrikeus/cyberstrike/issues)
 
 新しい問題を作成する前に、既存の問題を検索して、問題がすでに報告されているかどうかを確認してください。
 
@@ -185,7 +185,7 @@ OpenCode で問題が発生している場合:
 
 リアルタイムのヘルプやコミュニティのディスカッションについては、Discord サーバーに参加してください。
 
-[**opencode.ai/discord**](https://opencode.ai/discord)
+[**cyberstrike.io/discord**](https://cyberstrike.io/discord)
 
 ---
 
@@ -195,11 +195,11 @@ OpenCode で問題が発生している場合:
 
 ---
 
-### OpenCode が起動しない
+### CyberStrike が起動しない
 
 1. ログでエラーメッセージを確認する
 2. `--print-logs` で実行して、ターミナルに出力を確認してください。
-3. `opencode upgrade` を含む最新バージョンを使用していることを確認してください
+3. `cyberstrike upgrade` を含む最新バージョンを使用していることを確認してください
 
 ---
 
@@ -225,9 +225,9 @@ OpenCode で問題が発生している場合:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `cyberstrike/kimi-k2`
 
-どのモデルにアクセスできるかを確認するには、`opencode models` を実行します。
+どのモデルにアクセスできるかを確認するには、`cyberstrike models` を実行します。
 
 ---
 
@@ -241,10 +241,10 @@ ProviderInitError が発生した場合は、構成が無効または破損し�
 2. 問題が解決しない場合は、保存されている構成をクリアしてみてください。
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/cyberstrike
    ```
 
-   Windows では、`WIN+R` を押して、`%USERPROFILE%\.local\share\opencode` を削除します。
+   Windows では、`WIN+R` を押して、`%USERPROFILE%\.local\share\cyberstrike` を削除します。
 
 3. TUI の `/connect` コマンドを使用して、プロバイダーで再認証します。
 
@@ -252,21 +252,21 @@ ProviderInitError が発生した場合は、構成が無効または破損し�
 
 ### AI_APICallError とプロバイダーパッケージの問題
 
-API 呼び出しエラーが発生した場合は、プロバイダーパッケージが古いことが原因である可能性があります。 OpenCode は、必要に応じてプロバイダーパッケージ (OpenAI、Anthropic、Google など) を動的にインストールし、ローカルにキャッシュします。
+API 呼び出しエラーが発生した場合は、プロバイダーパッケージが古いことが原因である可能性があります。 CyberStrike は、必要に応じてプロバイダーパッケージ (OpenAI、Anthropic、Google など) を動的にインストールし、ローカルにキャッシュします。
 
 プロバイダーパッケージの問題を解決するには:
 
 1. プロバイダーパッケージのキャッシュをクリアします。
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/cyberstrike
    ```
 
-   Windows では、`WIN+R` を押して、`%USERPROFILE%\.cache\opencode` を削除します。
+   Windows では、`WIN+R` を押して、`%USERPROFILE%\.cache\cyberstrike` を削除します。
 
-2. OpenCode を再起動して最新のプロバイダーパッケージを再インストールします
+2. CyberStrike を再起動して最新のプロバイダーパッケージを再インストールします
 
-これにより、OpenCode はプロバイダーパッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデルパラメーターや API の変更に関する互換性の問題が解決されます。
+これにより、CyberStrike はプロバイダーパッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデルパラメーターや API の変更に関する互換性の問題が解決されます。
 
 ---
 
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-OpenCode は、Wayland を使用していて `wl-clipboard` を優先しているかどうかを検出します。そうでない場合は、`xclip` および `xsel` の順序でクリップボードツールを検索しようとします。
+CyberStrike は、Wayland を使用していて `wl-clipboard` を優先しているかどうかを検出します。そうでない場合は、`xclip` および `xsel` の順序でクリップボードツールを検索しようとします。

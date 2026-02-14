@@ -1,9 +1,9 @@
 ---
 title: ACP-Unterstützung
-description: Verwenden Sie OpenCode in jedem ACP-kompatiblen Editor.
+description: Verwenden Sie CyberStrike in jedem ACP-kompatiblen Editor.
 ---
 
-OpenCode unterstützt [Agent Client Protocol](https://agentclientprotocol.com) oder (ACP), sodass Sie es direkt in kompatiblen Editoren und IDEs verwenden können.
+CyberStrike unterstützt [Agent Client Protocol](https://agentclientprotocol.com) oder (ACP), sodass Sie es direkt in kompatiblen Editoren und IDEs verwenden können.
 
 :::tip
 Eine Liste der Editoren und Tools, die ACP unterstützen, finden Sie unter [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
@@ -15,9 +15,9 @@ ACP ist ein offenes Protokoll, das die Kommunikation zwischen Code-Editoren und 
 
 ## Konfiguration
 
-Um OpenCode über ACP zu verwenden, konfigurieren Sie Ihren Editor für die Ausführung des Befehls `opencode acp`.
+Um CyberStrike über ACP zu verwenden, konfigurieren Sie Ihren Editor für die Ausführung des Befehls `cyberstrike acp`.
 
-Der Befehl startet OpenCode als ACP-kompatiblen Unterprozess, der über stdio über JSON-RPC mit Ihrem Editor kommuniziert.
+Der Befehl startet CyberStrike als ACP-kompatiblen Unterprozess, der über stdio über JSON-RPC mit Ihrem Editor kommuniziert.
 
 Nachfolgend finden Sie Beispiele für beliebte Editoren, die ACP unterstützen.
 
@@ -30,8 +30,8 @@ Fügen Sie Ihrer [Zed](https://zed.dev)-Konfiguration (`~/.config/zed/settings.j
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "CyberStrike": {
+      "command": "cyberstrike",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ Sie können auch eine Tastenkombination binden, indem Sie Ihren `keymap.json` be
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "CyberStrike",
               "command": {
-                "command": "opencode",
+                "command": "cyberstrike",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ Fügen Sie zu Ihrem [JetBrains IDE](https://www.jetbrains.com/) acp.json gemäß
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "CyberStrike": {
+      "command": "/absolute/path/bin/cyberstrike",
       "args": ["acp"]
     }
   }
 }
 ```
 
-Um es zu öffnen, verwenden Sie den neuen Agenten „OpenCode“ in der AI Chat Agent Selector.
+Um es zu öffnen, verwenden Sie den neuen Agenten „CyberStrike“ in der AI Chat Agent Selector.
 
 ---
 
@@ -93,8 +93,8 @@ Fügen Sie Ihrer [Avante.nvim](https://github.com/yetone/avante.nvim)-Konfigurat
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ Wenn Sie Umgebungsvariablen übergeben müssen:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        CYBERSTRIKE_API_KEY = os.getenv("CYBERSTRIKE_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ Wenn Sie Umgebungsvariablen übergeben müssen:
 
 ### CodeCompanion.nvim
 
-Um OpenCode als ACP-Agent in [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) zu verwenden, fügen Sie Folgendes zu Ihrer Neovim-Konfiguration hinzu:
+Um CyberStrike als ACP-Agent in [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) zu verwenden, fügen Sie Folgendes zu Ihrer Neovim-Konfiguration hinzu:
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "cyberstrike",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-Diese Konfiguration richtet CodeCompanion so ein, dass OpenCode als ACP-Agent für den Chat verwendet wird.
+Diese Konfiguration richtet CodeCompanion so ein, dass CyberStrike als ACP-Agent für den Chat verwendet wird.
 
-Wenn Sie Umgebungsvariablen (wie `OPENCODE_API_KEY`) übergeben müssen, finden Sie ausführliche Informationen zu [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) in der Dokumentation zu CodeCompanion.nvim.
+Wenn Sie Umgebungsvariablen (wie `CYBERSTRIKE_API_KEY`) übergeben müssen, finden Sie ausführliche Informationen zu [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) in der Dokumentation zu CodeCompanion.nvim.
 
 ## Unterstützung
 
-OpenCode funktioniert über ACP genauso wie im Terminal. Alle Funktionen werden unterstützt:
+CyberStrike funktioniert über ACP genauso wie im Terminal. Alle Funktionen werden unterstützt:
 
 :::note
 Einige integrierte Slash-Befehle wie `/undo` und `/redo` werden derzeit nicht unterstützt.
@@ -150,7 +150,7 @@ Einige integrierte Slash-Befehle wie `/undo` und `/redo` werden derzeit nicht un
 
 - Integrierte Tools (Dateioperationen, Terminalbefehle usw.)
 - Benutzerdefinierte Tools und Slash-Befehle
-- MCP-Server, die in Ihrer OpenCode-Konfiguration konfiguriert sind
+- MCP-Server, die in Ihrer CyberStrike-Konfiguration konfiguriert sind
 - Projektspezifische Regeln von `AGENTS.md`
 - Benutzerdefinierte Formatierer und Linters
 - Agenten- und Berechtigungssystem

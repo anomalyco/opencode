@@ -1,15 +1,15 @@
 ---
 title: مقدمة
-description: ابدأ باستخدام OpenCode.
+description: ابدأ باستخدام CyberStrike.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) هو وكيل ترميز بالذكاء الاصطناعي مفتوح المصدر. يتوفر كواجهة terminal، وتطبيق لسطح المكتب، أو إضافة لبيئة تطوير متكاملة (IDE).
+[**CyberStrike**](/) هو وكيل ترميز بالذكاء الاصطناعي مفتوح المصدر. يتوفر كواجهة terminal، وتطبيق لسطح المكتب، أو إضافة لبيئة تطوير متكاملة (IDE).
 
-![واجهة OpenCode في terminal مع سمة opencode](../../../assets/lander/screenshot.png)
+![واجهة CyberStrike في terminal مع سمة cyberstrike](../../../assets/lander/screenshot.png)
 
 لنبدأ.
 
@@ -17,7 +17,7 @@ export const console = config.console
 
 #### المتطلبات
 
-لاستخدام OpenCode في terminal، ستحتاج إلى:
+لاستخدام CyberStrike في terminal، ستحتاج إلى:
 
 1. محاكي terminal حديث مثل:
    - [WezTerm](https://wezterm.org) متعدد المنصات
@@ -31,10 +31,10 @@ export const console = config.console
 
 ## التثبيت
 
-أسهل طريقة لتثبيت OpenCode هي عبر سكربت التثبيت.
+أسهل طريقة لتثبيت CyberStrike هي عبر سكربت التثبيت.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://cyberstrike.io/install | bash
 ```
 
 يمكنك أيضا تثبيته عبر الأوامر التالية:
@@ -45,28 +45,28 @@ curl -fsSL https://opencode.ai/install | bash
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g cyberstrike-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g cyberstrike-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g cyberstrike-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add cyberstrike-ai
         ```
 
       </TabItem>
@@ -76,68 +76,68 @@ curl -fsSL https://opencode.ai/install | bash
 - **باستخدام Homebrew على macOS وLinux**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install CyberStrikeus/tap/cyberstrike
   ```
 
-  > نوصي باستخدام tap الخاص بـ OpenCode للحصول على أحدث الإصدارات. صيغة `brew install opencode` الرسمية تُدار بواسطة فريق Homebrew ويتم تحديثها بوتيرة أقل.
+  > نوصي باستخدام tap الخاص بـ CyberStrike للحصول على أحدث الإصدارات. صيغة `brew install cyberstrike` الرسمية تُدار بواسطة فريق Homebrew ويتم تحديثها بوتيرة أقل.
 
 - **باستخدام Paru على Arch Linux**
 
   ```bash
-  sudo pacman -S opencode           # Arch Linux (Stable)
-  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  sudo pacman -S cyberstrike           # Arch Linux (Stable)
+  paru -S cyberstrike-bin              # Arch Linux (Latest from AUR)
   ```
 
 #### Windows
 
 :::tip[موصى به: استخدم WSL]
-لأفضل تجربة على Windows، نوصي باستخدام [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). يوفر أداء أفضل وتوافقا كاملا مع ميزات OpenCode.
+لأفضل تجربة على Windows، نوصي باستخدام [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). يوفر أداء أفضل وتوافقا كاملا مع ميزات CyberStrike.
 :::
 
 - **باستخدام Chocolatey**
 
   ```bash
-  choco install opencode
+  choco install cyberstrike
   ```
 
 - **باستخدام Scoop**
 
   ```bash
-  scoop install opencode
+  scoop install cyberstrike
   ```
 
 - **باستخدام NPM**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g cyberstrike-ai
   ```
 
 - **باستخدام Mise**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:CyberStrikeus/cyberstrike
   ```
 
 - **باستخدام Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/CyberStrikeus/cyberstrike
   ```
 
-دعم تثبيت OpenCode على Windows باستخدام Bun قيد العمل حاليا.
+دعم تثبيت CyberStrike على Windows باستخدام Bun قيد العمل حاليا.
 
-يمكنك أيضا تنزيل الملف التنفيذي من صفحة [Releases](https://github.com/anomalyco/opencode/releases).
+يمكنك أيضا تنزيل الملف التنفيذي من صفحة [Releases](https://github.com/CyberStrikeus/cyberstrike/releases).
 
 ---
 
 ## الإعداد
 
-مع OpenCode يمكنك استخدام أي مزود LLM عبر إعداد مفاتيح API الخاصة به.
+مع CyberStrike يمكنك استخدام أي مزود LLM عبر إعداد مفاتيح API الخاصة به.
 
-إذا كنت جديدا على استخدام مزوّدي LLM، فنوصي باستخدام [OpenCode Zen](/docs/zen).
-إنها قائمة منتقاة من النماذج تم اختبارها والتحقق منها بواسطة فريق OpenCode.
+إذا كنت جديدا على استخدام مزوّدي LLM، فنوصي باستخدام [CyberStrike Zen](/docs/zen).
+إنها قائمة منتقاة من النماذج تم اختبارها والتحقق منها بواسطة فريق CyberStrike.
 
-1. شغّل الأمر `/connect` في واجهة TUI، واختر opencode، ثم انتقل إلى [opencode.ai/auth](https://opencode.ai/auth).
+1. شغّل الأمر `/connect` في واجهة TUI، واختر cyberstrike، ثم انتقل إلى [cyberstrike.io/auth](https://cyberstrike.io/auth).
 
    ```txt
    /connect
@@ -166,31 +166,31 @@ curl -fsSL https://opencode.ai/install | bash
 cd /path/to/project
 ```
 
-ثم شغّل OpenCode.
+ثم شغّل CyberStrike.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-بعد ذلك، هيّئ OpenCode للمشروع عبر تشغيل الأمر التالي.
+بعد ذلك، هيّئ CyberStrike للمشروع عبر تشغيل الأمر التالي.
 
 ```bash frame="none"
 /init
 ```
 
-سيجعل هذا OpenCode يحلل مشروعك ويُنشئ ملف `AGENTS.md` في جذر المشروع.
+سيجعل هذا CyberStrike يحلل مشروعك ويُنشئ ملف `AGENTS.md` في جذر المشروع.
 
 :::tip
 يستحسن أن تقوم بعمل commit لملف `AGENTS.md` الخاص بمشروعك إلى Git.
 :::
 
-يساعد هذا OpenCode على فهم بنية المشروع وأنماط الترميز المستخدمة.
+يساعد هذا CyberStrike على فهم بنية المشروع وأنماط الترميز المستخدمة.
 
 ---
 
 ## الاستخدام
 
-أصبحت الآن جاهزا لاستخدام OpenCode للعمل على مشروعك. لا تتردد في سؤاله أي شيء!
+أصبحت الآن جاهزا لاستخدام CyberStrike للعمل على مشروعك. لا تتردد في سؤاله أي شيء!
 
 إذا كنت جديدا على استخدام وكيل ترميز بالذكاء الاصطناعي، فإليك بعض الأمثلة التي قد تساعد.
 
@@ -198,7 +198,7 @@ opencode
 
 ### اطرح أسئلة
 
-يمكنك أن تطلب من OpenCode شرح قاعدة الشيفرة لك.
+يمكنك أن تطلب من CyberStrike شرح قاعدة الشيفرة لك.
 
 :::tip
 استخدم المفتاح `@` للبحث التقريبي عن الملفات داخل المشروع.
@@ -214,11 +214,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### أضف ميزات
 
-يمكنك أن تطلب من OpenCode إضافة ميزات جديدة إلى مشروعك، لكننا نوصي أولا بطلب إنشاء خطة.
+يمكنك أن تطلب من CyberStrike إضافة ميزات جديدة إلى مشروعك، لكننا نوصي أولا بطلب إنشاء خطة.
 
 1. **أنشئ خطة**
 
-   لدى OpenCode _وضع Plan_ يعطل قدرته على إجراء التغييرات، ويقترح بدلا من ذلك _كيف_ سينفّذ الميزة.
+   لدى CyberStrike _وضع Plan_ يعطل قدرته على إجراء التغييرات، ويقترح بدلا من ذلك _كيف_ سينفّذ الميزة.
 
    انتقل إليه باستخدام مفتاح **Tab**. سترى مؤشرا لذلك في الزاوية السفلية اليمنى.
 
@@ -234,10 +234,10 @@ How is authentication handled in @packages/functions/src/api/index.ts
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   احرص على تزويد OpenCode بتفاصيل كافية ليفهم ما تريد. يساعد أن تتحدث إليه كما لو كنت تتحدث إلى مطور مبتدئ ضمن فريقك.
+   احرص على تزويد CyberStrike بتفاصيل كافية ليفهم ما تريد. يساعد أن تتحدث إليه كما لو كنت تتحدث إلى مطور مبتدئ ضمن فريقك.
 
    :::tip
-   أعطِ OpenCode سياقا وأمثلة كافية لمساعدته على فهم ما تريد.
+   أعطِ CyberStrike سياقا وأمثلة كافية لمساعدته على فهم ما تريد.
    :::
 
 2. **حسّن الخطة**
@@ -253,7 +253,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    اسحب الصور وأفلِتها داخل terminal لإضافتها إلى الطلب.
    :::
 
-   يستطيع OpenCode فحص أي صور تزوده بها وإضافتها إلى الطلب. يمكنك فعل ذلك عبر سحب الصورة وإفلاتها داخل terminal.
+   يستطيع CyberStrike فحص أي صور تزوده بها وإضافتها إلى الطلب. يمكنك فعل ذلك عبر سحب الصورة وإفلاتها داخل terminal.
 
 3. **ابنِ الميزة**
 
@@ -273,7 +273,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### نفّذ تغييرات
 
-للتغييرات الأبسط، يمكنك أن تطلب من OpenCode تنفيذها مباشرة دون الحاجة لمراجعة خطة أولا.
+للتغييرات الأبسط، يمكنك أن تطلب من CyberStrike تنفيذها مباشرة دون الحاجة لمراجعة خطة أولا.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -281,13 +281,13 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-تأكد من تقديم قدر مناسب من التفاصيل لكي يجري OpenCode التغييرات الصحيحة.
+تأكد من تقديم قدر مناسب من التفاصيل لكي يجري CyberStrike التغييرات الصحيحة.
 
 ---
 
 ### تراجع عن التغييرات
 
-لنفترض أنك طلبت من OpenCode إجراء بعض التغييرات.
+لنفترض أنك طلبت من CyberStrike إجراء بعض التغييرات.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -299,7 +299,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-سيقوم OpenCode الآن بعكس التغييرات التي أُجريت ويعرض رسالتك الأصلية مجددا.
+سيقوم CyberStrike الآن بعكس التغييرات التي أُجريت ويعرض رسالتك الأصلية مجددا.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -321,7 +321,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## المشاركة
 
-يمكن [مشاركة المحادثات](/docs/share) التي تجريها مع OpenCode مع فريقك.
+يمكن [مشاركة المحادثات](/docs/share) التي تجريها مع CyberStrike مع فريقك.
 
 ```bash frame="none"
 /share
@@ -333,12 +333,12 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 لا تتم مشاركة المحادثات افتراضيا.
 :::
 
-إليك [مثالا لمحادثة](https://opencode.ai/s/4XP1fce5) مع OpenCode.
+إليك [مثالا لمحادثة](https://cyberstrike.io/s/4XP1fce5) مع CyberStrike.
 
 ---
 
 ## التخصيص
 
-وهذا كل شيء! أصبحت الآن محترفا في استخدام OpenCode.
+وهذا كل شيء! أصبحت الآن محترفا في استخدام CyberStrike.
 
-لتجعله مناسبا لك، نوصي بـ [اختيار سمة](/docs/themes)، و[تخصيص اختصارات لوحة المفاتيح](/docs/keybinds)، و[إعداد منسقات الشيفرة](/docs/formatters)، و[إنشاء أوامر مخصصة](/docs/commands)، أو التجربة مع [إعدادات OpenCode](/docs/config).
+لتجعله مناسبا لك، نوصي بـ [اختيار سمة](/docs/themes)، و[تخصيص اختصارات لوحة المفاتيح](/docs/keybinds)، و[إعداد منسقات الشيفرة](/docs/formatters)، و[إنشاء أوامر مخصصة](/docs/commands)، أو التجربة مع [إعدادات CyberStrike](/docs/config).

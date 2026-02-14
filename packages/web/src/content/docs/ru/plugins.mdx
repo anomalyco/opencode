@@ -1,9 +1,9 @@
 ---
 title: Плагины
-description: Напишите свои собственные плагины для расширения opencode.
+description: Напишите свои собственные плагины для расширения cyberstrike.
 ---
 
-Плагины позволяют расширять opencode, подключаясь к различным событиям и настраивая поведение. Вы можете создавать плагины для добавления новых функций, интеграции с внешними сервисами или изменения поведения opencode по умолчанию.
+Плагины позволяют расширять cyberstrike, подключаясь к различным событиям и настраивая поведение. Вы можете создавать плагины для добавления новых функций, интеграции с внешними сервисами или изменения поведения cyberstrike по умолчанию.
 
 Для примера ознакомьтесь с [plugins](/docs/ecosystem#plugins), созданными сообществом.
 
@@ -19,8 +19,8 @@ description: Напишите свои собственные плагины д�
 
 Поместите файлы JavaScript или TypeScript в каталог плагина.
 
-- `.opencode/plugins/` – плагины уровня проекта.
-- `~/.config/opencode/plugins/` — глобальные плагины
+- `.cyberstrike/plugins/` – плагины уровня проекта.
+- `~/.config/cyberstrike/plugins/` — глобальные плагины
 
 Файлы в этих каталогах автоматически загружаются при запуске.
 
@@ -30,10 +30,10 @@ description: Напишите свои собственные плагины д�
 
 Укажите пакеты npm в файле конфигурации.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "cyberstrike-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ description: Напишите свои собственные плагины д�
 
 ### Как устанавливаются плагины
 
-**Плагины npm** устанавливаются автоматически с помощью Bun при запуске. Пакеты и их зависимости кэшируются в `~/.cache/opencode/node_modules/`.
+**Плагины npm** устанавливаются автоматически с помощью Bun при запуске. Пакеты и их зависимости кэшируются в `~/.cache/cyberstrike/node_modules/`.
 
 **Локальные плагины** загружаются непосредственно из каталога плагинов. Чтобы использовать внешние пакеты, вы должны создать `package.json` в своем каталоге конфигурации (см. [Зависимости](#dependencies)) или опубликовать плагин в npm и [добавить его в свой config](/docs/config#plugins).
 
@@ -55,10 +55,10 @@ description: Напишите свои собственные плагины д�
 
 Плагины загружаются из всех источников, и все хуки запускаются последовательно. Порядок загрузки следующий:
 
-1. Глобальная конфигурация (`~/.config/opencode/opencode.json`)
-2. Конфигурация проекта (`opencode.json`)
-3. Глобальный каталог плагинов (`~/.config/opencode/plugins/`)
-4. Каталог плагинов проекта (`.opencode/plugins/`)
+1. Глобальная конфигурация (`~/.config/cyberstrike/cyberstrike.json`)
+2. Конфигурация проекта (`cyberstrike.json`)
+3. Глобальный каталог плагинов (`~/.config/cyberstrike/plugins/`)
+4. Каталог плагинов проекта (`.cyberstrike/plugins/`)
 
 Дубликаты пакетов npm с тем же именем и версией загружаются один раз. Однако локальный плагин и плагин npm со схожими именами загружаются отдельно.
 
@@ -75,7 +75,7 @@ description: Напишите свои собственные плагины д�
 
 Локальные плагины и специальные инструменты могут использовать внешние пакеты npm. Добавьте `package.json` в каталог конфигурации с необходимыми вам зависимостями.
 
-```json title=".opencode/package.json"
+```json title=".cyberstrike/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ description: Напишите свои собственные плагины д�
 }
 ```
 
-opencode запускает `bun install` при запуске для их установки. Затем ваши плагины и инструменты смогут импортировать их.
+cyberstrike запускает `bun install` при запуске для их установки. Затем ваши плагины и инструменты смогут импортировать их.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Базовая структура
 
-```js title=".opencode/plugins/example.js"
+```js title=".cyberstrike/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 Для плагинов TypeScript вы можете импортировать типы из пакета плагина:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## Примеры
 
-Вот несколько примеров плагинов, которые вы можете использовать для расширения opencode.
+Вот несколько примеров плагинов, которые вы можете использовать для расширения cyberstrike.
 
 ---
 
@@ -219,13 +219,13 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 Отправляйте уведомления при возникновении определенных событий:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".cyberstrike/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "cyberstrike"'`
       }
     },
   }
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Мы используем `osascript` для запуска AppleScript на macOS. Здесь мы используем его для отправки уведомлений.
 
 :::note
-Если вы используете настольное приложение opencode, оно может автоматически отправлять системные уведомления, когда ответ готов или когда возникает ошибка сеанса.
+Если вы используете настольное приложение cyberstrike, оно может автоматически отправлять системные уведомления, когда ответ готов или когда возникает ошибка сеанса.
 :::
 
 ---
@@ -244,7 +244,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 Запретите открытому коду читать файлы `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".cyberstrike/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Внедряйте переменные среды во все shell-процессы выполнения (инструменты искусственного интеллекта и пользовательские terminal):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".cyberstrike/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Пользовательские инструменты
 
-Плагины также могут добавлять в opencode собственные инструменты:
+Плагины также могут добавлять в cyberstrike собственные инструменты:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@cyberstrike-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,7 +300,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Помощник `tool` создает собственный инструмент, который может вызывать opencode. Он принимает функцию схемы Zod и возвращает определение инструмента:
+Помощник `tool` создает собственный инструмент, который может вызывать cyberstrike. Он принимает функцию схемы Zod и возвращает определение инструмента:
 
 - `description`: Что делает инструмент
 - `args`: схема Zod для аргументов инструмента.
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 Используйте `client.app.log()` вместо `console.log` для структурированного ведения журнала:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Уровни: `debug`, `info`, `warn`, `error`. Подробности см. в документации SDK](https://opencode.ai/docs/sdk).
+Уровни: `debug`, `info`, `warn`, `error`. Подробности см. в документации SDK](https://cyberstrike.io/docs/sdk).
 
 ---
 
@@ -335,8 +335,8 @@ export const MyPlugin = async ({ client }) => {
 
 Настройте контекст, включаемый при сжатии сеанса:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 Вы также можете полностью заменить запрос на уплотнение, установив `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

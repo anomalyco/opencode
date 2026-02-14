@@ -31,7 +31,7 @@ Your app is ready to be deployed!
 
 ## E2E Testing
 
-Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an opencode backend (defaults to `localhost:4096`).
+Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an cyberstrike backend (defaults to `localhost:4096`).
 Use the local runner to create a temp sandbox, seed data, and run the tests.
 
 ```bash

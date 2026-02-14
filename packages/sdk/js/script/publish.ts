@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@cyberstrike-io/script"
 import { $ } from "bun"
 
 const dir = new URL("..", import.meta.url).pathname

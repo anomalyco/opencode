@@ -1,8 +1,8 @@
 ;(function () {
-  var themeId = localStorage.getItem("opencode-theme-id")
+  var themeId = localStorage.getItem("cyberstrike-theme-id")
   if (!themeId) return
 
-  var scheme = localStorage.getItem("opencode-color-scheme") || "system"
+  var scheme = localStorage.getItem("cyberstrike-color-scheme") || "system"
   var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
   var mode = isDark ? "dark" : "light"
 
@@ -11,7 +11,7 @@
 
   if (themeId === "oc-1") return
 
-  var css = localStorage.getItem("opencode-theme-css-" + themeId + "-" + mode)
+  var css = localStorage.getItem("cyberstrike-theme-css-" + themeId + "-" + mode)
   if (css) {
     var style = document.createElement("style")
     style.id = "oc-theme-preload"

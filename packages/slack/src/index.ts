@@ -1,5 +1,5 @@
 import { App } from "@slack/bolt"
-import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
+import { createCyberstrike, type ToolPart } from "@cyberstrike-io/sdk"
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -13,15 +13,15 @@ console.log("- Bot token present:", !!process.env.SLACK_BOT_TOKEN)
 console.log("- Signing secret present:", !!process.env.SLACK_SIGNING_SECRET)
 console.log("- App token present:", !!process.env.SLACK_APP_TOKEN)
 
-console.log("🚀 Starting opencode server...")
-const opencode = await createOpencode({
+console.log("🚀 Starting cyberstrike server...")
+const cyberstrike = await createCyberstrike({
   port: 0,
 })
-console.log("✅ Opencode server ready")
+console.log("✅ Cyberstrike server ready")
 
 const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
 ;(async () => {
-  const events = await opencode.client.event.subscribe()
+  const events = await cyberstrike.client.event.subscribe()
   for await (const event of events.stream) {
     if (event.type === "message.part.updated") {
       const part = event.properties.part
@@ -72,8 +72,8 @@ app.message(async ({ message, say }) => {
   let session = sessions.get(sessionKey)
 
   if (!session) {
-    console.log("🆕 Creating new opencode session...")
-    const { client, server } = opencode
+    console.log("🆕 Creating new cyberstrike session...")
+    const { client, server } = cyberstrike
 
     const createResult = await client.session.create({
       body: { title: `Slack thread ${thread}` },
@@ -88,7 +88,7 @@ app.message(async ({ message, say }) => {
       return
     }
 
-    console.log("✅ Created opencode session:", createResult.data.id)
+    console.log("✅ Created cyberstrike session:", createResult.data.id)
 
     session = { client, server, sessionId: createResult.data.id, channel, thread }
     sessions.set(sessionKey, session)
@@ -101,13 +101,13 @@ app.message(async ({ message, say }) => {
     }
   }
 
-  console.log("📝 Sending to opencode:", message.text)
+  console.log("📝 Sending to cyberstrike:", message.text)
   const result = await session.client.session.prompt({
     path: { id: session.sessionId },
     body: { parts: [{ type: "text", text: message.text }] },
   })
 
-  console.log("📤 Opencode response:", JSON.stringify(result, null, 2))
+  console.log("📤 Cyberstrike response:", JSON.stringify(result, null, 2))
 
   if (result.error) {
     console.error("❌ Failed to send message:", result.error)

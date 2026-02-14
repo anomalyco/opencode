@@ -3,11 +3,11 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
-OpenCode has a list of keybinds that you can customize through the OpenCode config.
+CyberStrike has a list of keybinds that you can customize through the CyberStrike config.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
 
 ## Leader key
 
-OpenCode uses a `leader` key for most keybinds. This avoids conflicts in your terminal.
+CyberStrike uses a `leader` key for most keybinds. This avoids conflicts in your terminal.
 
 By default, `ctrl+x` is the leader key and most actions require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
 
@@ -119,9 +119,9 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 
 You can disable a keybind by adding the key to your config with a value of "none".
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ You can disable a keybind by adding the key to your config with a value of "none
 
 ## Desktop prompt shortcuts
 
-The OpenCode desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `opencode.json`.
+The CyberStrike desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `cyberstrike.json`.
 
 | Shortcut | Action                                   |
 | -------- | ---------------------------------------- |

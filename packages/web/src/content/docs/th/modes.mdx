@@ -4,14 +4,14 @@ description: โหมดที่แตกต่างกันสำหรั�
 ---
 
 :::caution
-ขณะนี้โหมดได้รับการกำหนดค่าผ่านตัวเลือก `agent` ในการกำหนดค่า opencode ที่
+ขณะนี้โหมดได้รับการกำหนดค่าผ่านตัวเลือก `agent` ในการกำหนดค่า cyberstrike ที่
 ตัวเลือก `mode` เลิกใช้แล้ว [เรียนรู้เพิ่มเติม](/docs/agents)
 :::
 
-โหมดใน opencode ช่วยให้คุณปรับแต่งพฤติกรรม เครื่องมือ และพร้อมท์สำหรับกรณีการใช้งานที่แตกต่างกันได้
+โหมดใน cyberstrike ช่วยให้คุณปรับแต่งพฤติกรรม เครื่องมือ และพร้อมท์สำหรับกรณีการใช้งานที่แตกต่างกันได้
 
 มาพร้อมกับโหมดในตัวสองโหมด: **สร้าง** และ **วางแผน** คุณสามารถปรับแต่งได้
-สิ่งเหล่านี้หรือกำหนดค่าของคุณเองผ่านการกำหนดค่า opencode
+สิ่งเหล่านี้หรือกำหนดค่าของคุณเองผ่านการกำหนดค่า cyberstrike
 
 คุณสามารถสลับระหว่างโหมดระหว่างเซสชันหรือกำหนดค่าในไฟล์กำหนดค่าของคุณ
 
@@ -19,7 +19,7 @@ description: โหมดที่แตกต่างกันสำหรั�
 
 ## บิวท์อิน
 
-opencode มาพร้อมกับโหมดในตัวสองโหมด
+cyberstrike มาพร้อมกับโหมดในตัวสองโหมด
 
 ---
 
@@ -34,7 +34,7 @@ Build เป็นโหมด **ค่าเริ่มต้น** โดย�
 โหมดจำกัดที่ออกแบบมาเพื่อการวางแผนและการวิเคราะห์ ในโหมดแผน เครื่องมือต่อไปนี้จะถูกปิดใช้งานตามค่าเริ่มต้น:
 
 - `write` - ​​ไม่สามารถสร้างไฟล์ใหม่ได้
-- `edit` - ​​ไม่สามารถแก้ไขไฟล์ที่มีอยู่ได้ ยกเว้นไฟล์ที่อยู่ใน `.opencode/plans/*.md` เพื่อดูรายละเอียดแผนงาน
+- `edit` - ​​ไม่สามารถแก้ไขไฟล์ที่มีอยู่ได้ ยกเว้นไฟล์ที่อยู่ใน `.cyberstrike/plans/*.md` เพื่อดูรายละเอียดแผนงาน
 - `patch` - ​​ไม่สามารถใช้แพตช์ได้
 - `bash` - ​​ไม่สามารถรันคำสั่ง shell ได้
 
@@ -56,11 +56,11 @@ Build เป็นโหมด **ค่าเริ่มต้น** โดย�
 
 ### การกำหนดค่าด้วย JSON
 
-กำหนดค่าโหมดในไฟล์กำหนดค่า `opencode.json` ของคุณ:
+กำหนดค่าโหมดในไฟล์กำหนดค่า `cyberstrike.json` ของคุณ:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ Build เป็นโหมด **ค่าเริ่มต้น** โดย�
 
 คุณยังสามารถกำหนดโหมดโดยใช้ไฟล์ Markdown ได้ วางไว้ใน:
 
-- ทั่วโลก: `~/.config/opencode/modes/`
-- โครงการ: `.opencode/modes/`
+- ทั่วโลก: `~/.config/cyberstrike/modes/`
+- โครงการ: `.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Provide constructive feedback without making direct changes.
 
 ใช้การกำหนดค่า `model` เพื่อแทนที่โมเดลเริ่มต้นสำหรับโหมดนี้ มีประโยชน์สำหรับการใช้โมเดลที่แตกต่างกันซึ่งปรับให้เหมาะกับงานที่แตกต่างกัน ตัวอย่างเช่น โมเดลสำหรับการวางแผนที่เร็วขึ้น โมเดลที่มีความสามารถมากขึ้นสำหรับการนำไปปฏิบัติ
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Provide constructive feedback without making direct changes.
 
 ควบคุมการสุ่มและความคิดสร้างสรรค์ของการตอบสนองของ AI ด้วยการกำหนดค่า `temperature` ค่าที่ต่ำกว่าจะทำให้คำตอบมีจุดมุ่งหมายและกำหนดได้มากขึ้น ในขณะที่ค่าที่สูงกว่าจะเพิ่มความคิดสร้างสรรค์และความแปรปรวน
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Provide constructive feedback without making direct changes.
 - **0.3-0.5**: การตอบสนองที่สมดุลและความคิดสร้างสรรค์บางส่วน เหมาะสำหรับงานพัฒนาทั่วไป
 - **0.6-1.0**: คำตอบที่สร้างสรรค์และหลากหลายยิ่งขึ้น ซึ่งมีประโยชน์สำหรับการระดมความคิดและการสำรวจ
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-หากไม่มีการระบุอุณหภูมิ opencode จะใช้ค่าเริ่มต้นเฉพาะรุ่น (โดยทั่วไปจะเป็น 0 สำหรับรุ่นส่วนใหญ่ และ 0.55 สำหรับรุ่น Qwen)
+หากไม่มีการระบุอุณหภูมิ cyberstrike จะใช้ค่าเริ่มต้นเฉพาะรุ่น (โดยทั่วไปจะเป็น 0 สำหรับรุ่นส่วนใหญ่ และ 0.55 สำหรับรุ่น Qwen)
 
 ---
 
@@ -181,7 +181,7 @@ Provide constructive feedback without making direct changes.
 
 ระบุไฟล์พรอมต์ระบบที่กำหนดเองสำหรับโหมดนี้ด้วยการกำหนดค่า `prompt` ไฟล์พร้อมท์ควรมีคำแนะนำเฉพาะสำหรับวัตถุประสงค์ของโหมด
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ Provide constructive feedback without making direct changes.
 ```
 
 เส้นทางนี้สัมพันธ์กับตำแหน่งของไฟล์กำหนดค่า ดังนั้นสิ่งนี้จึงใช้ได้กับ
-ทั้งการกำหนดค่า opencode ส่วนกลางและการกำหนดค่าเฉพาะโครงการ
+ทั้งการกำหนดค่า cyberstrike ส่วนกลางและการกำหนดค่าเฉพาะโครงการ
 
 ---
 
@@ -247,9 +247,9 @@ Provide constructive feedback without making direct changes.
 
 ### ใช้การกำหนดค่า JSON
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -268,9 +268,9 @@ Provide constructive feedback without making direct changes.
 
 ### การใช้ไฟล์ Markdown
 
-สร้างไฟล์โหมดใน `.opencode/modes/` สำหรับโหมดเฉพาะโครงการหรือ `~/.config/opencode/modes/` สำหรับโหมดทั่วโลก:
+สร้างไฟล์โหมดใน `.cyberstrike/modes/` สำหรับโหมดเฉพาะโครงการหรือ `~/.config/cyberstrike/modes/` สำหรับโหมดทั่วโลก:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

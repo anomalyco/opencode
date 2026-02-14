@@ -17,9 +17,9 @@ description: 為重複任務建立自定義指令。
 
 在 `commands/` 目錄中建立 markdown 檔案來定義自定義指令。
 
-建立 `.opencode/commands/test.md`：
+建立 `.cyberstrike/commands/test.md`：
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ frontmatter 定義指令屬性。內容成為範本。
 
 ## 設定
 
-您 可以透過 opencode 設定或透過在 `commands/` 目錄中建立 markdown 檔案來新增自定義指令。
+您 可以透過 cyberstrike 設定或透過在 `commands/` 目錄中建立 markdown 檔案來新增自定義指令。
 
 ---
 
 ### JSON
 
-在 opencode [設定](/docs/config) 中使用 `command` 選項：
+在 cyberstrike [設定](/docs/config) 中使用 `command` 選項：
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ frontmatter 定義指令屬性。內容成為範本。
 
 您也可以使用 Markdown 檔案定義指令。將它們放入：
 
-- 全域：`~/.config/opencode/commands/`
-- 每個專案：`.opencode/commands/`
+- 全域：`~/.config/cyberstrike/commands/`
+- 每個專案：`.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -111,7 +111,7 @@ Markdown 檔名成為指令名。例如，`test.md` 讓您執行：
 
 使用 `$ARGUMENTS` 預留位置將參數傳遞給指令。
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -137,7 +137,7 @@ Include proper typing and basic structure.
 
 例如：
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -166,7 +166,7 @@ with the following content: $3
 
 例如，要建立分析測試覆蓋率的自定義指令：
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -179,7 +179,7 @@ Based on these results, suggest improvements to increase coverage.
 
 或者查看最近的變更：
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -198,7 +198,7 @@ Review these changes and suggest any improvements.
 
 使用 `@` 後跟檔名將檔案包含在指令中。
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -221,7 +221,7 @@ Check for performance issues and suggest improvements.
 
 `template` 選項定義執行指令時將發送到 LLM 的提示。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Check for performance issues and suggest improvements.
 
 使用 `description` 選項提供指令功能的簡要描述。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -259,7 +259,7 @@ Check for performance issues and suggest improvements.
 如果這是 [子代理](/docs/agents/#subagents)，該指令將預設觸發子代理呼叫。
 要禁用此行為，請將 `subtask` 設定為 `false`。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -279,7 +279,7 @@ Check for performance issues and suggest improvements.
 如果您希望指令不污染您的主要上下文並且將**強制**代理充當子代理，那麼這非常有用，
 即使 `mode` 在 [代理](/docs/agents) 設定上設定為 `primary`。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -297,7 +297,7 @@ Check for performance issues and suggest improvements.
 
 使用 `model` 設定覆寫此指令的預設模型。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ### 內建
 
-opencode 包含 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令； [了解更多](/docs/tui#commands)。
+cyberstrike 包含 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令； [了解更多](/docs/tui#commands)。
 
 :::note
 自定義指令可以覆寫內建指令。

@@ -3,21 +3,21 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/util/path"
-import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
+import { base64Encode } from "@cyberstrike-io/util/encode"
+import { Avatar } from "@cyberstrike-io/ui/avatar"
+import { DiffChanges } from "@cyberstrike-io/ui/diff-changes"
+import { HoverCard } from "@cyberstrike-io/ui/hover-card"
+import { Icon } from "@cyberstrike-io/ui/icon"
+import { IconButton } from "@cyberstrike-io/ui/icon-button"
+import { MessageNav } from "@cyberstrike-io/ui/message-nav"
+import { Spinner } from "@cyberstrike-io/ui/spinner"
+import { Tooltip } from "@cyberstrike-io/ui/tooltip"
+import { getFilename } from "@cyberstrike-io/util/path"
+import { type Message, type Session, type TextPart, type UserMessage } from "@cyberstrike-io/sdk/v2/client"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+const CYBERSTRIKE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
@@ -33,7 +33,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
         <Avatar
           fallback={name()}
           src={
-            props.project.id === OPENCODE_PROJECT_ID ? "https://opencode.ai/favicon.svg" : props.project.icon?.override
+            props.project.id === CYBERSTRIKE_PROJECT_ID ? "https://cyberstrike.io/favicon.svg" : props.project.icon?.override
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"

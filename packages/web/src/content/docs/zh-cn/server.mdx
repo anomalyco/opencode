@@ -1,19 +1,19 @@
 ---
 title: 服务器
-description: 通过 HTTP 与 opencode 服务器交互。
+description: 通过 HTTP 与 cyberstrike 服务器交互。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
+The `cyberstrike serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an cyberstrike client can use.
 
 ---
 
 ### 用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### 选项
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | 监听音频                            | `4096`           |
 | `--hostname`    | 监听的主机名                        | `127.0.0.1`      |
 | `--mdns`        | 启用 mDNS 发现                      | `false`          |
-| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--mdns-domain` | Custom domain name for mDNS service | `cyberstrike.local` |
 | `--cors`        | 允许的其他浏览器来源                | `[]`             |
 
 `--cors` 可以多次交付：
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 验证
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+Set `CYBERSTRIKE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `cyberstrike`, or set `CYBERSTRIKE_SERVER_USERNAME` to override it. This applies to both `cyberstrike serve` and `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### 它是如何运作的
 
-When you run `opencode` it starts a TUI and a server. Where the TUI is the
+When you run `cyberstrike` it starts a TUI and a server. Where the TUI is the
 与服务器器对话的客户端。服务器器公开 OpenAPI 3.1 规范
 该端点还用于生成 [SDK](/docs/sdk)。
 
 :::tip
-使用opencode服务器以程序设计方式与opencode交互。
+使用cyberstrike服务器以程序设计方式与cyberstrike交互。
 :::
 
-该架构让 opencode 支持客户端，并允许您以多种设计方式与 opencode 交互。
+该架构让 cyberstrike 支持客户端，并允许您以多种设计方式与 cyberstrike 交互。
 
-You can run `opencode serve` to start a standalone server. If you have the
-opencode TUI running, `opencode serve` will start a new server.
+You can run `cyberstrike serve` to start a standalone server. If you have the
+cyberstrike TUI running, `cyberstrike serve` will start a new server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI running, `opencode serve` will start a new server.
 
 当您启动 TUI 时，它会随机分配端口和主机名。您可以重新设置 `--hostname` 和 `--port` [flags](/docs/cli)。使用它连线到其服务器然后器。
 
-[**_T2_**](#tui) 端点可用于跨境服务器驱动 TUI。例如，您可以预填充或执行提示。此设置由 opencode [IDE](/docs/ide) 外挂使用。
+[**_T2_**](#tui) 端点可用于跨境服务器驱动 TUI。例如，您可以预填充或执行提示。此设置由 cyberstrike [IDE](/docs/ide) 外挂使用。
 
 ---
 
@@ -83,7 +83,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-opencode服务器公开以下API。
+cyberstrike服务器公开以下API。
 
 ---
 

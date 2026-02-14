@@ -3,7 +3,7 @@ title: Навыки агента
 description: Определите повторно используемое поведение с помощью определений SKILL.md
 ---
 
-Навыки агента позволяют opencode обнаруживать многократно используемые инструкции из вашего репозитория или домашнего каталога.
+Навыки агента позволяют cyberstrike обнаруживать многократно используемые инструкции из вашего репозитория или домашнего каталога.
 Навыки загружаются по требованию с помощью встроенного инструмента `skill`: агенты видят доступные навыки и при необходимости могут загрузить весь контент.
 
 ---
@@ -11,10 +11,10 @@ description: Определите повторно используемое по
 ## Разместить файлы
 
 Создайте одну папку для каждого имени навыка и поместите в нее `SKILL.md`.
-opencode выполняет поиск в следующих местах:
+cyberstrike выполняет поиск в следующих местах:
 
-- Конфигурация проекта: `.opencode/skills/<name>/SKILL.md`
-- Глобальная конфигурация: `~/.config/opencode/skills/<name>/SKILL.md`.
+- Конфигурация проекта: `.cyberstrike/skills/<name>/SKILL.md`
+- Глобальная конфигурация: `~/.config/cyberstrike/skills/<name>/SKILL.md`.
 - Совместимость с Project Claude: `.claude/skills/<name>/SKILL.md`
 - Глобальная совместимость с Claude: `~/.claude/skills/<name>/SKILL.md`
 - Совместимость с агентом проекта: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ opencode выполняет поиск в следующих местах:
 
 ## Понимание обнаружения
 
-Для локальных путей проекта opencode переходит из вашего текущего рабочего каталога, пока не достигнет рабочего дерева git.
-Он загружает все соответствующие `skills/*/SKILL.md` в `.opencode/` и все соответствующие `.claude/skills/*/SKILL.md` или `.agents/skills/*/SKILL.md` по пути.
+Для локальных путей проекта cyberstrike переходит из вашего текущего рабочего каталога, пока не достигнет рабочего дерева git.
+Он загружает все соответствующие `skills/*/SKILL.md` в `.cyberstrike/` и все соответствующие `.claude/skills/*/SKILL.md` или `.agents/skills/*/SKILL.md` по пути.
 
-Глобальные определения также загружаются из `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` и `~/.agents/skills/*/SKILL.md`.
+Глобальные определения также загружаются из `~/.config/cyberstrike/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` и `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ opencode выполняет поиск в следующих местах:
 
 ## Используйте пример
 
-Создайте `.opencode/skills/git-release/SKILL.md` следующим образом:
+Создайте `.cyberstrike/skills/git-release/SKILL.md` следующим образом:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: cyberstrike
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Распознавание описания инструмента
 
-opencode перечисляет доступные навыки в описании инструмента `skill`.
+cyberstrike перечисляет доступные навыки в описании инструмента `skill`.
 Каждая запись включает название и описание навыка:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Настройка разрешений
 
-Контролируйте, к каким навыкам агенты могут получить доступ, используя разрешения на основе шаблонов в `opencode.json`:
+Контролируйте, к каким навыкам агенты могут получить доступ, используя разрешения на основе шаблонов в `cyberstrike.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Для встроенных агентов** (в формате `opencode.json`):
+**Для встроенных агентов** (в формате `cyberstrike.json`):
 
 ```json
 {

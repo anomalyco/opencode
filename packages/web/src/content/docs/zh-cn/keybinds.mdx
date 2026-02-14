@@ -3,11 +3,11 @@ title: 快捷键
 description: 自定义您的按键绑定。
 ---
 
-opencode 有一个按键绑定列表，您可以通过 opencode 配置进行自定义。
+cyberstrike 有一个按键绑定列表，您可以通过 cyberstrike 配置进行自定义。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ opencode 有一个按键绑定列表，您可以通过 opencode 配置进行自�
 
 ## Leader 键
 
-opencode 对大多数按键绑定使用 `leader` 键。这可以避免终端中的冲突。
+cyberstrike 对大多数按键绑定使用 `leader` 键。这可以避免终端中的冲突。
 
 默认情况下，`ctrl+x` 是主键，大多数操作要求您先按主键，再按快捷键。例如，要开始新会话，请先按 `ctrl+x`，然后按 `n`。
 
@@ -119,9 +119,9 @@ opencode 对大多数按键绑定使用 `leader` 键。这可以避免终端中�
 
 您可以通过将按键添加到您的配置中并使用值“none”来禁用按键绑定。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ opencode 对大多数按键绑定使用 `leader` 键。这可以避免终端中�
 
 ## 桌面提示快捷键
 
-opencode 桌面应用程序提示输入支持常见的 Readline/Emacs 风格的文本编辑快捷方式。这些是内置的，目前无法通过 `opencode.json` 进行配置。
+cyberstrike 桌面应用程序提示输入支持常见的 Readline/Emacs 风格的文本编辑快捷方式。这些是内置的，目前无法通过 `cyberstrike.json` 进行配置。
 
 | 快捷键   | 动作                      |
 | -------- | ------------------------- |

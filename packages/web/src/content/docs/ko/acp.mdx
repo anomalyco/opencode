@@ -1,9 +1,9 @@
 ---
 title: ACP Support
-description: Use OpenCode in any ACP-compatible editor.
+description: Use CyberStrike in any ACP-compatible editor.
 ---
 
-OpenCode는 [Agent Client Protocol](https://agentclientprotocol.com)(ACP)을 지원하므로, ACP 호환 편집기와 IDE에서 OpenCode를 직접 사용할 수 있습니다.
+CyberStrike는 [Agent Client Protocol](https://agentclientprotocol.com)(ACP)을 지원하므로, ACP 호환 편집기와 IDE에서 CyberStrike를 직접 사용할 수 있습니다.
 
 :::tip
 ACP를 지원하는 편집기와 tool 목록은 [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)에서 확인하세요.
@@ -15,9 +15,9 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실행하도록 config를 설정하세요.
+ACP로 CyberStrike를 사용하려면, 편집기에서 `cyberstrike acp` 명령을 실행하도록 config를 설정하세요.
 
-이 명령은 OpenCode를 ACP 호환 subprocess로 시작하며, stdio 기반 JSON-RPC를 통해 편집기와 통신합니다.
+이 명령은 CyberStrike를 ACP 호환 subprocess로 시작하며, stdio 기반 JSON-RPC를 통해 편집기와 통신합니다.
 
 아래는 ACP를 지원하는 주요 편집기 예시입니다.
 
@@ -30,8 +30,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "CyberStrike": {
+      "command": "cyberstrike",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "CyberStrike",
               "command": {
-                "command": "opencode",
+                "command": "cyberstrike",
                 "args": ["acp"]
               }
             }
@@ -74,15 +74,15 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
+    "CyberStrike": {
+      "command": "/absolute/path/bin/cyberstrike",
       "args": ["acp"]
     }
   }
 }
 ```
 
-열려면 AI Chat agent selector에서 새 `OpenCode` agent를 선택하세요.
+열려면 AI Chat agent selector에서 새 `CyberStrike` agent를 선택하세요.
 
 ---
 
@@ -93,8 +93,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["cyberstrike"] = {
+      command = "cyberstrike",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        CYBERSTRIKE_API_KEY = os.getenv("CYBERSTRIKE_API_KEY")
       }
     }
   }
@@ -121,14 +121,14 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 
 ### CodeCompanion.nvim
 
-[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 OpenCode를 ACP agent로 사용하려면 Neovim config에 다음을 추가하세요.
+[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 CyberStrike를 ACP agent로 사용하려면 Neovim config에 다음을 추가하세요.
 
 ```lua
 require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "cyberstrike",
         model = "claude-sonnet-4",
       },
     },
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-이 config는 chat에서 OpenCode를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
+이 config는 chat에서 CyberStrike를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
 
-환경 변수(`OPENCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
+환경 변수(`CYBERSTRIKE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
 
 ## 지원
 
-OpenCode는 ACP를 통해서도 터미널과 동일하게 동작합니다. 다음 기능을 모두 지원합니다.
+CyberStrike는 ACP를 통해서도 터미널과 동일하게 동작합니다. 다음 기능을 모두 지원합니다.
 
 :::note
 `/undo` 및 `/redo`와 같은 일부 내장 슬래시 명령은 현재 지원되지 않습니다.
@@ -150,7 +150,7 @@ OpenCode는 ACP를 통해서도 터미널과 동일하게 동작합니다. 다�
 
 - 내장 tool(파일 작업, terminal 명령 등)
 - 사용자 정의 tool과 slash command
-- OpenCode config에 설정한 MCP 서버
+- CyberStrike config에 설정한 MCP 서버
 - `AGENTS.md`의 프로젝트별 규칙
 - 사용자 정의 formatter와 linter
 - agent 및 권한 시스템

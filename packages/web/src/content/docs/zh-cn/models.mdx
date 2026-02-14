@@ -3,13 +3,13 @@ title: 模型
 description: 配置 LLM 提供商和模型。
 ---
 
-opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 支持 **75+ LLM 提供商**，并支持运行本地模型。
+cyberstrike 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 支持 **75+ LLM 提供商**，并支持运行本地模型。
 
 ---
 
 ## 提供商
 
-默认会预加载大多数流行的提供商。如果您已通过 `/connect` 命令添加了提供商的凭据，那么它们将在您启动 opencode 时可用。
+默认会预加载大多数流行的提供商。如果您已通过 `/connect` 命令添加了提供商的凭据，那么它们将在您启动 cyberstrike 时可用。
 
 了解有关[提供商](/docs/providers) 的更多信息。
 
@@ -35,7 +35,7 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 然而，既擅长生成代码又擅长工具调用的只有少数。
 
-以下是与 opencode 配合良好的几个模型，排名不分前面。（这不是好看的列表，也不一定是最新的）：
+以下是与 cyberstrike 配合良好的几个模型，排名不分前面。（这不是好看的列表，也不一定是最新的）：
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -51,14 +51,14 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 要将其中之一设置为默认模型，您可以在您的
 打开代码配置。
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-这里完整的ID是`provider_id/model_id`。例如，如果您使用[OpenCode Zen](/docs/zen)，则您将使用`opencode/gpt-5.1-codex`来表示GPT 5.1 Codex。
+这里完整的ID是`provider_id/model_id`。例如，如果您使用[CyberStrike Zen](/docs/zen)，则您将使用`cyberstrike/gpt-5.1-codex`来表示GPT 5.1 Codex。
 
 如果您配置了[定制生产](/docs/providers#custom)，则`provider_id` 是配​​置中`provider` 部分的按键，`model_id` 是`provider.models` 中的按键。
 
@@ -68,9 +68,9 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 您可以通过 config.json 全局配置模型的选项。
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="cyberstrike.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 你还可以定义扩展内置 variants 的自定义 variants。variants 允许你为同一模型配置不同设置，而无需创建重复条目：
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="cyberstrike.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
-    "opencode": {
+    "cyberstrike": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ## 变体
 
-许多模型支持具有不同配置的多种变体。opencode附带了流行建设的内置默认变体。
+许多模型支持具有不同配置的多种变体。cyberstrike附带了流行建设的内置默认变体。
 
 ### 内置变体
 
-opencode 附带了许多重大的默认变体：
+cyberstrike 附带了许多重大的默认变体：
 
 **Anthropic**：
 
@@ -172,9 +172,9 @@ opencode 附带了许多重大的默认变体：
 
 您可以覆盖现有变体或添加您自己的变体：
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="cyberstrike.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ opencode 附带了许多重大的默认变体：
 
 ## 加载模型
 
-当opencode启动时，它会按以下优先顺序检查模型：
+当cyberstrike启动时，它会按以下优先顺序检查模型：
 
 1. `--model` 或 `-m` 配置命令行标志。格式与文件中的相同：`provider_id/model_id`。
 
-2. opencode 配置中的模型列表。
+2. cyberstrike 配置中的模型列表。
 
-   ```json title="opencode.json"
+   ```json title="cyberstrike.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://cyberstrike.io/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

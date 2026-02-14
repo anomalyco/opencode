@@ -3,13 +3,13 @@ title: โมเดล
 description: การกำหนดค่าผู้ให้บริการและรุ่น LLM
 ---
 
-OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://models.dev) เพื่อรองรับผู้ให้บริการ **75+ LLM** และรองรับการใช้งานโมเดลท้องถิ่น
+CyberStrike ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://models.dev) เพื่อรองรับผู้ให้บริการ **75+ LLM** และรองรับการใช้งานโมเดลท้องถิ่น
 
 ---
 
 ## ผู้ให้บริการ
 
-ผู้ให้บริการที่ได้รับความนิยมส่วนใหญ่จะถูกโหลดไว้ล่วงหน้าตามค่าเริ่มต้น หากคุณได้เพิ่มข้อมูลรับรองสำหรับผู้ให้บริการผ่านคำสั่ง `/connect` ข้อมูลเหล่านั้นจะพร้อมใช้งานเมื่อคุณเริ่ม OpenCode
+ผู้ให้บริการที่ได้รับความนิยมส่วนใหญ่จะถูกโหลดไว้ล่วงหน้าตามค่าเริ่มต้น หากคุณได้เพิ่มข้อมูลรับรองสำหรับผู้ให้บริการผ่านคำสั่ง `/connect` ข้อมูลเหล่านั้นจะพร้อมใช้งานเมื่อคุณเริ่ม CyberStrike
 
 เรียนรู้เพิ่มเติมเกี่ยวกับ [ผู้ให้บริการ](/docs/providers)
 
@@ -35,7 +35,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 
 อย่างไรก็ตาม มีเพียงไม่กี่ตัวเท่านั้นที่เก่งทั้งการสร้างโค้ดและการเรียกใช้เครื่องมือ
 
-ต่อไปนี้เป็นโมเดลหลายรุ่นที่ทำงานได้ดีกับ OpenCode โดยไม่เรียงลำดับเป็นพิเศษ (นี่ไม่ใช่รายการที่ครอบคลุมและไม่จำเป็นต้องเป็นข้อมูลล่าสุด):
+ต่อไปนี้เป็นโมเดลหลายรุ่นที่ทำงานได้ดีกับ CyberStrike โดยไม่เรียงลำดับเป็นพิเศษ (นี่ไม่ใช่รายการที่ครอบคลุมและไม่จำเป็นต้องเป็นข้อมูลล่าสุด):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,16 +49,16 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 ## ตั้งค่าเริ่มต้น
 
 หากต้องการตั้งค่าสิ่งใดสิ่งหนึ่งเป็นโมเดลเริ่มต้น คุณสามารถตั้งค่าคีย์ `model` ในของคุณ
-การกำหนดค่า OpenCode
+การกำหนดค่า CyberStrike
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-ID แบบเต็มคือ `provider_id/model_id` ตัวอย่างเช่น หากคุณใช้ [OpenCode Zen](/docs/zen) คุณจะใช้ `opencode/gpt-5.1-codex` สำหรับ GPT 5.1 Codex
+ID แบบเต็มคือ `provider_id/model_id` ตัวอย่างเช่น หากคุณใช้ [CyberStrike Zen](/docs/zen) คุณจะใช้ `cyberstrike/gpt-5.1-codex` สำหรับ GPT 5.1 Codex
 
 หากคุณได้กำหนดค่า [ผู้ให้บริการที่กำหนดเอง](/docs/providers#กำหนดเอง) `provider_id` จะเป็นคีย์จากส่วน `provider` ของการกำหนดค่าของคุณ และ `model_id` จะเป็นคีย์จาก `provider.models`
 
@@ -68,9 +68,9 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
 
 คุณสามารถกำหนดค่าตัวเลือกของโมเดลได้ทั่วโลกผ่านการกำหนดค่า
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="cyberstrike.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
 
 คุณยังสามารถกำหนดตัวแปรแบบกำหนดเองที่ขยายตัวแปรในตัวได้ ตัวแปรช่วยให้คุณกำหนดการตั้งค่าที่แตกต่างกันสำหรับรุ่นเดียวกันโดยไม่ต้องสร้างรายการที่ซ้ำกัน:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="cyberstrike.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
-    "opencode": {
+    "cyberstrike": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
 
 ## Variants (แบบ)
 
-โมเดลหลายตัวรองรับหลาย variants (รูปแบบย่อย) ที่มีการกำหนดค่าต่างกัน OpenCode มาพร้อมกับ variants เริ่มต้นในตัวสำหรับผู้ให้บริการยอดนิยม
+โมเดลหลายตัวรองรับหลาย variants (รูปแบบย่อย) ที่มีการกำหนดค่าต่างกัน CyberStrike มาพร้อมกับ variants เริ่มต้นในตัวสำหรับผู้ให้บริการยอดนิยม
 
 ### Variants ในตัว (Built-in Variants)
 
-OpenCode มาพร้อมกับ variants เริ่มต้นสำหรับผู้ให้บริการหลายราย:
+CyberStrike มาพร้อมกับ variants เริ่มต้นสำหรับผู้ให้บริการหลายราย:
 
 **Anthropic**:
 
@@ -172,9 +172,9 @@ OpenCode มาพร้อมกับ variants เริ่มต้นสำ�
 
 คุณสามารถแทนที่ variants ที่มีอยู่หรือเพิ่มของคุณเองได้:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="cyberstrike.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ OpenCode มาพร้อมกับ variants เริ่มต้นสำ�
 
 ## กำลังโหลดโมเดล
 
-เมื่อ OpenCode เริ่มทำงาน ระบบจะตรวจสอบรุ่นตามลำดับความสำคัญต่อไปนี้:
+เมื่อ CyberStrike เริ่มทำงาน ระบบจะตรวจสอบรุ่นตามลำดับความสำคัญต่อไปนี้:
 
 1. การตั้งค่าสถานะบรรทัดคำสั่ง `--model` หรือ `-m` รูปแบบจะเหมือนกับในไฟล์ปรับแต่ง: `provider_id/model_id`
 
-2. รายการโมเดลในการกำหนดค่า OpenCode
+2. รายการโมเดลในการกำหนดค่า CyberStrike
 
-   ```json title="opencode.json"
+   ```json title="cyberstrike.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://cyberstrike.io/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

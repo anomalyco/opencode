@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@cyberstrike-io/enterprise",
   "version": "1.2.1",
   "private": true,
   "type": "module",
@@ -8,13 +8,13 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "CYBERSTRIKE_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start",
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@cyberstrike-io/util": "workspace:*",
+    "@cyberstrike-io/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",

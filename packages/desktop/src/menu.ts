@@ -16,7 +16,7 @@ export async function createMenu(trigger: (id: string) => void) {
   const menu = await Menu.new({
     items: [
       await Submenu.new({
-        text: "OpenCode",
+        text: "CyberStrike",
         items: [
           await PredefinedMenuItem.new({
             item: { About: null },
@@ -159,11 +159,11 @@ export async function createMenu(trigger: (id: string) => void) {
         items: [
           // missing native macos search
           await MenuItem.new({
-            action: () => openUrl("https://opencode.ai/docs"),
-            text: "OpenCode Documentation",
+            action: () => openUrl("https://cyberstrike.io/docs"),
+            text: "CyberStrike Documentation",
           }),
           await MenuItem.new({
-            action: () => openUrl("https://discord.com/invite/opencode"),
+            action: () => openUrl("https://discord.com/invite/cyberstrike"),
             text: "Support Forum",
           }),
           await PredefinedMenuItem.new({
@@ -176,11 +176,11 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Separator",
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml"),
+            action: () => openUrl("https://github.com/CyberStrikeus/cyberstrike/issues/new?template=feature_request.yml"),
             text: "Share Feedback",
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml"),
+            action: () => openUrl("https://github.com/CyberStrikeus/cyberstrike/issues/new?template=bug_report.yml"),
             text: "Report a Bug",
           }),
         ],

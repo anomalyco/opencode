@@ -3,7 +3,7 @@ title: 工具
 description: 管理 LLM 可以使用的工具。
 ---
 
-Tools allow the LLM to perform actions in your codebase. opencode comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
+Tools allow the LLM to perform actions in your codebase. cyberstrike comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
 
 默认情况下，所有工具都是**启用**并且不需要执行权限。您可以交叉[permissions](/docs/permissions) 控制工具行为。
 
@@ -13,9 +13,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 使用 `permission` 栏位控制工具行为。您可以允许、拒绝或要求批准每个工具。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -26,9 +26,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 您还可以使用通配符同时控制多个工具。例如，要求 MCP 服务器批准所有工具：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 ## 內建工具
 
-以下是 opencode 中可用的所有内置工具。
+以下是 cyberstrike 中可用的所有内置工具。
 
 ---
 
@@ -49,9 +49,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 在项目环境中执行shell命令。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -66,9 +66,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 使用精确的字符串替换来修改现有文件。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -83,9 +83,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 建立新文件或覆盖现有文件。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -104,9 +104,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 读取代码库中的文件内容。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "read": "allow"
   }
@@ -121,9 +121,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 使用正则表达式搜索文件内容。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -138,9 +138,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 通过模式匹配查找文件。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -155,9 +155,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 列出给定路径中的文件和目录。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "list": "allow"
   }
@@ -173,12 +173,12 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 与已配置的 LSP 服务器交互，以获取代码智能功能，例如定义、引用、悬停信息和调用层次结构。
 
 :::note
-只有当 OPENCODE_EXPERIMENTAL_LSP_TOOL=true（或 OPENCODE_EXPERIMENTAL=true）时，此工具才可用。
+只有当 CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL=true（或 CYBERSTRIKE_EXPERIMENTAL=true）时，此工具才可用。
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -195,9 +195,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 对文件应用补丁。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -216,9 +216,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 加载[技能](/docs/skills)（`SKILL.md` 文件）并在对话中返回其内容。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -231,9 +231,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 在编码会话过程中管理待办事项列表。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -252,9 +252,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 阅读现有的待办事项清单。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -273,9 +273,9 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 
 获取网页内容。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -291,19 +291,19 @@ Tools allow the LLM to perform actions in your codebase. opencode comes with a s
 在网络上搜索资料。
 
 :::note
-只有在使用 OpenCode 提供程序时，或者当 OPENCODE_ENABLE_EXA 环境变量被设置为任何真值（例如 true 或 1）时，此工具才可用。
+只有在使用 CyberStrike 提供程序时，或者当 CYBERSTRIKE_ENABLE_EXA 环境变量被设置为任何真值（例如 true 或 1）时，此工具才可用。
 
-在启动 OpenCode 时启用：
+在启动 CyberStrike 时启用：
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+CYBERSTRIKE_ENABLE_EXA=1 cyberstrike
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -324,9 +324,9 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 在执行过程中向用户提问。
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "question": "allow"
   }
