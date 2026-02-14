@@ -1758,7 +1758,7 @@ export default function Page() {
       </div>
 
       <TerminalPanel
-        open={isDesktop() && view().terminal.opened()}
+        open={view().terminal.opened()}
         height={layout.terminal.height()}
         resize={layout.terminal.resize}
         close={view().terminal.close}
