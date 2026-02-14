@@ -43,6 +43,7 @@ export const openaiHelper: ProviderHelper = () => ({
         usage = json.response.usage
       },
       retrieve: () => usage,
+      buidlCostChunk: (cost: string) => `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`,
     }
   },
   normalizeUsage: (usage: Usage) => {
