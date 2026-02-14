@@ -1,6 +1,6 @@
 ---
 title: 规则
-description: 设置opencode的自定義指令。
+description: 设置opencode的自定义指令。
 ---
 
 您可以通过 `AGENTS.md` 文件创建 opencode 的自定义指令。这和 Cursor 的规则类似。它包含将包含在 LLM 上下文中的说明，方便您的特定项目自定义其行为。
@@ -48,7 +48,7 @@ This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for 
 - Import shared modules using workspace names: `@my-app/core/example`
 ```
 
-我们在此處添加特定于項目的說明，这将在您的團隊中共享。
+我们在此处添加特定于项目的说明，这将在您的团队中共享。
 
 ---
 
@@ -66,7 +66,7 @@ opencode 还支持从多个位置读取 `AGENTS.md` 文件。这有不同的目�
 
 由于此未提交给 Git 或与您的团队共享，因此我们建议使用它来指定 LLM 应遵循的任何个人规则。
 
-### 克勞德代碼兼容性
+### 克劳德代码兼容性
 
 Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 
@@ -118,7 +118,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 }
 ```
 
-遠程指令的获取有 5 秒的超時時間。
+远程指令的获取有 5 秒的超时时间。
 
 所有说明文件均与您的`AGENTS.md`文件合并。
 
@@ -168,9 +168,9 @@ For testing strategies and coverage requirements: @test/testing-guidelines.md
 Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
 ```
 
-这種方法允许您：
+这种方法允许您：
 
-- 创建模塊化、可重用的规则文件
+- 创建模块化、可重用的规则文件
 - 通过符号链接或git子模块在项目之间共享规则
 - 保持 AGENTS.md 简洁，同时参考详细指南
 - 确保opencode仅在特定任务需要时加载文件
