@@ -781,7 +781,7 @@ export namespace Config {
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
       session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
-      session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
+      session_delete: z.string().optional().default("<leader>d").describe("Delete session"),
       stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
       model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
       model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
