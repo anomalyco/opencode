@@ -68,6 +68,7 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "웹 가져오기",
   "ui.tool.shell": "셸",
+  "ui.tool.powershell": "PowerShell",
   "ui.tool.patch": "패치",
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",

@@ -67,6 +67,7 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhentning",
   "ui.tool.shell": "Shell",
+  "ui.tool.powershell": "PowerShell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Opgaver",
   "ui.tool.todos.read": "Læs opgaver",

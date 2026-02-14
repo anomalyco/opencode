@@ -102,6 +102,7 @@ function computeStatusFromPart(part: PartType | undefined, t: Translator): strin
       case "write":
         return t("ui.sessionTurn.status.makingEdits")
       case "bash":
+      case "pwsh":
         return t("ui.sessionTurn.status.runningCommands")
       default:
         return undefined
@@ -373,7 +374,7 @@ export function SessionTurn(
     if (msgParts.length !== 1) return
 
     const assistantPart = msgParts[0]
-    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
+    if (assistantPart?.type === "tool" && (assistantPart.tool === "bash" || assistantPart.tool === "pwsh")) return assistantPart
   })
 
   const isShellMode = createMemo(() => !!shellModePart())

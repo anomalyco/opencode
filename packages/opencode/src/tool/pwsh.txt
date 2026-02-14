@@ -1,0 +1,65 @@
+Executes a given PowerShell Core (pwsh) command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+
+All commands run in ${directory} by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `Set-Location <directory>; <command>` patterns - use `workdir` instead.
+
+IMPORTANT: This tool is for terminal operations like git, npm, docker, dotnet, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use `Get-ChildItem` to verify the parent directory exists and is the correct location
+   - For example, before running "New-Item -ItemType Directory foo/bar", first use `Get-ChildItem foo` to check that "foo" exists and is the intended parent directory
+
+2. Command Execution:
+   - Always quote file paths that contain spaces with single or double quotes (e.g., Remove-Item 'path with spaces/file.txt')
+   - Examples of proper quoting:
+     - New-Item -ItemType Directory "C:\Users\name\My Documents" (correct)
+     - New-Item -ItemType Directory C:\Users\name\My Documents (incorrect - will fail)
+     - python "C:\path\with spaces\script.py" (correct)
+     - python C:\path\with spaces\script.py (incorrect - will fail)
+   - After ensuring proper quoting, execute the command.
+   - Capture the output of the command.
+
+Usage notes:
+  - The command argument is required.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Because of this, you do NOT need to use `Select-Object -First`, `Select-Object -Last`, or other truncation commands to limit output - just run the command directly.
+
+  - Avoid using PowerShell with file operation cmdlets unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools:
+    - File search: Use Glob (NOT Get-ChildItem for searching)
+    - Content search: Use Grep (NOT Select-String)
+    - Read files: Use Read (NOT Get-Content)
+    - Edit files: Use Edit (NOT PowerShell text manipulation)
+    - Write files: Use Write (NOT Set-Content/Out-File)
+    - Communication: Output text directly (NOT Write-Host/Write-Output)
+  - When issuing multiple commands:
+    - If the commands are independent and can run in parallel, make multiple Pwsh tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Pwsh tool calls in parallel.
+    - If the commands depend on each other and must run sequentially, use a single Pwsh call with ';' to chain them together (e.g., `git add .; git commit -m "message"; git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before Pwsh for git operations, or git add before git commit), run these operations sequentially instead.
+    - Use ';' when you need to run commands sequentially (PowerShell continues even if earlier commands fail, unlike bash &&)
+  - AVOID using `Set-Location <directory>; <command>`. Use the `workdir` parameter to change directories instead.
+    <good-example>
+    Use workdir="C:/foo/bar" with command: pytest tests
+    </good-example>
+    <bad-example>
+    Set-Location C:/foo/bar; pytest tests
+    </bad-example>
+
+PowerShell Best Practices:
+  - Use native PowerShell cmdlets when appropriate: `Get-ChildItem` instead of `ls`, `Get-Content` instead of `cat`, `Remove-Item` instead of `rm`
+  - Use PowerShell pipeline patterns: `Get-Process | Where-Object { $_.CPU -gt 100 } | Select-Object Name, CPU`
+  - For external tools (git, docker, npm, etc.), use them directly as you would in bash
+
+CRITICAL SECURITY RULES - NEVER VIOLATE THESE:
+  - NEVER use `Invoke-Expression` or its alias `iex` - these execute arbitrary strings as code
+  - NEVER use `-EncodedCommand` or base64-encoded commands - these are used for obfuscation
+  - NEVER modify execution policy with `Set-ExecutionPolicy` - this bypasses security controls
+  - NEVER modify registry keys with `Set-ItemProperty`, `New-ItemProperty`, or `Remove-ItemProperty` on `HKLM:` or `HKCU:` paths - these affect system configuration
+  - NEVER modify firewall rules with `New-NetFirewallRule`, `Set-NetFirewallRule`, or `Remove-NetFirewallRule` - these affect network security
+  - NEVER create scheduled tasks with `Register-ScheduledTask` - these create persistence mechanisms
+  - NEVER use PowerShell remoting cmdlets: `Enter-PSSession`, `Invoke-Command -ComputerName`, `New-PSSession` - these enable remote code execution
+  - NEVER use download-and-execute patterns like `Invoke-WebRequest | Invoke-Expression` or `IWR | IEX` - these are malware delivery techniques
+  - NEVER use `Add-Type` for loading arbitrary .NET assemblies - this can load malicious code
+  - NEVER use `-WindowStyle Hidden` with `Start-Process` - this is used for stealth execution
+  - NEVER use `Start-Process` to spawn external processes with suspicious parameters - use direct command execution instead
+  - NEVER use `Stop-Computer` or `Restart-Computer` - these affect system availability
