@@ -1,6 +1,6 @@
 ---
 title: 主题
-description: 选择內建主题或定義您自己的主题。
+description: 选择内建主题或定义您自己的主题。
 ---
 
 使用 opencode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
@@ -11,13 +11,13 @@ By default, opencode uses our own `opencode` theme.
 
 ## 终端要求
 
-为了使主题能夠正确显示完整的调色板，您的终端必須支持**真彩色**（24 位顏色）。大多數现代终端默认支持此功能，但您可能需要启用它：
+为了使主题能够正确显示完整的调色板，您的终端必须支持**真彩色**（24 位颜色）。大多数现代终端默认支持此功能，但您可能需要启用它：
 
 - **检查支持**：执行 `echo $COLORTERM` - 它应该输出 `truecolor` 或 `24bit`
 - **启用真彩色**：在shell配置文件中设置环境变量`COLORTERM=truecolor`
 - **您的终端兼容性**：确保终端模拟器支持24位颜色（大多数现代终端，​​​​如iTerm2、Alacritty、Kitty、Windows终端和最新版本的GNOME终端都支持）
 
-如果沒有真彩色支持，主题的顏色精度可能会降低或回落到最接近的 256 色近似值。
+如果没有真彩色支持，主题的颜色精度可能会降低或回落到最接近的 256 色近似值。
 
 ---
 
@@ -39,7 +39,7 @@ opencode 带有几个内建主题。
 | `matrix`               | 骇客风格黑底绿主题                                                           |
 | `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
 
-此外，我们还在不斷添加新主题。
+此外，我们还在不断添加新主题。
 
 ---
 
@@ -47,15 +47,15 @@ opencode 带有几个内建主题。
 
 `system` 主题旨在自动适应您的最终方案。与使用固定颜色的传统主题不同，_system_ 主题：
 
-- **生成灰度**：根據终端的背景顏色建立自定義灰度，確保最佳对比度。
+- **生成灰度**：根据终端的背景颜色建立自定义灰度，确保最佳对比度。
 - **使用 ANSI 颜色**：使用标准 ANSI 颜色 (0-15) 进行语法突出显示和 UI 元素，尊重 Windows 的调色盘。
 - **保留默认设置**：使用 `none` 作为文字和背景颜色以保持本机的外观。
 
-系統主题適合以下用户：
+系统主题适合以下用户：
 
 - 希望 opencode 与终端的外观相匹配
-- 使用自定義终端配色方案
-- 希望所有终端应用程序具有一致的外觀
+- 使用自定义终端配色方案
+- 希望所有终端应用程序具有一致的外观
 
 ---
 
@@ -80,14 +80,14 @@ opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建�
 
 ### 优先级
 
-主题按以下顺序從多个目录載入，其中后面的目录覆盖前面的目录：
+主题按以下顺序从多个目录载入，其中后面的目录覆盖前面的目录：
 
-1. **內建主题** - 这些主题嵌入在二進製文件中
+1. **内建主题** - 这些主题嵌入在二进制文件中
 2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
 3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
 4. **Current working directory** - Defined in `./.opencode/themes/*.json`
 
-如果多个目录包含同名主题，则将使用优先顺序較高的目录中的主题。
+如果多个目录包含同名主题，则将使用优先顺序较高的目录中的主题。
 
 ---
 
@@ -102,7 +102,7 @@ mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
 ```
 
-以及針对特定专案的主题。
+以及针对特定项目的主题。
 
 ```bash no-frame
 mkdir -p .opencode/themes
@@ -140,7 +140,7 @@ vim .opencode/themes/my-theme.json
 
 ### 例子
 
-以下是自定義主题的示例：
+以下是自定义主题的示例：
 
 ```json title="my-theme.json"
 {
