@@ -49,11 +49,11 @@ Download the latest release from [GitHub Releases](https://github.com/kyashratho
 
 | Platform              | Download                                                                                                                      |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| macOS (Apple Silicon) | [`Claxedo_0.0.2_aarch64.dmg`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.2_aarch64.dmg)     |
-| macOS (Intel)         | [`Claxedo_0.0.2_x64.dmg`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.2_x64.dmg)             |
-| Windows               | [`Claxedo_0.0.2_x64-setup.exe`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.2_x64-setup.exe) |
-| Linux (Debian/Ubuntu) | [`Claxedo_0.0.2_amd64.deb`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.2_amd64.deb)         |
-| Linux (Fedora/RHEL)   | [`Claxedo-0.0.2-1.x86_64.rpm`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo-0.0.2-1.x86_64.rpm)   |
+| macOS (Apple Silicon) | [`Claxedo_0.0.3_aarch64.dmg`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.3_aarch64.dmg)     |
+| macOS (Intel)         | [`Claxedo_0.0.3_x64.dmg`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.3_x64.dmg)             |
+| Windows               | [`Claxedo_0.0.3_x64-setup.exe`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.3_x64-setup.exe) |
+| Linux (Debian/Ubuntu) | [`Claxedo_0.0.3_amd64.deb`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo_0.0.3_amd64.deb)         |
+| Linux (Fedora/RHEL)   | [`Claxedo-0.0.3-1.x86_64.rpm`](https://github.com/kyashrathore/Claxedo/releases/latest/download/Claxedo-0.0.3-1.x86_64.rpm)   |
 
 ## How It Works
 
