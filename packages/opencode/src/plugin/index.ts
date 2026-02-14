@@ -85,6 +85,7 @@ export namespace Plugin {
       // Object.entries(mod) would return both entries pointing to the same function reference.
       const seen = new Set<PluginInstance>()
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+        if (typeof fn !== "function") continue
         if (seen.has(fn)) continue
         seen.add(fn)
         const init = await fn(input)
