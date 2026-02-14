@@ -507,20 +507,28 @@ export default function Layout(props: ParentProps) {
         if (value.dir) return
 
         const last = server.projects.last()
+        if (!last) {
+          setState("autoselect", false)
+          return
+        }
 
         if (value.list.length === 0) {
-          if (!last) return
           setState("autoselect", false)
           openProject(last, false)
           navigateToProject(last)
           return
         }
 
-        const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
-        if (!next) return
+        const next = value.list.find((project) => project.worktree === last)
         setState("autoselect", false)
-        openProject(next.worktree, false)
-        navigateToProject(next.worktree)
+        if (next) {
+          openProject(next.worktree, false)
+          navigateToProject(next.worktree)
+          return
+        }
+
+        openProject(last, false)
+        navigateToProject(last)
       },
     ),
   )
