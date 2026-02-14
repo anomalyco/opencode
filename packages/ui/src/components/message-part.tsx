@@ -13,7 +13,6 @@ import {
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
-  AgentPart,
   AssistantMessage,
   FilePart,
   Message as MessageType,
@@ -351,15 +350,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     }),
   )
 
-  const inlineFiles = createMemo(() =>
-    files().filter((f) => {
-      const mime = f.mime
-      return !mime.startsWith("image/") && mime !== "application/pdf" && f.source?.text?.start !== undefined
-    }),
-  )
-
-  const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
-
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
@@ -413,7 +403,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
       <Show when={text()}>
         <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
-          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <Markdown text={text()} cacheKey={textPart()?.id} />
           <button
             data-slot="user-message-expand"
             type="button"
@@ -460,45 +450,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
     </div>
   )
-}
-
-type HighlightSegment = { text: string; type?: "file" | "agent" }
-
-function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
-  const segments = createMemo(() => {
-    const text = props.text
-
-    const allRefs: { start: number; end: number; type: "file" | "agent" }[] = [
-      ...props.references
-        .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
-        .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
-      ...props.agents
-        .filter((a) => a.source?.start !== undefined && a.source?.end !== undefined)
-        .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
-    ].sort((a, b) => a.start - b.start)
-
-    const result: HighlightSegment[] = []
-    let lastIndex = 0
-
-    for (const ref of allRefs) {
-      if (ref.start < lastIndex) continue
-
-      if (ref.start > lastIndex) {
-        result.push({ text: text.slice(lastIndex, ref.start) })
-      }
-
-      result.push({ text: text.slice(ref.start, ref.end), type: ref.type })
-      lastIndex = ref.end
-    }
-
-    if (lastIndex < text.length) {
-      result.push({ text: text.slice(lastIndex) })
-    }
-
-    return result
-  })
-
-  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
 }
 
 export function Part(props: MessagePartProps) {
