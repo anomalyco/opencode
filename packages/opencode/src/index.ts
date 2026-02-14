@@ -79,7 +79,7 @@ const cli = yargs(hideBin(process.argv))
       args: process.argv.slice(2),
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
+    const marker = path.join(Global.Path.data, "migration.json")
     const cmd = opts._[0]
     // skip migration for commands that may be called programmatically
     // migration progress should only be shown to interactive users
@@ -111,6 +111,7 @@ const cli = yargs(hideBin(process.argv))
             }
           },
         })
+        await Bun.write(marker, JSON.stringify({ migratedAt: new Date().toISOString() }))
       } finally {
         if (tty) process.stdout.write("\x1b[?25h")
         else {
