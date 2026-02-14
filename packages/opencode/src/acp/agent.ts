@@ -188,6 +188,10 @@ export namespace ACP {
                             title: part.tool,
                             locations: toLocations(part.tool, part.state.input),
                             rawInput: part.state.input,
+                            // Stream partial output during execution (e.g., bash stdout)
+                            rawOutput: part.state.metadata?.output
+                              ? { output: part.state.metadata.output }
+                              : undefined,
                           },
                         })
                         .catch((err) => {
@@ -518,6 +522,10 @@ export namespace ACP {
                     title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
+                    // Stream partial output during execution (e.g., bash stdout)
+                    rawOutput: part.state.metadata?.output
+                      ? { output: part.state.metadata.output }
+                      : undefined,
                   },
                 })
                 .catch((err) => {
