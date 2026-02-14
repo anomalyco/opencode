@@ -3,7 +3,7 @@ title: การแก้ไขปัญหา
 description: ปัญหาทั่วไปและวิธีแก้ปัญหา
 ---
 
-หากต้องการแก้ไขข้อบกพร่องเกี่ยวกับ OpenCode ให้เริ่มต้นด้วยการตรวจสอบบันทึกและข้อมูลในเครื่องที่จัดเก็บไว้ในดิสก์
+หากต้องการแก้ไขข้อบกพร่องเกี่ยวกับ CyberStrike ให้เริ่มต้นด้วยการตรวจสอบบันทึกและข้อมูลในเครื่องที่จัดเก็บไว้ในดิสก์
 
 ---
 
@@ -11,21 +11,21 @@ description: ปัญหาทั่วไปและวิธีแก้ป�
 
 ไฟล์บันทึกถูกเขียนไปที่:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\opencode\log`
+- **macOS/Linux**: `~/.local/share/cyberstrike/log/`
+- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\cyberstrike\log`
 
 ไฟล์บันทึกจะถูกตั้งชื่อด้วยการประทับเวลา (เช่น `2025-01-09T123456.log`) และไฟล์บันทึกล่าสุด 10 ไฟล์จะถูกเก็บไว้
 
-คุณสามารถตั้งค่าระดับการบันทึกด้วยตัวเลือกบรรทัดคำสั่ง `--log-level` เพื่อรับข้อมูลการแก้ไขข้อบกพร่องโดยละเอียดเพิ่มเติม ตัวอย่างเช่น `opencode --log-level DEBUG`
+คุณสามารถตั้งค่าระดับการบันทึกด้วยตัวเลือกบรรทัดคำสั่ง `--log-level` เพื่อรับข้อมูลการแก้ไขข้อบกพร่องโดยละเอียดเพิ่มเติม ตัวอย่างเช่น `cyberstrike --log-level DEBUG`
 
 ---
 
 ## พื้นที่จัดเก็บ
 
-opencode เก็บข้อมูลเซสชันและข้อมูลแอปพลิเคชันอื่น ๆ ไว้บนดิสก์ที่:
+cyberstrike เก็บข้อมูลเซสชันและข้อมูลแอปพลิเคชันอื่น ๆ ไว้บนดิสก์ที่:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/cyberstrike/`
+- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\cyberstrike`
 
 ไดเรกทอรีนี้ประกอบด้วย:
 
@@ -39,13 +39,13 @@ opencode เก็บข้อมูลเซสชันและข้อม�
 
 ## แอปเดสก์ท็อป
 
-OpenCode Desktop รันเซิร์ฟเวอร์ OpenCode ในเครื่อง (ไฟล์ `opencode-cli` sidecar) ในเบื้องหลัง ปัญหาส่วนใหญ่มีสาเหตุมาจากปลั๊กอินที่ทำงานผิดปกติ แคชเสียหาย หรือการตั้งค่าเซิร์ฟเวอร์ไม่ถูกต้อง
+CyberStrike Desktop รันเซิร์ฟเวอร์ CyberStrike ในเครื่อง (ไฟล์ `cyberstrike-cli` sidecar) ในเบื้องหลัง ปัญหาส่วนใหญ่มีสาเหตุมาจากปลั๊กอินที่ทำงานผิดปกติ แคชเสียหาย หรือการตั้งค่าเซิร์ฟเวอร์ไม่ถูกต้อง
 
 ### การตรวจสอบอย่างรวดเร็ว
 
 - ออกจากระบบโดยสมบูรณ์แล้วเปิดแอปใหม่อีกครั้ง
 - หากแอปแสดงหน้าจอข้อผิดพลาด ให้คลิก **รีสตาร์ท** และคัดลอกรายละเอียดข้อผิดพลาด
-- macOS เท่านั้น: เมนู `OpenCode` -> **โหลด Webview ใหม่** (ช่วยได้หาก UI ว่างเปล่า/frozen)
+- macOS เท่านั้น: เมนู `CyberStrike` -> **โหลด Webview ใหม่** (ช่วยได้หาก UI ว่างเปล่า/frozen)
 
 ---
 
@@ -57,28 +57,28 @@ OpenCode Desktop รันเซิร์ฟเวอร์ OpenCode ในเ�
 
 เปิดไฟล์กำหนดค่าส่วนกลางของคุณแล้วมองหาคีย์ `plugin`
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (หรือ `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (การติดตั้งเก่ากว่า): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/cyberstrike/cyberstrike.jsonc` (หรือ `~/.config/cyberstrike/cyberstrike.json`)
+- **macOS/Linux** (การติดตั้งเก่ากว่า): `~/.local/share/cyberstrike/cyberstrike.jsonc`
+- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\cyberstrike\cyberstrike.jsonc`
 
 หากคุณได้กำหนดค่าปลั๊กอินไว้ ให้ปิดการใช้งานชั่วคราวโดยลบคีย์ออกหรือตั้งค่าเป็นอาร์เรย์ว่าง:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "plugin": [],
 }
 ```
 
 #### ตรวจสอบไดเร็กทอรีปลั๊กอิน
 
-OpenCode ยังสามารถโหลดปลั๊กอินในเครื่องจากดิสก์ได้ ย้ายสิ่งเหล่านี้ออกไปชั่วคราว (หรือเปลี่ยนชื่อโฟลเดอร์) และรีสตาร์ทแอปเดสก์ท็อป:
+CyberStrike ยังสามารถโหลดปลั๊กอินในเครื่องจากดิสก์ได้ ย้ายสิ่งเหล่านี้ออกไปชั่วคราว (หรือเปลี่ยนชื่อโฟลเดอร์) และรีสตาร์ทแอปเดสก์ท็อป:
 
 - **ปลั๊กอินสากล**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\opencode\plugins`
+  - **macOS/Linux**: `~/.config/cyberstrike/plugins/`
+  - **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\cyberstrike\plugins`
 - **ปลั๊กอินโครงการ** (เฉพาะในกรณีที่คุณใช้การกำหนดค่าต่อโครงการ)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.cyberstrike/plugins/`
 
 หากแอปเริ่มทำงานอีกครั้ง ให้เปิดใช้งานปลั๊กอินอีกครั้งทีละรายการเพื่อดูว่าปลั๊กอินใดเป็นสาเหตุของปัญหา
 
@@ -86,22 +86,22 @@ OpenCode ยังสามารถโหลดปลั๊กอินใน�
 
 ### ล้างแคช
 
-หากการปิดใช้งานปลั๊กอินไม่ได้ผล (หรือการติดตั้งปลั๊กอินค้าง) ให้ล้างแคชเพื่อให้ OpenCode สามารถสร้างใหม่ได้
+หากการปิดใช้งานปลั๊กอินไม่ได้ผล (หรือการติดตั้งปลั๊กอินค้าง) ให้ล้างแคชเพื่อให้ CyberStrike สามารถสร้างใหม่ได้
 
-1. ออกจาก OpenCode Desktop โดยสมบูรณ์
+1. ออกจาก CyberStrike Desktop โดยสมบูรณ์
 2. ลบไดเรกทอรีแคช:
 
-- **macOS**: ตัวค้นหา -> `Cmd+Shift+G` -> วาง `~/.cache/opencode`
-- **Linux**: ลบ `~/.cache/opencode` (หรือรัน `rm -rf ~/.cache/opencode`)
-- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.cache\opencode`
+- **macOS**: ตัวค้นหา -> `Cmd+Shift+G` -> วาง `~/.cache/cyberstrike`
+- **Linux**: ลบ `~/.cache/cyberstrike` (หรือรัน `rm -rf ~/.cache/cyberstrike`)
+- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.cache\cyberstrike`
 
-3. รีสตาร์ทเดสก์ท็อป OpenCode
+3. รีสตาร์ทเดสก์ท็อป CyberStrike
 
 ---
 
 ### แก้ไขปัญหาการเชื่อมต่อเซิร์ฟเวอร์
 
-OpenCode Desktop สามารถเริ่มต้นเซิร์ฟเวอร์ภายในเครื่องของตนเองได้ (ค่าเริ่มต้น) หรือเชื่อมต่อกับเซิร์ฟเวอร์ URL ที่คุณกำหนดค่าไว้
+CyberStrike Desktop สามารถเริ่มต้นเซิร์ฟเวอร์ภายในเครื่องของตนเองได้ (ค่าเริ่มต้น) หรือเชื่อมต่อกับเซิร์ฟเวอร์ URL ที่คุณกำหนดค่าไว้
 
 หากคุณเห็นกล่องโต้ตอบ **"การเชื่อมต่อล้มเหลว"** (หรือแอปไม่เคยผ่านหน้าจอเริ่มต้น) ให้ตรวจสอบเซิร์ฟเวอร์ที่กำหนดเอง URL
 
@@ -111,13 +111,13 @@ OpenCode Desktop สามารถเริ่มต้นเซิร์ฟเ
 
 #### ลบ `server.port` / `server.hostname` ออกจากการกำหนดค่าของคุณ
 
-หาก `opencode.json(c)` ของคุณมีส่วน `server` ให้ลบออกชั่วคราวแล้วรีสตาร์ทแอปเดสก์ท็อป
+หาก `cyberstrike.json(c)` ของคุณมีส่วน `server` ให้ลบออกชั่วคราวแล้วรีสตาร์ทแอปเดสก์ท็อป
 
 #### ตรวจสอบตัวแปรสภาพแวดล้อม
 
-หากคุณตั้งค่า `OPENCODE_PORT` ในสภาพแวดล้อมของคุณ แอปเดสก์ท็อปจะพยายามใช้พอร์ตนั้นสำหรับเซิร์ฟเวอร์ภายในเครื่อง
+หากคุณตั้งค่า `CYBERSTRIKE_PORT` ในสภาพแวดล้อมของคุณ แอปเดสก์ท็อปจะพยายามใช้พอร์ตนั้นสำหรับเซิร์ฟเวอร์ภายในเครื่อง
 
-- ยกเลิกการตั้งค่า `OPENCODE_PORT` (หรือเลือกพอร์ตว่าง) แล้วรีสตาร์ท
+- ยกเลิกการตั้งค่า `CYBERSTRIKE_PORT` (หรือเลือกพอร์ตว่าง) แล้วรีสตาร์ท
 
 ---
 
@@ -132,21 +132,21 @@ OpenCode Desktop สามารถเริ่มต้นเซิร์ฟเ
 
 ### Windows: รันไทม์ WebView2
 
-บน Windows OpenCode Desktop ต้องใช้ Microsoft Edge **WebView2 Runtime** หากแอปเปิดเป็นหน้าต่างว่างหรือไม่เริ่มทำงาน ให้ติดตั้ง/update WebView2 แล้วลองอีกครั้ง
+บน Windows CyberStrike Desktop ต้องใช้ Microsoft Edge **WebView2 Runtime** หากแอปเปิดเป็นหน้าต่างว่างหรือไม่เริ่มทำงาน ให้ติดตั้ง/update WebView2 แล้วลองอีกครั้ง
 
 ---
 
 ### Windows: ปัญหาด้านประสิทธิภาพทั่วไป
 
-หากคุณประสบปัญหาประสิทธิภาพการทำงานช้า ปัญหาการเข้าถึงไฟล์ หรือปัญหา terminal บน Windows ให้ลองใช้ [WSL (ระบบย่อย Windows สำหรับ Linux)](/docs/windows-wsl) WSL มอบสภาพแวดล้อม Linux ที่ทำงานร่วมกับคุณสมบัติของ OpenCode ได้อย่างราบรื่นยิ่งขึ้น
+หากคุณประสบปัญหาประสิทธิภาพการทำงานช้า ปัญหาการเข้าถึงไฟล์ หรือปัญหา terminal บน Windows ให้ลองใช้ [WSL (ระบบย่อย Windows สำหรับ Linux)](/docs/windows-wsl) WSL มอบสภาพแวดล้อม Linux ที่ทำงานร่วมกับคุณสมบัติของ CyberStrike ได้อย่างราบรื่นยิ่งขึ้น
 
 ---
 
 ### การแจ้งเตือนไม่แสดง
 
-OpenCode Desktop จะแสดงการแจ้งเตือนของระบบเฉพาะเมื่อ:
+CyberStrike Desktop จะแสดงการแจ้งเตือนของระบบเฉพาะเมื่อ:
 
-- การแจ้งเตือนเปิดใช้งานสำหรับ OpenCode ในการตั้งค่าระบบปฏิบัติการของคุณและ
+- การแจ้งเตือนเปิดใช้งานสำหรับ CyberStrike ในการตั้งค่าระบบปฏิบัติการของคุณและ
 - หน้าต่างแอพไม่ได้โฟกัส
 
 ---
@@ -155,11 +155,11 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 หากแอปไม่เริ่มทำงานและคุณไม่สามารถล้างการตั้งค่าจากภายใน UI ได้ ให้รีเซ็ตสถานะที่บันทึกไว้ของแอปเดสก์ท็อป
 
-1. ออกจากเดสก์ท็อป OpenCode
-2. ค้นหาและลบไฟล์เหล่านี้ (อยู่ในไดเร็กทอรีข้อมูลแอป OpenCode Desktop):
+1. ออกจากเดสก์ท็อป CyberStrike
+2. ค้นหาและลบไฟล์เหล่านี้ (อยู่ในไดเร็กทอรีข้อมูลแอป CyberStrike Desktop):
 
-- `opencode.settings.dat` (เซิร์ฟเวอร์เริ่มต้นของเดสก์ท็อป URL)
-- `opencode.global.dat` และ `opencode.workspace.*.dat` (สถานะ UI เช่น เซิร์ฟเวอร์ล่าสุด/projects)
+- `cyberstrike.settings.dat` (เซิร์ฟเวอร์เริ่มต้นของเดสก์ท็อป URL)
+- `cyberstrike.global.dat` และ `cyberstrike.workspace.*.dat` (สถานะ UI เช่น เซิร์ฟเวอร์ล่าสุด/projects)
 
 หากต้องการค้นหาไดเร็กทอรีอย่างรวดเร็ว:
 
@@ -171,13 +171,13 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 ## การขอความช่วยเหลือ
 
-หากคุณประสบปัญหากับ OpenCode:
+หากคุณประสบปัญหากับ CyberStrike:
 
 1. **รายงานปัญหาเกี่ยวกับ GitHub**
 
    วิธีที่ดีที่สุดในการรายงานจุดบกพร่องหรือขอคุณสมบัติคือผ่านพื้นที่เก็บข้อมูล GitHub ของเรา:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/CyberStrikeus/cyberstrike/issues**](https://github.com/CyberStrikeus/cyberstrike/issues)
 
    ก่อนที่จะสร้างปัญหาใหม่ ให้ค้นหาปัญหาที่มีอยู่เพื่อดูว่าปัญหาของคุณได้รับการรายงานแล้วหรือไม่
 
@@ -185,7 +185,7 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
    สำหรับความช่วยเหลือแบบเรียลไทม์และการสนทนาในชุมชน เข้าร่วมเซิร์ฟเวอร์ Discord ของเรา:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**cyberstrike.io/discord**](https://cyberstrike.io/discord)
 
 ---
 
@@ -195,11 +195,11 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 ---
 
-### OpenCode จะไม่เริ่มทำงาน
+### CyberStrike จะไม่เริ่มทำงาน
 
 1. ตรวจสอบบันทึกเพื่อดูข้อความแสดงข้อผิดพลาด
 2. ลองรันด้วย `--print-logs` เพื่อดูเอาต์พุตใน terminal
-3. ตรวจสอบให้แน่ใจว่าคุณมีเวอร์ชันล่าสุดด้วย `opencode upgrade`
+3. ตรวจสอบให้แน่ใจว่าคุณมีเวอร์ชันล่าสุดด้วย `cyberstrike upgrade`
 
 ---
 
@@ -225,9 +225,9 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `cyberstrike/kimi-k2`
 
-หากต้องการทราบว่าคุณมีสิทธิ์เข้าถึงรุ่นใด ให้เรียกใช้ `opencode models`
+หากต้องการทราบว่าคุณมีสิทธิ์เข้าถึงรุ่นใด ให้เรียกใช้ `cyberstrike models`
 
 ---
 
@@ -241,10 +241,10 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 2. หากปัญหายังคงอยู่ ให้ลองล้างการกำหนดค่าที่เก็บไว้:
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/cyberstrike
    ```
 
-   บน Windows กด `WIN+R` และลบ: `%USERPROFILE%\.local\share\opencode`
+   บน Windows กด `WIN+R` และลบ: `%USERPROFILE%\.local\share\cyberstrike`
 
 3. ตรวจสอบความถูกต้องอีกครั้งกับผู้ให้บริการของคุณโดยใช้คำสั่ง `/connect` ใน TUI
 
@@ -252,21 +252,21 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 ### AI_APICallError และปัญหาแพ็คเกจผู้ให้บริการ
 
-หากคุณพบข้อผิดพลาดในการโทร API อาจเนื่องมาจากแพ็คเกจผู้ให้บริการที่ล้าสมัย opencode จะติดตั้งแพ็คเกจของผู้ให้บริการแบบไดนามิก (OpenAI, Anthropic, Google ฯลฯ) ตามความจำเป็น และแคชไว้ในเครื่อง
+หากคุณพบข้อผิดพลาดในการโทร API อาจเนื่องมาจากแพ็คเกจผู้ให้บริการที่ล้าสมัย cyberstrike จะติดตั้งแพ็คเกจของผู้ให้บริการแบบไดนามิก (OpenAI, Anthropic, Google ฯลฯ) ตามความจำเป็น และแคชไว้ในเครื่อง
 
 ในการแก้ไขปัญหาแพ็คเกจผู้ให้บริการ:
 
 1. ล้างแคชแพ็คเกจผู้ให้บริการ:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/cyberstrike
    ```
 
-   บน Windows กด `WIN+R` และลบ: `%USERPROFILE%\.cache\opencode`
+   บน Windows กด `WIN+R` และลบ: `%USERPROFILE%\.cache\cyberstrike`
 
-2. รีสตาร์ท opencode เพื่อติดตั้งแพ็คเกจผู้ให้บริการล่าสุดอีกครั้ง
+2. รีสตาร์ท cyberstrike เพื่อติดตั้งแพ็คเกจผู้ให้บริการล่าสุดอีกครั้ง
 
-การดำเนินการนี้จะบังคับให้ opencode ดาวน์โหลดแพ็คเกจผู้ให้บริการเวอร์ชันล่าสุด ซึ่งมักจะแก้ไขปัญหาความเข้ากันได้กับพารามิเตอร์โมเดลและการเปลี่ยนแปลง API
+การดำเนินการนี้จะบังคับให้ cyberstrike ดาวน์โหลดแพ็คเกจผู้ให้บริการเวอร์ชันล่าสุด ซึ่งมักจะแก้ไขปัญหาความเข้ากันได้กับพารามิเตอร์โมเดลและการเปลี่ยนแปลง API
 
 ---
 
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode จะตรวจพบว่าคุณใช้ Wayland และชอบ `wl-clipboard` หรือไม่เช่นนั้นจะพยายามค้นหาเครื่องมือคลิปบอร์ดตามลำดับ: `xclip` และ `xsel`
+cyberstrike จะตรวจพบว่าคุณใช้ Wayland และชอบ `wl-clipboard` หรือไม่เช่นนั้นจะพยายามค้นหาเครื่องมือคลิปบอร์ดตามลำดับ: `xclip` และ `xsel`

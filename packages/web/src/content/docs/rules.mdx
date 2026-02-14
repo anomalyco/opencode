@@ -1,21 +1,21 @@
 ---
 title: Rules
-description: Set custom instructions for opencode.
+description: Set custom instructions for cyberstrike.
 ---
 
-You can provide custom instructions to opencode by creating an `AGENTS.md` file. This is similar to Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
+You can provide custom instructions to cyberstrike by creating an `AGENTS.md` file. This is similar to Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
 
 ---
 
 ## Initialize
 
-To create a new `AGENTS.md` file, you can run the `/init` command in opencode.
+To create a new `AGENTS.md` file, you can run the `/init` command in cyberstrike.
 
 :::tip
 You should commit your project's `AGENTS.md` file to Git.
 :::
 
-This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps opencode to navigate the project better.
+This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps cyberstrike to navigate the project better.
 
 If you have an existing `AGENTS.md` file, this will try to add to it.
 
@@ -54,7 +54,7 @@ We are adding project-specific instructions here and this will be shared across 
 
 ## Types
 
-opencode also supports reading the `AGENTS.md` file from multiple locations. And this serves different purposes.
+cyberstrike also supports reading the `AGENTS.md` file from multiple locations. And this serves different purposes.
 
 ### Project
 
@@ -62,58 +62,58 @@ Place an `AGENTS.md` in your project root for project-specific rules. These only
 
 ### Global
 
-You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This gets applied across all opencode sessions.
+You can also have global rules in a `~/.config/cyberstrike/AGENTS.md` file. This gets applied across all cyberstrike sessions.
 
 Since this isn't committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
 
 ### Claude Code Compatibility
 
-For users migrating from Claude Code, OpenCode supports Claude Code's file conventions as fallbacks:
+For users migrating from Claude Code, CyberStrike supports Claude Code's file conventions as fallbacks:
 
 - **Project rules**: `CLAUDE.md` in your project directory (used if no `AGENTS.md` exists)
-- **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
+- **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/cyberstrike/AGENTS.md` exists)
 - **Skills**: `~/.claude/skills/` — see [Agent Skills](/docs/skills/) for details
 
 To disable Claude Code compatibility, set one of these environment variables:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## Precedence
 
-When opencode starts, it looks for rule files in this order:
+When cyberstrike starts, it looks for rule files in this order:
 
 1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
-2. **Global file** at `~/.config/opencode/AGENTS.md`
+2. **Global file** at `~/.config/cyberstrike/AGENTS.md`
 3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
 
-The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/cyberstrike/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Custom Instructions
 
-You can specify custom instruction files in your `opencode.json` or the global `~/.config/opencode/opencode.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
+You can specify custom instruction files in your `cyberstrike.json` or the global `~/.config/cyberstrike/cyberstrike.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
 
 Example:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 You can also use remote URLs to load instructions from the web.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -126,22 +126,22 @@ All instruction files are combined with your `AGENTS.md` files.
 
 ## Referencing External Files
 
-While opencode doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
+While cyberstrike doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
 
-### Using opencode.json
+### Using cyberstrike.json
 
-The recommended approach is to use the `instructions` field in `opencode.json`:
+The recommended approach is to use the `instructions` field in `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### Manual Instructions in AGENTS.md
 
-You can teach opencode to read external files by providing explicit instructions in your `AGENTS.md`. Here's a practical example:
+You can teach cyberstrike to read external files by providing explicit instructions in your `AGENTS.md`. Here's a practical example:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,8 +173,8 @@ This approach allows you to:
 - Create modular, reusable rule files
 - Share rules across projects via symlinks or git submodules
 - Keep AGENTS.md concise while referencing detailed guidelines
-- Ensure opencode loads files only when needed for the specific task
+- Ensure cyberstrike loads files only when needed for the specific task
 
 :::tip
-For monorepos or projects with shared standards, using `opencode.json` with glob patterns (like `packages/*/AGENTS.md`) is more maintainable than manual instructions.
+For monorepos or projects with shared standards, using `cyberstrike.json` with glob patterns (like `packages/*/AGENTS.md`) is more maintainable than manual instructions.
 :::

@@ -3,11 +3,11 @@ title: اختصارات لوحة المفاتيح
 description: خصّص اختصارات لوحة المفاتيح.
 ---
 
-يوفّر OpenCode قائمة باختصارات لوحة المفاتيح يمكنك تخصيصها عبر إعدادات OpenCode.
+يوفّر CyberStrike قائمة باختصارات لوحة المفاتيح يمكنك تخصيصها عبر إعدادات CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ description: خصّص اختصارات لوحة المفاتيح.
 
 ## مفتاح القائد
 
-يستخدم OpenCode مفتاح `leader` لمعظم اختصارات لوحة المفاتيح. يساعد ذلك على تجنّب التعارضات في terminal لديك.
+يستخدم CyberStrike مفتاح `leader` لمعظم اختصارات لوحة المفاتيح. يساعد ذلك على تجنّب التعارضات في terminal لديك.
 
 افتراضيا، يكون `ctrl+x` هو مفتاح القائد، وتتطلّب معظم الإجراءات أن تضغط أولا مفتاح القائد ثم الاختصار. على سبيل المثال، لبدء جلسة جديدة اضغط `ctrl+x` أولا ثم اضغط `n`.
 
@@ -119,9 +119,9 @@ description: خصّص اختصارات لوحة المفاتيح.
 
 يمكنك تعطيل أي اختصار بإضافة معرّف الاختصار إلى ملف الإعدادات بقيمة "none".
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ description: خصّص اختصارات لوحة المفاتيح.
 
 ## اختصارات موجّه سطح المكتب
 
-يدعم حقل إدخال الموجّه في تطبيق OpenCode لسطح المكتب اختصارات شائعة لتحرير النص على نمط Readline/Emacs. هذه الاختصارات مدمجة حاليا ولا يمكن تخصيصها عبر `opencode.json`.
+يدعم حقل إدخال الموجّه في تطبيق CyberStrike لسطح المكتب اختصارات شائعة لتحرير النص على نمط Readline/Emacs. هذه الاختصارات مدمجة حاليا ولا يمكن تخصيصها عبر `cyberstrike.json`.
 
 | الاختصار | الإجراء                                    |
 | -------- | ------------------------------------------ |

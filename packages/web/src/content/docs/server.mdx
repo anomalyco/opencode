@@ -1,19 +1,19 @@
 ---
 title: Server
-description: Interact with opencode server over HTTP.
+description: Interact with cyberstrike server over HTTP.
 ---
 
 import config from "../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
+The `cyberstrike serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an cyberstrike client can use.
 
 ---
 
 ### Usage
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Options
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port to listen on                   | `4096`           |
 | `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
 | `--mdns`        | Enable mDNS discovery               | `false`          |
-| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--mdns-domain` | Custom domain name for mDNS service | `cyberstrike.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
 
 `--cors` can be passed multiple times:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Authentication
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+Set `CYBERSTRIKE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `cyberstrike`, or set `CYBERSTRIKE_SERVER_USERNAME` to override it. This applies to both `cyberstrike serve` and `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### How it works
 
-When you run `opencode` it starts a TUI and a server. Where the TUI is the
+When you run `cyberstrike` it starts a TUI and a server. Where the TUI is the
 client that talks to the server. The server exposes an OpenAPI 3.1 spec
 endpoint. This endpoint is also used to generate an [SDK](/docs/sdk).
 
 :::tip
-Use the opencode server to interact with opencode programmatically.
+Use the cyberstrike server to interact with cyberstrike programmatically.
 :::
 
-This architecture lets opencode support multiple clients and allows you to interact with opencode programmatically.
+This architecture lets cyberstrike support multiple clients and allows you to interact with cyberstrike programmatically.
 
-You can run `opencode serve` to start a standalone server. If you have the
-opencode TUI running, `opencode serve` will start a new server.
+You can run `cyberstrike serve` to start a standalone server. If you have the
+cyberstrike TUI running, `cyberstrike serve` will start a new server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI running, `opencode serve` will start a new server.
 
 When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](/docs/cli). Then use this to connect to its server.
 
-The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](/docs/ide) plugins.
+The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the CyberStrike [IDE](/docs/ide) plugins.
 
 ---
 
@@ -83,7 +83,7 @@ For example, `http://localhost:4096/doc`. Use the spec to generate clients or in
 
 ## APIs
 
-The opencode server exposes the following APIs.
+The cyberstrike server exposes the following APIs.
 
 ---
 

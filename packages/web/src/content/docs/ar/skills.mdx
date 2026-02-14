@@ -3,7 +3,7 @@ title: "مهارات الوكيل"
 description: "عرّف سلوكاً قابلاً لإعادة الاستخدام عبر تعريفات SKILL.md"
 ---
 
-تتيح مهارات الوكيل لـ OpenCode اكتشاف تعليمات قابلة لإعادة الاستخدام من مستودعك أو من دليل المنزل.
+تتيح مهارات الوكيل لـ CyberStrike اكتشاف تعليمات قابلة لإعادة الاستخدام من مستودعك أو من دليل المنزل.
 تُحمَّل المهارات عند الطلب عبر أداة `skill` المدمجة — يرى الوكلاء المهارات المتاحة ويمكنهم تحميل المحتوى الكامل عند الحاجة.
 
 ---
@@ -11,10 +11,10 @@ description: "عرّف سلوكاً قابلاً لإعادة الاستخدام
 ## وضع الملفات
 
 أنشئ مجلداً واحداً لكل اسم مهارة وضع بداخله ملف `SKILL.md`.
-يبحث OpenCode في هذه المواقع:
+يبحث CyberStrike في هذه المواقع:
 
-- إعدادات المشروع: `.opencode/skills/<name>/SKILL.md`
-- إعدادات عامة: `~/.config/opencode/skills/<name>/SKILL.md`
+- إعدادات المشروع: `.cyberstrike/skills/<name>/SKILL.md`
+- إعدادات عامة: `~/.config/cyberstrike/skills/<name>/SKILL.md`
 - مشروع متوافق مع Claude: `.claude/skills/<name>/SKILL.md`
 - عام متوافق مع Claude: `~/.claude/skills/<name>/SKILL.md`
 - مشروع متوافق مع الوكلاء: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ description: "عرّف سلوكاً قابلاً لإعادة الاستخدام
 
 ## فهم الاكتشاف
 
-بالنسبة لمسارات المشروع المحلية، يتدرج OpenCode صعوداً من دليل العمل الحالي حتى يصل إلى `git worktree`.
-ويحمّل أي ملفات مطابقة لـ `skills/*/SKILL.md` داخل `.opencode/` وأي ملفات مطابقة لـ `.claude/skills/*/SKILL.md` أو `.agents/skills/*/SKILL.md` على طول الطريق.
+بالنسبة لمسارات المشروع المحلية، يتدرج CyberStrike صعوداً من دليل العمل الحالي حتى يصل إلى `git worktree`.
+ويحمّل أي ملفات مطابقة لـ `skills/*/SKILL.md` داخل `.cyberstrike/` وأي ملفات مطابقة لـ `.claude/skills/*/SKILL.md` أو `.agents/skills/*/SKILL.md` على طول الطريق.
 
-كما تُحمَّل التعريفات العامة أيضاً من `~/.config/opencode/skills/*/SKILL.md` و `~/.claude/skills/*/SKILL.md` و `~/.agents/skills/*/SKILL.md`.
+كما تُحمَّل التعريفات العامة أيضاً من `~/.config/cyberstrike/skills/*/SKILL.md` و `~/.claude/skills/*/SKILL.md` و `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,14 +73,14 @@ description: "عرّف سلوكاً قابلاً لإعادة الاستخدام
 
 ## استخدم مثالاً
 
-أنشئ `.opencode/skills/git-release/SKILL.md` بهذا الشكل:
+أنشئ `.cyberstrike/skills/git-release/SKILL.md` بهذا الشكل:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: cyberstrike
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## التعرّف على وصف الأداة
 
-يعرض OpenCode المهارات المتاحة في وصف أداة `skill`.
+يعرض CyberStrike المهارات المتاحة في وصف أداة `skill`.
 يتضمن كل إدخال اسم المهارة ووصفها:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## تهيئة الصلاحيات
 
-تحكم في المهارات التي يمكن للوكلاء الوصول إليها باستخدام صلاحيات مبنية على أنماط داخل `opencode.json`:
+تحكم في المهارات التي يمكن للوكلاء الوصول إليها باستخدام صلاحيات مبنية على أنماط داخل `cyberstrike.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**للوكلاء المدمجين** (في `opencode.json`):
+**للوكلاء المدمجين** (في `cyberstrike.json`):
 
 ```json
 {

@@ -4,7 +4,7 @@
     {
       "type": "bun",
       "request": "attach",
-      "name": "opencode (attach)",
+      "name": "cyberstrike (attach)",
       "url": "ws://localhost:6499/"
     }
   ]

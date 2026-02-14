@@ -11,18 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Provjera ažuriranja nije uspjela",
   "desktop.updater.checkFailed.message": "Nije moguće provjeriti ažuriranja",
   "desktop.updater.none.title": "Nema dostupnog ažuriranja",
-  "desktop.updater.none.message": "Već koristiš najnoviju verziju OpenCode-a",
+  "desktop.updater.none.message": "Već koristiš najnoviju verziju CyberStrike-a",
   "desktop.updater.downloadFailed.title": "Ažuriranje nije uspjelo",
   "desktop.updater.downloadFailed.message": "Neuspjelo preuzimanje ažuriranja",
   "desktop.updater.downloaded.title": "Ažuriranje preuzeto",
   "desktop.updater.downloaded.prompt":
-    "Verzija {{version}} OpenCode-a je preuzeta. Želiš li da je instaliraš i ponovo pokreneš aplikaciju?",
+    "Verzija {{version}} CyberStrike-a je preuzeta. Želiš li da je instaliraš i ponovo pokreneš aplikaciju?",
   "desktop.updater.installFailed.title": "Ažuriranje nije uspjelo",
   "desktop.updater.installFailed.message": "Neuspjela instalacija ažuriranja",
 
   "desktop.cli.installed.title": "CLI instaliran",
   "desktop.cli.installed.message":
-    "CLI je instaliran u {{path}}\n\nRestartuj terminal da bi koristio komandu 'opencode'.",
+    "CLI je instaliran u {{path}}\n\nRestartuj terminal da bi koristio komandu 'cyberstrike'.",
   "desktop.cli.failed.title": "Instalacija nije uspjela",
   "desktop.cli.failed.message": "Neuspjela instalacija CLI-a: {{error}}",
 }

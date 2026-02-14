@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: GitLab sorunlarında ve birleştirme isteklerinde opencode'u kullanın.
+description: GitLab sorunlarında ve birleştirme isteklerinde cyberstrike'u kullanın.
 ---
 
-opencode, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
+cyberstrike, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
 
-Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktır.
+Her iki durumda da cyberstrike, GitLab çalıştırıcılarınızda çalışacaktır.
 
 ---
 
 ## GitLab CI
 
-opencode normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
+cyberstrike normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
 
-Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Burada cyberstrike için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-cyberstrike](https://gitlab.com/nagyv/gitlab-cyberstrike).
 
 ---
 
 ### Özellikler
 
-- **İş başına özel işlemleri kullanın**: opencode parçalarının kullanıma veya devre dışı bırakmak için opencode'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
-- **Minimum kurulum**: CI bileşeni opencode'u arka planda kurar; yalnızca opencode yapılandırmasını ve ilk istemi oluşturmanız gerekir.
+- **İş başına özel işlemleri kullanın**: cyberstrike parçalarının kullanıma veya devre dışı bırakmak için cyberstrike'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
+- **Minimum kurulum**: CI bileşeni cyberstrike'u arka planda kurar; yalnızca cyberstrike yapılandırmasını ve ilk istemi oluşturmanız gerekir.
 - **Esnek**: CI bileşeni, davranışını özelleştirmek için çeşitli girişleri destekler
 
 ---
 
 ### Kurulum
 
-1. opencode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
+1. cyberstrike kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
 2. Aşağıdakileri `.gitlab-ci.yml` dosyanıza ekleyin.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-cyberstrike/cyberstrike@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/cyberstrike-config
+         auth_json: $CYBERSTRIKE_AUTH_JSON # The variable name for your CyberStrike authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode).
+Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-cyberstrike).
 
 ---
 
 ## GitLab Duo
 
-opencode, GitLab iş akışınızla bütünleşir.
-Bir yorumda `@opencode`'dan bahsedin; opencode, GitLab CI işlem hattınızdaki görevleri yürütecektir.
+cyberstrike, GitLab iş akışınızla bütünleşir.
+Bir yorumda `@cyberstrike`'dan bahsedin; cyberstrike, GitLab CI işlem hattınızdaki görevleri yürütecektir.
 
 ---
 
 ### Özellikler
 
-- **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
-- **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
+- **Sorunları önceliklendirin**: cyberstrike'dan bir sorunu araştırıp size açıklamasını isteyin.
+- **Düzelt ve uygula**: cyberstrike'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
   Yeni bir dal oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
-- **Güvenli**: opencode, GitLab çalıştırıcılarınızda çalışır.
+- **Güvenli**: cyberstrike, GitLab çalıştırıcılarınızda çalışır.
 
 ---
 
 ### Yapılandırma
 
-opencode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
+cyberstrike, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
 
 :::tip
 Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)'a göz atın.
@@ -82,19 +82,19 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing cyberstrike"
+      - npm install --global cyberstrike-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_CYBERSTRIKE
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating CyberStrike auth configuration"
+      - mkdir --parents ~/.local/share/cyberstrike
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/cyberstrike/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "cyberstrike@gitlab.com"
+      - git config --global user.name "CyberStrike"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running CyberStrike"
       - |
-        opencode run "
+        cyberstrike run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_CYBERSTRIKE
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ Ayrıntılı talimatlar için [GitLab CLI agents docs](https://docs.gitlab.com/u
 
 ### Örnekler
 
-GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
+GitLab'da cyberstrike'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
 :::tip
-`@opencode`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
+`@cyberstrike`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
 :::
 
 - **Bir sorunu açıklama**
@@ -169,27 +169,27 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   Bu yorumu bir GitLab sayısına ekleyin.
 
   ```
-  @opencode explain this issue
+  @cyberstrike explain this issue
   ```
 
-  opencode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
+  cyberstrike konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
 
 - **Bir sorunu düzeltme**
 
   In a GitLab issue, say:
 
   ```
-  @opencode fix this
+  @cyberstrike fix this
   ```
 
-  opencode yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
+  cyberstrike yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
 
 - **Birleştirme isteklerini inceleme**
 
   GitLab birleştirme isteğine aşağıdaki yorumu bırakın.
 
   ```
-  @opencode review this merge request
+  @cyberstrike review this merge request
   ```
 
-  opencode, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.
+  cyberstrike, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.

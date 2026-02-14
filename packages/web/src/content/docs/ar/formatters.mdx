@@ -1,15 +1,15 @@
 ---
 title: المُنسِّقات
-description: يستخدم OpenCode مُنسِّقات خاصة بكل لغة.
+description: يستخدم CyberStrike مُنسِّقات خاصة بكل لغة.
 ---
 
-يُنسِّق OpenCode الملفات تلقائيا بعد كتابتها أو تعديلها باستخدام مُنسِّقات خاصة بكل لغة. يضمن ذلك أن الشيفرة التي يتم توليدها تتبع أساليب التنسيق المعتمدة في مشروعك.
+يُنسِّق CyberStrike الملفات تلقائيا بعد كتابتها أو تعديلها باستخدام مُنسِّقات خاصة بكل لغة. يضمن ذلك أن الشيفرة التي يتم توليدها تتبع أساليب التنسيق المعتمدة في مشروعك.
 
 ---
 
 ## مُضمَّنة
 
-يأتي OpenCode مع عدة مُنسِّقات مُضمَّنة للغات وأطر العمل الشائعة. فيما يلي قائمة بالمُنسِّقات وامتدادات الملفات المدعومة والأوامر أو خيارات الإعداد التي تحتاجها.
+يأتي CyberStrike مع عدة مُنسِّقات مُضمَّنة للغات وأطر العمل الشائعة. فيما يلي قائمة بالمُنسِّقات وامتدادات الملفات المدعومة والأوامر أو خيارات الإعداد التي تحتاجها.
 
 | المُنسِّق            | الامتدادات                                                                                               | المتطلبات                                                                               |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ description: يستخدم OpenCode مُنسِّقات خاصة بكل لغة.
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | وجود اعتماد `oxfmt` في `package.json` و[علم متغير بيئة تجريبي](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                      | يتوفر أمر `ormolu`                                                                      |
 
-لذا إذا كان مشروعك يتضمن `prettier` ضمن `package.json`، فسيستخدمه OpenCode تلقائيا.
+لذا إذا كان مشروعك يتضمن `prettier` ضمن `package.json`، فسيستخدمه CyberStrike تلقائيا.
 
 ---
 
 ## كيف يعمل
 
-عندما يكتب OpenCode ملفا أو يحرره، فإنه:
+عندما يكتب CyberStrike ملفا أو يحرره، فإنه:
 
 1. يتحقق من امتداد الملف مقابل جميع المُنسِّقات المفعّلة.
 2. يشغّل أمر المُنسِّق المناسب على الملف.
@@ -56,11 +56,11 @@ description: يستخدم OpenCode مُنسِّقات خاصة بكل لغة.
 
 ## الإعداد
 
-يمكنك تخصيص المُنسِّقات عبر قسم `formatter` في إعدادات OpenCode.
+يمكنك تخصيص المُنسِّقات عبر قسم `formatter` في إعدادات CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ description: يستخدم OpenCode مُنسِّقات خاصة بكل لغة.
 
 لتعطيل **جميع** المُنسِّقات على مستوى عام، اضبط `formatter` على `false`:
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": false
 }
 ```
 
 لتعطيل مُنسِّق **محدد**، اضبط `disabled` على `true`:
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ description: يستخدم OpenCode مُنسِّقات خاصة بكل لغة.
 
 يمكنك تجاوز المُنسِّقات المُضمَّنة أو إضافة مُنسِّقات جديدة عبر تحديد الأمر ومتغيرات البيئة وامتدادات الملفات:
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

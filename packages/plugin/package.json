@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@cyberstrike-io/plugin",
   "version": "1.2.1",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@cyberstrike-io/sdk": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

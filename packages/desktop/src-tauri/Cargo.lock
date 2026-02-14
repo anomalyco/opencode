@@ -3082,7 +3082,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-desktop"
+name = "cyberstrike-desktop"
 version = "0.0.0"
 dependencies = [
  "chrono",

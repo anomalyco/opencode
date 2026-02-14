@@ -1,25 +1,25 @@
 From 90904222b6f8c86a6d0a8ebed9661950f632a4e8 Mon Sep 17 00:00:00 2001
-From: OpenCode Bot <opencode@sst.dev>
+From: CyberStrike Bot <cyberstrike@sst.dev>
 Date: Wed, 11 Feb 2026 18:44:27 +0000
 Subject: [PATCH] add square logo variants to brand page
 
 ---
- .../asset/brand/opencode-logo-dark-square.png | Bin 0 -> 697 bytes
- .../asset/brand/opencode-logo-dark-square.svg |  18 ++++++
- .../brand/opencode-logo-light-square.png      | Bin 0 -> 697 bytes
- .../brand/opencode-logo-light-square.svg      |  18 ++++++
- .../preview-opencode-logo-dark-square.png     | Bin 0 -> 1477 bytes
- .../preview-opencode-logo-light-square.png    | Bin 0 -> 1467 bytes
+ .../asset/brand/cyberstrike-logo-dark-square.png | Bin 0 -> 697 bytes
+ .../asset/brand/cyberstrike-logo-dark-square.svg |  18 ++++++
+ .../brand/cyberstrike-logo-light-square.png      | Bin 0 -> 697 bytes
+ .../brand/cyberstrike-logo-light-square.svg      |  18 ++++++
+ .../preview-cyberstrike-logo-dark-square.png     | Bin 0 -> 1477 bytes
+ .../preview-cyberstrike-logo-light-square.png    | Bin 0 -> 1467 bytes
  .../console/app/src/routes/brand/index.tsx    |  60 ++++++++++++++++++
  7 files changed, 96 insertions(+)
- create mode 100644 packages/console/app/src/asset/brand/opencode-logo-dark-square.png
- create mode 100644 packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
- create mode 100644 packages/console/app/src/asset/brand/opencode-logo-light-square.png
- create mode 100644 packages/console/app/src/asset/brand/opencode-logo-light-square.svg
- create mode 100644 packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png
- create mode 100644 packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png
+ create mode 100644 packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.png
+ create mode 100644 packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.svg
+ create mode 100644 packages/console/app/src/asset/brand/cyberstrike-logo-light-square.png
+ create mode 100644 packages/console/app/src/asset/brand/cyberstrike-logo-light-square.svg
+ create mode 100644 packages/console/app/src/asset/brand/preview-cyberstrike-logo-dark-square.png
+ create mode 100644 packages/console/app/src/asset/brand/preview-cyberstrike-logo-light-square.png
 
-diff --git a/packages/console/app/src/asset/brand/opencode-logo-dark-square.png b/packages/console/app/src/asset/brand/opencode-logo-dark-square.png
+diff --git a/packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.png b/packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..673c7e3a20f917fae56719ed1c35b4614ecd5f53
 GIT binary patch
@@ -35,11 +35,11 @@ HP6<r_YMlsn
 literal 0
 HcmV?d00001
 
-diff --git a/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg b/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
+diff --git a/packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.svg b/packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.svg
 new file mode 100644
 index 0000000..6a67f62
 --- /dev/null
-+++ b/packages/console/app/src/asset/brand/opencode-logo-dark-square.svg
++++ b/packages/console/app/src/asset/brand/cyberstrike-logo-dark-square.svg
 @@ -0,0 +1,18 @@
 +<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
 +<g transform="translate(30, 0)">
@@ -59,7 +59,7 @@ index 0000000..6a67f62
 +</clipPath>
 +</defs>
 +</svg>
-diff --git a/packages/console/app/src/asset/brand/opencode-logo-light-square.png b/packages/console/app/src/asset/brand/opencode-logo-light-square.png
+diff --git a/packages/console/app/src/asset/brand/cyberstrike-logo-light-square.png b/packages/console/app/src/asset/brand/cyberstrike-logo-light-square.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..5c710474abc4668504cb9678da1de6ad33458af9
 GIT binary patch
@@ -75,11 +75,11 @@ HoD!M<*)j+`
 literal 0
 HcmV?d00001
 
-diff --git a/packages/console/app/src/asset/brand/opencode-logo-light-square.svg b/packages/console/app/src/asset/brand/opencode-logo-light-square.svg
+diff --git a/packages/console/app/src/asset/brand/cyberstrike-logo-light-square.svg b/packages/console/app/src/asset/brand/cyberstrike-logo-light-square.svg
 new file mode 100644
 index 0000000..a738ad8
 --- /dev/null
-+++ b/packages/console/app/src/asset/brand/opencode-logo-light-square.svg
++++ b/packages/console/app/src/asset/brand/cyberstrike-logo-light-square.svg
 @@ -0,0 +1,18 @@
 +<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
 +<g transform="translate(30, 0)">
@@ -99,7 +99,7 @@ index 0000000..a738ad8
 +</clipPath>
 +</defs>
 +</svg>
-diff --git a/packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png b/packages/console/app/src/asset/brand/preview-opencode-logo-dark-square.png
+diff --git a/packages/console/app/src/asset/brand/preview-cyberstrike-logo-dark-square.png b/packages/console/app/src/asset/brand/preview-cyberstrike-logo-dark-square.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..604ad7aa7a87c71d4a3972f18da4044e53f745fe
 GIT binary patch
@@ -119,7 +119,7 @@ RH-Q=$JYD@<);T3K0RY|)#{mEU
 literal 0
 HcmV?d00001
 
-diff --git a/packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png b/packages/console/app/src/asset/brand/preview-opencode-logo-light-square.png
+diff --git a/packages/console/app/src/asset/brand/preview-cyberstrike-logo-light-square.png b/packages/console/app/src/asset/brand/preview-cyberstrike-logo-light-square.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..3964d8528440323730053e56f9d957539937b99d
 GIT binary patch
@@ -145,37 +145,37 @@ index eda3c84..9140462 100644
 +++ b/packages/console/app/src/routes/brand/index.tsx
 @@ -7,18 +7,24 @@ import { useI18n } from "~/context/i18n"
  import { LocaleLinks } from "~/component/locale-links"
- import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
- import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
-+import previewLogoLightSquare from "../../asset/brand/preview-opencode-logo-light-square.png"
-+import previewLogoDarkSquare from "../../asset/brand/preview-opencode-logo-dark-square.png"
- import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
- import previewWordmarkDark from "../../asset/brand/preview-opencode-wordmark-dark.png"
- import previewWordmarkSimpleLight from "../../asset/brand/preview-opencode-wordmark-simple-light.png"
- import previewWordmarkSimpleDark from "../../asset/brand/preview-opencode-wordmark-simple-dark.png"
- import logoLightPng from "../../asset/brand/opencode-logo-light.png"
- import logoDarkPng from "../../asset/brand/opencode-logo-dark.png"
-+import logoLightSquarePng from "../../asset/brand/opencode-logo-light-square.png"
-+import logoDarkSquarePng from "../../asset/brand/opencode-logo-dark-square.png"
- import wordmarkLightPng from "../../asset/brand/opencode-wordmark-light.png"
- import wordmarkDarkPng from "../../asset/brand/opencode-wordmark-dark.png"
- import wordmarkSimpleLightPng from "../../asset/brand/opencode-wordmark-simple-light.png"
- import wordmarkSimpleDarkPng from "../../asset/brand/opencode-wordmark-simple-dark.png"
- import logoLightSvg from "../../asset/brand/opencode-logo-light.svg"
- import logoDarkSvg from "../../asset/brand/opencode-logo-dark.svg"
-+import logoLightSquareSvg from "../../asset/brand/opencode-logo-light-square.svg"
-+import logoDarkSquareSvg from "../../asset/brand/opencode-logo-dark-square.svg"
- import wordmarkLightSvg from "../../asset/brand/opencode-wordmark-light.svg"
- import wordmarkDarkSvg from "../../asset/brand/opencode-wordmark-dark.svg"
- import wordmarkSimpleLightSvg from "../../asset/brand/opencode-wordmark-simple-light.svg"
+ import previewLogoLight from "../../asset/brand/preview-cyberstrike-logo-light.png"
+ import previewLogoDark from "../../asset/brand/preview-cyberstrike-logo-dark.png"
++import previewLogoLightSquare from "../../asset/brand/preview-cyberstrike-logo-light-square.png"
++import previewLogoDarkSquare from "../../asset/brand/preview-cyberstrike-logo-dark-square.png"
+ import previewWordmarkLight from "../../asset/brand/preview-cyberstrike-wordmark-light.png"
+ import previewWordmarkDark from "../../asset/brand/preview-cyberstrike-wordmark-dark.png"
+ import previewWordmarkSimpleLight from "../../asset/brand/preview-cyberstrike-wordmark-simple-light.png"
+ import previewWordmarkSimpleDark from "../../asset/brand/preview-cyberstrike-wordmark-simple-dark.png"
+ import logoLightPng from "../../asset/brand/cyberstrike-logo-light.png"
+ import logoDarkPng from "../../asset/brand/cyberstrike-logo-dark.png"
++import logoLightSquarePng from "../../asset/brand/cyberstrike-logo-light-square.png"
++import logoDarkSquarePng from "../../asset/brand/cyberstrike-logo-dark-square.png"
+ import wordmarkLightPng from "../../asset/brand/cyberstrike-wordmark-light.png"
+ import wordmarkDarkPng from "../../asset/brand/cyberstrike-wordmark-dark.png"
+ import wordmarkSimpleLightPng from "../../asset/brand/cyberstrike-wordmark-simple-light.png"
+ import wordmarkSimpleDarkPng from "../../asset/brand/cyberstrike-wordmark-simple-dark.png"
+ import logoLightSvg from "../../asset/brand/cyberstrike-logo-light.svg"
+ import logoDarkSvg from "../../asset/brand/cyberstrike-logo-dark.svg"
++import logoLightSquareSvg from "../../asset/brand/cyberstrike-logo-light-square.svg"
++import logoDarkSquareSvg from "../../asset/brand/cyberstrike-logo-dark-square.svg"
+ import wordmarkLightSvg from "../../asset/brand/cyberstrike-wordmark-light.svg"
+ import wordmarkDarkSvg from "../../asset/brand/cyberstrike-wordmark-dark.svg"
+ import wordmarkSimpleLightSvg from "../../asset/brand/cyberstrike-wordmark-simple-light.svg"
 @@ -135,6 +141,60 @@ export default function Brand() {
                    </button>
                  </div>
                </div>
 +              <div>
-+                <img src={previewLogoLightSquare} alt="OpenCode brand guidelines" />
++                <img src={previewLogoLightSquare} alt="CyberStrike brand guidelines" />
 +                <div data-component="actions">
-+                  <button onClick={() => downloadFile(logoLightSquarePng, "opencode-logo-light-square.png")}>
++                  <button onClick={() => downloadFile(logoLightSquarePng, "cyberstrike-logo-light-square.png")}>
 +                    PNG
 +                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
 +                      <path
@@ -186,7 +186,7 @@ index eda3c84..9140462 100644
 +                      />
 +                    </svg>
 +                  </button>
-+                  <button onClick={() => downloadFile(logoLightSquareSvg, "opencode-logo-light-square.svg")}>
++                  <button onClick={() => downloadFile(logoLightSquareSvg, "cyberstrike-logo-light-square.svg")}>
 +                    SVG
 +                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
 +                      <path
@@ -200,9 +200,9 @@ index eda3c84..9140462 100644
 +                </div>
 +              </div>
 +              <div>
-+                <img src={previewLogoDarkSquare} alt="OpenCode brand guidelines" />
++                <img src={previewLogoDarkSquare} alt="CyberStrike brand guidelines" />
 +                <div data-component="actions">
-+                  <button onClick={() => downloadFile(logoDarkSquarePng, "opencode-logo-dark-square.png")}>
++                  <button onClick={() => downloadFile(logoDarkSquarePng, "cyberstrike-logo-dark-square.png")}>
 +                    PNG
 +                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
 +                      <path
@@ -213,7 +213,7 @@ index eda3c84..9140462 100644
 +                      />
 +                    </svg>
 +                  </button>
-+                  <button onClick={() => downloadFile(logoDarkSquareSvg, "opencode-logo-dark-square.svg")}>
++                  <button onClick={() => downloadFile(logoDarkSquareSvg, "cyberstrike-logo-dark-square.svg")}>
 +                    SVG
 +                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
 +                      <path
@@ -227,7 +227,7 @@ index eda3c84..9140462 100644
 +                </div>
 +              </div>
                <div>
-                 <img src={previewWordmarkLight} alt="OpenCode brand guidelines" />
+                 <img src={previewWordmarkLight} alt="CyberStrike brand guidelines" />
                  <div data-component="actions">
 -- 
 2.39.5

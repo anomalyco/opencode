@@ -3,11 +3,11 @@ title: Scorciatoie
 description: Personalizza le scorciatoie da tastiera.
 ---
 
-OpenCode ha una lista di scorciatoie che puoi personalizzare tramite la configurazione di OpenCode.
+CyberStrike ha una lista di scorciatoie che puoi personalizzare tramite la configurazione di CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode ha una lista di scorciatoie che puoi personalizzare tramite la configur
 
 ## Tasto leader
 
-OpenCode usa un tasto `leader` per la maggior parte delle scorciatoie. Questo evita conflitti nel terminale.
+CyberStrike usa un tasto `leader` per la maggior parte delle scorciatoie. Questo evita conflitti nel terminale.
 
 Per impostazione predefinita, `ctrl+x` e il tasto leader e la maggior parte delle azioni richiede di premere prima il leader e poi la scorciatoia. Per esempio, per avviare una nuova sessione premi `ctrl+x` e poi `n`.
 
@@ -119,9 +119,9 @@ Non sei obbligato a usare un tasto leader per le scorciatoie, ma lo consigliamo.
 
 Puoi disabilitare una scorciatoia aggiungendo la chiave nella configurazione con valore "none".
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ Puoi disabilitare una scorciatoia aggiungendo la chiave nella configurazione con
 
 ## Scorciatoie del prompt desktop
 
-Il campo di input del prompt nell'app desktop di OpenCode supporta scorciatoie comuni in stile Readline/Emacs per modificare il testo. Sono integrate e al momento non configurabili tramite `opencode.json`.
+Il campo di input del prompt nell'app desktop di CyberStrike supporta scorciatoie comuni in stile Readline/Emacs per modificare il testo. Sono integrate e al momento non configurabili tramite `cyberstrike.json`.
 
 | Scorciatoia | Azione                                     |
 | ----------- | ------------------------------------------ |

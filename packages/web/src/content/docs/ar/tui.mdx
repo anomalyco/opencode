@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: استخدام واجهة المستخدم TUI في OpenCode.
+description: استخدام واجهة المستخدم TUI في CyberStrike.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يوفّر OpenCode واجهة terminal تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
+يوفّر CyberStrike واجهة terminal تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
 
-يؤدي تشغيل OpenCode إلى بدء واجهة TUI للدليل الحالي.
+يؤدي تشغيل CyberStrike إلى بدء واجهة TUI للدليل الحالي.
 
 ```bash
-opencode
+cyberstrike
 ```
 
 أو يمكنك تشغيلها لدليل عمل محدد.
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 بعد الدخول إلى واجهة TUI، يمكنك إرسال رسالة كطلب.
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## الأوامر
 
-عند استخدام واجهة OpenCode في terminal، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
+عند استخدام واجهة CyberStrike في terminal، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-أضف موفّرا إلى OpenCode. يتيح لك اختيار أحد الموفّرين المتاحين وإضافة مفاتيح API الخاصة بهم.
+أضف موفّرا إلى CyberStrike. يتيح لك اختيار أحد الموفّرين المتاحين وإضافة مفاتيح API الخاصة بهم.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-اخرج من OpenCode. _الأسماء المستعارة_: `/quit`, `/q`
+اخرج من CyberStrike. _الأسماء المستعارة_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## الإعداد
 
-يمكنك تخصيص سلوك واجهة TUI عبر ملف إعدادات OpenCode.
+يمكنك تخصيص سلوك واجهة TUI عبر ملف إعدادات CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

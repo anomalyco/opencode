@@ -1,16 +1,16 @@
 export * from "./client.js"
 export * from "./server.js"
 
-import { createOpencodeClient } from "./client.js"
-import { createOpencodeServer } from "./server.js"
+import { createCyberstrikeClient } from "./client.js"
+import { createCyberstrikeServer } from "./server.js"
 import type { ServerOptions } from "./server.js"
 
-export async function createOpencode(options?: ServerOptions) {
-  const server = await createOpencodeServer({
+export async function createCyberstrike(options?: ServerOptions) {
+  const server = await createCyberstrikeServer({
     ...options,
   })
 
-  const client = createOpencodeClient({
+  const client = createCyberstrikeClient({
     baseUrl: server.url,
   })
 

@@ -3,11 +3,11 @@ title: キーバインド
 description: キーバインドをカスタマイズします。
 ---
 
-OpenCode には、OpenCode 設定を通じてカスタマイズできるキーバインドのリストがあります。
+CyberStrike には、CyberStrike 設定を通じてカスタマイズできるキーバインドのリストがあります。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -107,7 +107,7 @@ OpenCode には、OpenCode 設定を通じてカスタマイズできるキー�
 
 ## リーダーキー
 
-OpenCode は、ほとんどのキーバインドに `leader` キーを使用します。これにより、ターミナルでの競合が回避されます。
+CyberStrike は、ほとんどのキーバインドに `leader` キーを使用します。これにより、ターミナルでの競合が回避されます。
 
 デフォルトでは、`ctrl+x` がリーダーキーであり、ほとんどの操作では、最初にリーダーキーを押してからショートカットを押す必要があります。たとえば、新しいセッションを開始するには、まず `ctrl+x` を押してから、`n` を押します。
 
@@ -119,9 +119,9 @@ OpenCode は、ほとんどのキーバインドに `leader` キーを使用し�
 
 キーバインドを無効にするには、値「none」を指定してキーを構成に追加します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +132,7 @@ OpenCode は、ほとんどのキーバインドに `leader` キーを使用し�
 
 ## デスクトッププロンプトのショートカット
 
-OpenCode デスクトップアプリのプロンプト入力は、テキストを編集するための一般的な Readline/Emacs スタイルのショートカットをサポートしています。これらは組み込みであり、現在 `opencode.json` を介して構成することはできません。
+CyberStrike デスクトップアプリのプロンプト入力は、テキストを編集するための一般的な Readline/Emacs スタイルのショートカットをサポートしています。これらは組み込みであり、現在 `cyberstrike.json` を介して構成することはできません。
 
 | ショートカット | アクション                                        |
 | -------------- | ------------------------------------------------- |

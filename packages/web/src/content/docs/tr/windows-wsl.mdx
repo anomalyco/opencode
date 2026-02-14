@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: En iyi deneyim icin opencode'u WSL'de calistirin.
+description: En iyi deneyim icin cyberstrike'u WSL'de calistirin.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-opencode Windows'ta dogrudan calisabilir, ancak en iyi deneyim icin [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) kullanmanizi oneriyoruz. WSL, opencode ozellikleriyle sorunsuz calisan bir Linux ortami saglar.
+cyberstrike Windows'ta dogrudan calisabilir, ancak en iyi deneyim icin [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) kullanmanizi oneriyoruz. WSL, cyberstrike ozellikleriyle sorunsuz calisan bir Linux ortami saglar.
 
 :::tip[Neden WSL?]
-WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un dayandigi gelistirme araclariyla uyumluluk sunar.
+WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve cyberstrike'un dayandigi gelistirme araclariyla uyumluluk sunar.
 :::
 
 ---
@@ -21,21 +21,21 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un day
 
    Henuz yuklemediyseniz resmi Microsoft rehberini kullanarak [WSL kurulumunu](https://learn.microsoft.com/en-us/windows/wsl/install) yapin.
 
-2. **opencode'u WSL icine yukleyin**
+2. **cyberstrike'u WSL icine yukleyin**
 
-   WSL hazir olduktan sonra WSL terminalini acin ve opencode'u [kurulum yontemlerinden](/docs/) biriyle yukleyin.
+   WSL hazir olduktan sonra WSL terminalini acin ve cyberstrike'u [kurulum yontemlerinden](/docs/) biriyle yukleyin.
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://cyberstrike.io/install | bash
    ```
 
-3. **opencode'u WSL icinden kullanin**
+3. **cyberstrike'u WSL icinden kullanin**
 
-   Proje dizininize gidin (`/mnt/c/`, `/mnt/d/` vb. ile Windows dosyalarina erisebilirsiniz) ve opencode'u calistirin.
+   Proje dizininize gidin (`/mnt/c/`, `/mnt/d/` vb. ile Windows dosyalarina erisebilirsiniz) ve cyberstrike'u calistirin.
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   cyberstrike
    ```
 
 </Steps>
@@ -44,12 +44,12 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un day
 
 ## Masaüstü uygulaması + WSL sunucusu
 
-opencode Desktop kullanmak isteyip sunucuyu WSL'de calistirmak istiyorsaniz:
+cyberstrike Desktop kullanmak isteyip sunucuyu WSL'de calistirmak istiyorsaniz:
 
 1. **Sunucuyu WSL'de baslatin** ve dis baglantilara izin vermek icin `--hostname 0.0.0.0` kullanin:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   cyberstrike serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Desktop uygulamasini** `http://localhost:4096` adresine baglayin
@@ -59,10 +59,10 @@ Kurulumunuzda `localhost` calismiyorsa bunun yerine WSL IP adresini kullanin (WS
 :::
 
 :::caution
-`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `OPENCODE_SERVER_PASSWORD` ayarlayin.
+`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `CYBERSTRIKE_SERVER_PASSWORD` ayarlayin.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Windows'ta en iyi web deneyimi icin:
 
-1. **`opencode web` komutunu PowerShell yerine WSL terminalinde calistirin**:
+1. **`cyberstrike web` komutunu PowerShell yerine WSL terminalinde calistirin**:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   cyberstrike web --hostname 0.0.0.0
    ```
 
-2. **Windows tarayicinizdan** `http://localhost:<port>` adresini acin (opencode URL'yi yazdirir)
+2. **Windows tarayicinizdan** `http://localhost:<port>` adresini acin (cyberstrike URL'yi yazdirir)
 
-`opencode web` komutunu WSL'den calistirmak, dosya sistemi erisimi ve terminal entegrasyonunu daha tutarli hale getirirken tarayicidan erisimi korur.
+`cyberstrike web` komutunu WSL'den calistirmak, dosya sistemi erisimi ve terminal entegrasyonunu daha tutarli hale getirirken tarayicidan erisimi korur.
 
 ---
 
@@ -97,17 +97,17 @@ Ornek:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+cyberstrike
 ```
 
 :::tip
-En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina) klonlayip opencode'u orada calistirmayi dusunun.
+En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina) klonlayip cyberstrike'u orada calistirmayi dusunun.
 :::
 
 ---
 
 ## İpuçları
 
-- Windows suruculerinde duran projelerde opencode'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
-- Butunlesik bir gelistirme akisi icin opencode ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
-- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/opencode/` konumunda saklanir
+- Windows suruculerinde duran projelerde cyberstrike'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
+- Butunlesik bir gelistirme akisi icin cyberstrike ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
+- cyberstrike konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/cyberstrike/` konumunda saklanir

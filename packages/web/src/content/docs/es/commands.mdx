@@ -17,9 +17,9 @@ Los comandos personalizados se suman a los comandos integrados como `/init`, `/u
 
 Cree archivos de Markdown en el directorio `commands/` para definir comandos personalizados.
 
-Crear `.opencode/commands/test.md`:
+Crear `.cyberstrike/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Utilice el comando escribiendo `/` seguido del nombre del comando.
 
 ## Configuración
 
-Puede agregar comandos personalizados a través de la configuración OpenCode o creando archivos de Markdown en el directorio `commands/`.
+Puede agregar comandos personalizados a través de la configuración CyberStrike o creando archivos de Markdown en el directorio `commands/`.
 
 ---
 
 ### JSON
 
-Utilice la opción `command` en su OpenCode [config](/docs/config):
+Utilice la opción `command` en su CyberStrike [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Ahora puedes ejecutar este comando en TUI:
 
 También puede definir comandos utilizando archivos de Markdown. Colócalos en:
 
-- Global: `~/.config/opencode/commands/`
-- Por proyecto: `.opencode/commands/`
+- Global: `~/.config/cyberstrike/commands/`
+- Por proyecto: `.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Las indicaciones para los comandos personalizados admiten varios marcadores de p
 
 Pase argumentos a comandos usando el marcador de posición `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ También puede acceder a argumentos individuales utilizando parámetros posicion
 
 Por ejemplo:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Utilice _!`command`_ para inyectar la salida de [comando bash](/docs/tui#bash-co
 
 Por ejemplo, para crear un comando personalizado que analice la cobertura de la prueba:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 O para revisar cambios recientes:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Los comandos se ejecutan en el directorio raíz de su proyecto y su salida pasa 
 
 Incluya archivos en su comando usando `@` seguido del nombre del archivo.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Veamos las opciones de configuración en detalle.
 
 La opción `template` define el mensaje que se enviará al LLM cuando se ejecute el comando.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Esta es una opción de configuración **obligatoria**.
 
 Utilice la opción `description` para proporcionar una breve descripción de lo que hace el comando.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Utilice la configuración `agent` para especificar opcionalmente qué [agente](/
 Si se trata de un [subagente](/docs/agents/#subagents), el comando activará una invocación de subagente de forma predeterminada.
 Para desactivar este comportamiento, establezca `subtask` en `false`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Utilice el booleano `subtask` para forzar que el comando active una invocación 
 Esto es útil si desea que el comando no contamine su contexto principal y **obligue** al agente a actuar como subagente.
 incluso si `mode` está configurado en `primary` en la configuración de [agente](/docs/agents).
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Esta es una opción de configuración **opcional**.
 
 Utilice la configuración `model` para anular el modelo predeterminado para este comando.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Esta es una opción de configuración **opcional**.
 
 ## Integrados
 
-opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
+cyberstrike incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
 
 :::note
 Los comandos personalizados pueden anular los comandos integrados.

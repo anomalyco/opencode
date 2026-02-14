@@ -1,19 +1,19 @@
 ---
 title: Serwer
-description: Interakcja z serwerem opencode za pośrednictwem protokołu HTTP.
+description: Interakcja z serwerem cyberstrike za pośrednictwem protokołu HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Komenda `opencode serve` uruchamia bezgłowy serwer HTTP, który udostępnia punkt końcowy OpenAPI, z którego może korzystać klient opencode.
+Komenda `cyberstrike serve` uruchamia bezgłowy serwer HTTP, który udostępnia punkt końcowy OpenAPI, z którego może korzystać klient cyberstrike.
 
 ---
 
 ### Użycie
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opcje
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port nasłuchiwania                           | `4096`           |
 | `--hostname`    | Nazwa hosta do nasłuchiwania                 | `127.0.0.1`      |
 | `--mdns`        | Włącz wykrywanie mDNS                        | `false`          |
-| `--mdns-domain` | Niestandardowa nazwa domeny dla usługi mDNS  | `opencode.local` |
+| `--mdns-domain` | Niestandardowa nazwa domeny dla usługi mDNS  | `cyberstrike.local` |
 | `--cors`        | Dodatkowe originy przeglądarki do dozwolenia | `[]`             |
 
 `--cors` można przekazać wiele razy:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Uwierzytelnianie
 
-Ustaw `OPENCODE_SERVER_PASSWORD`, aby chronić serwer za pomocą podstawowego uwierzytelniania HTTP. Domyślną nazwą użytkownika jest `opencode` lub ustaw `OPENCODE_SERVER_USERNAME`, aby ją zastąpić. Dotyczy to zarówno `opencode serve`, jak i `opencode web`.
+Ustaw `CYBERSTRIKE_SERVER_PASSWORD`, aby chronić serwer za pomocą podstawowego uwierzytelniania HTTP. Domyślną nazwą użytkownika jest `cyberstrike` lub ustaw `CYBERSTRIKE_SERVER_USERNAME`, aby ją zastąpić. Dotyczy to zarówno `cyberstrike serve`, jak i `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### Jak to działa
 
-Kiedy uruchomisz `opencode`, uruchomi się TUI i serwer. Gdzie jest TUI
+Kiedy uruchomisz `cyberstrike`, uruchomi się TUI i serwer. Gdzie jest TUI
 klient komunikujący się z serwerem. Serwer udostępnia specyfikację OpenAPI 3.1
 punkt końcowy. Ten punkt końcowy jest również używany do generowania [SDK](/docs/sdk).
 
 :::tip
-Użyj serwera opencode do programowej interakcji z opencode.
+Użyj serwera cyberstrike do programowej interakcji z cyberstrike.
 :::
 
-Ta architektura umożliwia obsługę wielu klientów przez opencode i programową interakcję z kodem otwartym.
+Ta architektura umożliwia obsługę wielu klientów przez cyberstrike i programową interakcję z kodem otwartym.
 
-Możesz uruchomić `opencode serve`, aby uruchomić samodzielny serwer. Jeśli masz
-opencode TUI działa, `opencode serve` uruchomi nowy serwer.
+Możesz uruchomić `cyberstrike serve`, aby uruchomić samodzielny serwer. Jeśli masz
+cyberstrike TUI działa, `cyberstrike serve` uruchomi nowy serwer.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI działa, `opencode serve` uruchomi nowy serwer.
 
 Po uruchomieniu TUI losowo przypisuje port i nazwę hosta. Zamiast tego możesz przekazać `--hostname` i `--port` [flagi](/docs/cli). Następnie użyj tego, aby połączyć się z serwerem.
 
-Punktu końcowego [`/tui`](#TUI) można użyć do sterowania TUI przez serwer. Można na przykład wstępnie wypełnić lub uruchomić monit. Ta konfiguracja jest używana przez wtyczki opencode [IDE](/docs/ide).
+Punktu końcowego [`/tui`](#TUI) można użyć do sterowania TUI przez serwer. Można na przykład wstępnie wypełnić lub uruchomić monit. Ta konfiguracja jest używana przez wtyczki cyberstrike [IDE](/docs/ide).
 
 ---
 
@@ -83,7 +83,7 @@ Na przykład `http://localhost:4096/doc`. Użyj specyfikacji, aby wygenerować k
 
 ## API
 
-Serwer opencode udostępnia następujące interfejsy API.
+Serwer cyberstrike udostępnia następujące interfejsy API.
 
 ---
 

@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog } from "@cyberstrike-io/ui/dialog"
+import { Button } from "@cyberstrike-io/ui/button"
+import { useDialog } from "@cyberstrike-io/ui/context/dialog"
 import { useSettings } from "@/context/settings"
 
 export type Highlight = {

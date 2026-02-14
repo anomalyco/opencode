@@ -3,7 +3,7 @@ title: MCP 服务器
 description: 添加本地和远程MCP工具。
 ---
 
-您可以使用“模型上下文协议”或MCP将外部工具添加到opencode。opencode支持本地和远程服务器。
+您可以使用“模型上下文协议”或MCP将外部工具添加到cyberstrike。cyberstrike支持本地和远程服务器。
 
 添加使用后，MCP工具将自动与内置工具一起供LLM。
 
@@ -23,11 +23,11 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 ## 启用
 
-您可以在`mcp`下的[opencode配置](https://opencode.ai/docs/config/)中定义MCP服务器。为每个MCP添加唯一的名称。当提示LLM时，您可以通过名称引用该MCP。
+您可以在`mcp`下的[cyberstrike配置](https://cyberstrike.io/docs/config/)中定义MCP服务器。为每个MCP添加唯一的名称。当提示LLM时，您可以通过名称引用该MCP。
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 ### 覆盖远程默认值
 
-组织可以通过其 `.well-known/opencode` 端点提供默认的 MCP 服务器。这些服务器可能默认被禁用，允许用户选择他们需要的服务器。
+组织可以通过其 `.well-known/cyberstrike` 端点提供默认的 MCP 服务器。这些服务器可能默认被禁用，允许用户选择他们需要的服务器。
 
 要从组织的远程特定启用服务器，请使用配置 `enabled: true` 将其添加到本地配置：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 使用`type`将本地MCP服务器添加到MCP对像中的`"local"`。
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 
 例如，以下是添加测试 [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP 服务器的方法。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ use the mcp_everything tool to add the number 3 and 4
 
 通过将`type`设置为ZZPH1Z添加远程MCP服务器。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要身份验证时，opencode将：
+cyberstrike自动处理远程MCP服务器的OAuth身份验证。当服务器需要身份验证时，cyberstrike将：
 
 1. 检测 401 响应并启动 OAuth 流程
 2. 如果服务器支持，请使用**动态客户端注册 (RFC 7591)**
@@ -177,9 +177,9 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 对于大多数支持 OAuth 的 MCP 配置服务器，不需要特殊配置。只需远程服务器：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 }
 ```
 
-如果服务器需要身份验证，opencode 将在您第一次尝试使用它时提示您进行身份验证。如果没有，您可以使用 `timeout`[手动触发流量](#authenticating)。
+如果服务器需要身份验证，cyberstrike 将在您第一次尝试使用它时提示您进行身份验证。如果没有，您可以使用 `timeout`[手动触发流量](#authenticating)。
 
 ---
 
@@ -197,9 +197,9 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 如果您有来自MCP服务器强大的客户端，则可以配置它们：
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,32 +223,32 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 使用特定MCP服务器进行身份验证：
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 列出所有MCP服务器及其身份验证状态：
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 删除存储的凭据：
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-`opencode mcp auth <server-name>` 命令将打开您的浏览器进行授权。授权后，opencode Tokens安全地存储在 `mcp auth` 中。
+`cyberstrike mcp auth <server-name>` 命令将打开您的浏览器进行授权。授权后，cyberstrike Tokens安全地存储在 `mcp auth` 中。
 
 ---
 
 #### 禁用 OAuth
 
-如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`~/.local/share/opencode/mcp-auth.json`设置为`oauth`：
+如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`~/.local/share/cyberstrike/mcp-auth.json`设置为`oauth`：
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ opencode mcp logout my-oauth-server
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 `mcp debug`命令显示当前身份验证状态、测试HTTP连接并尝试OAuth发现流程。
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-您的 MCP 可以作为 opencode 中的工具以及内置工具使用。，您可以像任何其他工具一样通过 opencode 配置来管理它们。
+您的 MCP 可以作为 cyberstrike 中的工具以及内置工具使用。，您可以像任何其他工具一样通过 cyberstrike 配置来管理它们。
 
 ---
 
@@ -299,9 +299,9 @@ opencode mcp debug my-oauth-server
 
 这意味著您可以全局启用或禁用它们。
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ opencode mcp debug my-oauth-server
 
 我们还可以使用 glob 模式来取消所有匹配的 MCP。
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ opencode mcp debug my-oauth-server
 1. 全局禁用它作为工具。
 2. 在您的[代理配置](/docs/agents#tools)中，启用MCP作为服务器工具。
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ MCP服务器工具以名称服务器作为出口进行注册，要因此禁用�
 
 添加[哨兵MCP服务器](https://mcp.sentry.dev)以与您的Sentry项目和问题进行交互。
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ MCP服务器工具以名称服务器作为出口进行注册，要因此禁用�
 添加配置后，使用Sentry进行身份验证：
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-这将打开一个浏览器窗口以完成 OAuth 流程并将 opencode 连接到您的 Sentry 账户。
+这将打开一个浏览器窗口以完成 OAuth 流程并将 cyberstrike 连接到您的 Sentry 账户。
 
 通过身份验证后，您可以在提示中使用Sentry工具来查询问题、项目和错误数据。
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 添加[Context7 MCP 服务器](https://github.com/upstash/context7) 以搜索文档。
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 如果您注册了免费帐户，则可以使用 API 轴并获得更高的速率限制。
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 添加 [Vercel 的 Grep](https://grep.app) MCP 服务器正在搜索 GitHub 上的代码片段。
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

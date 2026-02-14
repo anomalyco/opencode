@@ -1,9 +1,9 @@
 ---
 title: 自定義工具
-description: 建立 LLM 可以在 opencode 中呼叫的工具。
+description: 建立 LLM 可以在 cyberstrike 中呼叫的工具。
 ---
 
-自定義工具是您建立的函式，LLM 可以在對話期間呼叫。它們與 opencode 的 [內建工具](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
+自定義工具是您建立的函式，LLM 可以在對話期間呼叫。它們與 cyberstrike 的 [內建工具](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
 
 ---
 
@@ -17,8 +17,8 @@ description: 建立 LLM 可以在 opencode 中呼叫的工具。
 
 它們可以定義為：
 
-- 透過將它們放在專案的 `.opencode/tools/` 目錄中來本地進行。
-- 或者在全域範圍內，將它們放置在 `~/.config/opencode/tools/` 中。
+- 透過將它們放在專案的 `.cyberstrike/tools/` 目錄中來本地進行。
+- 或者在全域範圍內，將它們放置在 `~/.config/cyberstrike/tools/` 中。
 
 ---
 
@@ -26,8 +26,8 @@ description: 建立 LLM 可以在 opencode 中呼叫的工具。
 
 建立工具的最簡單方法是使用 `tool()` 輔助程式，它提供類型安全和驗證。
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/tools/database.ts" {1}
+import { tool } from "@cyberstrike-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ export default tool({
 
 您也可以從單個檔案匯出多個工具。每個匯出都會成為**一個單獨的工具**，名稱為 **`<filename>_<exportname>`**：
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/tools/math.ts"
+import { tool } from "@cyberstrike-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -112,8 +112,8 @@ export default {
 
 工具接收有關當前工作階段的上下文：
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/tools/project.ts" {8}
+import { tool } from "@cyberstrike-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -139,7 +139,7 @@ export default tool({
 
 首先，將該工具建立為 Python 指令碼：
 
-```python title=".opencode/tools/add.py"
+```python title=".cyberstrike/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,8 +149,8 @@ print(a + b)
 
 然後建立呼叫它的工具定義：
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/tools/python-add.ts" {10}
+import { tool } from "@cyberstrike-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".cyberstrike/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

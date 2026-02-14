@@ -55,7 +55,7 @@ body {
 }
 
 @supports (background: -webkit-named-image(i)) {
-  [data-page="opencode"] {
+  [data-page="cyberstrike"] {
     border-top: 1px solid var(--color-border-weak);
   }
 }

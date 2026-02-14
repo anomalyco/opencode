@@ -3,7 +3,7 @@ title: Værktøjer
 description: Administrer de værktøjer, en LLM kan bruge.
 ---
 
-Verktøy lar LLM utføre handlinger i kodebasen din. OpenCode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
+Verktøy lar LLM utføre handlinger i kodebasen din. CyberStrike kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
 
 Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for at kjøre. Du kan kontrollere verktøyets oppførsel gjennom [tillatelser](/docs/permissions).
 
@@ -13,9 +13,9 @@ Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for at kj�
 
 Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -26,9 +26,9 @@ Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tilla
 
 Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eksempel, for at kreve godkjenning for alle verktøy fra en MCP-server:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eks
 
 ## Indbyggede
 
-Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
+Her er alle de innebygde verktøyene som er tilgængelige i CyberStrike.
 
 ---
 
@@ -49,9 +49,9 @@ Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
 
 Utfør shellkommandoer i prosjektmiljøet ditt.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -66,9 +66,9 @@ Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git statu
 
 Endre eksisterende filer ved at bruge eksakte strengerstatninger.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -83,9 +83,9 @@ Dette verktøyet utfører nøyaktige redigeringer av filer ved at erstatte eksak
 
 Opret nye filer eller overskriv eksisterende.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -104,9 +104,9 @@ Brug denne for at la LLM lage nye filer. Den vil overskrive eksisterende filer h
 
 Les filinnholdet fra kodebasen din.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "read": "allow"
   }
@@ -121,9 +121,9 @@ Dette verktøyet leser filer og returnerer innholdet. Den støtter lesing av spe
 
 Søk i filinnhold ved hjelp av regulære uttrykk.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -138,9 +138,9 @@ Rask innholdssøk på tvers av kodebasen din. Støtter full regex-syntaks og fil
 
 Finn filer etter mønstermatching.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -155,9 +155,9 @@ Søk etter filer ved at bruge glob-mønstre som `**/*.js` eller `src/**/*.ts`. R
 
 List filer og kataloger i en gitt bane.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "list": "allow"
   }
@@ -173,12 +173,12 @@ Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for at filtr
 Samhandle med dine konfigurerte LSP-servere for at få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
 
 :::note
-Dette verktøyet er bare tilgængelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
+Dette verktøyet er bare tilgængelig når `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL=true` (eller `CYBERSTRIKE_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -195,9 +195,9 @@ For at konfigurere hvilke LSP-servere som er tilgængelige for prosjektet ditt, 
 
 Brug patcher på filer.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -216,9 +216,9 @@ Dette verktøyet bruger opdateringsfiler til kodebasen din. Nyttig for at påfø
 
 Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet i samtalen.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -231,9 +231,9 @@ Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet 
 
 Administrer to-doslister under kodingssessioner.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -252,9 +252,9 @@ Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere 
 
 Les eksisterende to-doslister.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -273,9 +273,9 @@ Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere 
 
 Hent nettinnhold.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -291,19 +291,19 @@ Lar LLM hente og lese nettsider. Nyttig for at slå opp dokumentasjon eller fors
 Søk på nettet for informasjon.
 
 :::note
-Dette verktøyet er bare tilgængelig når du bruger OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
+Dette verktøyet er bare tilgængelig når du bruger CyberStrike-leverandøren eller når miljøvariabelen `CYBERSTRIKE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
 
-Slik aktiverer du når du starter OpenCode:
+Slik aktiverer du når du starter CyberStrike:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+CYBERSTRIKE_ENABLE_EXA=1 cyberstrike
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -324,9 +324,9 @@ Brug `websearch` når du trenger at finne informasjon (oppdagelse), og `webfetch
 
 Still brugeren spørsmål under utførelse.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "question": "allow"
   }

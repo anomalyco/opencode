@@ -4,7 +4,7 @@ description: Verwalte, welche Tools ein LLM nutzen darf.
 ---
 
 Tools erlauben dem LLM Aktionen in deiner Codebasis.
-OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
+CyberStrike bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
 
 Standardmaessig sind alle Tools **aktiviert** und brauchen keine Freigabe.
 Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
@@ -16,9 +16,9 @@ Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
 Nutze das Feld `permission`, um Tool-Verhalten zu steuern.
 Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -30,9 +30,9 @@ Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
 Mit Wildcards kannst du mehrere Tools auf einmal steuern.
 Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -45,7 +45,7 @@ Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
 ## Eingebaut
 
-Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
+Hier sind alle in CyberStrike verfuegbaren eingebauten Tools.
 
 ---
 
@@ -53,9 +53,9 @@ Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
 
 Fuehrt Shell-Befehle in deiner Projektumgebung aus.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -70,9 +70,9 @@ Damit kann das LLM Terminal-Befehle wie `npm install`, `git status` oder andere 
 
 Bearbeitet bestehende Dateien ueber exakte String-Ersetzungen.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -88,9 +88,9 @@ Es ist der zentrale Weg, wie das LLM Code aendert.
 
 Erstellt neue Dateien oder ueberschreibt bestehende Dateien.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -111,9 +111,9 @@ Das Tool `write` wird ueber die Berechtigung `edit` gesteuert.
 
 Read file contents from your codebase.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "read": "allow"
   }
@@ -128,9 +128,9 @@ This tool reads files and returns their contents. It supports reading specific l
 
 Search file contents using regular expressions.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -145,9 +145,9 @@ Fast content search across your codebase. Supports full regex syntax and file pa
 
 Find files by pattern matching.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -162,9 +162,9 @@ Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns ma
 
 List files and directories in a given path.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "list": "allow"
   }
@@ -180,12 +180,12 @@ This tool lists directory contents. It accepts glob patterns to filter results.
 Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
 
 :::note
-This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+This tool is only available when `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL=true` (or `CYBERSTRIKE_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -202,9 +202,9 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 Apply patches to files.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -223,9 +223,9 @@ The `patch` tool is controlled by the `edit` permission, which covers all file m
 
 Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the conversation.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -238,9 +238,9 @@ Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the c
 
 Manage todo lists during coding sessions.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -259,9 +259,9 @@ This tool is disabled for subagents by default, but you can enable it manually. 
 
 Read existing todo lists.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "todoread": "allow"
   }
@@ -280,9 +280,9 @@ This tool is disabled for subagents by default, but you can enable it manually. 
 
 Fetch web content.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -298,19 +298,19 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 Search the web for information.
 
 :::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+This tool is only available when using the CyberStrike provider or when the `CYBERSTRIKE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
 
-To enable when launching OpenCode:
+To enable when launching CyberStrike:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+CYBERSTRIKE_ENABLE_EXA=1 cyberstrike
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -331,9 +331,9 @@ Use `websearch` when you need to find information (discovery), and `webfetch` wh
 
 Ask the user questions during execution.
 
-```json title="opencode.json" {4}
+```json title="cyberstrike.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "question": "allow"
   }

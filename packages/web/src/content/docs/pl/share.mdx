@@ -1,9 +1,9 @@
 ---
 title: Udostępnianie
-description: Udostępnij swoje rozmowy dotyczące opencode.
+description: Udostępnij swoje rozmowy dotyczące cyberstrike.
 ---
 
-Funkcja udostępniania opencode umożliwia tworzenie publicznych linków do konwersacji opencode, dzięki czemu możesz współpracować z członkami zespołu lub uzyskać pomoc od innych.
+Funkcja udostępniania cyberstrike umożliwia tworzenie publicznych linków do konwersacji cyberstrike, dzięki czemu możesz współpracować z członkami zespołu lub uzyskać pomoc od innych.
 
 :::note
 Udostępnione konwersacje są publicznie dostępne dla każdej osoby mającej link.
@@ -13,7 +13,7 @@ Udostępnione konwersacje są publicznie dostępne dla każdej osoby mającej li
 
 ## Jak to działa
 
-Kiedy udostępniasz rozmowę, opencode:
+Kiedy udostępniasz rozmowę, cyberstrike:
 
 1. Tworzy unikalny publiczny adres URL sesji
 2. Synchronizuje historię rozmów z naszymi serwerami
@@ -23,13 +23,13 @@ Kiedy udostępniasz rozmowę, opencode:
 
 ## Udostępnianie
 
-opencode obsługuje trzy tryby udostępniania, które kontrolują sposób udostępniania rozmów:
+cyberstrike obsługuje trzy tryby udostępniania, które kontrolują sposób udostępniania rozmów:
 
 ---
 
 ### Ręczne (domyślne)
 
-Domyślnie opencode korzysta z ręcznego trybu udostępniania. Sesje nie są udostępniane automatycznie, ale możesz je udostępnić ręcznie za pomocą polecenia `/share`:
+Domyślnie cyberstrike korzysta z ręcznego trybu udostępniania. Sesje nie są udostępniane automatycznie, ale możesz je udostępnić ręcznie za pomocą polecenia `/share`:
 
 ```
 /share
@@ -39,7 +39,7 @@ Spowoduje to wygenerowanie unikalnego adresu URL, który zostanie skopiowany do 
 
 Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
 
 Możesz włączyć automatyczne udostępnianie dla wszystkich nowych rozmów, ustawiając opcję `share` na `"auto"` w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Po włączeniu automatycznego udostępniania każda nowa rozmowa będzie automat
 
 Możesz całkowicie wyłączyć udostępnianie, ustawiając opcję `share` na `"disabled"` w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Aby wymusić to w całym zespole dla danego projektu, dodaj go do `opencode.json` w swoim projekcie i sprawdź w Git.
+Aby wymusić to w całym zespole dla danego projektu, dodaj go do `cyberstrike.json` w swoim projekcie i sprawdź w Git.
 
 ---
 
@@ -125,4 +125,4 @@ W przypadku wdrożeń korporacyjnych funkcją udostępniania może być:
 - **Restricted** to users authenticated through SSO only
 - **Własny hosting** na własnej infrastrukturze
 
-[Dowiedz się więcej](/docs/enterprise) o używaniu opencode w Twojej organizacji.
+[Dowiedz się więcej](/docs/enterprise) o używaniu cyberstrike w Twojej organizacji.

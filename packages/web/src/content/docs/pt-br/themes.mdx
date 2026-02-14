@@ -3,9 +3,9 @@ title: Temas
 description: Selecione um tema embutido ou defina o seu próprio.
 ---
 
-Com o opencode, você pode selecionar um dos vários temas embutidos, usar um tema que se adapta ao tema do seu terminal ou definir seu próprio tema personalizado.
+Com o cyberstrike, você pode selecionar um dos vários temas embutidos, usar um tema que se adapta ao tema do seu terminal ou definir seu próprio tema personalizado.
 
-Por padrão, o opencode usa nosso próprio tema `opencode`.
+Por padrão, o cyberstrike usa nosso próprio tema `cyberstrike`.
 
 ---
 
@@ -23,7 +23,7 @@ Sem suporte a truecolor, os temas podem aparecer com precisão de cor reduzida o
 
 ## Temas embutidos
 
-O opencode vem com vários temas embutidos.
+O cyberstrike vem com vários temas embutidos.
 
 | Nome                   | Descrição                                                                   |
 | ---------------------- | --------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ O tema `system` é projetado para se adaptar automaticamente ao esquema de cores
 
 O tema do sistema é para usuários que:
 
-- Querem que o opencode corresponda à aparência do seu terminal
+- Querem que o cyberstrike corresponda à aparência do seu terminal
 - Usam esquemas de cores de terminal personalizados
 - Preferem uma aparência consistente em todos os aplicativos de terminal
 
@@ -63,9 +63,9 @@ O tema do sistema é para usuários que:
 
 Você pode selecionar um tema chamando a seleção de tema com o comando `/theme`. Ou você pode especificá-lo em sua [configuração](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ Você pode selecionar um tema chamando a seleção de tema com o comando `/theme
 
 ## Temas personalizados
 
-O opencode suporta um sistema de temas flexível baseado em JSON que permite aos usuários criar e personalizar temas facilmente.
+O cyberstrike suporta um sistema de temas flexível baseado em JSON que permite aos usuários criar e personalizar temas facilmente.
 
 ---
 
@@ -83,9 +83,9 @@ O opencode suporta um sistema de temas flexível baseado em JSON que permite aos
 Os temas são carregados de vários diretórios na seguinte ordem, onde diretórios posteriores substituem os anteriores:
 
 1. **Temas embutidos** - Estes estão incorporados no binário
-2. **Diretório de configuração do usuário** - Definido em `~/.config/opencode/themes/*.json` ou `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Diretório raiz do projeto** - Definido em `<project-root>/.opencode/themes/*.json`
-4. **Diretório de trabalho atual** - Definido em `./.opencode/themes/*.json`
+2. **Diretório de configuração do usuário** - Definido em `~/.config/cyberstrike/themes/*.json` ou `$XDG_CONFIG_HOME/cyberstrike/themes/*.json`
+3. **Diretório raiz do projeto** - Definido em `<project-root>/.cyberstrike/themes/*.json`
+4. **Diretório de trabalho atual** - Definido em `./.cyberstrike/themes/*.json`
 
 Se vários diretórios contiverem um tema com o mesmo nome, o tema do diretório com maior prioridade será usado.
 
@@ -98,15 +98,15 @@ Para criar um tema personalizado, crie um arquivo JSON em um dos diretórios de 
 Para temas de usuário:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 E para temas específicos do projeto.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ Aqui está um exemplo de um tema personalizado:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

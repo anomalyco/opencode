@@ -3,7 +3,7 @@ title: MCP เซิร์ฟเวอร์
 description: เพิ่มเครื่องมือ MCP ในพื้นที่และระยะไกล
 ---
 
-คุณสามารถเพิ่มเครื่องมือภายนอกให้กับ OpenCode ได้โดยใช้ _Model Context Protocol_ หรือ MCP OpenCode รองรับทั้งเซิร์ฟเวอร์ภายในและเซิร์ฟเวอร์ระยะไกล
+คุณสามารถเพิ่มเครื่องมือภายนอกให้กับ CyberStrike ได้โดยใช้ _Model Context Protocol_ หรือ MCP CyberStrike รองรับทั้งเซิร์ฟเวอร์ภายในและเซิร์ฟเวอร์ระยะไกล
 
 เมื่อเพิ่มแล้ว เครื่องมือ MCP จะพร้อมใช้งานโดยอัตโนมัติสำหรับ LLM ควบคู่ไปกับเครื่องมือในตัว
 
@@ -23,11 +23,11 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 ## เปิดใช้งาน
 
-คุณสามารถกำหนดเซิร์ฟเวอร์ MCP ได้ใน [OpenCode Config](https://opencode.ai/docs/config/) ภายใต้ `mcp` เพิ่ม MCP แต่ละรายการด้วยชื่อที่ไม่ซ้ำใคร คุณสามารถอ้างอิงถึง MCP ด้วยชื่อได้เมื่อแจ้ง LLM
+คุณสามารถกำหนดเซิร์ฟเวอร์ MCP ได้ใน [CyberStrike Config](https://cyberstrike.io/docs/config/) ภายใต้ `mcp` เพิ่ม MCP แต่ละรายการด้วยชื่อที่ไม่ซ้ำใคร คุณสามารถอ้างอิงถึง MCP ด้วยชื่อได้เมื่อแจ้ง LLM
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 ### การเอาชนะค่าเริ่มต้นระยะไกล
 
-องค์กรสามารถจัดเตรียมเซิร์ฟเวอร์ MCP เริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/opencode` เซิร์ฟเวอร์เหล่านี้อาจถูกปิดใช้งานตามค่าเริ่มต้น ทำให้ผู้ใช้สามารถเลือกใช้เซิร์ฟเวอร์ที่ต้องการได้
+องค์กรสามารถจัดเตรียมเซิร์ฟเวอร์ MCP เริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/cyberstrike` เซิร์ฟเวอร์เหล่านี้อาจถูกปิดใช้งานตามค่าเริ่มต้น ทำให้ผู้ใช้สามารถเลือกใช้เซิร์ฟเวอร์ที่ต้องการได้
 
 หากต้องการเปิดใช้งานเซิร์ฟเวอร์เฉพาะจากการกำหนดค่าระยะไกลขององค์กรของคุณ ให้เพิ่มเซิร์ฟเวอร์ดังกล่าวลงในการกำหนดค่าภายในเครื่องของคุณด้วย `enabled: true`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 เพิ่มเซิร์ฟเวอร์ท้องถิ่น MCP โดยใช้ `type` ไปยัง `"local"` ภายในวัตถุ MCP
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 ตัวอย่างเช่น นี่คือวิธีที่คุณสามารถเพิ่มการทดสอบเซิร์ฟเวอร์ [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP เซิร์ฟเวอร์
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ use the mcp_everything tool to add the number 3 and 4
 
 เพิ่มเซิร์ฟเวอร์ระยะไกล MCP โดยตั้งค่า `type` เป็น `"remote"`
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-OpenCode จะจัดการการตรวจสอบสิทธิ์ OAuth สำหรับเซิร์ฟเวอร์ MCP ระยะไกลโดยอัตโนมัติ เมื่อเซิร์ฟเวอร์ต้องการการรับรองความถูกต้อง OpenCode จะ:
+CyberStrike จะจัดการการตรวจสอบสิทธิ์ OAuth สำหรับเซิร์ฟเวอร์ MCP ระยะไกลโดยอัตโนมัติ เมื่อเซิร์ฟเวอร์ต้องการการรับรองความถูกต้อง CyberStrike จะ:
 
 1. ตรวจหาการตอบสนอง 401 และเริ่มโฟลว์ OAuth
 2. ใช้ **การลงทะเบียนไคลเอ็นต์แบบไดนามิก (RFC 7591)** หากเซิร์ฟเวอร์รองรับ
@@ -177,9 +177,9 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 
 สำหรับเซิร์ฟเวอร์ MCP ที่เปิดใช้งาน OAuth ส่วนใหญ่ ไม่จำเป็นต้องมีการกำหนดค่าพิเศษ เพียงกำหนดค่าเซิร์ฟเวอร์ระยะไกล:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 }
 ```
 
-หากเซิร์ฟเวอร์ต้องมีการตรวจสอบสิทธิ์ OpenCode จะแจ้งให้คุณตรวจสอบความถูกต้องเมื่อคุณพยายามใช้งานครั้งแรก หากไม่เป็นเช่นนั้น คุณสามารถ[ทริกเกอร์โฟลว์ด้วยตนเอง](#การตรวจสอบสิทธิ์) ด้วย `opencode mcp auth <server-name>`
+หากเซิร์ฟเวอร์ต้องมีการตรวจสอบสิทธิ์ CyberStrike จะแจ้งให้คุณตรวจสอบความถูกต้องเมื่อคุณพยายามใช้งานครั้งแรก หากไม่เป็นเช่นนั้น คุณสามารถ[ทริกเกอร์โฟลว์ด้วยตนเอง](#การตรวจสอบสิทธิ์) ด้วย `cyberstrike mcp auth <server-name>`
 
 ---
 
@@ -197,9 +197,9 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 
 หากคุณมีข้อมูลประจำตัวไคลเอ็นต์จากผู้ให้บริการเซิร์ฟเวอร์ MCP คุณสามารถกำหนดค่าได้:
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,22 +223,22 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 ตรวจสอบสิทธิ์กับเซิร์ฟเวอร์ MCP เฉพาะ:
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 แสดงรายการเซิร์ฟเวอร์ MCP ทั้งหมดและสถานะการตรวจสอบสิทธิ์:
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 ลบข้อมูลรับรองที่เก็บไว้:
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-คำสั่ง `mcp auth` จะเปิดเบราว์เซอร์ของคุณเพื่อขออนุญาต หลังจากที่คุณอนุญาตแล้ว OpenCode จะจัดเก็บโทเค็นอย่างปลอดภัยใน `~/.local/share/opencode/mcp-auth.json`
+คำสั่ง `mcp auth` จะเปิดเบราว์เซอร์ของคุณเพื่อขออนุญาต หลังจากที่คุณอนุญาตแล้ว CyberStrike จะจัดเก็บโทเค็นอย่างปลอดภัยใน `~/.local/share/cyberstrike/mcp-auth.json`
 
 ---
 
@@ -246,9 +246,9 @@ opencode mcp logout my-oauth-server
 
 หากคุณต้องการปิดการใช้งาน OAuth อัตโนมัติสำหรับเซิร์ฟเวอร์ (เช่น สำหรับเซิร์ฟเวอร์ที่ใช้คีย์ API แทน) ให้ตั้งค่า `oauth` เป็น `false`:
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ opencode mcp logout my-oauth-server
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 คำสั่ง `mcp debug` แสดงสถานะการตรวจสอบสิทธิ์ปัจจุบัน ทดสอบการเชื่อมต่อ HTTP และพยายามใช้ขั้นตอนการค้นหา OAuth
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## จัดการ
 
-MCP ของคุณพร้อมใช้งานในฐานะเครื่องมือใน OpenCode ควบคู่ไปกับเครื่องมือในตัว คุณจึงสามารถจัดการผ่านการกำหนดค่า OpenCode ได้เหมือนกับเครื่องมืออื่นๆ
+MCP ของคุณพร้อมใช้งานในฐานะเครื่องมือใน CyberStrike ควบคู่ไปกับเครื่องมือในตัว คุณจึงสามารถจัดการผ่านการกำหนดค่า CyberStrike ได้เหมือนกับเครื่องมืออื่นๆ
 
 ---
 
@@ -299,9 +299,9 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 
 ซึ่งหมายความว่าคุณสามารถเปิดหรือปิดใช้งานได้ทั่วโลก
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 
 นอกจากนี้เรายังสามารถใช้รูปแบบ glob เพื่อปิดใช้งาน MCP ที่ตรงกันทั้งหมดได้
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 1. ปิดการใช้งานเป็นเครื่องมือทั่วโลก
 2. ใน [agent config](/docs/agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ MCP เครื่องมือเซิร์ฟเวอร์ได้ร�
 
 เพิ่ม [เซิร์ฟเวอร์ Sentry MCP](https://mcp.sentry.dev) เพื่อโต้ตอบกับโครงการและปัญหา Sentry ของคุณ
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ MCP เครื่องมือเซิร์ฟเวอร์ได้ร�
 หลังจากเพิ่มการกำหนดค่าแล้ว ให้ตรวจสอบสิทธิ์กับ Sentry:
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-ซึ่งจะเป็นการเปิดหน้าต่างเบราว์เซอร์เพื่อดำเนินการโฟลว์ OAuth ให้เสร็จสมบูรณ์ และเชื่อมต่อ OpenCode กับบัญชี Sentry ของคุณ
+ซึ่งจะเป็นการเปิดหน้าต่างเบราว์เซอร์เพื่อดำเนินการโฟลว์ OAuth ให้เสร็จสมบูรณ์ และเชื่อมต่อ CyberStrike กับบัญชี Sentry ของคุณ
 
 เมื่อตรวจสอบสิทธิ์แล้ว คุณจะใช้เครื่องมือ Sentry ในข้อความแจ้งเพื่อค้นหาปัญหา โปรเจ็กต์ และข้อมูลข้อผิดพลาดได้
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 เพิ่ม [Context7 MCP server](https://github.com/upstash/context7) เพื่อค้นหาในเอกสาร
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 หากคุณได้ลงทะเบียนสำหรับบัญชีฟรี คุณสามารถใช้รหัส API ของคุณและรับขีดจำกัดอัตราที่สูงขึ้น
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 เพิ่มเซิร์ฟเวอร์ [Grep by Vercel](https://grep.app) MCP เพื่อค้นหาผ่านข้อมูลโค้ดบน GitHub
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

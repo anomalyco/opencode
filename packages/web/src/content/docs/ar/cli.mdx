@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: أوامر وخيارات CLI في OpenCode.
+description: أوامر وخيارات CLI في CyberStrike.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يبدأ CLI الخاص بـ OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
+يبدأ CLI الخاص بـ CyberStrike افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع OpenCode برمجيا.
+كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع CyberStrike برمجيا.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+cyberstrike run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-بدء واجهة المستخدم terminal (TUI) الخاصة بـ OpenCode.
+بدء واجهة المستخدم terminal (TUI) الخاصة بـ CyberStrike.
 
 ```bash
-opencode [project]
+cyberstrike [project]
 ```
 
 #### الخيارات
@@ -44,36 +44,36 @@ opencode [project]
 
 ## الأوامر
 
-يتضمن CLI الخاص بـ OpenCode أيضا الأوامر التالية.
+يتضمن CLI الخاص بـ CyberStrike أيضا الأوامر التالية.
 
 ---
 
 ### agent
 
-إدارة وكلاء OpenCode.
+إدارة وكلاء CyberStrike.
 
 ```bash
-opencode agent [command]
+cyberstrike agent [command]
 ```
 
 ---
 
 ### attach
 
-إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
+إرفاق terminal بخادم الواجهة الخلفية لـ CyberStrike قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
 
 ```bash
-opencode attach [url]
+cyberstrike attach [url]
 ```
 
-يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
+يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ CyberStrike تعمل عن بعد. على سبيل المثال:
 
 ```bash
 # ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
-opencode web --port 4096 --hostname 0.0.0.0
+cyberstrike web --port 4096 --hostname 0.0.0.0
 
 # في محطة طرفية (terminal) أخرى، اربط TUI بالواجهة الخلفية قيد التشغيل
-opencode attach http://10.20.30.40:4096
+cyberstrike attach http://10.20.30.40:4096
 ```
 
 #### الرايات
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 إنشاء وكيل جديد بإعدادات مخصصة.
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 سيرشدك هذا الأمر خلال إنشاء وكيل جديد مع موجه نظام مخصص وإعدادات الأدوات.
@@ -102,7 +102,7 @@ opencode agent create
 عرض جميع الوكلاء المتاحين.
 
 ```bash
-opencode agent list
+cyberstrike agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 أمر لإدارة بيانات الاعتماد وتسجيل الدخول لمزودي الخدمة.
 
 ```bash
-opencode auth [command]
+cyberstrike auth [command]
 ```
 
 ---
 
 #### login
 
-يعتمد OpenCode على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `opencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/opencode/auth.json`.
+يعتمد CyberStrike على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `cyberstrike auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/cyberstrike/auth.json`.
 
 ```bash
-opencode auth login
+cyberstrike auth login
 ```
 
-عند تشغيل OpenCode يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
+عند تشغيل CyberStrike يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
 
 ---
 
@@ -134,13 +134,13 @@ opencode auth login
 يسرد جميع المزودين الذين تم توثيقهم كما هم محفوظون في ملف بيانات الاعتماد.
 
 ```bash
-opencode auth list
+cyberstrike auth list
 ```
 
 أو النسخة المختصرة.
 
 ```bash
-opencode auth ls
+cyberstrike auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 يسجلك خارج مزود عبر حذفه من ملف بيانات الاعتماد.
 
 ```bash
-opencode auth logout
+cyberstrike auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 إدارة وكيل GitHub لأتمتة المستودع.
 
 ```bash
-opencode github [command]
+cyberstrike github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 تثبيت وكيل GitHub في مستودعك.
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 يقوم ذلك بإعداد سير عمل GitHub Actions اللازم ويرشدك خلال عملية التهيئة. [اعرف المزيد](/docs/github).
@@ -182,7 +182,7 @@ opencode github install
 تشغيل وكيل GitHub. يُستخدم هذا عادة ضمن GitHub Actions.
 
 ```bash
-opencode github run
+cyberstrike github run
 ```
 
 ##### الرايات
@@ -199,7 +199,7 @@ opencode github run
 إدارة خوادم Model Context Protocol.
 
 ```bash
-opencode mcp [command]
+cyberstrike mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 إضافة خادم MCP إلى تهيئتك.
 
 ```bash
-opencode mcp add
+cyberstrike mcp add
 ```
 
 سيرشدك هذا الأمر خلال إضافة خادم MCP محلي أو بعيد.
@@ -221,13 +221,13 @@ opencode mcp add
 عرض جميع خوادم MCP المُهيأة وحالة اتصالها.
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 أو استخدم النسخة المختصرة.
 
 ```bash
-opencode mcp ls
+cyberstrike mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 إجراء المصادقة مع خادم MCP يدعم OAuth.
 
 ```bash
-opencode mcp auth [name]
+cyberstrike mcp auth [name]
 ```
 
 إذا لم تُحدِّد اسم خادم، فسيُطلب منك الاختيار من الخوادم المتاحة الداعمة لـ OAuth.
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 يمكنك أيضا عرض الخوادم الداعمة لـ OAuth وحالة المصادقة الخاصة بها.
 
 ```bash
-opencode mcp auth list
+cyberstrike mcp auth list
 ```
 
 أو استخدم النسخة المختصرة.
 
 ```bash
-opencode mcp auth ls
+cyberstrike mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 إزالة بيانات اعتماد OAuth لخادم MCP.
 
 ```bash
-opencode mcp logout [name]
+cyberstrike mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 تشخيص مشاكل اتصال OAuth لخادم MCP.
 
 ```bash
-opencode mcp debug <name>
+cyberstrike mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 عرض جميع النماذج المتاحة من المزودين المُهيأين.
 
 ```bash
-opencode models [provider]
+cyberstrike models [provider]
 ```
 
 يعرض هذا الأمر جميع النماذج المتاحة عبر المزودين المُهيأين لديك بصيغة `provider/model`.
@@ -291,7 +291,7 @@ opencode models [provider]
 يمكنك اختياريا تمرير معرّف مزود لتصفية النماذج حسب ذلك المزود.
 
 ```bash
-opencode models anthropic
+cyberstrike models anthropic
 ```
 
 #### الرايات
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | تحديث ذاكرة التخزين المؤقت للنماذج من models.dev              |
 | `--verbose` | استخدام مخرجات أكثر تفصيلا للنماذج (تشمل بيانات مثل التكاليف) |
 
-استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في OpenCode.
+استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في CyberStrike.
 
 ```bash
-opencode models --refresh
+cyberstrike models --refresh
 ```
 
 ---
 
 ### run
 
-تشغيل opencode في وضع غير تفاعلي عبر تمرير موجه مباشرة.
+تشغيل cyberstrike في وضع غير تفاعلي عبر تمرير موجه مباشرة.
 
 ```bash
-opencode run [message..]
+cyberstrike run [message..]
 ```
 
 هذا مفيد للبرمجة النصية والأتمتة، أو عندما تريد إجابة سريعة دون تشغيل واجهة TUI كاملة. على سبيل المثال.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "cyberstrike run"
+cyberstrike run Explain the use of context in Go
 ```
 
-يمكنك أيضا الإرفاق بمثيل `opencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
+يمكنك أيضا الإرفاق بمثيل `cyberstrike serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
 
 ```bash
 # ابدأ خادمًا بلا واجهة في محطة طرفية واحدة
-opencode serve
+cyberstrike serve
 
 # في محطة طرفية أخرى، شغّل الأوامر التي ترتبط به
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+cyberstrike run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### الرايات
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                       |
 | `--format`   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)                  |
 | `--title`    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)           |
-| `--attach`   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096)    |
+| `--attach`   |         | الإرفاق بخادم cyberstrike قيد التشغيل (مثل http://localhost:4096)    |
 | `--port`     |         | منفذ الخادم المحلي (الافتراضي منفذ عشوائي)                        |
 
 ---
 
 ### serve
 
-بدء خادم OpenCode بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
+بدء خادم CyberStrike بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
 
 ```bash
-opencode serve
+cyberstrike serve
 ```
 
-يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف opencode دون واجهة TUI. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف cyberstrike دون واجهة TUI. اضبط `CYBERSTRIKE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `cyberstrike`).
 
 #### الرايات
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-إدارة جلسات OpenCode.
+إدارة جلسات CyberStrike.
 
 ```bash
-opencode session [command]
+cyberstrike session [command]
 ```
 
 ---
 
 #### list
 
-عرض جميع جلسات OpenCode.
+عرض جميع جلسات CyberStrike.
 
 ```bash
-opencode session list
+cyberstrike session list
 ```
 
 ##### الرايات
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-عرض إحصاءات استخدام الرموز والتكلفة لجلسات OpenCode لديك.
+عرض إحصاءات استخدام الرموز والتكلفة لجلسات CyberStrike لديك.
 
 ```bash
-opencode stats
+cyberstrike stats
 ```
 
 #### الرايات
@@ -424,7 +424,7 @@ opencode stats
 تصدير بيانات الجلسة بصيغة JSON.
 
 ```bash
-opencode export [sessionID]
+cyberstrike export [sessionID]
 ```
 
 إذا لم تُقدّم معرّف جلسة، فسيُطلب منك الاختيار من الجلسات المتاحة.
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة OpenCode.
+استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة CyberStrike.
 
 ```bash
-opencode import <file>
+cyberstrike import <file>
 ```
 
-يمكنك الاستيراد من ملف محلي أو من رابط مشاركة OpenCode.
+يمكنك الاستيراد من ملف محلي أو من رابط مشاركة CyberStrike.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+cyberstrike import session.json
+cyberstrike import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-بدء خادم OpenCode بدون واجهة مع واجهة ويب.
+بدء خادم CyberStrike بدون واجهة مع واجهة ويب.
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى CyberStrike عبر واجهة ويب. اضبط `CYBERSTRIKE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `cyberstrike`).
 
 #### الرايات
 
@@ -474,7 +474,7 @@ opencode web
 بدء خادم ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+cyberstrike acp
 ```
 
 يشغّل هذا الأمر خادم ACP يتواصل عبر stdin/stdout باستخدام nd-JSON.
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-إلغاء تثبيت OpenCode وإزالة جميع الملفات ذات الصلة.
+إلغاء تثبيت CyberStrike وإزالة جميع الملفات ذات الصلة.
 
 ```bash
-opencode uninstall
+cyberstrike uninstall
 ```
 
 #### الرايات
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-تحديث opencode إلى أحدث إصدار أو إلى إصدار محدد.
+تحديث cyberstrike إلى أحدث إصدار أو إلى إصدار محدد.
 
 ```bash
-opencode upgrade [target]
+cyberstrike upgrade [target]
 ```
 
 للترقية إلى أحدث إصدار.
 
 ```bash
-opencode upgrade
+cyberstrike upgrade
 ```
 
 للترقية إلى إصدار محدد.
 
 ```bash
-opencode upgrade v0.1.48
+cyberstrike upgrade v0.1.48
 ```
 
 #### الرايات
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## الخيارات العامة
 
-يدعم سطر أوامر opencode الخيارات العامة التالية.
+يدعم سطر أوامر cyberstrike الخيارات العامة التالية.
 
 | الراية         | المختصر | الوصف                                  |
 | -------------- | ------- | -------------------------------------- |
@@ -551,34 +551,34 @@ opencode upgrade v0.1.48
 
 ## متغيرات البيئة
 
-يمكن تهيئة OpenCode باستخدام متغيرات البيئة.
+يمكن تهيئة CyberStrike باستخدام متغيرات البيئة.
 
 | المتغير                               | النوع   | الوصف                                                     |
 | ------------------------------------- | ------- | --------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
-| `OPENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
-| `OPENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
-| `OPENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
-| `OPENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
-| `OPENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
-| `OPENCODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | تعطيل التحقق من وقت الملف لتحسين الأداء                   |
-| `OPENCODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
-| `OPENCODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
+| `CYBERSTRIKE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
+| `CYBERSTRIKE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
+| `CYBERSTRIKE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
+| `CYBERSTRIKE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
+| `CYBERSTRIKE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
+| `CYBERSTRIKE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
+| `CYBERSTRIKE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
+| `CYBERSTRIKE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
+| `CYBERSTRIKE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
+| `CYBERSTRIKE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
+| `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
+| `CYBERSTRIKE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
+| `CYBERSTRIKE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
+| `CYBERSTRIKE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
+| `CYBERSTRIKE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
+| `CYBERSTRIKE_DISABLE_FILETIME_CHECK`     | boolean | تعطيل التحقق من وقت الملف لتحسين الأداء                   |
+| `CYBERSTRIKE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
+| `CYBERSTRIKE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
+| `CYBERSTRIKE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
+| `CYBERSTRIKE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `cyberstrike`) |
+| `CYBERSTRIKE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
 
 ---
 
@@ -588,16 +588,16 @@ opencode upgrade v0.1.48
 
 | المتغير                                         | النوع   | الوصف                                       |
 | ----------------------------------------------- | ------- | ------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | تفعيل جميع الميزات التجريبية                |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI              |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM    |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل            |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                          |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                         |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                   |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | تفعيل تدقيق أنواع LSP تجريبي                |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | تفعيل ميزات markdown تجريبية                |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                             |
+| `CYBERSTRIKE_EXPERIMENTAL`                         | boolean | تفعيل جميع الميزات التجريبية                |
+| `CYBERSTRIKE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                      |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI              |
+| `CYBERSTRIKE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية |
+| `CYBERSTRIKE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM    |
+| `CYBERSTRIKE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل            |
+| `CYBERSTRIKE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                          |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                      |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                         |
+| `CYBERSTRIKE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                   |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TY`                  | boolean | تفعيل تدقيق أنواع LSP تجريبي                |
+| `CYBERSTRIKE_EXPERIMENTAL_MARKDOWN`                | boolean | تفعيل ميزات markdown تجريبية                |
+| `CYBERSTRIKE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                             |

@@ -34,7 +34,7 @@ impl MainWindow {
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
             app,
         )
-        .title("OpenCode")
+        .title("CyberStrike")
         .decorations(true)
         .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
@@ -42,9 +42,9 @@ impl MainWindow {
         .maximized(true)
         .initialization_script(format!(
             r#"
-            window.__OPENCODE__ ??= {{}};
-            window.__OPENCODE__.updaterEnabled = {UPDATER_ENABLED};
-            window.__OPENCODE__.wsl = {wsl_enabled};
+            window.__CYBERSTRIKE__ ??= {{}};
+            window.__CYBERSTRIKE__.updaterEnabled = {UPDATER_ENABLED};
+            window.__CYBERSTRIKE__.wsl = {wsl_enabled};
           "#
         ));
 

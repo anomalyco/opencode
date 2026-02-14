@@ -26,7 +26,7 @@ import {
   QuestionRequest,
   QuestionAnswer,
   QuestionInfo,
-} from "@opencode-ai/sdk/v2"
+} from "@cyberstrike-io/sdk/v2"
 import { createStore } from "solid-js/store"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -42,9 +42,9 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { findLast } from "@opencode-ai/util/array"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+import { findLast } from "@cyberstrike-io/util/array"
+import { getDirectory as _getDirectory, getFilename } from "@cyberstrike-io/util/path"
+import { checksum } from "@cyberstrike-io/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"

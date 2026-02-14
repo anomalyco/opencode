@@ -3,9 +3,9 @@ title: Temaer
 description: Velg et innebygd tema eller definer ditt eget.
 ---
 
-Med opencode kan du velge fra ett av flere innebygde temaer, bruke et tema som tilpasser seg terminaltemaet ditt, eller definere ditt eget tilpassede tema.
+Med cyberstrike kan du velge fra ett av flere innebygde temaer, bruke et tema som tilpasser seg terminaltemaet ditt, eller definere ditt eget tilpassede tema.
 
-Som standard bruker opencode vårt eget `opencode`-tema.
+Som standard bruker cyberstrike vårt eget `cyberstrike`-tema.
 
 ---
 
@@ -23,7 +23,7 @@ Uten truecolor-støtte kan temaer vises med redusert fargenøyaktighet eller fal
 
 ## Innebygde temaer
 
-opencode kommer med flere innebygde temaer.
+cyberstrike kommer med flere innebygde temaer.
 
 | Navn                   | Beskrivelse                                                               |
 | ---------------------- | ------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ Og mer, vi legger stadig til nye temaer.
 
 Systemtemaet er for brukere som:
 
-- Vil at opencode skal matche terminalens utseende
+- Vil at cyberstrike skal matche terminalens utseende
 - Bruker tilpassede terminalfargeskjemaer
 - Foretrekker et konsistent utseende på tvers av alle terminalapplikasjoner
 
@@ -63,9 +63,9 @@ Systemtemaet er for brukere som:
 
 Du kan velge et tema ved å åpne temavelgeren med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ Du kan velge et tema ved å åpne temavelgeren med kommandoen `/theme`. Eller du
 
 ## Egendefinerte temaer
 
-opencode støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt lage og tilpasse temaer.
+cyberstrike støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt lage og tilpasse temaer.
 
 ---
 
@@ -83,9 +83,9 @@ opencode støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt la
 Temaer lastes inn fra flere kataloger i følgende rekkefølge der senere kataloger overstyrer tidligere:
 
 1. **Innebygde temaer** - Disse er innebygd i binæren
-2. **Brukerkonfigurasjonskatalog** - Definert i `~/.config/opencode/themes/*.json` eller `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Prosjektrotkatalog** - Definert i `<project-root>/.opencode/themes/*.json`
-4. **Gjeldende arbeidskatalog** - Definert i `./.opencode/themes/*.json`
+2. **Brukerkonfigurasjonskatalog** - Definert i `~/.config/cyberstrike/themes/*.json` eller `$XDG_CONFIG_HOME/cyberstrike/themes/*.json`
+3. **Prosjektrotkatalog** - Definert i `<project-root>/.cyberstrike/themes/*.json`
+4. **Gjeldende arbeidskatalog** - Definert i `./.cyberstrike/themes/*.json`
 
 Hvis flere kataloger inneholder et tema med samme navn, vil temaet fra katalogen med høyere prioritet bli brukt.
 
@@ -98,15 +98,15 @@ For å lage et tilpasset tema, lag en JSON-fil i en av temakatalogene.
 For brukerspesifikke temaer:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 Og for prosjektspesifikke temaer.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ Her er et eksempel på et tilpasset tema:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

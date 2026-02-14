@@ -1,18 +1,18 @@
 ---
 title: Unternehmen
-description: Sichere Verwendung von OpenCode in Ihrem Unternehmen.
+description: Sichere Verwendung von CyberStrike in Ihrem Unternehmen.
 ---
 
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-OpenCode Enterprise ist für Organisationen gedacht, die sicherstellen möchten, dass ihr Code und ihre Daten niemals ihre Infrastruktur verlassen. Dies kann durch die Verwendung einer zentralen Konfiguration erreicht werden, die in Ihr SSO- und internes AI-Gateway integriert ist.
+CyberStrike Enterprise ist für Organisationen gedacht, die sicherstellen möchten, dass ihr Code und ihre Daten niemals ihre Infrastruktur verlassen. Dies kann durch die Verwendung einer zentralen Konfiguration erreicht werden, die in Ihr SSO- und internes AI-Gateway integriert ist.
 
 :::note
-OpenCode speichert keine Ihrer Code- oder Kontextdaten.
+CyberStrike speichert keine Ihrer Code- oder Kontextdaten.
 :::
 
-So starten Sie mit OpenCode Enterprise:
+So starten Sie mit CyberStrike Enterprise:
 
 1. Führen Sie einen internen Test mit Ihrem Team durch.
 2. **<a href={email}>Kontaktieren Sie uns</a>**, um Preise und Implementierungsoptionen zu besprechen.
@@ -21,16 +21,16 @@ So starten Sie mit OpenCode Enterprise:
 
 ## Testphase
 
-OpenCode ist Open Source und speichert keine Ihrer Code- oder Kontextdaten, sodass Ihr Entwickler einfach [get started](/docs/) und eine Testversion durchführen kann.
+CyberStrike ist Open Source und speichert keine Ihrer Code- oder Kontextdaten, sodass Ihr Entwickler einfach [get started](/docs/) und eine Testversion durchführen kann.
 
 ---
 
 ### Datenverarbeitung
 
-**OpenCode speichert Ihren Code oder Ihre Kontextdaten nicht.** Die gesamte Verarbeitung erfolgt lokal oder durch direkte API-Aufrufe an Ihren AI-Anbieter.
+**CyberStrike speichert Ihren Code oder Ihre Kontextdaten nicht.** Die gesamte Verarbeitung erfolgt lokal oder durch direkte API-Aufrufe an Ihren AI-Anbieter.
 
 Das heißt, solange Sie einen Anbieter Ihres Vertrauens oder einen internen nutzen
-AI-Gateway können Sie OpenCode sicher verwenden.
+AI-Gateway können Sie CyberStrike sicher verwenden.
 
 Die einzige Einschränkung hier ist die optionale Funktion `/share`.
 
@@ -38,15 +38,15 @@ Die einzige Einschränkung hier ist die optionale Funktion `/share`.
 
 #### Gespräche teilen
 
-Wenn ein Benutzer die Funktion `/share` aktiviert, werden die Konversation und die damit verbundenen Daten an den Dienst gesendet, den wir zum Hosten dieser Freigabeseiten unter opencode.ai verwenden.
+Wenn ein Benutzer die Funktion `/share` aktiviert, werden die Konversation und die damit verbundenen Daten an den Dienst gesendet, den wir zum Hosten dieser Freigabeseiten unter cyberstrike.io verwenden.
 
 Die Daten werden derzeit über das Edge-Netzwerk unseres CDN bereitgestellt und am Edge in der Nähe Ihres Benutzers zwischengespeichert.
 
 Wir empfehlen Ihnen, dies für Ihre Testversion zu deaktivieren.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "share": "disabled"
 }
 ```
@@ -57,19 +57,19 @@ Wir empfehlen Ihnen, dies für Ihre Testversion zu deaktivieren.
 
 ### Code-Besitz
 
-**Der gesamte von OpenCode erstellte Code gehört Ihnen.** Es bestehen keine Lizenzbeschränkungen oder Eigentumsansprüche.
+**Der gesamte von CyberStrike erstellte Code gehört Ihnen.** Es bestehen keine Lizenzbeschränkungen oder Eigentumsansprüche.
 
 ---
 
 ## Preise
 
-Für OpenCode Enterprise verwenden wir ein Pro-Sitz-Modell. Wenn Sie über ein eigenes LLM-Gateway verfügen, berechnen wir keine Gebühren für die verwendeten Token. Für weitere Informationen zu Preisen und Implementierungsoptionen **<a href={email}>kontaktieren Sie uns</a>**.
+Für CyberStrike Enterprise verwenden wir ein Pro-Sitz-Modell. Wenn Sie über ein eigenes LLM-Gateway verfügen, berechnen wir keine Gebühren für die verwendeten Token. Für weitere Informationen zu Preisen und Implementierungsoptionen **<a href={email}>kontaktieren Sie uns</a>**.
 
 ---
 
 ## Bereitstellung
 
-Sobald Sie Ihre Testversion abgeschlossen haben und bereit sind, OpenCode unter zu verwenden
+Sobald Sie Ihre Testversion abgeschlossen haben und bereit sind, CyberStrike unter zu verwenden
 Für Ihre Organisation können Sie **<a href={email}>uns kontaktieren</a>**, um dies zu besprechen
 Preisgestaltung und Umsetzungsmöglichkeiten.
 
@@ -77,7 +77,7 @@ Preisgestaltung und Umsetzungsmöglichkeiten.
 
 ### Zentrale Konfiguration
 
-Wir können OpenCode so einrichten, dass eine einzige zentrale Konfiguration für Ihre gesamte Organisation verwendet wird.
+Wir können CyberStrike so einrichten, dass eine einzige zentrale Konfiguration für Ihre gesamte Organisation verwendet wird.
 
 Diese zentralisierte Konfiguration kann in Ihren SSO-Anbieter integriert werden und stellt sicher, dass alle Benutzer nur auf Ihr internes AI-Gateway zugreifen.
 
@@ -85,15 +85,15 @@ Diese zentralisierte Konfiguration kann in Ihren SSO-Anbieter integriert werden 
 
 ### SSO-Integration
 
-Über die zentrale Konfiguration kann OpenCode zur Authentifizierung in den SSO-Anbieter Ihrer Organisation integriert werden.
+Über die zentrale Konfiguration kann CyberStrike zur Authentifizierung in den SSO-Anbieter Ihrer Organisation integriert werden.
 
-Dadurch kann OpenCode Anmeldeinformationen für Ihr internes AI-Gateway über Ihr eigenes Identitätsverwaltungssystem abrufen.
+Dadurch kann CyberStrike Anmeldeinformationen für Ihr internes AI-Gateway über Ihr eigenes Identitätsverwaltungssystem abrufen.
 
 ---
 
 ### Internes AI-Gateway
 
-Mit der zentralen Konfiguration kann OpenCode auch so konfiguriert werden, dass nur Ihr internes AI-Gateway verwendet wird.
+Mit der zentralen Konfiguration kann CyberStrike auch so konfiguriert werden, dass nur Ihr internes AI-Gateway verwendet wird.
 
 Sie können auch alle anderen AI-Anbieter deaktivieren und so sicherstellen, dass alle Anfragen über die genehmigte Infrastruktur Ihrer Organisation laufen.
 
@@ -111,16 +111,16 @@ Dies steht derzeit auf unserer Roadmap. Wenn Sie Interesse haben, **<a href={ema
 ## FAQ
 
 <details>
-<summary>Was ist OpenCode Enterprise?</summary>
+<summary>Was ist CyberStrike Enterprise?</summary>
 
-OpenCode Enterprise ist für Organisationen gedacht, die sicherstellen möchten, dass ihr Code und ihre Daten niemals ihre Infrastruktur verlassen. Dies kann durch die Verwendung einer zentralen Konfiguration erreicht werden, die in Ihr SSO- und internes AI-Gateway integriert ist.
+CyberStrike Enterprise ist für Organisationen gedacht, die sicherstellen möchten, dass ihr Code und ihre Daten niemals ihre Infrastruktur verlassen. Dies kann durch die Verwendung einer zentralen Konfiguration erreicht werden, die in Ihr SSO- und internes AI-Gateway integriert ist.
 
 </details>
 
 <details>
-<summary>Wie fange ich mit OpenCode Enterprise an?</summary>
+<summary>Wie fange ich mit CyberStrike Enterprise an?</summary>
 
-Beginnen Sie einfach mit einem internen Test mit Ihrem Team. OpenCode speichert standardmäßig weder Ihren Code noch Ihre Kontextdaten, was den Einstieg erleichtert.
+Beginnen Sie einfach mit einem internen Test mit Ihrem Team. CyberStrike speichert standardmäßig weder Ihren Code noch Ihre Kontextdaten, was den Einstieg erleichtert.
 
 Dann **<a href={email}>kontaktieren Sie uns</a>**, um Preise und Implementierungsoptionen zu besprechen.
 
@@ -134,16 +134,16 @@ Wir bieten Enterprise-Preise pro Sitzplatz an. Wenn Sie über ein eigenes LLM-Ga
 </details>
 
 <details>
-<summary>Sind meine Daten bei OpenCode Enterprise sicher?</summary>
+<summary>Sind meine Daten bei CyberStrike Enterprise sicher?</summary>
 
-Ja. OpenCode speichert Ihren Code oder Ihre Kontextdaten nicht. Die gesamte Verarbeitung erfolgt lokal oder durch direkte API-Anrufe an Ihren AI-Anbieter. Dank zentraler Konfiguration und SSO-Integration bleiben Ihre Daten innerhalb der Infrastruktur Ihres Unternehmens sicher.
+Ja. CyberStrike speichert Ihren Code oder Ihre Kontextdaten nicht. Die gesamte Verarbeitung erfolgt lokal oder durch direkte API-Anrufe an Ihren AI-Anbieter. Dank zentraler Konfiguration und SSO-Integration bleiben Ihre Daten innerhalb der Infrastruktur Ihres Unternehmens sicher.
 
 </details>
 
 <details>
 <summary>Können wir unsere eigene private NPM-Registry verwenden?</summary>
 
-OpenCode unterstützt private NPM-Registrierungen durch Buns native `.npmrc`-Dateiunterstützung. Wenn Ihre Organisation eine private Registrierung wie JFrog Artifactory, Nexus oder ähnliches verwendet, stellen Sie sicher, dass der Entwickler authentifiziert ist, bevor Sie OpenCode ausführen.
+CyberStrike unterstützt private NPM-Registrierungen durch Buns native `.npmrc`-Dateiunterstützung. Wenn Ihre Organisation eine private Registrierung wie JFrog Artifactory, Nexus oder ähnliches verwendet, stellen Sie sicher, dass der Entwickler authentifiziert ist, bevor Sie CyberStrike ausführen.
 
 So richten Sie die Authentifizierung mit Ihrer privaten Registrierung ein:
 
@@ -151,11 +151,11 @@ So richten Sie die Authentifizierung mit Ihrer privaten Registrierung ein:
 npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
-Dadurch wird `~/.npmrc` mit Authentifizierungsdetails erstellt. OpenCode wird automatisch
+Dadurch wird `~/.npmrc` mit Authentifizierungsdetails erstellt. CyberStrike wird automatisch
 Hebe das auf.
 
 :::caution
-Sie müssen bei der privaten Registrierung angemeldet sein, bevor Sie OpenCode ausführen.
+Sie müssen bei der privaten Registrierung angemeldet sein, bevor Sie CyberStrike ausführen.
 :::
 
 Alternativ können Sie eine `.npmrc`-Datei manuell konfigurieren:
@@ -165,6 +165,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Entwickler müssen vor der Ausführung von OpenCode bei der privaten Registrierung angemeldet sein, um sicherzustellen, dass Pakete aus Ihrer Unternehmensregistrierung installiert werden können.
+Entwickler müssen vor der Ausführung von CyberStrike bei der privaten Registrierung angemeldet sein, um sicherzustellen, dass Pakete aus Ihrer Unternehmensregistrierung installiert werden können.
 
 </details>

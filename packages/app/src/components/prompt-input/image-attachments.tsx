@@ -1,5 +1,5 @@
 import { Component, For, Show } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@cyberstrike-io/ui/icon"
 import type { ImageAttachmentPart } from "@/context/prompt"
 
 type PromptImageAttachmentsProps = {

@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: สัญญาณและคำสั่งของ OpenCode CLI
+description: สัญญาณและคำสั่งของ CyberStrike CLI
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
+CyberStrike CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
 
 ```bash
-opencode
+cyberstrike
 ```
 
-นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ OpenCode ผ่านโปรแกรมได้
+นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ CyberStrike ผ่านโปรแกรมได้
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+cyberstrike run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-เริ่ม TUI เพื่อใช้ OpenCode แบบโต้ตอบ
+เริ่ม TUI เพื่อใช้ CyberStrike แบบโต้ตอบ
 
 ```bash
-opencode [project]
+cyberstrike [project]
 ```
 
 #### แฟล็ก
@@ -44,36 +44,36 @@ opencode [project]
 
 ## คำสั่ง
 
-OpenCode CLI ยังมีคำสั่งย่อยอีกมากมาย
+CyberStrike CLI ยังมีคำสั่งย่อยอีกมากมาย
 
 ---
 
 ### agent
 
-จัดการเอเจนต์สำหรับ OpenCode
+จัดการเอเจนต์สำหรับ CyberStrike
 
 ```bash
-opencode agent [command]
+cyberstrike agent [command]
 ```
 
 ---
 
 ### attach
 
-เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
+เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ CyberStrike ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
 
 ```bash
-opencode attach [url]
+cyberstrike attach [url]
 ```
 
-วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ OpenCode ระยะไกลได้ ตัวอย่าง:
+วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ CyberStrike ระยะไกลได้ ตัวอย่าง:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+cyberstrike web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+cyberstrike attach http://10.20.30.40:4096
 ```
 
 #### แฟล็ก
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 สร้างเอเจนต์ใหม่
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
@@ -102,7 +102,7 @@ opencode agent create
 แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
 
 ```bash
-opencode agent list
+cyberstrike agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 จัดการการตรวจสอบสิทธิ์และข้อมูลรับรอง
 
 ```bash
-opencode auth [command]
+cyberstrike auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/opencode/auth.json`
+CyberStrike ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/cyberstrike/auth.json`
 
 ```bash
-opencode auth login
+cyberstrike auth login
 ```
 
-เมื่อ OpenCode เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
+เมื่อ CyberStrike เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
 
 ---
 
@@ -134,13 +134,13 @@ opencode auth login
 แสดงรายการข้อมูลรับรองการตรวจสอบสิทธิ์ทั้งหมดที่กำหนดค่าไว้
 
 ```bash
-opencode auth list
+cyberstrike auth list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode auth ls
+cyberstrike auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 ออกจากระบบของผู้ให้บริการและลบข้อมูลรับรองออกจากไฟล์ auth
 
 ```bash
-opencode auth logout
+cyberstrike auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 จัดการเอเจนต์ GitHub สำหรับเวิร์กโฟลว์อัตโนมัติ
 
 ```bash
-opencode github [command]
+cyberstrike github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 ติดตั้งเอเจนต์ GitHub ใน repository ของคุณ
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 คำสั่งนี้จะสร้างเวิร์กโฟลว์ GitHub Actions และแนะนำคุณตลอดกระบวนการตั้งค่า [เรียนรู้เพิ่มเติม](/docs/github)
@@ -182,7 +182,7 @@ opencode github install
 รันเอเจนต์ GitHub ด้วยตนเองหรือใน GitHub Actions
 
 ```bash
-opencode github run
+cyberstrike github run
 ```
 
 ##### แฟล็ก
@@ -199,7 +199,7 @@ opencode github run
 จัดการเซิร์ฟเวอร์ Model Context Protocol (MCP)
 
 ```bash
-opencode mcp [command]
+cyberstrike mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 เพิ่มเซิร์ฟเวอร์ MCP ลงในการกำหนดค่าของคุณ
 
 ```bash
-opencode mcp add
+cyberstrike mcp add
 ```
 
 คำสั่งนี้จะแนะนำคุณผ่านวิซาร์ดเพื่อกำหนดค่าเซิร์ฟเวอร์ MCP ใหม่
@@ -221,13 +221,13 @@ opencode mcp add
 แสดงรายชื่อเซิร์ฟเวอร์ MCP ทั้งหมดที่กำหนดค่าไว้และสถานะ
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode mcp ls
+cyberstrike mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 ยืนยันตัวตนกับเซิร์ฟเวอร์ MCP ที่ต้องการ OAuth
 
 ```bash
-opencode mcp auth [name]
+cyberstrike mcp auth [name]
 ```
 
 หากไม่ระบุชื่อเซิร์ฟเวอร์ คุณจะได้รับแจ้งให้เลือกจากเซิร์ฟเวอร์ที่รองรับ OAuth ที่พร้อมใช้งาน
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 คุณยังสามารถแสดงรายการสถานะการตรวจสอบสิทธิ์ OAuth ได้:
 
 ```bash
-opencode mcp auth list
+cyberstrike mcp auth list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode mcp auth ls
+cyberstrike mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 ลบข้อมูลรับรอง OAuth สำหรับเซิร์ฟเวอร์ MCP
 
 ```bash
-opencode mcp logout [name]
+cyberstrike mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 ดีบักการเชื่อมต่อเซิร์ฟเวอร์ MCP
 
 ```bash
-opencode mcp debug <name>
+cyberstrike mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 แสดงรายการโมเดลที่พร้อมใช้งานทั้งหมดจากผู้ให้บริการที่กำหนดค่าไว้
 
 ```bash
-opencode models [provider]
+cyberstrike models [provider]
 ```
 
 คำสั่งนี้จะแสดง ID โมเดลทั้งหมดในรูปแบบ `provider/model`
@@ -291,7 +291,7 @@ opencode models [provider]
 คุณยังสามารถส่งผ่านรหัสผู้ให้บริการเพื่อกรองโมเดลตามผู้ให้บริการรายนั้นได้
 
 ```bash
-opencode models anthropic
+cyberstrike models anthropic
 ```
 
 #### แฟล็ก
@@ -302,36 +302,36 @@ opencode models anthropic
 | `--verbose` | แสดงรายละเอียดโมเดลเพิ่มเติม (รวมข้อมูลเมตาเช่นต้นทุน) |
 | `--json`    | แสดงผลลัพธ์เป็น JSON                                   |
 
-ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน OpenCode
+ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน CyberStrike
 
 ```bash
-opencode models --refresh
+cyberstrike models --refresh
 ```
 
 ---
 
 ### run
 
-รัน OpenCode โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
+รัน CyberStrike โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
 
 ```bash
-opencode run [message..]
+cyberstrike run [message..]
 ```
 
 มีประโยชน์สำหรับการทำงานอัตโนมัติหรือเมื่อต้องการคำตอบอย่างรวดเร็วโดยไม่ต้องเปิด TUI ตัวอย่าง:
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "cyberstrike run"
+cyberstrike run Explain the use of context in Go
 ```
 
-คุณยังสามารถแนบไปกับเซิร์ฟเวอร์ `opencode serve` ที่ทำงานอยู่ หรือใช้เซิร์ฟเวอร์ MCP แบบ headless:
+คุณยังสามารถแนบไปกับเซิร์ฟเวอร์ `cyberstrike serve` ที่ทำงานอยู่ หรือใช้เซิร์ฟเวอร์ MCP แบบ headless:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+cyberstrike serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+cyberstrike run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### แฟล็ก
@@ -348,20 +348,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | แนบไฟล์ไปกับข้อความ                                                    |
 | `--format`   |      | รูปแบบเอาต์พุต: text (จัดรูปแบบ) หรือ json (JSON ดิบ)                  |
 | `--title`    |      | ชื่อสำหรับเซสชัน (หากไม่ได้ระบุ จะสร้างจากพรอมต์)                      |
-| `--attach`   |      | แนบไปกับเซิร์ฟเวอร์ opencode ที่ทำงานอยู่ (เช่น http://localhost:4096) |
+| `--attach`   |      | แนบไปกับเซิร์ฟเวอร์ cyberstrike ที่ทำงานอยู่ (เช่น http://localhost:4096) |
 | `--port`     |      | พอร์ตสำหรับเซิร์ฟเวอร์ภายในเครื่อง (หากไม่ได้ระบุ จะใช้พอร์ตสุ่ม)      |
 
 ---
 
 ### serve
 
-เริ่มต้นเซิร์ฟเวอร์ OpenCode headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
+เริ่มต้นเซิร์ฟเวอร์ CyberStrike headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
 
 ```bash
-opencode serve
+cyberstrike serve
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ OpenCode ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ CyberStrike ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `cyberstrike` และรหัสผ่านระบุโดย `CYBERSTRIKE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -376,20 +376,20 @@ opencode serve
 
 ### session
 
-จัดการเซสชัน OpenCode
+จัดการเซสชัน CyberStrike
 
 ```bash
-opencode session [command]
+cyberstrike session [command]
 ```
 
 ---
 
 #### list
 
-แสดงรายการเซสชัน OpenCode ทั้งหมด
+แสดงรายการเซสชัน CyberStrike ทั้งหมด
 
 ```bash
-opencode session list
+cyberstrike session list
 ```
 
 ##### แฟล็ก
@@ -403,10 +403,10 @@ opencode session list
 
 ### stats
 
-แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ OpenCode ของคุณ
+แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ CyberStrike ของคุณ
 
 ```bash
-opencode stats
+cyberstrike stats
 ```
 
 #### แฟล็ก
@@ -425,7 +425,7 @@ opencode stats
 ส่งออกประวัติเซสชันเป็น JSON
 
 ```bash
-opencode export [sessionID]
+cyberstrike export [sessionID]
 ```
 
 หากไม่ระบุรหัสเซสชัน คุณจะได้รับแจ้งให้เลือกจากรายการล่าสุด
@@ -434,30 +434,30 @@ opencode export [sessionID]
 
 ### import
 
-นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ OpenCode
+นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ CyberStrike
 
 ```bash
-opencode import <file>
+cyberstrike import <file>
 ```
 
 คุณสามารถนำเข้าไฟล์ในเครื่องหรือ URL ที่แชร์
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+cyberstrike import session.json
+cyberstrike import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-เริ่ม OpenCode ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
+เริ่ม CyberStrike ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง CyberStrike ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `cyberstrike` และรหัสผ่านระบุโดย `CYBERSTRIKE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -475,7 +475,7 @@ opencode web
 เริ่มต้นเซิร์ฟเวอร์ ACP (Agent Client Protocol)
 
 ```bash
-opencode acp
+cyberstrike acp
 ```
 
 คำสั่งนี้เริ่มต้นเซิร์ฟเวอร์ ACP ที่สื่อสารผ่าน stdin/stdout ด้วย nd-JSON
@@ -492,10 +492,10 @@ opencode acp
 
 ### uninstall
 
-ถอนการติดตั้ง OpenCode และลบข้อมูลการกำหนดค่าทั้งหมด
+ถอนการติดตั้ง CyberStrike และลบข้อมูลการกำหนดค่าทั้งหมด
 
 ```bash
-opencode uninstall
+cyberstrike uninstall
 ```
 
 #### แฟล็ก
@@ -511,22 +511,22 @@ opencode uninstall
 
 ### upgrade
 
-อัปเกรด OpenCode เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
+อัปเกรด CyberStrike เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
 
 ```bash
-opencode upgrade [target]
+cyberstrike upgrade [target]
 ```
 
 อัปเกรดเป็นเวอร์ชันล่าสุด
 
 ```bash
-opencode upgrade
+cyberstrike upgrade
 ```
 
 อัปเกรดเป็นเวอร์ชันที่ระบุ
 
 ```bash
-opencode upgrade v0.1.48
+cyberstrike upgrade v0.1.48
 ```
 
 #### แฟล็ก
@@ -539,7 +539,7 @@ opencode upgrade v0.1.48
 
 ## แฟล็กระดับโลก
 
-OpenCode CLI ยอมรับแฟล็กสากลต่อไปนี้สำหรับทุกคำสั่ง
+CyberStrike CLI ยอมรับแฟล็กสากลต่อไปนี้สำหรับทุกคำสั่ง
 
 | แฟล็ก          | สั้น | คำอธิบาย                                  |
 | -------------- | ---- | ----------------------------------------- |
@@ -552,34 +552,34 @@ OpenCode CLI ยอมรับแฟล็กสากลต่อไปนี�
 
 ## ตัวแปรสภาพแวดล้อม
 
-OpenCode สามารถกำหนดค่าโดยใช้ตัวแปรสภาพแวดล้อม
+CyberStrike สามารถกำหนดค่าโดยใช้ตัวแปรสภาพแวดล้อม
 
 | ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
 | ------------------------------------- | ------- | ---------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
-| `OPENCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
-| `OPENCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
-| `OPENCODE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
-| `OPENCODE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
-| `OPENCODE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
-| `OPENCODE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
-| `OPENCODE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | Boolean | ปิดใช้งานการตรวจสอบเวลาแก้ไขไฟล์                                 |
-| `OPENCODE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
-| `OPENCODE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
-| `OPENCODE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
-| `OPENCODE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
+| `CYBERSTRIKE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
+| `CYBERSTRIKE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
+| `CYBERSTRIKE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
+| `CYBERSTRIKE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
+| `CYBERSTRIKE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
+| `CYBERSTRIKE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
+| `CYBERSTRIKE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
+| `CYBERSTRIKE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
+| `CYBERSTRIKE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
+| `CYBERSTRIKE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
+| `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
+| `CYBERSTRIKE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
+| `CYBERSTRIKE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
+| `CYBERSTRIKE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
+| `CYBERSTRIKE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
+| `CYBERSTRIKE_DISABLE_FILETIME_CHECK`     | Boolean | ปิดใช้งานการตรวจสอบเวลาแก้ไขไฟล์                                 |
+| `CYBERSTRIKE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
+| `CYBERSTRIKE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
+| `CYBERSTRIKE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
+| `CYBERSTRIKE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `cyberstrike`) |
+| `CYBERSTRIKE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
 
 ---
 
@@ -589,16 +589,16 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                          | ชนิด    | คำอธิบาย                                       |
 | ----------------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองทั้งหมด                  |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | การตรวจสอบประเภท LSP แบบทดลอง                  |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | Boolean | ใช้ Markdown renderer แบบทดลอง                 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |
+| `CYBERSTRIKE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองทั้งหมด                  |
+| `CYBERSTRIKE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
+| `CYBERSTRIKE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
+| `CYBERSTRIKE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
+| `CYBERSTRIKE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
+| `CYBERSTRIKE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
+| `CYBERSTRIKE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TY`                  | Boolean | การตรวจสอบประเภท LSP แบบทดลอง                  |
+| `CYBERSTRIKE_EXPERIMENTAL_MARKDOWN`                | Boolean | ใช้ Markdown renderer แบบทดลอง                 |
+| `CYBERSTRIKE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |

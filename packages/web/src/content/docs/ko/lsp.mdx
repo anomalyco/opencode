@@ -1,15 +1,15 @@
 ---
 title: LSP 서버
-description: OpenCode는 LSP 서버와 통합되어 작동합니다.
+description: CyberStrike는 LSP 서버와 통합되어 작동합니다.
 ---
 
-OpenCode는 언어 서버 프로토콜(LSP)과 통합되어 LLM이 코드베이스와 상호 작용할 수 있게 돕습니다. 이를 통해 진단 정보를 사용하여 LLM에 피드백을 제공합니다.
+CyberStrike는 언어 서버 프로토콜(LSP)과 통합되어 LLM이 코드베이스와 상호 작용할 수 있게 돕습니다. 이를 통해 진단 정보를 사용하여 LLM에 피드백을 제공합니다.
 
 ---
 
 ## 기본 제공 (Built-in)
 
-OpenCode는 인기 있는 언어들에 대해 여러 내장 LSP 서버를 제공합니다.
+CyberStrike는 인기 있는 언어들에 대해 여러 내장 LSP 서버를 제공합니다.
 
 | LSP 서버           | 확장자                                                             | 요구사항                                              |
 | ------------------ | ------------------------------------------------------------------ | ----------------------------------------------------- |
@@ -49,14 +49,14 @@ OpenCode는 인기 있는 언어들에 대해 여러 내장 LSP 서버를 제공
 LSP 서버는 위 파일 확장자 중 하나가 감지되고 요구 사항이 충족되면 자동으로 활성화됩니다.
 
 :::note
-`OPENCODE_DISABLE_LSP_DOWNLOAD` 환경 변수를 `true`로 설정하여 자동 LSP 서버 다운로드를 비활성화 할 수 있습니다.
+`CYBERSTRIKE_DISABLE_LSP_DOWNLOAD` 환경 변수를 `true`로 설정하여 자동 LSP 서버 다운로드를 비활성화 할 수 있습니다.
 :::
 
 ---
 
 ## 작동 방식
 
-OpenCode가 파일을 열 때, 다음과 같이 작동합니다:
+CyberStrike가 파일을 열 때, 다음과 같이 작동합니다:
 
 1. 활성화된 모든 LSP 서버에 대해 파일 확장자를 확인합니다.
 2. 적절한 LSP 서버가 아직 실행 중이지 않다면 시작합니다.
@@ -65,11 +65,11 @@ OpenCode가 파일을 열 때, 다음과 같이 작동합니다:
 
 ## 구성
 
-OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 있습니다.
+CyberStrike 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 있습니다.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {}
 }
 ```
@@ -92,9 +92,9 @@ OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 
 
 `env` 속성을 사용하여 LSP 서버를 시작할 때 환경 변수를 설정합니다.
 
-```json title="opencode.json" {5-7}
+```json title="cyberstrike.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -111,9 +111,9 @@ OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 
 
 `initialization` 속성을 사용하여 초기화 옵션을 LSP 서버에 전달합니다. 이들은 LSP `initialize` 요청에 보내진 서버 별 설정입니다.
 
-```json title="opencode.json" {5-9}
+```json title="cyberstrike.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -136,18 +136,18 @@ OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 
 
 전역적으로 **모든** LSP 서버를 비활성화하려면 `lsp`를 `false`로 설정하십시오.
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": false
 }
 ```
 
 **특정** LSP 서버를 비활성화하려면 `disabled`를 `true`로 설정하십시오.
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -162,9 +162,9 @@ OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 
 
 명령어와 파일 확장자를 지정하여 사용자 정의 LSP 서버를 추가할 수 있습니다.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

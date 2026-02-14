@@ -1,9 +1,9 @@
 ---
 title: Paylasim
-description: opencode konusmalarini genel baglantilarla paylasin.
+description: cyberstrike konusmalarini genel baglantilarla paylasin.
 ---
 
-opencode'un paylasim ozelligi, konusmalariniz icin genel baglantilar olusturmanizi saglar. Boylece ekip arkadaslarinizla birlikte calisabilir veya diger kisilerden yardim alabilirsiniz.
+cyberstrike'un paylasim ozelligi, konusmalariniz icin genel baglantilar olusturmanizi saglar. Boylece ekip arkadaslarinizla birlikte calisabilir veya diger kisilerden yardim alabilirsiniz.
 
 :::note
 Paylasilan konusmalar, baglantiya sahip herkes tarafindan gorulebilir.
@@ -13,7 +13,7 @@ Paylasilan konusmalar, baglantiya sahip herkes tarafindan gorulebilir.
 
 ## Nasil calisir
 
-Bir konusmayi paylastiginizda opencode:
+Bir konusmayi paylastiginizda cyberstrike:
 
 1. Oturumunuz icin benzersiz bir genel URL olusturur
 2. Konusma gecmisinizi sunucularimiza senkronize eder
@@ -23,13 +23,13 @@ Bir konusmayi paylastiginizda opencode:
 
 ## Paylasim
 
-opencode, konusmalarin nasil paylasilacagini kontrol eden uc farkli paylasim modu sunar:
+cyberstrike, konusmalarin nasil paylasilacagini kontrol eden uc farkli paylasim modu sunar:
 
 ---
 
 ### Manuel (varsayilan)
 
-Varsayilan olarak opencode manuel paylasim modunu kullanir. Oturumlar otomatik paylasilmaz, ancak `/share` komutuyla manuel olarak paylasabilirsiniz:
+Varsayilan olarak cyberstrike manuel paylasim modunu kullanir. Oturumlar otomatik paylasilmaz, ancak `/share` komutuyla manuel olarak paylasabilirsiniz:
 
 ```
 /share
@@ -39,7 +39,7 @@ Bu komut benzersiz bir URL uretir ve panoya kopyalar.
 
 Manuel modu acikca ayarlamak icin [config dosyaniza](/docs/config) sunu ekleyin:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ Manuel modu acikca ayarlamak icin [config dosyaniza](/docs/config) sunu ekleyin:
 
 Tum yeni konusmalar icin otomatik paylasimi acmak isterseniz, [config dosyanizda](/docs/config) `share` degerini `"auto"` yapin:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Otomatik paylasim acikken her yeni konusma otomatik olarak paylasilir ve bir bag
 
 Paylasimi tamamen kapatmak icin [config dosyanizda](/docs/config) `share` degerini `"disabled"` yapin:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Bunu belirli bir projede tum ekip icin zorunlu kilmak icin proje icindeki `opencode.json` dosyasina ekleyip Git'e commit edin.
+Bunu belirli bir projede tum ekip icin zorunlu kilmak icin proje icindeki `cyberstrike.json` dosyasina ekleyip Git'e commit edin.
 
 ---
 
@@ -124,4 +124,4 @@ Kurumsal kurulumlarda paylasim ozelligi su sekillerde yapilandirilabilir:
 - Sadece SSO ile dogrulanan kullanicilarla **sinirlandirilabilir**
 - Kendi altyapinizda **self-hosted** olarak calistirilabilir
 
-Kurulusunuzda opencode kullanimi icin [daha fazla bilgi alin](/docs/enterprise).
+Kurulusunuzda cyberstrike kullanimi icin [daha fazla bilgi alin](/docs/enterprise).

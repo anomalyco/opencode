@@ -1,20 +1,20 @@
 ---
 title: ルール
-description: OpenCode のカスタム命令を設定します。
+description: CyberStrike のカスタム命令を設定します。
 ---
 
-`AGENTS.md` ファイルを作成することで、OpenCode にカスタム命令を提供できます。これは Cursor のルールと似ています。これには、特定のプロジェクトに合わせて LLM の動作をカスタマイズするために LLM のコンテキストに含まれる命令が含まれています。
+`AGENTS.md` ファイルを作成することで、CyberStrike にカスタム命令を提供できます。これは Cursor のルールと似ています。これには、特定のプロジェクトに合わせて LLM の動作をカスタマイズするために LLM のコンテキストに含まれる命令が含まれています。
 
 ---
 
 ## 初期化
 
-新しい `AGENTS.md` ファイルを作成するには、OpenCode で `/init` コマンドを実行します。
+新しい `AGENTS.md` ファイルを作成するには、CyberStrike で `/init` コマンドを実行します。
 
 :::tip
 プロジェクトの `AGENTS.md` ファイルを Git にコミットする必要があります。
 :::
-`AGENTS.md` ファイルが生成されます。これは、OpenCode がプロジェクトをより適切にナビゲートするのに役立ちます。
+`AGENTS.md` ファイルが生成されます。これは、CyberStrike がプロジェクトをより適切にナビゲートするのに役立ちます。
 
 既存の `AGENTS.md` ファイルがある場合、これはそれに追加しようとします。
 
@@ -53,7 +53,7 @@ This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for 
 
 ## 種類
 
-OpenCode は、複数の場所からの `AGENTS.md` ファイルの読み取りもサポートしています。そして、これはさまざまな目的に役立ちます。
+CyberStrike は、複数の場所からの `AGENTS.md` ファイルの読み取りもサポートしています。そして、これはさまざまな目的に役立ちます。
 
 ### プロジェクト
 
@@ -61,58 +61,58 @@ OpenCode は、複数の場所からの `AGENTS.md` ファイルの読み取り�
 
 ### グローバル
 
-`~/.config/opencode/AGENTS.md` ファイルにグローバルルールを含めることもできます。これは、すべての OpenCode セッションに適用されます。
+`~/.config/cyberstrike/AGENTS.md` ファイルにグローバルルールを含めることもできます。これは、すべての CyberStrike セッションに適用されます。
 
 これは Git にコミットされておらず、チームと共有されていないため、LLM が従うべき個人ルールを指定するためにこれを使用することをお勧めします。
 
 ### Claude Code 互換性
 
-Claude Code から移行するユーザーのために、OpenCode はフォールバックとして Claude Code のファイル規則をサポートしています。
+Claude Code から移行するユーザーのために、CyberStrike はフォールバックとして Claude Code のファイル規則をサポートしています。
 
 - **プロジェクトルール**: プロジェクトディレクトリ内の `CLAUDE.md` (`AGENTS.md` が存在しない場合に使用されます)
-- **グローバルルール**: `~/.claude/CLAUDE.md` (`~/.config/opencode/AGENTS.md` が存在しない場合に使用)
+- **グローバルルール**: `~/.claude/CLAUDE.md` (`~/.config/cyberstrike/AGENTS.md` が存在しない場合に使用)
 - **スキル**: `~/.claude/skills/` — 詳細については、[エージェントスキル](/docs/skills/) を参照してください。
 
 Claude Code の互換性を無効にするには、次の環境変数のいずれかを設定します。
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## 優先順位
 
-OpenCode が開始されると、次の順序でルールファイルが検索されます。
+CyberStrike が開始されると、次の順序でルールファイルが検索されます。
 
 1. **ローカルファイル** (現在のディレクトリから上に移動) (`AGENTS.md`、`CLAUDE.md`)
-2. **グローバルファイル** (`~/.config/opencode/AGENTS.md`)
+2. **グローバルファイル** (`~/.config/cyberstrike/AGENTS.md`)
 3. **Claude Code ファイル** (`~/.claude/CLAUDE.md` にあります) (無効になっていない限り)
 
-最初に一致したファイルが各カテゴリで優先されます。たとえば、`AGENTS.md` と `CLAUDE.md` の両方がある場合、`AGENTS.md` のみが使用されます。同様に、`~/.config/opencode/AGENTS.md` は `~/.claude/CLAUDE.md` よりも優先されます。
+最初に一致したファイルが各カテゴリで優先されます。たとえば、`AGENTS.md` と `CLAUDE.md` の両方がある場合、`AGENTS.md` のみが使用されます。同様に、`~/.config/cyberstrike/AGENTS.md` は `~/.claude/CLAUDE.md` よりも優先されます。
 
 ---
 
 ## カスタム指示
 
-`opencode.json` またはグローバル `~/.config/opencode/opencode.json` でカスタム命令ファイルを指定できます。これにより、あなたとあなたのチームは、既存のルールを AGENTS.md に複製するのではなく、再利用することができます。
+`cyberstrike.json` またはグローバル `~/.config/cyberstrike/cyberstrike.json` でカスタム命令ファイルを指定できます。これにより、あなたとあなたのチームは、既存のルールを AGENTS.md に複製するのではなく、再利用することができます。
 
 例：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 リモート URL を使用して Web から命令をロードすることもできます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -125,22 +125,22 @@ OpenCode が開始されると、次の順序でルールファイルが検索�
 
 ## 外部ファイル参照
 
-OpenCode は `AGENTS.md` のファイル参照を自動的に解析しませんが、次の 2 つの方法で同様の機能を実現できます。
+CyberStrike は `AGENTS.md` のファイル参照を自動的に解析しませんが、次の 2 つの方法で同様の機能を実現できます。
 
-### `opencode.json` の使用
+### `cyberstrike.json` の使用
 
-推奨されるアプローチは、`instructions` の `opencode.json` フィールドを使用することです。
+推奨されるアプローチは、`instructions` の `cyberstrike.json` フィールドを使用することです。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### AGENTS.md の手動指示
 
-`AGENTS.md` で明示的な命令を指定することで、OpenCode に外部ファイルを読み取るように教えることができます。実際の例を次に示します。
+`AGENTS.md` で明示的な命令を指定することで、CyberStrike に外部ファイルを読み取るように教えることができます。実際の例を次に示します。
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -172,8 +172,8 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - モジュール式の再利用可能なルールファイルを作成する
 - シンボリックリンクまたは git サブモジュールを介してプロジェクト間でルールを共有する
 - 詳細なガイドラインを参照しながら、AGENTS.md を簡潔に保ちます
-- OpenCode が特定のタスクに必要な場合にのみファイルをロードするようにする
+- CyberStrike が特定のタスクに必要な場合にのみファイルをロードするようにする
 
 :::tip
-モノリポジトリまたは共有標準を使用するプロジェクトの場合、グロブパターン (`opencode.json` など) で `packages/*/AGENTS.md` を使用する方が、手動で指示するよりも保守しやすくなります。
+モノリポジトリまたは共有標準を使用するプロジェクトの場合、グロブパターン (`cyberstrike.json` など) で `packages/*/AGENTS.md` を使用する方が、手動で指示するよりも保守しやすくなります。
 :::

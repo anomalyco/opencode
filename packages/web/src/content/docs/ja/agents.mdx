@@ -15,7 +15,7 @@ Plan エージェントを使用すると、コードを変更せずにコード
 
 ## 種類
 
-OpenCode には 2 種類のエージェントがあります。プライマリエージェントとサブエージェント。
+CyberStrike には 2 種類のエージェントがあります。プライマリエージェントとサブエージェント。
 
 ---
 
@@ -27,7 +27,7 @@ OpenCode には 2 種類のエージェントがあります。プライマリ�
 **Tab** キーを使用して、セッション中にプライマリエージェントを切り替えることができます。
 :::
 
-OpenCode には、**Build** と **Plan** という 2 つの組み込みプライマリエージェントが付属しています。これらについて以下で説明します。
+CyberStrike には、**Build** と **Plan** という 2 つの組み込みプライマリエージェントが付属しています。これらについて以下で説明します。
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode には、**Build** と **Plan** という 2 つの組み込みプライ
 
 サブエージェントは、プライマリエージェントが特定のタスクのために呼び出すことができる特殊なアシスタントです。メッセージ内で **@ メンション**することで、手動で呼び出すこともできます。
 
-OpenCode には、**General** と **Explore** という 2 つの組み込みサブエージェントが付属しています。これについては以下で見ていきます。
+CyberStrike には、**General** と **Explore** という 2 つの組み込みサブエージェントが付属しています。これについては以下で見ていきます。
 
 ---
 
 ## 組み込み
 
-OpenCode には、2 つの組み込みプライマリエージェントと 2 つの組み込みサブエージェントが付属しています。
+CyberStrike には、2 つの組み込みプライマリエージェントと 2 つの組み込みサブエージェントが付属しています。
 
 ---
 
@@ -135,11 +135,11 @@ _モード_: `primary`
 
 ### JSON
 
-`opencode.json` 設定ファイルでエージェントを構成します。
+`cyberstrike.json` 設定ファイルでエージェントを構成します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -180,10 +180,10 @@ _モード_: `primary`
 
 Markdown ファイルを使用してエージェントを定義することもできます。それらを次の場所に置きます。
 
-- グローバル: `~/.config/opencode/agents/`
-- プロジェクトごと: `.opencode/agents/`
+- グローバル: `~/.config/cyberstrike/agents/`
+- プロジェクトごと: `.cyberstrike/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -219,7 +219,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 
 `description` オプションを使用して、エージェントの機能とそれをいつ使用するかについての簡単な説明を提供します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -239,7 +239,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 
 値が低いほど、応答はより集中的かつ決定的になりますが、値が高いほど、創造性と変動性が高まります。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -258,7 +258,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 - **0.3-0.5**: 創造性を備えたバランスの取れた応答。一般的な開発タスクに適しています。
 - **0.6-1.0**: より創造的で多様な応答。ブレーンストーミングや探索に役立ちます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "analyze": {
@@ -276,7 +276,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 }
 ```
 
-温度が指定されていない場合、OpenCode はモデル固有のデフォルトを使用します。通常、ほとんどのモデルでは 0、Qwen モデルでは 0.55 です。
+温度が指定されていない場合、CyberStrike はモデル固有のデフォルトを使用します。通常、ほとんどのモデルでは 0、Qwen モデルでは 0.55 です。
 
 ---
 
@@ -286,7 +286,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 
 これが設定されていない場合、エージェントは、モデルが停止を選択するか、ユーザーがセッションを中断するまで反復を続けます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "quick-thinker": {
@@ -310,7 +310,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 
 エージェントを無効にするには、`true` に設定します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -326,7 +326,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 
 `prompt` 設定を使用して、このエージェントのカスタムシステムプロンプトファイルを指定します。プロンプトファイルには、エージェントの目的に固有の指示が含まれている必要があります。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -336,7 +336,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 }
 ```
 
-このパスは、設定ファイルが配置されている場所に対する相対パスです。したがって、これはグローバルな OpenCode 設定とプロジェクト固有の設定の両方で機能します。
+このパスは、設定ファイルが配置されている場所に対する相対パスです。したがって、これはグローバルな CyberStrike 設定とプロジェクト固有の設定の両方で機能します。
 
 ---
 
@@ -348,7 +348,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 モデルを指定しない場合、プライマリエージェントは [グローバルに設定されたモデル](/docs/config#models) を使用し、サブエージェントはサブエージェントを呼び出したプライマリエージェントのモデルを使用します。
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -358,7 +358,7 @@ Markdown ファイル名がエージェント名になります。たとえば�
 }
 ```
 
-OpenCode 設定内のモデル ID は、`provider/model-id` という形式を使用します。たとえば、[OpenCode Zen](/docs/zen) を使用している場合、GPT 5.1 Codex には `opencode/gpt-5.1-codex` を使用します。
+CyberStrike 設定内のモデル ID は、`provider/model-id` という形式を使用します。たとえば、[CyberStrike Zen](/docs/zen) を使用している場合、GPT 5.1 Codex には `cyberstrike/gpt-5.1-codex` を使用します。
 
 ---
 
@@ -366,9 +366,9 @@ OpenCode 設定内のモデル ID は、`provider/model-id` という形式を�
 
 `tools` 設定を使用して、このエージェントで使用できるツールを制御します。特定のツールを `true` または `false` に設定することで、有効または無効にすることができます。
 
-```json title="opencode.json" {3-6,9-12}
+```json title="cyberstrike.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -389,9 +389,9 @@ OpenCode 設定内のモデル ID は、`provider/model-id` という形式を�
 :::
 MCP サーバーからすべてのツールを無効にするには、次のようにします。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -416,9 +416,9 @@ MCP サーバーからすべてのツールを無効にするには、次のよ�
 - `"allow"` — 承認なしですべての操作を許可する
 - `"deny"` — ツールを無効にする
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -427,9 +427,9 @@ MCP サーバーからすべてのツールを無効にするには、次のよ�
 
 これらの権限はエージェントごとにオーバーライドできます。
 
-```json title="opencode.json" {3-5,8-10}
+```json title="cyberstrike.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -445,7 +445,7 @@ MCP サーバーからすべてのツールを無効にするには、次のよ�
 
 Markdown エージェントで権限を設定することもできます。
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -464,9 +464,9 @@ Only analyze code and suggest changes.
 
 特定の bash コマンドに対するアクセス許可を設定できます。
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -482,9 +482,9 @@ Only analyze code and suggest changes.
 
 これにはグロブパターンを使用できます。
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -500,9 +500,9 @@ Only analyze code and suggest changes.
 また、`*` ワイルドカードを使用して、すべてのコマンドの権限を管理することもできます。
 最後に一致したルールが優先されるため、`*` ワイルドカードを最初に置き、特定のルールを後に置きます。
 
-```json title="opencode.json" {8}
+```json title="cyberstrike.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -524,7 +524,7 @@ Only analyze code and suggest changes.
 
 `mode` 設定を使用してエージェントのモードを制御します。 `mode` オプションは、エージェントの使用方法を決定するために使用されます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -542,7 +542,7 @@ Only analyze code and suggest changes.
 
 `@` を使用して、`hidden: true` オートコンプリートメニューからサブエージェントを非表示にします。他のエージェントによってタスクツールを介してプログラム的にのみ呼び出す必要がある内部サブエージェントに役立ちます。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "internal-helper": {
@@ -565,7 +565,7 @@ Only analyze code and suggest changes.
 
 `permission.task` を使用して、エージェントがタスクツール経由でどのサブエージェントを呼び出すことができるかを制御します。柔軟なマッチングのためにグロブパターンを使用します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "orchestrator": {
@@ -598,7 +598,7 @@ Only analyze code and suggest changes.
 
 有効な 16 進カラー (例: `#FF5733`) またはテーマカラー: `primary`、`secondary`、`accent`、`success`、`warning`、`error`、`info` を使用します。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "creative": {
@@ -617,7 +617,7 @@ Only analyze code and suggest changes.
 
 `top_p` オプションで応答の多様性を制御します。ランダム性を制御するための温度の代替手段。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "brainstorm": {
@@ -637,7 +637,7 @@ Only analyze code and suggest changes.
 
 たとえば、OpenAI の推論モデルを使用すると、推論の労力を制御できます。
 
-```json title="opencode.json" {6,7}
+```json title="cyberstrike.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
 これらの追加オプションはモデルとプロバイダーに固有です。使用可能なパラメータについては、プロバイダのドキュメントを確認してください。
 
 :::tip
-`opencode models` を実行して、利用可能なモデルのリストを表示します。
+`cyberstrike models` を実行して、利用可能なモデルのリストを表示します。
 :::
 
 ---
@@ -663,7 +663,7 @@ Only analyze code and suggest changes.
 次のコマンドを使用して、新しいエージェントを作成できます。
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 この対話型コマンドは次のことを行います。
@@ -693,14 +693,14 @@ opencode agent create
 以下に、役立つと思われるエージェントの例をいくつか示します。
 
 :::tip
-共有したいエージェントはいますか? [PR](https://github.com/anomalyco/opencode) を送信します。
+共有したいエージェントはいますか? [PR](https://github.com/CyberStrikeus/cyberstrike) を送信します。
 :::
 
 ---
 
 ### ドキュメント作成エージェント
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/cyberstrike/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -722,7 +722,7 @@ Focus on:
 
 ### セキュリティ監査エージェント
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/cyberstrike/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

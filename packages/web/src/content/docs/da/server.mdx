@@ -1,19 +1,19 @@
 ---
 title: Server
-description: Interager med opencode-serveren over HTTP.
+description: Interager med cyberstrike-serveren over HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en opencode-klient kan bruge.
+Kommandoen `cyberstrike serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en cyberstrike-klient kan bruge.
 
 ---
 
 ### Brug
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+cyberstrike serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Indstillinger
@@ -23,41 +23,41 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | Port at lytte på                             | `4096`           |
 | `--hostname`    | Værtsnavn at lytte på                        | `127.0.0.1`      |
 | `--mdns`        | Aktiver mDNS-opdagelse                       | `false`          |
-| `--mdns-domain` | Brugerdefineret domænenavn for mDNS-tjeneste | `opencode.local` |
+| `--mdns-domain` | Brugerdefineret domænenavn for mDNS-tjeneste | `cyberstrike.local` |
 | `--cors`        | Yderligere browseroprindelse for at tillade  | `[]`             |
 
 `--cors` kan angives flere gange:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+cyberstrike serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Godkendelse
 
-Indstil `OPENCODE_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `opencode`, eller indstil `OPENCODE_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `opencode serve` og `opencode web`.
+Indstil `CYBERSTRIKE_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `cyberstrike`, eller indstil `CYBERSTRIKE_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `cyberstrike serve` og `cyberstrike web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve
 ```
 
 ---
 
 ### Sådan fungerer det
 
-Når du kører `opencode` starter den en TUI og en server. Hvor TUI er
+Når du kører `cyberstrike` starter den en TUI og en server. Hvor TUI er
 klient som taler med serveren. Serveren viser en OpenAPI 3.1-specifikation
 endpoint. Dette endpoint bruges også til at generere en [SDK](/docs/sdk).
 
 :::tip
-Brug opencode-serveren til at interagere med opencode programmatisk.
+Brug cyberstrike-serveren til at interagere med cyberstrike programmatisk.
 :::
 
-Denne arkitektur lader opencode understøtte flere klienter og lader dig interagere med opencode programmatisk.
+Denne arkitektur lader cyberstrike understøtte flere klienter og lader dig interagere med cyberstrike programmatisk.
 
-Du kan køre `opencode serve` for at starte en selvstændig server. Hvis du har
-opencode TUI kørende, vil `opencode serve` starte en ny server.
+Du kan køre `cyberstrike serve` for at starte en selvstændig server. Hvis du har
+cyberstrike TUI kørende, vil `cyberstrike serve` starte en ny server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI kørende, vil `opencode serve` starte en ny server.
 
 Når du starter TUI, tildeler den tilfældigt en port og et værtsnavn. Du kan i stedet sende `--hostname` og `--port` [flagene](/docs/cli). Brug derefter disse til at forbinde til serveren.
 
-[`/tui`](#tui) endpointet kan bruges til at køre TUI gennem serveren. Du kan for eksempel forududfylde eller køre en forespørgsel. Denne opsætning bruges af OpenCode [IDE](/docs/ide) plugins.
+[`/tui`](#tui) endpointet kan bruges til at køre TUI gennem serveren. Du kan for eksempel forududfylde eller køre en forespørgsel. Denne opsætning bruges af CyberStrike [IDE](/docs/ide) plugins.
 
 ---
 
@@ -83,7 +83,7 @@ For eksempel `http://localhost:4096/doc`. Brug specifikationen til at generere k
 
 ## API'er
 
-OpenCode-serveren viser følgende API'er.
+CyberStrike-serveren viser følgende API'er.
 
 ---
 

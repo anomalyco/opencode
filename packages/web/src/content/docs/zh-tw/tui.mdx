@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: 使用 OpenCode 終端機使用者介面。
+description: 使用 CyberStrike 終端機使用者介面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一個互動式終端機介面或 TUI，供您與 LLM 一起處理專案。
+CyberStrike 提供了一個互動式終端機介面或 TUI，供您與 LLM 一起處理專案。
 
-執行 OpenCode 會啟動當前目錄的 TUI。
+執行 CyberStrike 會啟動當前目錄的 TUI。
 
 ```bash
-opencode
+cyberstrike
 ```
 
 或者您可以為特定的工作目錄啟動它。
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 進入 TUI 後，您可以透過訊息進行提示。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 指令
 
-使用 OpenCode TUI 時，您可以輸入 `/` 後跟指令名稱來快速執行操作。例如：
+使用 CyberStrike TUI 時，您可以輸入 `/` 後跟指令名稱來快速執行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-將供應商添加到 OpenCode。允許您從可用的供應商中進行選擇並添加其 API 金鑰。
+將供應商添加到 CyberStrike。允許您從可用的供應商中進行選擇並添加其 API 金鑰。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出 OpenCode。 _別名_：`/quit`、`/q`
+退出 CyberStrike。 _別名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -355,11 +355,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 配置
 
-您可以透過 OpenCode 設定檔自定義 TUI 行為。
+您可以透過 CyberStrike 設定檔自定義 TUI 行為。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

@@ -3,9 +3,9 @@ title: テーマ
 description: 組み込みのテーマを選択するか、独自のテーマを定義します。
 ---
 
-OpenCode を使用すると、いくつかの組み込みテーマから 1 つを選択したり、ターミナルのテーマに適合するテーマを使用したり、独自のカスタムテーマを定義したりできます。
+CyberStrike を使用すると、いくつかの組み込みテーマから 1 つを選択したり、ターミナルのテーマに適合するテーマを使用したり、独自のカスタムテーマを定義したりできます。
 
-デフォルトでは、OpenCode は独自の `opencode` テーマを使用します。
+デフォルトでは、CyberStrike は独自の `cyberstrike` テーマを使用します。
 
 ---
 
@@ -23,7 +23,7 @@ Truecolor のサポートがないと、テーマの色の精度が低下した�
 
 ## 組み込みのテーマ
 
-OpenCode にはいくつかの組み込みテーマが付属しています。
+CyberStrike にはいくつかの組み込みテーマが付属しています。
 
 | Name                   | Description                                                                  |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ OpenCode にはいくつかの組み込みテーマが付属しています。
 
 システムテーマは、次のようなユーザーを対象としています。
 
-- OpenCode をターミナルの外観と一致させたい
+- CyberStrike をターミナルの外観と一致させたい
 - カスタムターミナルのカラースキームを使用する
 - すべてのターミナルアプリケーションにわたって一貫した外観を好む
 
@@ -63,9 +63,9 @@ OpenCode にはいくつかの組み込みテーマが付属しています。
 
 テーマを選択するには、`/theme` コマンドでテーマ選択を表示します。または、[config](/docs/config) で設定します。
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ OpenCode にはいくつかの組み込みテーマが付属しています。
 
 ## カスタムテーマ
 
-OpenCode は、ユーザーがテーマを簡単に作成およびカスタマイズできる柔軟な JSON ベースのテーマシステムをサポートしています。
+CyberStrike は、ユーザーがテーマを簡単に作成およびカスタマイズできる柔軟な JSON ベースのテーマシステムをサポートしています。
 
 ---
 
@@ -83,9 +83,9 @@ OpenCode は、ユーザーがテーマを簡単に作成およびカスタマ�
 テーマは複数のディレクトリから次の順序でロードされ、後のディレクトリが前のディレクトリをオーバーライドします。
 
 1. **組み込みテーマ** - これらはバイナリに埋め込まれています
-2. **ユーザー設定ディレクトリ** - `~/.config/opencode/themes/*.json` または `$XDG_CONFIG_HOME/opencode/themes/*.json` で定義されます
-3. **プロジェクトのルートディレクトリ** - `<project-root>/.opencode/themes/*.json` で定義されます。
-4. **現在の作業ディレクトリ** - `./.opencode/themes/*.json` で定義
+2. **ユーザー設定ディレクトリ** - `~/.config/cyberstrike/themes/*.json` または `$XDG_CONFIG_HOME/cyberstrike/themes/*.json` で定義されます
+3. **プロジェクトのルートディレクトリ** - `<project-root>/.cyberstrike/themes/*.json` で定義されます。
+4. **現在の作業ディレクトリ** - `./.cyberstrike/themes/*.json` で定義
 
 複数のディレクトリに同じ名前のテーマが含まれている場合は、優先度の高いディレクトリのテーマが使用されます。
 
@@ -98,15 +98,15 @@ OpenCode は、ユーザーがテーマを簡単に作成およびカスタマ�
 ユーザー全体のテーマの場合:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 そしてプロジェクト固有のテーマについても。
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",
@@ -372,7 +372,7 @@ vim .opencode/themes/my-theme.json
 
 ## カスタムテーマ
 
-OpenCode は、ユーザーがテーマを簡単に作成およびカスタマイズできる柔軟な JSON ベースのテーマ システムをサポートしています。
+CyberStrike は、ユーザーがテーマを簡単に作成およびカスタマイズできる柔軟な JSON ベースのテーマ システムをサポートしています。
 
 ---
 
@@ -381,9 +381,9 @@ OpenCode は、ユーザーがテーマを簡単に作成およびカスタマ�
 テーマは複数のディレクトリから次の順序でロードされ、後のディレクトリが前のディレクトリをオーバーライドします。
 
 1. **組み込みテーマ** - これらはバイナリに埋め込まれています
-2. **ユーザー設定ディレクトリ** - `~/.config/opencode/themes/*.json` または `$XDG_CONFIG_HOME/opencode/themes/*.json` で定義されます
-3. **プロジェクトのルート ディレクトリ** - `<project-root>/.opencode/themes/*.json` で定義されます。
-4. **現在の作業ディレクトリ** - `./.opencode/themes/*.json` で定義
+2. **ユーザー設定ディレクトリ** - `~/.config/cyberstrike/themes/*.json` または `$XDG_CONFIG_HOME/cyberstrike/themes/*.json` で定義されます
+3. **プロジェクトのルート ディレクトリ** - `<project-root>/.cyberstrike/themes/*.json` で定義されます。
+4. **現在の作業ディレクトリ** - `./.cyberstrike/themes/*.json` で定義
 
 複数のディレクトリに同じ名前のテーマが含まれている場合は、優先度の高いディレクトリのテーマが使用されます。
 
@@ -396,15 +396,15 @@ OpenCode は、ユーザーがテーマを簡単に作成およびカスタマ�
 ユーザー全体のテーマの場合:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 そしてプロジェクト固有のテーマについても。
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -442,7 +442,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

@@ -17,9 +17,9 @@ Brugerdefinerede kommandoer er ud over de indbyggede kommandoer som `/init`, `/u
 
 Opret markdown-filer i mappen `commands/` for at definere brugerdefinerede kommandoer.
 
-Opret `.opencode/commands/test.md`:
+Opret `.cyberstrike/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Brug kommandoen ved at skrive `/` efterfulgt af kommandonavnet.
 
 ## Konfiguration
 
-Du kan tilføje brugerdefinerede kommandoer gennem OpenCode-konfigurationen eller ved at oprette markdown-filer i `commands/`-mappen.
+Du kan tilføje brugerdefinerede kommandoer gennem CyberStrike-konfigurationen eller ved at oprette markdown-filer i `commands/`-mappen.
 
 ---
 
 ### JSON
 
-Brug indstillingerne `command` i din OpenCode [config](/docs/config):
+Brug indstillingerne `command` i din CyberStrike [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Nu kan du køre denne kommando i TUI:
 
 Du kan også definere kommandoer ved hjælp af markdown-filer. Placer dem i:
 
-- Globalt: `~/.config/opencode/commands/`
-- Pr. projekt: `.opencode/commands/`
+- Globalt: `~/.config/cyberstrike/commands/`
+- Pr. projekt: `.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Spørgsmålene til de brugerdefinerede kommandoer understøtter flere specielle 
 
 Send argumenter til kommandoer ved hjælp af pladsholderen `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Du kan også få adgang til individuelle argumenter ved hjælp af positionelle p
 
 For eksempel:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Brug _!`command`_ til at injicere [bash command](/docs/tui#bash-commands) output
 
 For eksempel, for at oprette en brugerdefineret kommando, der analyserer testdækning:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Eller for at gennemgå de seneste ændringer:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Kommandoer kører i dit projekts rodmappe, og deres output bliver en del af prom
 
 Inkluder filer i din kommando ved hjælp af `@` efterfulgt af filnavnet.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Lad os se nærmere på konfigurationsmulighederne.
 
 Indstillingen `template` definerer den prompt, der sendes til LLM, når kommandoen udføres.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Dette er en **påkrævet** konfigurationsindstilling.
 
 Brug indstillingen `description` til at give en kort beskrivelse af, hvad kommandoen gør.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Brug `agent`-konfigurationen til valgfrit at angive, hvilken [agent](/docs/agent
 Hvis dette er en [subagent](/docs/agents/#subagents), vil kommandoen som standard udløse en subagent påkaldelse.
 For at deaktivere denne adfærd skal du indstille `subtask` til `false`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Brug `subtask` boolean til at tvinge kommandoen til at udløse en [subagent](/do
 Dette er nyttigt, hvis du ønsker, at kommandoen ikke skal forurene din primære kontekst og vil **tvinge** agenten til at fungere som en underagent,
 øjeblikkelig `mode` er sat til `primary` på [agent](/docs/agents) konfigurationen.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 Brug `model`-konfigurationen til at tilsidesætte standardmodellen for denne kommando.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 ## Indbyggede kommandoer
 
-opencode indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
+cyberstrike indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
 
 :::note
 Brugerdefinerede kommandoer kan tilsidesætte indbyggede kommandoer.

@@ -15,7 +15,7 @@ description: 設定和使用專門的代理。
 
 ## 類型
 
-opencode 中有兩種類型的代理；主要代理和子代理。
+cyberstrike 中有兩種類型的代理；主要代理和子代理。
 
 ---
 
@@ -27,7 +27,7 @@ opencode 中有兩種類型的代理；主要代理和子代理。
 您可以在工作階段期間使用 **Tab** 鍵在主要代理之間切換。
 :::
 
-opencode 附帶兩個內建的主要代理：**Build** 和 **Plan**。我們將在下面看看這些。
+cyberstrike 附帶兩個內建的主要代理：**Build** 和 **Plan**。我們將在下面看看這些。
 
 ---
 
@@ -35,13 +35,13 @@ opencode 附帶兩個內建的主要代理：**Build** 和 **Plan**。我們將�
 
 子代理是主要代理可以呼叫來執行特定任務的專業助理。您也可以透過在訊息中 **@提及** 它們來手動呼叫它們。
 
-opencode 附帶兩個內建子代理：**General** 和 **Explore**。我們將在下面看看這個。
+cyberstrike 附帶兩個內建子代理：**General** 和 **Explore**。我們將在下面看看這個。
 
 ---
 
 ## 內建
 
-opencode 附帶兩個內建主代理和兩個內建子代理。
+cyberstrike 附帶兩個內建主代理和兩個內建子代理。
 
 ---
 
@@ -135,11 +135,11 @@ _模式_：`primary`
 
 ### JSON
 
-在 `opencode.json` 設定檔中設定代理：
+在 `cyberstrike.json` 設定檔中設定代理：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -180,10 +180,10 @@ _模式_：`primary`
 
 您也可以使用 Markdown 檔案定義代理。將它們放入：
 
-- 全域：`~/.config/opencode/agents/`
-- 每個專案：`.opencode/agents/`
+- 全域：`~/.config/cyberstrike/agents/`
+- 每個專案：`.cyberstrike/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -219,7 +219,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 
 使用 `description` 選項提供代理的作用以及何時使用它的簡要描述。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -239,7 +239,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 
 較低的值使回應更加集中和確定，而較高的值則增加創造力和可變性。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -258,7 +258,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 - **0.3-0.5**：具有一定創造力的平衡回應，適合一般開發任務
 - **0.6-1.0**：更有創意和多樣化的反應，有助於腦力激盪和探索
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "analyze": {
@@ -276,7 +276,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 }
 ```
 
-如果未指定溫度，opencode 將使用特定於模型的預設值；大多數模型通常為 0，Qwen 模型為 0.55。
+如果未指定溫度，cyberstrike 將使用特定於模型的預設值；大多數模型通常為 0，Qwen 模型為 0.55。
 
 ---
 
@@ -286,7 +286,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 
 如果未設定，代理將繼續迭代，直到模型選擇停止或使用者中斷工作階段。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "quick-thinker": {
@@ -310,7 +310,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 
 設定為 `true` 以禁用代理。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -326,7 +326,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 
 使用 `prompt` 設定為此代理指定自定義系統提示檔案。提示檔案應包含特定於代理目的的說明。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -336,7 +336,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 }
 ```
 
-該路徑是相對於設定檔所在位置的。因此，這適用於全域 opencode 設定和專案特定設定。
+該路徑是相對於設定檔所在位置的。因此，這適用於全域 cyberstrike 設定和專案特定設定。
 
 ---
 
@@ -348,7 +348,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 如果您不指定模型，主代理將使用 [全域設定的模型](/docs/config#models)，而子代理將使用呼叫子代理的主代理的模型。
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "plan": {
@@ -358,7 +358,7 @@ Markdown 檔名成為代理名稱。例如，`review.md` 建立 `review` 代理�
 }
 ```
 
-opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如果您使用 [OpenCode Zen](/docs/zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+cyberstrike 設定中的模型 ID 使用格式 `provider/model-id`。例如，如果您使用 [CyberStrike Zen](/docs/zen)，則您將使用 `cyberstrike/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
 
 ---
 
@@ -366,9 +366,9 @@ opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如�
 
 使用 `tools` 設定控制此代理中可用的工具。您可以透過將特定工具設定為 `true` 或 `false` 來啟用或禁用特定工具。
 
-```json title="opencode.json" {3-6,9-12}
+```json title="cyberstrike.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -390,9 +390,9 @@ opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如�
 
 您也可以使用萬用字元同時控制多個工具。例如，要禁用 MCP 伺服器中的所有工具：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -417,9 +417,9 @@ opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如�
 - `"allow"` — 未經批准允許所有操作
 - `"deny"` — 禁用該工具
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -428,9 +428,9 @@ opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如�
 
 您可以覆蓋每個代理的這些權限。
 
-```json title="opencode.json" {3-5,8-10}
+```json title="cyberstrike.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -446,7 +446,7 @@ opencode 設定中的模型 ID 使用格式 `provider/model-id`。例如，如�
 
 您還可以在 Markdown 代理中設定權限。
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -465,9 +465,9 @@ Only analyze code and suggest changes.
 
 您可以設定特定 bash 指令的權限。
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -483,9 +483,9 @@ Only analyze code and suggest changes.
 
 這可以採用全域模式。
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -501,9 +501,9 @@ Only analyze code and suggest changes.
 您也可以使用 `*` 萬用字元來管理所有指令的權限。
 由於最後一個匹配規則優先，因此將 `*` 萬用字元放在前面，將特定規則放在後面。
 
-```json title="opencode.json" {8}
+```json title="cyberstrike.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -525,7 +525,7 @@ Only analyze code and suggest changes.
 
 使用 `mode` 設定控制代理的模式。 `mode` 選項用於確定如何使用代理。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "review": {
@@ -543,7 +543,7 @@ Only analyze code and suggest changes.
 
 使用 `@` 從 `hidden: true` 自動完成選單隱藏子代理。對於只能由其他代理透過任務工具以程式化方式呼叫的內部子代理很有用。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "internal-helper": {
@@ -566,7 +566,7 @@ Only analyze code and suggest changes.
 
 使用 `permission.task` 控制代理可以透過任務工具呼叫哪些子代理。使用 glob 模式進行靈活匹配。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "orchestrator": {
@@ -601,7 +601,7 @@ Only analyze code and suggest changes.
 
 使用有效的十六進位顏色（例如 `#FF5733`）或主題顏色：`primary`、`secondary`、`accent`、`success`、`warning`、`error`、`info`。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "creative": {
@@ -620,7 +620,7 @@ Only analyze code and suggest changes.
 
 使用 `top_p` 選項控制回應多樣性。控制隨機性的溫度替代方案。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "agent": {
     "brainstorm": {
@@ -640,7 +640,7 @@ Only analyze code and suggest changes.
 
 例如，使用 OpenAI 的推理模型，您可以控制推理工作：
 
-```json title="opencode.json" {6,7}
+```json title="cyberstrike.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -656,7 +656,7 @@ Only analyze code and suggest changes.
 這些附加選項是特定於模型和供應商的。檢查供應商的文件以獲取可用參數。
 
 :::tip
-執行 `opencode models` 查看可用模型的列表。
+執行 `cyberstrike models` 查看可用模型的列表。
 :::
 
 ---
@@ -666,7 +666,7 @@ Only analyze code and suggest changes.
 您可以使用以下指令建立新代理：
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 此互動式指令將：
@@ -696,14 +696,14 @@ opencode agent create
 以下是一些您可能會覺得有用的範例代理。
 
 :::tip
-您有想要分享的代理嗎？ [提交 PR](https://github.com/anomalyco/opencode)。
+您有想要分享的代理嗎？ [提交 PR](https://github.com/CyberStrikeus/cyberstrike)。
 :::
 
 ---
 
 ### 文件代理
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/cyberstrike/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -725,7 +725,7 @@ Focus on:
 
 ### 安全稽核員
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/cyberstrike/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

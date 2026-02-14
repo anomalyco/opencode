@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@cyberstrike-io/util/path"
+import { type Session } from "@cyberstrike-io/sdk/v2/client"
 
 export const workspaceKey = (directory: string) => {
   const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)

@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: opencode CLI seçenekleri ve komutları.
+description: cyberstrike CLI seçenekleri ve komutları.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode CLI herhangi bir argüman olmadan çalıştırıldığında varsayılan olarak [TUI](/docs/tui)'yi başlatır.
+cyberstrike CLI herhangi bir argüman olmadan çalıştırıldığında varsayılan olarak [TUI](/docs/tui)'yi başlatır.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-Ancak bu sayfada belgelendiği gibi komutları da kabul eder. Bu, opencode ile programlı olarak etkileşim kurmanıza olanak tanır.
+Ancak bu sayfada belgelendiği gibi komutları da kabul eder. Bu, cyberstrike ile programlı olarak etkileşim kurmanıza olanak tanır.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+cyberstrike run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-opencode terminal kullanıcı arayüzünü başlatır.
+cyberstrike terminal kullanıcı arayüzünü başlatır.
 
 ```bash
-opencode [project]
+cyberstrike [project]
 ```
 
 #### Bayraklar
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Komutlar
 
-opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
+cyberstrike CLI ayrıca aşağıdaki komutlara da sahiptir.
 
 ---
 
 ### agent
 
-opencode için agent'ları yönetin.
+cyberstrike için agent'ları yönetin.
 
 ```bash
-opencode agent [command]
+cyberstrike agent [command]
 ```
 
 ---
 
 ### attach
 
-`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir opencode arka uç sunucusuna bir terminal ekleyin.
+`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir cyberstrike arka uç sunucusuna bir terminal ekleyin.
 
 ```bash
-opencode attach [url]
+cyberstrike attach [url]
 ```
 
-Bu, TUI öğesinin uzak bir opencode arka ucuyla kullanılmasına olanak tanır. Örneğin:
+Bu, TUI öğesinin uzak bir cyberstrike arka ucuyla kullanılmasına olanak tanır. Örneğin:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+cyberstrike web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+cyberstrike attach http://10.20.30.40:4096
 ```
 
 #### Bayraklar
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Özel yapılandırmaya sahip yeni bir agent oluşturun.
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir agent oluşturma konusunda size yol gösterecektir.
@@ -102,7 +102,7 @@ Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir agent oluş
 Mevcut tüm agent'ları listeleyin.
 
 ```bash
-opencode agent list
+cyberstrike agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Sağlayıcılar için kimlik bilgilerini ve oturum açmayı yönetme komutu.
 
 ```bash
-opencode auth [command]
+cyberstrike auth [command]
 ```
 
 ---
 
 #### login
 
-opencode, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tarafından desteklenmektedir, dolayısıyla kullanmak istediğiniz herhangi bir sağlayıcı için API anahtarlarını ayarlamak üzere `opencode auth login` kullanabilirsiniz. Bu `~/.local/share/opencode/auth.json`'de saklanıyor.
+cyberstrike, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tarafından desteklenmektedir, dolayısıyla kullanmak istediğiniz herhangi bir sağlayıcı için API anahtarlarını ayarlamak üzere `cyberstrike auth login` kullanabilirsiniz. Bu `~/.local/share/cyberstrike/auth.json`'de saklanıyor.
 
 ```bash
-opencode auth login
+cyberstrike auth login
 ```
 
-opencode başlatıldığında sağlayıcıları kimlik bilgileri dosyasından yükler. Ayrıca ortam değişkenlerindeki veya projenizdeki `.env` dosyasındaki anahtarları da kullanır.
+cyberstrike başlatıldığında sağlayıcıları kimlik bilgileri dosyasından yükler. Ayrıca ortam değişkenlerindeki veya projenizdeki `.env` dosyasındaki anahtarları da kullanır.
 
 ---
 
@@ -134,13 +134,13 @@ opencode başlatıldığında sağlayıcıları kimlik bilgileri dosyasından y�
 Kimlik bilgileri dosyasında depolanan tüm kimliği doğrulanmış sağlayıcıları listeler.
 
 ```bash
-opencode auth list
+cyberstrike auth list
 ```
 
 Veya kısa versiyonu.
 
 ```bash
-opencode auth ls
+cyberstrike auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Bir sağlayıcıyı kimlik bilgileri dosyasından temizleyerek oturumunuzu kapatır.
 
 ```bash
-opencode auth logout
+cyberstrike auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Depo otomasyonu için GitHub aracısını yönetin.
 
 ```bash
-opencode github [command]
+cyberstrike github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 GitHub aracısını deponuza yükleyin.
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 Bu komut gerekli GitHub Actions workflow'unu kurar ve yapılandırma adımlarında size rehberlik eder. [Daha fazla bilgi](/docs/github).
@@ -182,7 +182,7 @@ Bu komut gerekli GitHub Actions workflow'unu kurar ve yapılandırma adımların
 GitHub aracısını çalıştırın. Bu genellikle GitHub Eylemlerinde kullanılır.
 
 ```bash
-opencode github run
+cyberstrike github run
 ```
 
 ##### Bayraklar
@@ -199,7 +199,7 @@ opencode github run
 Model Bağlam Protokolü sunucularını yönetin.
 
 ```bash
-opencode mcp [command]
+cyberstrike mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Yapılandırmanıza bir MCP sunucusu ekleyin.
 
 ```bash
-opencode mcp add
+cyberstrike mcp add
 ```
 
 Bu komut, yerel veya uzak bir MCP sunucusu ekleme konusunda size yol gösterecektir.
@@ -221,13 +221,13 @@ Bu komut, yerel veya uzak bir MCP sunucusu ekleme konusunda size yol gösterecek
 Yapılandırılmış tüm MCP sunucularını ve bağlantı durumlarını listeleyin.
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Veya kısa versiyonunu kullanın.
 
 ```bash
-opencode mcp ls
+cyberstrike mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 OAuth'un etkin olduğu bir MCP sunucusuyla kimlik doğrulaması yapın.
 
 ```bash
-opencode mcp auth [name]
+cyberstrike mcp auth [name]
 ```
 
 Sunucu adı belirtmezseniz mevcut OAuth özellikli sunucular arasından seçim yapmanız istenir.
@@ -245,13 +245,13 @@ Sunucu adı belirtmezseniz mevcut OAuth özellikli sunucular arasından seçim y
 Ayrıca OAuth özellikli sunucuları ve bunların kimlik doğrulama durumlarını da listeleyebilirsiniz.
 
 ```bash
-opencode mcp auth list
+cyberstrike mcp auth list
 ```
 
 Veya kısa versiyonunu kullanın.
 
 ```bash
-opencode mcp auth ls
+cyberstrike mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 MCP sunucusu için OAuth kimlik bilgilerini kaldırın.
 
 ```bash
-opencode mcp logout [name]
+cyberstrike mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 MCP sunucusu için OAuth bağlantı sorunlarının hatalarını ayıklayın.
 
 ```bash
-opencode mcp debug <name>
+cyberstrike mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 Yapılandırılmış sağlayıcıların tüm mevcut modellerini listeleyin.
 
 ```bash
-opencode models [provider]
+cyberstrike models [provider]
 ```
 
 Bu komut, yapılandırdığınız sağlayıcılardaki modelleri `provider/model` formatında listeler.
@@ -291,7 +291,7 @@ Bu, [config dosyanızda](/docs/config/) kullanmanız gereken tam model adını b
 Modelleri bu sağlayıcıya göre filtrelemek için isteğe bağlı olarak bir sağlayıcı kimliğini iletebilirsiniz.
 
 ```bash
-opencode models anthropic
+cyberstrike models anthropic
 ```
 
 #### Bayraklar
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Modeller.dev'den model önbelleğini yenileyin                                |
 | `--verbose` | Daha ayrıntılı model çıktısı kullanın (maliyetler gibi meta veriler içerir) |
 
-Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları opencode'da görmek istediğinizde kullanışlıdır.
+Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları cyberstrike'da görmek istediğinizde kullanışlıdır.
 
 ```bash
-opencode models --refresh
+cyberstrike models --refresh
 ```
 
 ---
 
 ### run
 
-Doğrudan bir istem ileterek opencode'u etkileşimli olmayan modda çalıştırın.
+Doğrudan bir istem ileterek cyberstrike'u etkileşimli olmayan modda çalıştırın.
 
 ```bash
-opencode run [message..]
+cyberstrike run [message..]
 ```
 
 Bu, komut dosyası oluşturma, otomasyon veya TUI'un tamamını başlatmadan hızlı bir yanıt istediğinizde kullanışlıdır. Örneğin.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "cyberstrike run"
+cyberstrike run Explain the use of context in Go
 ```
 
-Ayrıca, her çalıştırmada MCP sunucusunun soğuk önyükleme sürelerini önlemek için çalışan bir `opencode serve` örneğine de ekleyebilirsiniz:
+Ayrıca, her çalıştırmada MCP sunucusunun soğuk önyükleme sürelerini önlemek için çalışan bir `cyberstrike serve` örneğine de ekleyebilirsiniz:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+cyberstrike serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+cyberstrike run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Bayraklar
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | Mesaja eklenecek dosya(lar)                                                       |
 | `--format`   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                |
 | `--title`    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)          |
-| `--attach`   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)               |
+| `--attach`   |      | Çalışan bir cyberstrike sunucusuna ekleyin (ör. http://localhost:4096)               |
 | `--port`     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır) |
 
 ---
 
 ### serve
 
-API erişimi için headless bir opencode sunucusu başlatır. Tam HTTP arayüzü için [server docs](/docs/server) sayfasına bakın.
+API erişimi için headless bir cyberstrike sunucusu başlatır. Tam HTTP arayüzü için [server docs](/docs/server) sayfasına bakın.
 
 ```bash
-opencode serve
+cyberstrike serve
 ```
 
-Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir HTTP sunucusunu başlatır. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+Bu, TUI arayüzü olmadan cyberstrike işlevselliğine API erişimi sağlayan bir HTTP sunucusunu başlatır. HTTP temel kimlik doğrulamasını etkinleştirmek için `CYBERSTRIKE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `cyberstrike` şeklindedir).
 
 #### Bayraklar
 
@@ -375,20 +375,20 @@ Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir H
 
 ### session
 
-opencode oturumlarını yönetin.
+cyberstrike oturumlarını yönetin.
 
 ```bash
-opencode session [command]
+cyberstrike session [command]
 ```
 
 ---
 
 #### list
 
-Tüm opencode oturumlarını listeleyin.
+Tüm cyberstrike oturumlarını listeleyin.
 
 ```bash
-opencode session list
+cyberstrike session list
 ```
 
 ##### Bayraklar
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-opencode oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini gösterin.
+cyberstrike oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini gösterin.
 
 ```bash
-opencode stats
+cyberstrike stats
 ```
 
 #### Bayraklar
@@ -424,7 +424,7 @@ opencode stats
 Oturum verilerini JSON olarak dışa aktarın.
 
 ```bash
-opencode export [sessionID]
+cyberstrike export [sessionID]
 ```
 
 Bir oturum kimliği sağlamazsanız mevcut oturumlar arasından seçim yapmanız istenir.
@@ -433,30 +433,30 @@ Bir oturum kimliği sağlamazsanız mevcut oturumlar arasından seçim yapmanız
 
 ### import
 
-Bir JSON dosyasından veya opencode paylaşımından URL oturum verilerini içe aktarın.
+Bir JSON dosyasından veya cyberstrike paylaşımından URL oturum verilerini içe aktarın.
 
 ```bash
-opencode import <file>
+cyberstrike import <file>
 ```
 
-Yerel bir dosyadan veya opencode paylaşımından (URL) içe aktarabilirsiniz.
+Yerel bir dosyadan veya cyberstrike paylaşımından (URL) içe aktarabilirsiniz.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+cyberstrike import session.json
+cyberstrike import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Web arayüzüyle başsız bir opencode sunucusu başlatın.
+Web arayüzüyle başsız bir cyberstrike sunucusu başlatın.
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencode'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla cyberstrike'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `CYBERSTRIKE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `cyberstrike` şeklindedir).
 
 #### Bayraklar
 
@@ -474,7 +474,7 @@ Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencod
 Bir ACP (Ajan İstemci Protokolü) sunucusu başlatın.
 
 ```bash
-opencode acp
+cyberstrike acp
 ```
 
 Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir ACP sunucusunu başlatır.
@@ -491,10 +491,10 @@ Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir A
 
 ### uninstall
 
-opencode'u kaldırın ve ilgili tüm dosyaları kaldırın.
+cyberstrike'u kaldırın ve ilgili tüm dosyaları kaldırın.
 
 ```bash
-opencode uninstall
+cyberstrike uninstall
 ```
 
 #### Bayraklar
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-opencode'u en son sürüme veya belirli bir sürüme günceller.
+cyberstrike'u en son sürüme veya belirli bir sürüme günceller.
 
 ```bash
-opencode upgrade [target]
+cyberstrike upgrade [target]
 ```
 
 En son sürüme yükseltmek için.
 
 ```bash
-opencode upgrade
+cyberstrike upgrade
 ```
 
 Belirli bir sürüme yükseltmek için:
 
 ```bash
-opencode upgrade v0.1.48
+cyberstrike upgrade v0.1.48
 ```
 
 #### Bayraklar
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Global bayraklar
 
-opencode CLI aşağıdaki global bayrakları destekler.
+cyberstrike CLI aşağıdaki global bayrakları destekler.
 
 | Bayrak         | Kısa | Tanım                                    |
 | -------------- | ---- | ---------------------------------------- |
@@ -551,34 +551,34 @@ opencode CLI aşağıdaki global bayrakları destekler.
 
 ## Ortam değişkenleri
 
-opencode ortam değişkenleri kullanılarak yapılandırılabilir.
+cyberstrike ortam değişkenleri kullanılarak yapılandırılabilir.
 
 | Değişken                              | Tip     | Açıklama                                                                    |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Oturumları otomatik olarak paylaş                                           |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
-| `OPENCODE_CONFIG`                     | string  | Yapılandırma dosyasının yolu                                                |
-| `OPENCODE_CONFIG_DIR`                 | string  | Yapılandırma dizinine giden yol                                             |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Satır içi JSON config içeriği                                               |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Otomatik güncelleme kontrollerini devre dışı bırak                          |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Eski verilerin temizlenmesini devre dışı bırak                              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Otomatik terminal başlığı güncellemelerini devre dışı bırakın               |
-| `OPENCODE_PERMISSION`                 | string  | Satır içi JSON izin config'i                                                |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Varsayılan eklentileri devre dışı bırakın                                   |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Otomatik LSP sunucu indirmelerini devre dışı bırakın                        |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Deneysel modelleri etkinleştir                                              |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Otomatik context sıkıştırmayı devre dışı bırak                              |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`'den okumayı devre dışı bırak (istem + beceriler)                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` dosyasını okumayı devre dışı bırak                    |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` yüklemesini devre dışı bırak                               |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Uzak kaynaklardan model getirmeyi devre dışı bırakın                        |
-| `OPENCODE_FAKE_VCS`                   | string  | Test amaçlı sahte VCS sağlayıcısı                                           |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Optimizasyon için dosya süresi kontrolünü devre dışı bırakın                |
-| `OPENCODE_CLIENT`                     | string  | Client kimliği (varsayılan: `cli`)                                          |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Exa web arama araçlarını etkinleştir                                        |
-| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` için temel kimlik doğrulamayı etkinleştirin                   |
-| `OPENCODE_SERVER_USERNAME`            | string  | Temel kimlik doğrulama kullanıcı adını geçersiz kıl (varsayılan `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Model yapılandırmasını almak için özel URL                                  |
+| `CYBERSTRIKE_AUTO_SHARE`                 | boolean | Oturumları otomatik olarak paylaş                                           |
+| `CYBERSTRIKE_GIT_BASH_PATH`              | string  | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
+| `CYBERSTRIKE_CONFIG`                     | string  | Yapılandırma dosyasının yolu                                                |
+| `CYBERSTRIKE_CONFIG_DIR`                 | string  | Yapılandırma dizinine giden yol                                             |
+| `CYBERSTRIKE_CONFIG_CONTENT`             | string  | Satır içi JSON config içeriği                                               |
+| `CYBERSTRIKE_DISABLE_AUTOUPDATE`         | boolean | Otomatik güncelleme kontrollerini devre dışı bırak                          |
+| `CYBERSTRIKE_DISABLE_PRUNE`              | boolean | Eski verilerin temizlenmesini devre dışı bırak                              |
+| `CYBERSTRIKE_DISABLE_TERMINAL_TITLE`     | boolean | Otomatik terminal başlığı güncellemelerini devre dışı bırakın               |
+| `CYBERSTRIKE_PERMISSION`                 | string  | Satır içi JSON izin config'i                                                |
+| `CYBERSTRIKE_DISABLE_DEFAULT_PLUGINS`    | boolean | Varsayılan eklentileri devre dışı bırakın                                   |
+| `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD`       | boolean | Otomatik LSP sunucu indirmelerini devre dışı bırakın                        |
+| `CYBERSTRIKE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Deneysel modelleri etkinleştir                                              |
+| `CYBERSTRIKE_DISABLE_AUTOCOMPACT`        | boolean | Otomatik context sıkıştırmayı devre dışı bırak                              |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`'den okumayı devre dışı bırak (istem + beceriler)                  |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` dosyasını okumayı devre dışı bırak                    |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` yüklemesini devre dışı bırak                               |
+| `CYBERSTRIKE_DISABLE_MODELS_FETCH`       | boolean | Uzak kaynaklardan model getirmeyi devre dışı bırakın                        |
+| `CYBERSTRIKE_FAKE_VCS`                   | string  | Test amaçlı sahte VCS sağlayıcısı                                           |
+| `CYBERSTRIKE_DISABLE_FILETIME_CHECK`     | boolean | Optimizasyon için dosya süresi kontrolünü devre dışı bırakın                |
+| `CYBERSTRIKE_CLIENT`                     | string  | Client kimliği (varsayılan: `cli`)                                          |
+| `CYBERSTRIKE_ENABLE_EXA`                 | boolean | Exa web arama araçlarını etkinleştir                                        |
+| `CYBERSTRIKE_SERVER_PASSWORD`            | string  | `serve`/`web` için temel kimlik doğrulamayı etkinleştirin                   |
+| `CYBERSTRIKE_SERVER_USERNAME`            | string  | Temel kimlik doğrulama kullanıcı adını geçersiz kıl (varsayılan `cyberstrike`) |
+| `CYBERSTRIKE_MODELS_URL`                 | string  | Model yapılandırmasını almak için özel URL                                  |
 
 ---
 
@@ -588,16 +588,16 @@ Bu ortam değişkenleri değişebilecek veya kaldırılabilecek deneysel özelli
 
 | Değişken                                        | Tip     | Tanım                                                   |
 | ----------------------------------------------- | ------- | ------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Tüm deneysel özellikleri etkinleştir                    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Simge bulmayı etkinleştir                               |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI'da seçim yapıldığında kopyalamayı devre dışı bırak  |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | MS cinsinden bash komutları için varsayılan zaman aşımı |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM yanıtları için maksimum çıktı belirteçleri          |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Tüm dizin için dosya izleyiciyi etkinleştir             |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Oxfmt biçimlendiriciyi etkinleştir                      |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Deneysel LSP aracını etkinleştir                        |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Dosya izleyiciyi devre dışı bırak                       |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Deneysel Exa özelliklerini etkinleştirin                |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Deneysel LSP tür denetimini etkinleştir                 |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Deneysel işaretleme özelliklerini etkinleştir           |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan modunu etkinleştir                                 |
+| `CYBERSTRIKE_EXPERIMENTAL`                         | boolean | Tüm deneysel özellikleri etkinleştir                    |
+| `CYBERSTRIKE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Simge bulmayı etkinleştir                               |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI'da seçim yapıldığında kopyalamayı devre dışı bırak  |
+| `CYBERSTRIKE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | MS cinsinden bash komutları için varsayılan zaman aşımı |
+| `CYBERSTRIKE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM yanıtları için maksimum çıktı belirteçleri          |
+| `CYBERSTRIKE_EXPERIMENTAL_FILEWATCHER`             | boolean | Tüm dizin için dosya izleyiciyi etkinleştir             |
+| `CYBERSTRIKE_EXPERIMENTAL_OXFMT`                   | boolean | Oxfmt biçimlendiriciyi etkinleştir                      |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL`                | boolean | Deneysel LSP aracını etkinleştir                        |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Dosya izleyiciyi devre dışı bırak                       |
+| `CYBERSTRIKE_EXPERIMENTAL_EXA`                     | boolean | Deneysel Exa özelliklerini etkinleştirin                |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TY`                  | boolean | Deneysel LSP tür denetimini etkinleştir                 |
+| `CYBERSTRIKE_EXPERIMENTAL_MARKDOWN`                | boolean | Deneysel işaretleme özelliklerini etkinleştir           |
+| `CYBERSTRIKE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan modunu etkinleştir                                 |

@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Cliente JS con seguridad de tipos para el servidor opencode.
+description: Cliente JS con seguridad de tipos para el servidor cyberstrike.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-El SDK opencode JS/TS proporciona un cliente con seguridad de tipos para interactuar con el servidor.
-Úselo para crear integraciones y controlar opencode mediante programación.
+El SDK cyberstrike JS/TS proporciona un cliente con seguridad de tipos para interactuar con el servidor.
+Úselo para crear integraciones y controlar cyberstrike mediante programación.
 
 [Más información](/docs/server) sobre cómo funciona el servidor. Para ver ejemplos, consulte los [proyectos](/docs/ecosystem#projects) creados por la comunidad.
 
@@ -18,19 +18,19 @@ El SDK opencode JS/TS proporciona un cliente con seguridad de tipos para interac
 Instale el SDK desde npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @cyberstrike-ai/sdk
 ```
 
 ---
 
 ## Crear cliente
 
-Cree una instancia de opencode:
+Cree una instancia de cyberstrike:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createCyberstrike()
 ```
 
 Esto inicia tanto un servidor como un cliente.
@@ -49,12 +49,12 @@ Esto inicia tanto un servidor como un cliente.
 
 ## Configuración
 
-Puede pasar un objeto de configuración para personalizar el comportamiento. La instancia aún recoge su `opencode.json`, pero puede anular o agregar configuración en línea:
+Puede pasar un objeto de configuración para personalizar el comportamiento. La instancia aún recoge su `cyberstrike.json`, pero puede anular o agregar configuración en línea:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const opencode = await createOpencode({
+const cyberstrike = await createCyberstrike({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${cyberstrike.server.url}`)
 
-opencode.server.close()
+cyberstrike.server.close()
 ```
 
 ## Solo cliente
 
-Si ya tiene una instancia en ejecución de opencode, puede crear una instancia de cliente para conectarse a ella:
+Si ya tiene una instancia en ejecución de cyberstrike, puede crear una instancia de cliente para conectarse a ella:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createCyberstrikeClient } from "@cyberstrike-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createCyberstrikeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 El SDK incluye definiciones TypeScript para todos los tipos API. Importarlos directamente:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@cyberstrike-ai/sdk"
 ```
 
 Todos los tipos se generan a partir de la especificación OpenAPI del servidor y están disponibles en el <a href={typesUrl}>archivo de tipos</a>.
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*cyberstrike" },
 })
 
 const files = await client.find.files({

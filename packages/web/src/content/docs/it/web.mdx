@@ -1,28 +1,28 @@
 ---
 title: Web
-description: Usa OpenCode nel browser.
+description: Usa CyberStrike nel browser.
 ---
 
-OpenCode puo funzionare come applicazione web nel browser, offrendo la stessa potente esperienza di coding AI senza bisogno di un terminale.
+CyberStrike puo funzionare come applicazione web nel browser, offrendo la stessa potente esperienza di coding AI senza bisogno di un terminale.
 
-![OpenCode Web - Nuova sessione](../../../assets/web/web-homepage-new-session.png)
+![CyberStrike Web - Nuova sessione](../../../assets/web/web-homepage-new-session.png)
 
 ## Per iniziare
 
 Avvia l'interfaccia web eseguendo:
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-Questo avvia un server locale su `127.0.0.1` con una porta disponibile scelta a caso e apre automaticamente OpenCode nel browser predefinito.
+Questo avvia un server locale su `127.0.0.1` con una porta disponibile scelta a caso e apre automaticamente CyberStrike nel browser predefinito.
 
 :::caution
-Se `OPENCODE_SERVER_PASSWORD` non e impostata, il server non sara protetto. Va bene per l'uso locale, ma va impostata per l'accesso in rete.
+Se `CYBERSTRIKE_SERVER_PASSWORD` non e impostata, il server non sara protetto. Va bene per l'uso locale, ma va impostata per l'accesso in rete.
 :::
 
 :::tip[Utenti Windows]
-Per la migliore esperienza, esegui `opencode web` da [WSL](/docs/windows-wsl) invece che da PowerShell. Questo garantisce accesso corretto al file system e integrazione col terminale.
+Per la migliore esperienza, esegui `cyberstrike web` da [WSL](/docs/windows-wsl) invece che da PowerShell. Questo garantisce accesso corretto al file system e integrazione col terminale.
 :::
 
 ---
@@ -33,21 +33,21 @@ Puoi configurare il server web con i flag della riga di comando o nel tuo [file 
 
 ### Porta
 
-Per impostazione predefinita, OpenCode sceglie una porta disponibile. Puoi specificare una porta:
+Per impostazione predefinita, CyberStrike sceglie una porta disponibile. Puoi specificare una porta:
 
 ```bash
-opencode web --port 4096
+cyberstrike web --port 4096
 ```
 
 ### Nome host
 
-Per impostazione predefinita, il server si lega a `127.0.0.1` (solo localhost). Per rendere OpenCode accessibile sulla rete:
+Per impostazione predefinita, il server si lega a `127.0.0.1` (solo localhost). Per rendere CyberStrike accessibile sulla rete:
 
 ```bash
-opencode web --hostname 0.0.0.0
+cyberstrike web --hostname 0.0.0.0
 ```
 
-Usando `0.0.0.0`, OpenCode mostrera sia l'indirizzo locale sia quello di rete:
+Usando `0.0.0.0`, CyberStrike mostrera sia l'indirizzo locale sia quello di rete:
 
 ```
   Local access:       http://localhost:4096
@@ -59,15 +59,15 @@ Usando `0.0.0.0`, OpenCode mostrera sia l'indirizzo locale sia quello di rete:
 Abilita mDNS per rendere il server individuabile sulla rete locale:
 
 ```bash
-opencode web --mdns
+cyberstrike web --mdns
 ```
 
-Questo imposta automaticamente l'hostname a `0.0.0.0` e pubblicizza il server come `opencode.local`.
+Questo imposta automaticamente l'hostname a `0.0.0.0` e pubblicizza il server come `cyberstrike.local`.
 
 Puoi personalizzare il nome di dominio mDNS per eseguire piu istanze sulla stessa rete:
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+cyberstrike web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -75,36 +75,36 @@ opencode web --mdns --mdns-domain myproject.local
 Per consentire domini aggiuntivi per CORS (utile per frontend personalizzati):
 
 ```bash
-opencode web --cors https://example.com
+cyberstrike web --cors https://example.com
 ```
 
 ### Autenticazione
 
-Per proteggere l'accesso, imposta una password usando la variabile d'ambiente `OPENCODE_SERVER_PASSWORD`:
+Per proteggere l'accesso, imposta una password usando la variabile d'ambiente `CYBERSTRIKE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+CYBERSTRIKE_SERVER_PASSWORD=secret cyberstrike web
 ```
 
-Lo username predefinito e `opencode`, ma puo essere cambiato con `OPENCODE_SERVER_USERNAME`.
+Lo username predefinito e `cyberstrike`, ma puo essere cambiato con `CYBERSTRIKE_SERVER_USERNAME`.
 
 ---
 
 ## Usa l'interfaccia web
 
-Una volta avviata, l'interfaccia web ti da accesso alle tue sessioni OpenCode.
+Una volta avviata, l'interfaccia web ti da accesso alle tue sessioni CyberStrike.
 
 ### Sessioni
 
 Visualizza e gestisci le sessioni dalla homepage. Puoi vedere le sessioni attive e avviarne di nuove.
 
-![OpenCode Web - Sessione attiva](../../../assets/web/web-homepage-active-session.png)
+![CyberStrike Web - Sessione attiva](../../../assets/web/web-homepage-active-session.png)
 
 ### Stato del server
 
 Fai clic su "See Servers" per vedere i server connessi e il loro stato.
 
-![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![CyberStrike Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -114,10 +114,10 @@ Puoi collegare una TUI da terminale a un server web gia in esecuzione:
 
 ```bash
 # Avvia il web server
-opencode web --port 4096
+cyberstrike web --port 4096
 
 # In un altro terminale, collega la TUI
-opencode attach http://localhost:4096
+cyberstrike attach http://localhost:4096
 ```
 
 Questo ti permette di usare contemporaneamente interfaccia web e terminale, condividendo le stesse sessioni e lo stesso stato.
@@ -126,7 +126,7 @@ Questo ti permette di usare contemporaneamente interfaccia web e terminale, cond
 
 ## File di configurazione
 
-Puoi anche configurare le impostazioni del server nel file di config `opencode.json`:
+Puoi anche configurare le impostazioni del server nel file di config `cyberstrike.json`:
 
 ```json
 {

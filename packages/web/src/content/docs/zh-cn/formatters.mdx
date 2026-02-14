@@ -1,15 +1,15 @@
 ---
 title: 格式化程序
-description: opencode 使用特定于语言的格式化程序。
+description: cyberstrike 使用特定于语言的格式化程序。
 ---
 
-使用特定于语言的格式化程序编写或编辑文件后，opencode 会自动格式化文件。这可以确保生成的代码遵循项目的代码风格。
+使用特定于语言的格式化程序编写或编辑文件后，cyberstrike 会自动格式化文件。这可以确保生成的代码遵循项目的代码风格。
 
 ---
 
 ## 内置
 
-opencode 附带了多个适用于流行语言和框架的内置格式化程序。下面是格式化程序、支持的文件扩展名以及所需的命令或配置选项的列表。
+cyberstrike 附带了多个适用于流行语言和框架的内置格式化程序。下面是格式化程序、支持的文件扩展名以及所需的命令或配置选项的列表。
 
 | 格式化程序           | 扩展名                                                                                                   | 要求                                                                                                  |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
 
-因此，如果您的项目的 `prettier` 中有 `package.json`，opencode 将自动使用它。
+因此，如果您的项目的 `prettier` 中有 `package.json`，cyberstrike 将自动使用它。
 
 ---
 
 ## 它是如何工作的
 
-当 opencode 写入或编辑文件时，它：
+当 cyberstrike 写入或编辑文件时，它：
 
 1. 根据所有启用的格式化程序检查文件扩展名。
 2. 对文件运行适当的格式化程序命令。
@@ -56,11 +56,11 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 
 ## 配置
 
-您可以通过 opencode 配置中的 `formatter` 部分自定义格式化程序。
+您可以通过 cyberstrike 配置中的 `formatter` 部分自定义格式化程序。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 
 要全局禁用 **所有** 格式化程序，将 `formatter` 设置为 `false`：
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": false
 }
 ```
 
 要禁用 **特定** 格式化程序，将 `disabled` 设置为 `true`：
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 
 您可以覆盖内置格式化程序或通过指定命令、环境变量和文件扩展名添加新格式化程序：
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

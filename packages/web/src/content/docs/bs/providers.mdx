@@ -1,30 +1,30 @@
 ---
 title: Provajderi
-description: Korištenje bilo kojeg LLM provajdera u OpenCode.
+description: Korištenje bilo kojeg LLM provajdera u CyberStrike.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) za podršku **75+ LLM provajdera** i podržava pokretanje lokalnih modela.
+CyberStrike koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) za podršku **75+ LLM provajdera** i podržava pokretanje lokalnih modela.
 
 Za dodavanje provajdera potrebno je:
 
 1. Dodajte API ključeve za provajdera koristeći naredbu `/connect`.
-2. Konfigurirajte dobavljača u vašoj OpenCode konfiguraciji.
+2. Konfigurirajte dobavljača u vašoj CyberStrike konfiguraciji.
 
 ---
 
 ### Vjerodajnice
 
 Kada dodate API ključeve dobavljača sa naredbom `/connect`, oni se pohranjuju
-u `~/.local/share/opencode/auth.json`.
+u `~/.local/share/cyberstrike/auth.json`.
 
 ---
 
 ### Konfiguracija
 
-Možete prilagoditi dobavljače putem odjeljka `provider` u vašem OpenCode
+Možete prilagoditi dobavljače putem odjeljka `provider` u vašem CyberStrike
 config.
 
 ---
@@ -33,9 +33,9 @@ config.
 
 Možete prilagoditi osnovni URL za bilo kojeg provajdera postavljanjem opcije `baseURL`. Ovo je korisno kada koristite proxy usluge ili prilagođene krajnje tačke.
 
-```json title="opencode.json" {6}
+```json title="cyberstrike.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ Možete prilagoditi osnovni URL za bilo kojeg provajdera postavljanjem opcije `b
 
 ---
 
-## OpenCode Zen
+## CyberStrike Zen
 
-OpenCode Zen je lista modela koje je obezbedio OpenCode tim koji su bili
-testirano i potvrđeno da dobro radi sa OpenCode. [Saznajte više](/docs/zen).
+CyberStrike Zen je lista modela koje je obezbedio CyberStrike tim koji su bili
+testirano i potvrđeno da dobro radi sa CyberStrike. [Saznajte više](/docs/zen).
 
 :::tip
-Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
+Ako ste novi, preporučujemo da počnete sa CyberStrike Zen.
 :::
 
-1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [opencode.ai/auth](https://opencode.ai/auth).
+1. Pokrenite naredbu `/connect` u TUI-u, odaberite cyberstrike i idite na [cyberstrike.io/auth](https://cyberstrike.io/auth).
 
 ```txt
    /connect
@@ -80,7 +80,7 @@ Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
    /models
 ```
 
-Radi kao i svaki drugi provajder u OpenCode i potpuno je opcionalan za korištenje.
+Radi kao i svaki drugi provajder u CyberStrike i potpuno je opcionalan za korištenje.
 
 ---
 
@@ -124,7 +124,7 @@ Ne vidite provajdera ovdje? Pošaljite PR.
 
 ### Amazon Bedrock
 
-Da biste koristili Amazon Bedrock s OpenCode:
+Da biste koristili Amazon Bedrock s CyberStrike:
 
 1. Idite na **Katalog modela** na Amazon Bedrock konzoli i zatražite
    pristup modelima koje želite.
@@ -137,17 +137,17 @@ Da biste koristili Amazon Bedrock s OpenCode:
 
    #### Varijable okruženja (Brzi početak)
 
-   Postavite jednu od ovih varijabli okruženja dok pokrećete opencode:
+   Postavite jednu od ovih varijabli okruženja dok pokrećete cyberstrike:
 
 ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY cyberstrike
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile cyberstrike
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX cyberstrike
 ```
 
 Ili ih dodajte na svoj bash profil:
@@ -159,11 +159,11 @@ Ili ih dodajte na svoj bash profil:
 
 #### Konfiguracijski fajl (Preporučeno)
 
-Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `opencode.json`:
+Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -189,9 +189,9 @@ Opcije konfiguracijske datoteke imaju prednost nad varijablama okruženja.
 
 Ako koristite VPC krajnje tačke za Bedrock:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -235,9 +235,9 @@ Kada se postavi token nosioca (putem `/connect` ili `AWS_BEARER_TOKEN_BEDROCK`),
 :::note
 Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u ključu i postavite svojstvo `id` na arn. Ovo osigurava ispravno keširanje:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -282,7 +282,7 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 ```
 
 :::info
-[Anthropic] (https://anthropic.com) službeno ne podržava korištenje vaše Claude Pro/Max pretplate u OpenCode.
+[Anthropic] (https://anthropic.com) službeno ne podržava korištenje vaše Claude Pro/Max pretplate u CyberStrike.
 :::
 
 ##### Korištenje API ključeva
@@ -306,7 +306,7 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 2. Idite na [Azure AI Foundry](https://ai.azure.com/) i implementirajte model.
 
    :::note
-   Ime implementacije mora odgovarati imenu modela da bi opencode ispravno radio.
+   Ime implementacije mora odgovarati imenu modela da bi cyberstrike ispravno radio.
    :::
 
 3. Pokrenite naredbu `/connect` i potražite **Azure**.
@@ -327,7 +327,7 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 5. Postavite ime vašeg resursa kao varijablu okruženja:
 
 ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX cyberstrike
 ```
 
 Ili ga dodajte na svoj bash profil:
@@ -353,7 +353,7 @@ Ili ga dodajte na svoj bash profil:
 2. Idite na [Azure AI Foundry](https://ai.azure.com/) i implementirajte model.
 
    :::note
-   Ime implementacije mora odgovarati imenu modela da bi opencode ispravno radio.
+   Ime implementacije mora odgovarati imenu modela da bi cyberstrike ispravno radio.
    :::
 
 3. Pokrenite naredbu `/connect` i potražite **Azure kognitivne usluge**.
@@ -374,7 +374,7 @@ Ili ga dodajte na svoj bash profil:
 5. Postavite ime vašeg resursa kao varijablu okruženja:
 
 ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX cyberstrike
 ```
 
 Ili ga dodajte na svoj bash profil:
@@ -485,11 +485,11 @@ Ili ga postavite kao varijablu okruženja.
    /models
 ```
 
-Također možete dodati modele kroz svoju opencode konfiguraciju.
+Također možete dodati modele kroz svoju cyberstrike konfiguraciju.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
@@ -666,7 +666,7 @@ Odaberite **OAuth** i vaš pretraživač će se otvoriti za autorizaciju.
 
 1.  Idite na [GitLab korisničke postavke > Pristupni tokeni](https://gitlab.com/-/user_settings/personal_access_tokens)
 2.  Kliknite **Dodaj novi token**
-3.  Naziv: `OpenCode`, opseg: `api`
+3.  Naziv: `CyberStrike`, opseg: `api`
 4.  Kopirajte token (počinje sa `glpat-`)
 5.  Unesite ga u terminal
 
@@ -684,20 +684,20 @@ Dostupna su tri modela bazirana na Claudeu:
 
 :::note
 Također možete odrediti 'GITLAB_TOKEN' varijablu okruženja ako ne želite
-da pohrani token u opencode auth memoriju.
+da pohrani token u cyberstrike auth memoriju.
 :::
 
 ##### Samostalni GitLab
 
 :::note[Napomena o usklađenosti]
-OpenCode koristi mali model za neke AI zadatke kao što je generiranje naslova sesije.
-Podrazumevano je konfigurisan da koristi gpt-5-nano, a hostuje ga Zen. Da zaključate OpenCode
+CyberStrike koristi mali model za neke AI zadatke kao što je generiranje naslova sesije.
+Podrazumevano je konfigurisan da koristi gpt-5-nano, a hostuje ga Zen. Da zaključate CyberStrike
 da biste koristili samo svoju vlastitu instancu koju hostuje GitLab, dodajte sljedeće u svoju
-`opencode.json` fajl. Također se preporučuje da onemogućite dijeljenje sesije.
+`cyberstrike.json` fajl. Također se preporučuje da onemogućite dijeljenje sesije.
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -755,11 +755,11 @@ Više dokumentacije na početnoj stranici [opencode-gitlab-auth](https://www.npm
 
 ##### Konfiguracija
 
-Prilagodite putem `opencode.json`:
+Prilagodite putem `cyberstrike.json`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -778,10 +778,10 @@ Prilagodite putem `opencode.json`:
 
 Za pristup GitLab alatima (zahtjevi za spajanje, problemi, cjevovodi, CI/CD, itd.):
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["@gitlab/cyberstrike-gitlab-plugin"]
 }
 ```
 
@@ -791,7 +791,7 @@ Ovaj dodatak pruža sveobuhvatne mogućnosti upravljanja GitLab repozitorijumom,
 
 ### GitHub Copilot
 
-Da biste koristili svoju GitHub Copilot pretplatu s opencode:
+Da biste koristili svoju GitHub Copilot pretplatu s cyberstrike:
 
 :::note
 Neki modeli će možda trebati [Pro+
@@ -828,7 +828,7 @@ Neki modeli moraju biti ručno omogućeni u vašim [postavkama GitHub Copilot](h
 
 ### Google Vertex AI
 
-Za korištenje Google Vertex AI s OpenCode:
+Za korištenje Google Vertex AI s CyberStrike:
 
 1. Idite do **Model Garden** u Google Cloud Console i provjerite
    modeli dostupni u vašoj regiji.
@@ -844,10 +844,10 @@ Za korištenje Google Vertex AI s OpenCode:
      - `GOOGLE_APPLICATION_CREDENTIALS`: Put do JSON ključnog fajla vašeg naloga usluge
      - Autentifikacija koristeći gcloud CLI: `gcloud auth application-default login`
 
-   Postavite ih dok se pokreće opencode.
+   Postavite ih dok se pokreće cyberstrike.
 
 ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id cyberstrike
 ```
 
 Ili ih dodajte svom bash profilu.
@@ -957,13 +957,13 @@ Za više provajdera i napredne funkcije kao što su keširanje i ograničavanje 
 
 #### Opcione konfiguracije
 
-U slučaju da vidite funkciju ili model iz Helicone-a koji nije automatski konfiguriran putem opencodea, uvijek ga možete sami konfigurirati.
+U slučaju da vidite funkciju ili model iz Helicone-a koji nije automatski konfiguriran putem cyberstrikea, uvijek ga možete sami konfigurirati.
 
 Evo [Heliconeov katalog modela](https://helicone.ai/models), ovo će vam trebati da preuzmete ID-ove modela koje želite dodati.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/cyberstrike/cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -989,9 +989,9 @@ Evo [Heliconeov katalog modela](https://helicone.ai/models), ovo će vam trebati
 
 Helicone podržava prilagođena zaglavlja za funkcije kao što su keširanje, praćenje korisnika i upravljanje sesijom. Dodajte ih u konfiguraciju svog provajdera koristeći `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/cyberstrike/cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1000,7 +1000,7 @@ Helicone podržava prilagođena zaglavlja za funkcije kao što su keširanje, pr
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "cyberstrike",
         },
       },
     },
@@ -1010,21 +1010,21 @@ Helicone podržava prilagođena zaglavlja za funkcije kao što su keširanje, pr
 
 ##### Praćenje sesije
 
-Heliconeova funkcija [Sessions](https://docs.helicone.ai/features/sessions) vam omogućava da grupišete povezane LLM zahtjeve zajedno. Koristite dodatak [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) da automatski prijavite svaki OpenCode razgovor kao sesiju u Helicone-u.
+Heliconeova funkcija [Sessions](https://docs.helicone.ai/features/sessions) vam omogućava da grupišete povezane LLM zahtjeve zajedno. Koristite dodatak [cyberstrike-helicone-session](https://github.com/H2Shami/cyberstrike-helicone-session) da automatski prijavite svaki CyberStrike razgovor kao sesiju u Helicone-u.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g cyberstrike-helicone-session
 ```
 
 Dodajte ga u svoju konfiguraciju.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["cyberstrike-helicone-session"]
 }
 ```
 
-Dodatak ubacuje zaglavlja `Helicone-Session-Id` i `Helicone-Session-Name` u vaše zahtjeve. Na stranici Helicone Sessions, vidjet ćete svaki OpenCode razgovor naveden kao zasebna sesija.
+Dodatak ubacuje zaglavlja `Helicone-Session-Id` i `Helicone-Session-Name` u vaše zahtjeve. Na stranici Helicone Sessions, vidjet ćete svaki CyberStrike razgovor naveden kao zasebna sesija.
 
 ##### Uobičajena Helicone zaglavlja
 
@@ -1041,11 +1041,11 @@ Pogledajte [Helicone Header Directory](https://docs.helicone.ai/helicone-headers
 
 ### llama.cpp
 
-Možete konfigurirati opencode za korištenje lokalnih modela putem [llama.cpp's](https://github.com/ggml-org/llama.cpp) uslužnog programa llama-server
+Možete konfigurirati cyberstrike za korištenje lokalnih modela putem [llama.cpp's](https://github.com/ggml-org/llama.cpp) uslužnog programa llama-server
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="cyberstrike.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1108,11 +1108,11 @@ IO.NET nudi 17 modela optimiziranih za različite slučajeve upotrebe:
 
 ### LM Studio
 
-Možete konfigurirati opencode za korištenje lokalnih modela preko LM Studio.
+Možete konfigurirati cyberstrike za korištenje lokalnih modela preko LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="cyberstrike.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1225,15 +1225,15 @@ Da biste koristili Kimi K2 iz Moonshot AI:
 
 ### Ollama
 
-Možete konfigurirati opencode za korištenje lokalnih modela putem Ollame.
+Možete konfigurirati cyberstrike za korištenje lokalnih modela putem Ollame.
 
 :::tip
-Ollama se može automatski konfigurirati za OpenCode. Pogledajte [Ollama integracijske dokumente](https://docs.ollama.com/integrations/opencode) za detalje.
+Ollama se može automatski konfigurirati za CyberStrike. Pogledajte [Ollama integracijske dokumente](https://docs.ollama.com/integrations/cyberstrike) za detalje.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="cyberstrike.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1267,13 +1267,13 @@ Ako pozivi alata ne rade, pokušajte povećati `num_ctx` u Ollama. Počnite oko 
 
 ### Ollama Cloud
 
-Da biste koristili Ollama Cloud s OpenCode:
+Da biste koristili Ollama Cloud s CyberStrike:
 
 1. Idite na [https://ollama.com/](https://ollama.com/) i prijavite se ili kreirajte račun.
 
 2. Idite na **Postavke** > **Ključevi** i kliknite na **Dodaj API ključ** da generišete novi API ključ.
 
-3. Kopirajte API ključ za korištenje u OpenCode.
+3. Kopirajte API ključ za korištenje u CyberStrike.
 
 4. Pokrenite naredbu `/connect` i potražite **Ollama Cloud**.
 
@@ -1290,7 +1290,7 @@ Da biste koristili Ollama Cloud s OpenCode:
    └ enter
 ```
 
-6. **Važno**: Prije upotrebe modela oblaka u OpenCode, morate lokalno povući informacije o modelu:
+6. **Važno**: Prije upotrebe modela oblaka u CyberStrike, morate lokalno povući informacije o modelu:
 
 ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1337,19 +1337,19 @@ Ako već imate API ključ, možete odabrati **Ručno unesite API ključ** i zali
 
 ---
 
-### OpenCode Zen
+### CyberStrike Zen
 
-OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCode tim. [Saznajte više](/docs/zen).
+CyberStrike Zen je lista testiranih i verifikovanih modela koju je obezbedio CyberStrike tim. [Saznajte više](/docs/zen).
 
-1. Prijavite se na **<a href={console}>OpenCode Zen</a>** i kliknite na **Kreiraj API ključ**.
+1. Prijavite se na **<a href={console}>CyberStrike Zen</a>** i kliknite na **Kreiraj API ključ**.
 
-2. Pokrenite naredbu `/connect` i potražite **OpenCode Zen**.
+2. Pokrenite naredbu `/connect` i potražite **CyberStrike Zen**.
 
 ```txt
    /connect
 ```
 
-3. Unesite svoj OpenCode API ključ.
+3. Unesite svoj CyberStrike API ključ.
 
 ```txt
    ┌ API key
@@ -1391,11 +1391,11 @@ OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCo
    /models
 ```
 
-Također možete dodati dodatne modele putem vaše opencode konfiguracije.
+Također možete dodati dodatne modele putem vaše cyberstrike konfiguracije.
 
-```json title="opencode.json" {6}
+```json title="cyberstrike.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1406,11 +1406,11 @@ Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 }
 ```
 
-5. Također ih možete prilagoditi putem vaše opencode konfiguracije. Evo primjera navođenja provajdera
+5. Također ih možete prilagoditi putem vaše cyberstrike konfiguracije. Evo primjera navođenja provajdera
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1458,7 +1458,7 @@ SAP AI Core omogućava pristup preko 40+ modela iz OpenAI, Anthropic, Google, Am
 Ili postavite varijablu okruženja `AICORE_SERVICE_KEY`:
 
 ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' cyberstrike
 ```
 
 Ili ga dodajte na svoj bash profil:
@@ -1470,7 +1470,7 @@ Ili ga dodajte na svoj bash profil:
 4. Opciono postavite ID implementacije i grupu resursa:
 
 ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group cyberstrike
 ```
 
 :::note
@@ -1514,7 +1514,7 @@ Ove postavke su opcione i treba ih konfigurirati u skladu s vašim SAP AI Core p
 
 ### Scaleway
 
-Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) sa Opencodeom:
+Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) sa Cyberstrikeom:
 
 1. Prijeđite na [Scaleway Console IAM postavke](https://console.scaleway.com/iam/api-keys) da generišete novi API ključ.
 
@@ -1622,11 +1622,11 @@ Vercel AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic, Go
    /models
 ```
 
-Također možete prilagoditi modele kroz svoju opencode konfiguraciju. Evo primjera specificiranja redoslijeda usmjeravanja dobavljača.
+Također možete prilagoditi modele kroz svoju cyberstrike konfiguraciju. Evo primjera specificiranja redoslijeda usmjeravanja dobavljača.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1732,11 +1732,11 @@ Ako ste pretplaćeni na **GLM plan kodiranja**, odaberite **Z.AI plan kodiranja*
    /models
 ```
 
-Također možete dodati dodatne modele putem vaše opencode konfiguracije.
+Također možete dodati dodatne modele putem vaše cyberstrike konfiguracije.
 
-```json title="opencode.json" {6}
+```json title="cyberstrike.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "zenmux": {
       "models": {
@@ -1754,7 +1754,7 @@ Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 Da biste dodali bilo kojeg **OpenAI-kompatibilnog** provajdera koji nije naveden u naredbi `/connect`:
 
 :::tip
-Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s opencode-om. Većina modernih AI provajdera nudi API-je kompatibilne sa OpenAI.
+Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s cyberstrike-om. Većina modernih AI provajdera nudi API-je kompatibilne sa OpenAI.
 :::
 
 1. Pokrenite naredbu `/connect` i pomaknite se prema dolje do **Ostalo**.
@@ -1793,18 +1793,18 @@ Odaberite ID koji se pamti, to ćete koristiti u svom konfiguracijskom fajlu.
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in cyberstrike.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
 ```
 
-4. Kreirajte ili ažurirajte svoju `opencode.json` datoteku u direktoriju projekta:
+4. Kreirajte ili ažurirajte svoju `cyberstrike.json` datoteku u direktoriju projekta:
 
-```json title="opencode.json" ""myprovider"" {5-15}
+```json title="cyberstrike.json" ""myprovider"" {5-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1841,9 +1841,9 @@ Više o naprednim opcijama u primjeru ispod.
 
 Evo primjera postavljanja opcija `apiKey`, `headers` i modela `limit`.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="cyberstrike.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1876,7 +1876,7 @@ Detalji konfiguracije:
 - **limit.context**: Maksimalni ulazni tokeni koje model prihvata.
 - **limit.output**: Maksimalni tokeni koje model može generirati.
 
-Polja `limit` omogućavaju OpenCode da shvati koliko vam je konteksta ostalo. Standardni dobavljači ih automatski preuzimaju sa models.dev.
+Polja `limit` omogućavaju CyberStrike da shvati koliko vam je konteksta ostalo. Standardni dobavljači ih automatski preuzimaju sa models.dev.
 
 ---
 
@@ -1884,12 +1884,12 @@ Polja `limit` omogućavaju OpenCode da shvati koliko vam je konteksta ostalo. St
 
 Ako imate problema s konfiguracijom provajdera, provjerite sljedeće:
 
-1. **Provjerite postavke autentifikacije**: Pokrenite `opencode auth list` da vidite da li su vjerodajnice
+1. **Provjerite postavke autentifikacije**: Pokrenite `cyberstrike auth list` da vidite da li su vjerodajnice
    za provajdera se dodaju u vašu konfiguraciju.
 
    Ovo se ne odnosi na dobavljače kao što je Amazon Bedrock, koji se oslanjaju na varijable okruženja za svoju autentifikaciju.
 
-2. Za prilagođene provajdere, provjerite OpenCode konfiguraciju i:
-   - Uvjerite se da ID provajdera korišten u naredbi `/connect` odgovara ID-u u vašoj opencode konfiguraciji.
+2. Za prilagođene provajdere, provjerite CyberStrike konfiguraciju i:
+   - Uvjerite se da ID provajdera korišten u naredbi `/connect` odgovara ID-u u vašoj cyberstrike konfiguraciji.
    - Za provajdera se koristi pravi npm paket. Na primjer, koristite `@ai-sdk/cerebras` za Cerebras. A za sve ostale OpenAI kompatibilne provajdere, koristite `@ai-sdk/openai-compatible`.
    - Provjerite da li se ispravna krajnja tačka API-ja koristi u polju `options.baseURL`.

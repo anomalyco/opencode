@@ -17,9 +17,9 @@ description: 为重复任务创建自定义命令。
 
 在 `commands/` 目录中创建 markdown 文件来定义自定义命令。
 
-创建 `.opencode/commands/test.md`：
+创建 `.cyberstrike/commands/test.md`：
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ frontmatter 定义命令属性。内容成为模板。
 
 ## 配置
 
-您可以通过 opencode 配置或通过在 `commands/` 目录中创建 markdown 文件来添加自定义命令。
+您可以通过 cyberstrike 配置或通过在 `commands/` 目录中创建 markdown 文件来添加自定义命令。
 
 ---
 
 ### JSON
 
-在 opencode [配置](/docs/config) 中使用 `command` 选项：
+在 cyberstrike [配置](/docs/config) 中使用 `command` 选项：
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ frontmatter 定义命令属性。内容成为模板。
 
 您还可以使用 Markdown 文件定义命令。将它们放入：
 
-- 全局：`~/.config/opencode/commands/`
-- 每个项目：`.opencode/commands/`
+- 全局：`~/.config/cyberstrike/commands/`
+- 每个项目：`.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ Markdown 文件名成为命令名。例如，`test.md` 让
 
 使用 `$ARGUMENTS` 占位符将参数提交给命令。
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Include proper typing and basic structure.
 
 例如：
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ with the following content: $3
 
 例如，要创建分析测试覆盖率的自定义命令：
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 或者查看最近的更改：
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Review these changes and suggest any improvements.
 
 使用 `@` 后跟文件名将文件包含在命令中。
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Check for performance issues and suggest improvements.
 
 `template` 选项定义执行命令时将发送到 LLM 的提示。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Check for performance issues and suggest improvements.
 
 使用 `description` 选项提供命令功能的简要描述。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Check for performance issues and suggest improvements.
 如果是 [Subagents](/docs/agents/#subagents) 该命令将默认触发子代理调用。
 要取消此行为，则将 `subtask` 设置为 `false`。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Check for performance issues and suggest improvements.
 如果您希望命令不污染您的主要上下文并且将 **强制** 代理充当子代理，那么这非常有用，
 即使 `mode` 在 [Agent](/docs/agents) 配置上设置为 `primary`。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Check for performance issues and suggest improvements.
 
 使用 `model` 配置覆盖此命令的默认模型。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 内置
 
-opencode 包含 `/init`、`/undo`、`/redo`、`/share`、`/help` 等内置命令；[了解更多](/docs/tui#commands)。
+cyberstrike 包含 `/init`、`/undo`、`/redo`、`/share`、`/help` 等内置命令；[了解更多](/docs/tui#commands)。
 
 :::note
 自定义命令可以覆盖内置命令。

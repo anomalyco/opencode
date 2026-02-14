@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Usa l'interfaccia utente da terminale (TUI) di OpenCode.
+description: Usa l'interfaccia utente da terminale (TUI) di CyberStrike.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode fornisce un'interfaccia interattiva da terminale (TUI) per lavorare sui tuoi progetti con un LLM.
+CyberStrike fornisce un'interfaccia interattiva da terminale (TUI) per lavorare sui tuoi progetti con un LLM.
 
-Eseguire OpenCode avvia la TUI per la directory corrente.
+Eseguire CyberStrike avvia la TUI per la directory corrente.
 
 ```bash
-opencode
+cyberstrike
 ```
 
 Oppure puoi avviarla per una specifica working directory.
 
 ```bash
-opencode /path/to/project
+cyberstrike /path/to/project
 ```
 
 Una volta nella TUI, puoi inviare un messaggio come prompt.
@@ -57,7 +57,7 @@ L'output del comando viene aggiunto alla conversazione come risultato di uno str
 
 ## Comandi
 
-Quando usi la TUI di OpenCode, puoi digitare `/` seguito dal nome di un comando per eseguire rapidamente azioni. Per esempio:
+Quando usi la TUI di CyberStrike, puoi digitare `/` seguito dal nome di un comando per eseguire rapidamente azioni. Per esempio:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Ecco tutti i comandi slash disponibili:
 
 ### connetti
 
-Aggiunge un provider a OpenCode. Ti permette di selezionare tra i provider disponibili e aggiungere le relative chiavi API.
+Aggiunge un provider a CyberStrike. Ti permette di selezionare tra i provider disponibili e aggiungere le relative chiavi API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Apre un editor esterno per comporre messaggi. Usa l'editor impostato nella varia
 
 ### esci
 
-Esce da OpenCode. _Alias_: `/quit`, `/q`
+Esce da CyberStrike. _Alias_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ Alcuni editor richiedono argomenti da riga di comando per funzionare in modalita
 
 ## Configurazione
 
-Puoi personalizzare il comportamento della TUI tramite il file di config di OpenCode.
+Puoi personalizzare il comportamento della TUI tramite il file di config di CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

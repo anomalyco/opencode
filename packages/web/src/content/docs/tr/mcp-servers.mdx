@@ -3,7 +3,7 @@ title: MCP sunucuları
 description: Yerel ve uzak MCP araçlarını ekleyin.
 ---
 
-_Model Bağlam Protokolü_ veya MCP kullanarak opencode'a harici araçlar ekleyebilirsiniz. opencode hem yerel hem de uzak sunucuları destekler.
+_Model Bağlam Protokolü_ veya MCP kullanarak cyberstrike'a harici araçlar ekleyebilirsiniz. cyberstrike hem yerel hem de uzak sunucuları destekler.
 
 MCP araçları eklendikten sonra yerleşik araçların yanı sıra LLM tarafından otomatik olarak kullanılabilir.
 
@@ -23,11 +23,11 @@ GitHub MCP sunucusu gibi belirli MCP sunucuları çok sayıda belirteç ekleme e
 
 ## Etkinleştirme
 
-MCP sunucularını [opencode Config](https://opencode.ai/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
+MCP sunucularını [cyberstrike Config](https://cyberstrike.io/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ Ayrıca `enabled` öğesini `false` olarak ayarlayarak bir sunucuyu devre dış�
 
 ### Uzak varsayılanları geçersiz kılma
 
-Kuruluşlar, `.well-known/opencode` uç noktaları aracılığıyla varsayılan MCP sunucularını sağlayabilir. Bu sunucular varsayılan olarak devre dışı bırakılarak kullanıcıların ihtiyaç duydukları sunucuları seçmelerine olanak tanınabilir.
+Kuruluşlar, `.well-known/cyberstrike` uç noktaları aracılığıyla varsayılan MCP sunucularını sağlayabilir. Bu sunucular varsayılan olarak devre dışı bırakılarak kullanıcıların ihtiyaç duydukları sunucuları seçmelerine olanak tanınabilir.
 
 Kuruluşunuzun uzak yapılandırmasından belirli bir sunucuyu etkinleştirmek için onu `enabled: true` ile yerel yapılandırmanıza ekleyin:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ Yerel yapılandırma değerleriniz uzak varsayılanları geçersiz kılar. Daha 
 
 `type` kullanarak yerel MCP sunucularını MCP nesnesi içindeki `"local"`'ye ekleyin.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ Komut, yerel MCP sunucusunun nasıl başlatıldığıdır. Ayrıca ortam değiş
 
 Örneğin, [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP test sunucusunu şu şekilde görebilirsiniz.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiş
 
 `type`'yi `"remote"` olarak ayarlayarak uzak MCP sunucularını ekleyin.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiş
 
 ## OAuth
 
-opencode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olarak yönetir. Bir sunucu kimlik doğrulaması gerektirdiğinde opencode şunları yapar:
+cyberstrike, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olarak yönetir. Bir sunucu kimlik doğrulaması gerektirdiğinde cyberstrike şunları yapar:
 
 1. 401 yanıtını tespit edin ve OAuth akışını başlatın
 2. Sunucu tarafından destekleniyorsa **Dinamik İstemci Kaydı (RFC 7591)** kullanın
@@ -177,9 +177,9 @@ opencode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olar
 
 OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gerek yoktur. Uzak sunucuyu yapılandırmanız yeterli:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gere
 }
 ```
 
-Sunucu kimlik doğrulama gerektiriyorsa opencode, onu ilk kez kullanmaya çalıştığınızda kimlik doğrulamanızı isteyecektir. Değilse, `opencode mcp auth <server-name>` ile [manually trigger the flow](#authenticating) yapabilirsiniz.
+Sunucu kimlik doğrulama gerektiriyorsa cyberstrike, onu ilk kez kullanmaya çalıştığınızda kimlik doğrulamanızı isteyecektir. Değilse, `cyberstrike mcp auth <server-name>` ile [manually trigger the flow](#authenticating) yapabilirsiniz.
 
 ---
 
@@ -197,9 +197,9 @@ Sunucu kimlik doğrulama gerektiriyorsa opencode, onu ilk kez kullanmaya çalı�
 
 MCP sunucu sağlayıcısından istemci kimlik bilgileriniz varsa, bunları yapılandırabilirsiniz:
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,22 +223,22 @@ Kimlik doğrulamayı manuel olarak tetikleyebilir veya kimlik bilgilerini yönet
 Belirli bir MCP sunucusuyla kimlik doğrulaması yapın:
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 Tüm MCP sunucularını ve kimlik doğrulama durumlarını listeleyin:
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Remove stored credentials:
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-`mcp auth` komutu tarayıcınızı yetkilendirme için açacaktır. Yetkilendirmenizin ardından opencode, belirteçleri `~/.local/share/opencode/mcp-auth.json`'de güvenli bir şekilde saklar.
+`mcp auth` komutu tarayıcınızı yetkilendirme için açacaktır. Yetkilendirmenizin ardından cyberstrike, belirteçleri `~/.local/share/cyberstrike/mcp-auth.json`'de güvenli bir şekilde saklar.
 
 ---
 
@@ -246,9 +246,9 @@ opencode mcp logout my-oauth-server
 
 Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğin, bunun yerine API anahtarlarını kullanan sunucular için), `oauth`'yi `false` olarak ayarlayın:
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ Uzak bir MCP sunucusunun kimlik doğrulaması başarısız olursa aşağıdakile
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 `mcp debug` komutu mevcut kimlik doğrulama durumunu gösterir, HTTP bağlantısını test eder ve OAuth bulma akışını dener.
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## Yönetim
 
-MCP'leriniz yerleşik araçların yanı sıra opencode'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi opencode yapılandırması aracılığıyla yönetebilirsiniz.
+MCP'leriniz yerleşik araçların yanı sıra cyberstrike'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi cyberstrike yapılandırması aracılığıyla yönetebilirsiniz.
 
 ---
 
@@ -299,9 +299,9 @@ MCP'leriniz yerleşik araçların yanı sıra opencode'da araç olarak mevcuttur
 
 Bu, bunları global olarak etkinleştirebileceğiniz veya devre dışı bırakabileceğiniz anlamına gelir.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ Bu, bunları global olarak etkinleştirebileceğiniz veya devre dışı bırakab
 
 Eşleşen tüm MCP'leri devre dışı bırakmak için bir glob modeli de kullanabiliriz.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 1. Global olarak bir araç olarak devre dışı bırakın.
 2. [agent config](/docs/agents#tools)'nizde, MCP sunucusunu bir araç olarak etkinleştirin.
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ Aşağıda bazı yaygın MCP sunucularının örnekleri verilmiştir. Diğer sun
 
 Sentry projelerinizle ve sorunlarınızla etkileşimde bulunmak için [Sentry MCP server](https://mcp.sentry.dev) ekleyin.
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ Sentry projelerinizle ve sorunlarınızla etkileşimde bulunmak için [Sentry MC
 Yapılandırmayı ekledikten sonra Sentry ile kimlik doğrulaması yapın:
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-Bu, OAuth akışını tamamlamak ve opencode'u Sentry hesabınıza bağlamak için bir tarayıcı penceresi açacaktır.
+Bu, OAuth akışını tamamlamak ve cyberstrike'u Sentry hesabınıza bağlamak için bir tarayıcı penceresi açacaktır.
 
 Kimlik doğrulaması yapıldıktan sonra sorunları, projeleri ve hata verilerini sorgulamak için istemlerinizde Sentry araçlarını kullanabilirsiniz.
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 Dokumanlar arasında arama yapmak için [Context7 MCP server](https://github.com/upstash/context7) ekleyin.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Dokumanlar arasında arama yapmak için [Context7 MCP server](https://github.com
 
 Ücretsiz bir hesaba kaydolduysanız API anahtarınızı kullanarak daha yüksek ücret limitleri elde edebilirsiniz.
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 GitHub'daki kod parçacıkları arasında arama yapmak için [Grep by Vercel](https://grep.app) MCP sunucusunu ekleyin.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

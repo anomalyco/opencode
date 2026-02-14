@@ -1,12 +1,12 @@
 import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@cyberstrike-io/ui/button"
+import { Icon } from "@cyberstrike-io/ui/icon"
+import { Select } from "@cyberstrike-io/ui/select"
+import { Switch } from "@cyberstrike-io/ui/switch"
+import { Tooltip } from "@cyberstrike-io/ui/tooltip"
+import { useTheme, type ColorScheme } from "@cyberstrike-io/ui/theme"
+import { showToast } from "@cyberstrike-io/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
@@ -201,7 +201,7 @@ export const SettingsGeneral: Component = () => {
           description={
             <>
               {language.t("settings.general.row.theme.description")}{" "}
-              <Link href="https://opencode.ai/docs/themes/">{language.t("common.learnMore")}</Link>
+              <Link href="https://cyberstrike.io/docs/themes/">{language.t("common.learnMore")}</Link>
             </>
           }
         >

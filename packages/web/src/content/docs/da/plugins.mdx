@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Skriv dine egne plugins for at udvide OpenCode.
+description: Skriv dine egne plugins for at udvide CyberStrike.
 ---
 
-Plugins giver dig mulighed for at udvide OpenCode ved at tilslutte sig forskellige begivenheder og tilpasse adfærd. Du kan oprette plugins for at tilføje nye funktioner, integrere med eksterne tjenester eller ændre OpenCodes standardadfærd.
+Plugins giver dig mulighed for at udvide CyberStrike ved at tilslutte sig forskellige begivenheder og tilpasse adfærd. Du kan oprette plugins for at tilføje nye funktioner, integrere med eksterne tjenester eller ændre CyberStrikes standardadfærd.
 
 For eksempler, tjek [plugins](/docs/ecosystem#plugins) oprettet af fællesskabet.
 
@@ -19,8 +19,8 @@ Der er to måder at indlæse plugins på.
 
 Placer JavaScript- eller TypeScript-filer i plugin-mappen.
 
-- `.opencode/plugins/` - Plugins på projektniveau
-- `~/.config/opencode/plugins/` - Globale plugins
+- `.cyberstrike/plugins/` - Plugins på projektniveau
+- `~/.config/cyberstrike/plugins/` - Globale plugins
 
 Filer i disse mapper indlæses automatisk ved opstart.
 
@@ -30,10 +30,10 @@ Filer i disse mapper indlæses automatisk ved opstart.
 
 Angiv npm-pakker i din konfigurationsfil.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "cyberstrike-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ Gennemse tilgængelige plugins i [ecosystem](/docs/ecosystem#plugins).
 
 ### Installation af plugins
 
-**npm plugins** installeres automatisk ved hjælp af Bun ved opstart. Pakker og deres afhængigheder cachelagres i `~/.cache/opencode/node_modules/`.
+**npm plugins** installeres automatisk ved hjælp af Bun ved opstart. Pakker og deres afhængigheder cachelagres i `~/.cache/cyberstrike/node_modules/`.
 
 **Lokale plugins** indlæses direkte fra plugin-biblioteket. For at bruge eksterne pakker skal du oprette en `package.json` i din konfigurationsmappe (se [Dependencies](#dependencies)), eller udgive pluginnet til npm og [add it to your config](/docs/config#plugins).
 
@@ -55,10 +55,10 @@ Gennemse tilgængelige plugins i [ecosystem](/docs/ecosystem#plugins).
 
 Plugins indlæses fra alle kilder, og alle hooks kører i rækkefølge. Indlæsningsrækkefølgen er:
 
-1. Global konfiguration (`~/.config/opencode/opencode.json`)
-2. Projektkonfiguration (`opencode.json`)
-3. Global plugin-mappe (`~/.config/opencode/plugins/`)
-4. Projekt plugin bibliotek (`.opencode/plugins/`)
+1. Global konfiguration (`~/.config/cyberstrike/cyberstrike.json`)
+2. Projektkonfiguration (`cyberstrike.json`)
+3. Global plugin-mappe (`~/.config/cyberstrike/plugins/`)
+4. Projekt plugin bibliotek (`.cyberstrike/plugins/`)
 
 Dublerede npm-pakker med samme navn og version indlæses én gang. Et lokalt plugin og et npm plugin med lignende navne indlæses dog hver for sig.
 
@@ -75,7 +75,7 @@ funktioner. Hver funktion modtager et kontekstobjekt og returnerer et hooks-obje
 
 Lokale plugins og brugerdefinerede værktøjer kan bruge eksterne npm-pakker. Tilføj en `package.json` til din konfigurationsmappe med de afhængigheder, du har brug for.
 
-```json title=".opencode/package.json"
+```json title=".cyberstrike/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ Lokale plugins og brugerdefinerede værktøjer kan bruge eksterne npm-pakker. Ti
 }
 ```
 
-OpenCode kører `bun install` ved opstart for at installere disse. Dine plugins og værktøjer kan derefter importere dem.
+CyberStrike kører `bun install` ved opstart for at installere disse. Dine plugins og værktøjer kan derefter importere dem.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Grundlæggende struktur
 
-```js title=".opencode/plugins/example.js"
+```js title=".cyberstrike/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ Plugin-funktionen modtager:
 - `project`: Den aktuelle projektinformation.
 - `directory`: Den aktuelle arbejdsmappe.
 - `worktree`: Git worktree-stien.
-- `client`: En opencode SDK klient til interaktion med AI.
+- `client`: En cyberstrike SDK klient til interaktion med AI.
 - `-: Buns [shell API](https://bun.com/docs/runtime/shell) til udførelse af kommandoer.
 
 ---
@@ -128,7 +128,7 @@ Plugin-funktionen modtager:
 For TypeScript-plugins kan du importere typer fra plugin-pakken:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 
 ## Eksempler
 
-Her er nogle eksempler på plugins, du kan bruge til at udvide opencode.
+Her er nogle eksempler på plugins, du kan bruge til at udvide cyberstrike.
 
 ---
 
@@ -219,13 +219,13 @@ Her er nogle eksempler på plugins, du kan bruge til at udvide opencode.
 
 Send meddelelser, når visse hændelser indtræffer:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".cyberstrike/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "cyberstrike"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Vi bruger `osascript` til at køre AppleScript på macOS. Her bruger vi det til at sende notifikationer.
 
 :::note
-Hvis du bruger OpenCode desktop-appen, kan den sende systemmeddelelser automatisk, når et svar er klar, eller når en session fejler.
+Hvis du bruger CyberStrike desktop-appen, kan den sende systemmeddelelser automatisk, når et svar er klar, eller når en session fejler.
 :::
 
 ---
 
 ### .env-beskyttelse
 
-Undgå opencode i at læse `.env` filer:
+Undgå cyberstrike i at læse `.env` filer:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".cyberstrike/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Injicer miljøvariabler i al shell-udførelse (AI-værktøjer og brugerterminaler):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".cyberstrike/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Brugerdefinerede værktøjer
 
-Plugins kan også tilføje brugerdefinerede værktøjer til opencode:
+Plugins kan også tilføje brugerdefinerede værktøjer til cyberstrike:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@cyberstrike-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool`-hjælperen opretter et brugerdefineret værktøj, som opencode kan kalde. Det tager en Zod-skemafunktion og returnerer en værktøjsdefinition med:
+`tool`-hjælperen opretter et brugerdefineret værktøj, som cyberstrike kan kalde. Det tager en Zod-skemafunktion og returnerer en værktøjsdefinition med:
 
 - `description`: Hvad værktøjet gør
 - `args`: Zod-skema for værktøjets argumenter
 - `execute`: Funktion, der kører, når værktøjet kaldes
 
-Dine tilpassede værktøjer vil være tilgængelige for opencode sammen med indbyggede værktøjer.
+Dine tilpassede værktøjer vil være tilgængelige for cyberstrike sammen med indbyggede værktøjer.
 
 ---
 
@@ -314,7 +314,7 @@ Dine tilpassede værktøjer vil være tilgængelige for opencode sammen med indb
 
 Brug `client.app.log()` i stedet for `console.log` til struktureret logning:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Niveauer: `debug`, `info`, `warn`, `error`. Se [SDK documentation](https://opencode.ai/docs/sdk) for detaljer.
+Niveauer: `debug`, `info`, `warn`, `error`. Se [SDK documentation](https://cyberstrike.io/docs/sdk) for detaljer.
 
 ---
 
@@ -335,8 +335,8 @@ Niveauer: `debug`, `info`, `warn`, `error`. Se [SDK documentation](https://openc
 
 Tilpas konteksten inkluderet, når en session komprimeres:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 Du kan også erstatte komprimeringsprompten helt ved at indstille `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

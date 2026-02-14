@@ -96,7 +96,7 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Otro",
   "dialog.provider.tag.recommended": "Recomendado",
-  "dialog.provider.opencode.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
+  "dialog.provider.cyberstrike.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
   "dialog.provider.anthropic.note": "Acceso directo a modelos Claude, incluyendo Pro y Max",
   "dialog.provider.copilot.note": "Modelos Claude para asistencia de codificación",
   "dialog.provider.openai.note": "Modelos GPT para tareas de IA generales rápidas y capaces",
@@ -110,7 +110,7 @@ export const dict = {
   "dialog.model.manage": "Gestionar modelos",
   "dialog.model.manage.description": "Personalizar qué modelos aparecen en el selector de modelos.",
 
-  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por OpenCode",
+  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por CyberStrike",
   "dialog.model.unpaid.addMore.title": "Añadir más modelos de proveedores populares",
 
   "dialog.provider.viewAll": "Ver más proveedores",
@@ -123,21 +123,21 @@ export const dict = {
   "provider.connect.status.waiting": "Esperando autorización...",
   "provider.connect.status.failed": "Autorización fallida: {{error}}",
   "provider.connect.apiKey.description":
-    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
+    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en CyberStrike.",
   "provider.connect.apiKey.label": "Clave API de {{provider}}",
   "provider.connect.apiKey.placeholder": "Clave API",
   "provider.connect.apiKey.required": "La clave API es obligatoria",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen te da acceso a un conjunto curado de modelos fiables optimizados para agentes de programación.",
-  "provider.connect.opencodeZen.line2":
+  "provider.connect.cyberstrikeZen.line1":
+    "CyberStrike Zen te da acceso a un conjunto curado de modelos fiables optimizados para agentes de programación.",
+  "provider.connect.cyberstrikeZen.line2":
     "Con una sola clave API obtendrás acceso a modelos como Claude, GPT, Gemini, GLM y más.",
-  "provider.connect.opencodeZen.visit.prefix": "Visita ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " para obtener tu clave API.",
+  "provider.connect.cyberstrikeZen.visit.prefix": "Visita ",
+  "provider.connect.cyberstrikeZen.visit.link": "cyberstrike.io/zen",
+  "provider.connect.cyberstrikeZen.visit.suffix": " para obtener tu clave API.",
   "provider.connect.oauth.code.visit.prefix": "Visita ",
   "provider.connect.oauth.code.visit.link": "este enlace",
   "provider.connect.oauth.code.visit.suffix":
-    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
+    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en CyberStrike.",
   "provider.connect.oauth.code.label": "Código de autorización {{method}}",
   "provider.connect.oauth.code.placeholder": "Código de autorización",
   "provider.connect.oauth.code.required": "El código de autorización es obligatorio",
@@ -145,7 +145,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Visita ",
   "provider.connect.oauth.auto.visit.link": "este enlace",
   "provider.connect.oauth.auto.visit.suffix":
-    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
+    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en CyberStrike.",
   "provider.connect.oauth.auto.confirmationCode": "Código de confirmación",
   "provider.connect.toast.connected.title": "{{provider}} conectado",
   "provider.connect.toast.connected.description": "Los modelos de {{provider}} ahora están disponibles para usar.",
@@ -286,7 +286,7 @@ export const dict = {
   "dialog.mcp.empty": "No hay MCPs configurados",
 
   "dialog.lsp.empty": "LSPs detectados automáticamente por tipo de archivo",
-  "dialog.plugins.empty": "Plugins configurados en opencode.json",
+  "dialog.plugins.empty": "Plugins configurados en cyberstrike.json",
 
   "mcp.status.connected": "conectado",
   "mcp.status.failed": "fallido",
@@ -299,7 +299,7 @@ export const dict = {
   "dialog.directory.empty": "No se encontraron carpetas",
 
   "dialog.server.title": "Servidores",
-  "dialog.server.description": "Cambiar a qué servidor de OpenCode se conecta esta app.",
+  "dialog.server.description": "Cambiar a qué servidor de CyberStrike se conecta esta app.",
   "dialog.server.search.placeholder": "Buscar servidores",
   "dialog.server.empty": "No hay servidores aún",
   "dialog.server.add.title": "Añadir un servidor",
@@ -427,7 +427,7 @@ export const dict = {
   "toast.session.listFailed.title": "Fallo al cargar sesiones para {{project}}",
 
   "toast.update.title": "Actualización disponible",
-  "toast.update.description": "Una nueva versión de OpenCode ({{version}}) está disponible para instalar.",
+  "toast.update.description": "Una nueva versión de CyberStrike ({{version}}) está disponible para instalar.",
   "toast.update.action.installRestart": "Instalar y reiniciar",
   "toast.update.action.notYet": "Todavía no",
 
@@ -438,7 +438,7 @@ export const dict = {
   "error.page.action.checking": "Comprobando...",
   "error.page.action.checkUpdates": "Buscar actualizaciones",
   "error.page.action.updateTo": "Actualizar a {{version}}",
-  "error.page.report.prefix": "Por favor reporta este error al equipo de OpenCode",
+  "error.page.report.prefix": "Por favor reporta este error al equipo de CyberStrike",
   "error.page.report.discord": "en Discord",
   "error.page.version": "Versión: {{version}}",
 
@@ -456,8 +456,8 @@ export const dict = {
   "error.chain.responseBody": "Cuerpo de la respuesta:\n{{body}}",
   "error.chain.didYouMean": "¿Quisiste decir: {{suggestions}}",
   "error.chain.modelNotFound": "Modelo no encontrado: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Comprueba los nombres de proveedor/modelo en tu configuración (opencode.json)",
-  "error.chain.mcpFailed": 'El servidor MCP "{{name}}" falló. Nota, OpenCode no soporta autenticación MCP todavía.',
+  "error.chain.checkConfig": "Comprueba los nombres de proveedor/modelo en tu configuración (cyberstrike.json)",
+  "error.chain.mcpFailed": 'El servidor MCP "{{name}}" falló. Nota, CyberStrike no soporta autenticación MCP todavía.',
   "error.chain.providerAuthFailed": "Autenticación de proveedor fallida ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Fallo al inicializar proveedor "{{provider}}". Comprueba credenciales y configuración.',
@@ -575,12 +575,12 @@ export const dict = {
   "sidebar.workspaces.enable": "Habilitar espacios de trabajo",
   "sidebar.workspaces.disable": "Deshabilitar espacios de trabajo",
   "sidebar.gettingStarted.title": "Empezando",
-  "sidebar.gettingStarted.line1": "OpenCode incluye modelos gratuitos para que puedas empezar inmediatamente.",
+  "sidebar.gettingStarted.line1": "CyberStrike incluye modelos gratuitos para que puedas empezar inmediatamente.",
   "sidebar.gettingStarted.line2": "Conecta cualquier proveedor para usar modelos, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Sesiones recientes",
   "sidebar.project.viewAllSessions": "Ver todas las sesiones",
 
-  "app.name.desktop": "OpenCode Desktop",
+  "app.name.desktop": "CyberStrike Desktop",
 
   "settings.section.desktop": "Escritorio",
   "settings.section.server": "Servidor",
@@ -588,7 +588,7 @@ export const dict = {
   "settings.tab.shortcuts": "Atajos",
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "Integración con WSL",
-  "settings.desktop.wsl.description": "Ejecutar el servidor OpenCode dentro de WSL en Windows.",
+  "settings.desktop.wsl.description": "Ejecutar el servidor CyberStrike dentro de WSL en Windows.",
 
   "settings.general.section.appearance": "Apariencia",
   "settings.general.section.notifications": "Notificaciones del sistema",
@@ -597,11 +597,11 @@ export const dict = {
   "settings.general.section.display": "Pantalla",
 
   "settings.general.row.language.title": "Idioma",
-  "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",
+  "settings.general.row.language.description": "Cambiar el idioma de visualización para CyberStrike",
   "settings.general.row.appearance.title": "Apariencia",
-  "settings.general.row.appearance.description": "Personaliza cómo se ve OpenCode en tu dispositivo",
+  "settings.general.row.appearance.description": "Personaliza cómo se ve CyberStrike en tu dispositivo",
   "settings.general.row.theme.title": "Tema",
-  "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
+  "settings.general.row.theme.description": "Personaliza el tema de CyberStrike.",
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
 
@@ -615,13 +615,13 @@ export const dict = {
     'Mostrar ventanas emergentes de "Novedades" después de las actualizaciones',
 
   "settings.updates.row.startup.title": "Buscar actualizaciones al iniciar",
-  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia OpenCode",
+  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia CyberStrike",
   "settings.updates.row.check.title": "Buscar actualizaciones",
   "settings.updates.row.check.description": "Buscar actualizaciones manualmente e instalarlas si hay alguna",
   "settings.updates.action.checkNow": "Buscar ahora",
   "settings.updates.action.checking": "Buscando...",
   "settings.updates.toast.latest.title": "Estás al día",
-  "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
+  "settings.updates.toast.latest.description": "Estás usando la última versión de CyberStrike.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

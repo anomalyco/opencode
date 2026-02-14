@@ -16,9 +16,9 @@ Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo
 ## Kreiranje datoteka naredbi
 
 Kreirajte markdown fajlove u direktorijumu `commands/` da definišete prilagođene komande.
-Kreiraj `.opencode/commands/test.md`:
+Kreiraj `.cyberstrike/commands/test.md`:
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -40,17 +40,17 @@ Koristite komandu tako što ćete upisati `/` nakon čega slijedi naziv komande.
 
 ## Konfiguracija
 
-Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
+Možete dodati prilagođene komande kroz CyberStrike konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
 
 ---
 
 ### JSON
 
-Koristite opciju `command` u svom OpenCode [config](/docs/config):
+Koristite opciju `command` u svom CyberStrike [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -77,10 +77,10 @@ Sada možete pokrenuti ovu naredbu u TUI:
 
 Također možete definirati komande koristeći markdown datoteke. Stavite ih u:
 
-- Globalno: `~/.config/opencode/commands/`
-- Po projektu: `.opencode/commands/`
+- Globalno: `~/.config/cyberstrike/commands/`
+- Po projektu: `.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -109,7 +109,7 @@ Promptovi za prilagođene komande podržavaju nekoliko posebnih čuvara mjesta i
 
 Proslijedite argumente naredbama koristeći čuvar mjesta `$ARGUMENTS`.
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -134,7 +134,7 @@ Također možete pristupiti pojedinačnim argumentima koristeći pozicione param
 
 Na primjer:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -162,7 +162,7 @@ Ovo zamjenjuje:
 Koristite _!`command`_ da ubacite izlaz [bash command](/docs/tui#bash-commands) u svoj prompt.
 Na primjer, da kreirate prilagođenu naredbu koja analizira pokrivenost testom:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -175,7 +175,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Ili da vidite nedavne promjene:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -194,7 +194,7 @@ Naredbe se pokreću u korijenskom direktoriju vašeg projekta i njihov izlaz pos
 
 Uključite datoteke u svoju naredbu koristeći `@` nakon čega slijedi naziv datoteke.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -217,7 +217,7 @@ Pogledajmo detaljno opcije konfiguracije.
 
 Opcija `template` definira prompt koji će biti poslan LLM-u kada se naredba izvrši.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -235,7 +235,7 @@ Ovo je **obavezna** opcija konfiguracije.
 
 Koristite opciju `description` da pružite kratak opis onoga što naredba radi.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -255,7 +255,7 @@ Koristite `agent` konfiguraciju da opciono odredite koji [agent](/docs/agents) t
 Ako je ovo [subagent](/docs/agents/#subagents) naredba će po defaultu pokrenuti pozivanje subagenta.
 Da onemogućite ovo ponašanje, postavite `subtask` na `false`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -275,7 +275,7 @@ Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](/docs/age
 Ovo je korisno ako želite da naredba ne zagađuje vaš primarni kontekst i da će **primorati** agenta da djeluje kao subagent,
 čak i ako je `mode` postavljeno na `primary` u konfiguraciji [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -293,7 +293,7 @@ Ovo je **opciona** opcija konfiguracije.
 
 Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -309,7 +309,7 @@ Ovo je **opciona** opcija konfiguracije.
 
 ## Ugrađene naredbe
 
-OpenCode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
+CyberStrike uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
 :::note
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::

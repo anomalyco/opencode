@@ -1,15 +1,15 @@
 ---
 title: Formattere
-description: OpenCode bruker språkspesifikke formattere.
+description: CyberStrike bruker språkspesifikke formattere.
 ---
 
-OpenCode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formattere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
+CyberStrike formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formattere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
 
 ---
 
 ## Innebygde formattere
 
-OpenCode kommer med flere innebygde formattere for populære språk og rammeverk. Nedenfor er en liste over formattere, støttede filendelser og kommandoer eller konfigurasjonsalternativer den krever.
+CyberStrike kommer med flere innebygde formattere for populære språk og rammeverk. Nedenfor er en liste over formattere, støttede filendelser og kommandoer eller konfigurasjonsalternativer den krever.
 
 | Formatter              | Filendelser                                                                                             | Krav                                                                                                    |
 | ---------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ OpenCode kommer med flere innebygde formattere for populære språk og rammeverk
 | oxfmt (Eksperimentell) | .js, .jsx, .ts, .tsx                                                                                    | `oxfmt` avhengighet i `package.json` og et [eksperimentelt env variabel flagg](/docs/cli/#experimental) |
 | ormolu                 | .hs                                                                                                     | `ormolu` kommando tilgjengelig                                                                          |
 
-Så hvis prosjektet ditt har `prettier` i `package.json`, vil OpenCode automatisk bruke det.
+Så hvis prosjektet ditt har `prettier` i `package.json`, vil CyberStrike automatisk bruke det.
 
 ---
 
 ## Slik fungerer det
 
-Når OpenCode skriver eller redigerer en fil, gjør den:
+Når CyberStrike skriver eller redigerer en fil, gjør den:
 
 1. Kontrollerer filtypen mot alle aktiverte formattere.
 2. Kjører riktig formateringskommando på filen.
@@ -56,11 +56,11 @@ Denne prosessen skjer i bakgrunnen, og sikrer at kodestilene dine opprettholdes 
 
 ## Konfigurasjon
 
-Du kan tilpasse formattere gjennom `formatter`-delen i OpenCode-konfigurasjonen.
+Du kan tilpasse formattere gjennom `formatter`-delen i CyberStrike-konfigurasjonen.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ La oss se på noen eksempler.
 
 For å deaktivere **alle** formattere globalt, sett `formatter` til `false`:
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": false
 }
 ```
 
 For å deaktivere en **spesifikk** formatter, sett `disabled` til `true`:
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ For å deaktivere en **spesifikk** formatter, sett `disabled` til `true`:
 
 Du kan overstyre de innebygde formatterne eller legge til nye ved å spesifisere kommandoen, miljøvariablene og filtypene:
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

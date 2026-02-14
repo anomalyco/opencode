@@ -3,7 +3,7 @@ title: Servidores MCP
 description: Adicione ferramentas MCP locais e remotas.
 ---
 
-Você pode adicionar ferramentas externas ao opencode usando o _Model Context Protocol_, ou MCP. O opencode suporta servidores locais e remotos.
+Você pode adicionar ferramentas externas ao cyberstrike usando o _Model Context Protocol_, ou MCP. O cyberstrike suporta servidores locais e remotos.
 
 Uma vez adicionadas, as ferramentas MCP estão automaticamente disponíveis para o LLM juntamente com as ferramentas integradas.
 
@@ -23,11 +23,11 @@ Certos servidores MCP, como o servidor MCP do GitHub, tendem a adicionar muitos 
 
 ## Habilitando
 
-Você pode definir servidores MCP em sua [Configuração do opencode](https://opencode.ai/docs/config/) sob `mcp`. Adicione cada MCP com um nome único. Você pode se referir a esse MCP pelo nome ao solicitar ao LLM.
+Você pode definir servidores MCP em sua [Configuração do cyberstrike](https://cyberstrike.io/docs/config/) sob `mcp`. Adicione cada MCP com um nome único. Você pode se referir a esse MCP pelo nome ao solicitar ao LLM.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="cyberstrike.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ Você também pode desabilitar um servidor definindo `enabled` como `false`. Iss
 
 ### Substituindo padrões remotos
 
-As organizações podem fornecer servidores MCP padrão através de seu endpoint `.well-known/opencode`. Esses servidores podem estar desabilitados por padrão, permitindo que os usuários optem pelos que precisam.
+As organizações podem fornecer servidores MCP padrão através de seu endpoint `.well-known/cyberstrike`. Esses servidores podem estar desabilitados por padrão, permitindo que os usuários optem pelos que precisam.
 
 Para habilitar um servidor específico da configuração remota da sua organização, adicione-o à sua configuração local com `enabled: true`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ Os valores da sua configuração local substituem os padrões remotos. Veja [pre
 
 Adicione servidores MCP locais usando `type` como `"local"` dentro do objeto MCP.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="cyberstrike.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ O comando é como o servidor MCP local é iniciado. Você também pode passar um
 
 Por exemplo, aqui está como você pode adicionar o servidor MCP de teste [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="cyberstrike.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ Aqui estão todas as opções para configurar um servidor MCP local.
 
 Adicione servidores MCP remotos definindo `type` como `"remote"`.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ O `url` é a URL do servidor MCP remoto e com a opção `headers` você pode pas
 
 ## OAuth
 
-O opencode lida automaticamente com a autenticação OAuth para servidores MCP remotos. Quando um servidor requer autenticação, o opencode irá:
+O cyberstrike lida automaticamente com a autenticação OAuth para servidores MCP remotos. Quando um servidor requer autenticação, o cyberstrike irá:
 
 1. Detectar a resposta 401 e iniciar o fluxo OAuth
 2. Usar **Registro Dinâmico de Cliente (RFC 7591)** se suportado pelo servidor
@@ -177,9 +177,9 @@ O opencode lida automaticamente com a autenticação OAuth para servidores MCP r
 
 Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração especial é necessária. Basta configurar o servidor remoto:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração
 }
 ```
 
-Se o servidor requer autenticação, o opencode solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `opencode mcp auth <server-name>`.
+Se o servidor requer autenticação, o cyberstrike solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `cyberstrike mcp auth <server-name>`.
 
 ---
 
@@ -197,9 +197,9 @@ Se o servidor requer autenticação, o opencode solicitará que você se autenti
 
 Se você tiver credenciais de cliente do provedor do servidor MCP, pode configurá-las:
 
-```json title="opencode.json" {7-11}
+```json title="cyberstrike.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,22 +223,22 @@ Você pode iniciar manualmente a autenticação ou gerenciar credenciais.
 Autentique-se com um servidor MCP específico:
 
 ```bash
-opencode mcp auth my-oauth-server
+cyberstrike mcp auth my-oauth-server
 ```
 
 Liste todos os servidores MCP e seu status de autenticação:
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Remova credenciais armazenadas:
 
 ```bash
-opencode mcp logout my-oauth-server
+cyberstrike mcp logout my-oauth-server
 ```
 
-O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o opencode armazenará os tokens de forma segura em `~/.local/share/opencode/mcp-auth.json`.
+O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o cyberstrike armazenará os tokens de forma segura em `~/.local/share/cyberstrike/mcp-auth.json`.
 
 ---
 
@@ -246,9 +246,9 @@ O comando `mcp auth` abrirá seu navegador para autorização. Após você autor
 
 Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, para servidores que usam chaves de API em vez disso), defina `oauth` como `false`:
 
-```json title="opencode.json" {7}
+```json title="cyberstrike.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ Se um servidor MCP remoto estiver falhando na autenticação, você pode diagnos
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+cyberstrike mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+cyberstrike mcp debug my-oauth-server
 ```
 
 O comando `mcp debug` mostra o status de autenticação atual, testa a conectividade HTTP e tenta o fluxo de descoberta OAuth.
@@ -291,7 +291,7 @@ O comando `mcp debug` mostra o status de autenticação atual, testa a conectivi
 
 ## Gerenciamento
 
-Seus MCPs estão disponíveis como ferramentas no opencode, juntamente com ferramentas integradas. Portanto, você pode gerenciá-los através da configuração do opencode como qualquer outra ferramenta.
+Seus MCPs estão disponíveis como ferramentas no cyberstrike, juntamente com ferramentas integradas. Portanto, você pode gerenciá-los através da configuração do cyberstrike como qualquer outra ferramenta.
 
 ---
 
@@ -299,9 +299,9 @@ Seus MCPs estão disponíveis como ferramentas no opencode, juntamente com ferra
 
 Isso significa que você pode habilitá-los ou desabilitá-los globalmente.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ Isso significa que você pode habilitá-los ou desabilitá-los globalmente.
 
 Também podemos usar um padrão glob para desabilitar todos os MCPs correspondentes.
 
-```json title="opencode.json" {14}
+```json title="cyberstrike.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ Se você tiver um grande número de servidores MCP, pode querer habilitá-los ap
 1. Desabilite-o como uma ferramenta globalmente.
 2. Em sua [configuração de agente](/docs/agents#tools), habilite o servidor MCP como uma ferramenta.
 
-```json title="opencode.json" {11, 14-18}
+```json title="cyberstrike.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ Abaixo estão exemplos de alguns servidores MCP comuns. Você pode enviar um PR 
 
 Adicione o [servidor MCP Sentry](https://mcp.sentry.dev) para interagir com seus projetos e problemas do Sentry.
 
-```json title="opencode.json" {4-8}
+```json title="cyberstrike.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ Adicione o [servidor MCP Sentry](https://mcp.sentry.dev) para interagir com seus
 Após adicionar a configuração, autentique-se com o Sentry:
 
 ```bash
-opencode mcp auth sentry
+cyberstrike mcp auth sentry
 ```
 
-Isso abrirá uma janela do navegador para completar o fluxo OAuth e conectar o opencode à sua conta do Sentry.
+Isso abrirá uma janela do navegador para completar o fluxo OAuth e conectar o cyberstrike à sua conta do Sentry.
 
 Uma vez autenticado, você pode usar ferramentas do Sentry em seus prompts para consultar problemas, projetos e dados de erro.
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 Adicione o [servidor MCP Context7](https://github.com/upstash/context7) para pesquisar através de documentos.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Adicione o [servidor MCP Context7](https://github.com/upstash/context7) para pes
 
 Se você se inscreveu para uma conta gratuita, pode usar sua chave de API e obter limites de taxa mais altos.
 
-```json title="opencode.json" {7-9}
+```json title="cyberstrike.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 Adicione o [Grep by Vercel](https://grep.app) servidor MCP para pesquisar através de trechos de código no GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

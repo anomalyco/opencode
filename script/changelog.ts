@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk/v2"
+import { createCyberstrike } from "@cyberstrike-io/sdk/v2"
 import { parseArgs } from "util"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@cyberstrike-io/script"
 
 type Release = {
   tag_name: string
@@ -12,7 +12,7 @@ type Release = {
 }
 
 export async function getLatestRelease(skip?: string) {
-  const data = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=100").then((res) => {
+  const data = await fetch("https://api.github.com/repos/CyberStrikeus/cyberstrike/releases?per_page=100").then((res) => {
     if (!res.ok) throw new Error(res.statusText)
     return res.json()
   })
@@ -43,7 +43,7 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
 
   // Get commit data with GitHub usernames from the API
   const compare =
-    await $`gh api "/repos/anomalyco/opencode/compare/${fromRef}...${toRef}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
+    await $`gh api "/repos/CyberStrikeus/cyberstrike/compare/${fromRef}...${toRef}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
 
   const commitData = new Map<string, { login: string | null; message: string }>()
   for (const line of compare.split("\n").filter(Boolean)) {
@@ -53,7 +53,7 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
 
   // Get commits that touch the relevant packages
   const log =
-    await $`git log ${fromRef}..${toRef} --oneline --format="%H" -- packages/opencode packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
+    await $`git log ${fromRef}..${toRef} --oneline --format="%H" -- packages/cyberstrike packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
   const hashes = log.split("\n").filter(Boolean)
 
   const commits: Commit[] = []
@@ -68,8 +68,8 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
     const areas = new Set<string>()
 
     for (const file of files.split("\n").filter(Boolean)) {
-      if (file.startsWith("packages/opencode/src/cli/cmd/")) areas.add("tui")
-      else if (file.startsWith("packages/opencode/")) areas.add("core")
+      if (file.startsWith("packages/cyberstrike/src/cli/cmd/")) areas.add("tui")
+      else if (file.startsWith("packages/cyberstrike/")) areas.add("core")
       else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
       else if (file.startsWith("packages/desktop/")) areas.add("app")
       else if (file.startsWith("packages/app/")) areas.add("app")
@@ -136,14 +136,14 @@ function getSection(areas: Set<string>): string {
   return "Core"
 }
 
-async function summarizeCommit(opencode: Awaited<ReturnType<typeof createOpencode>>, message: string): Promise<string> {
+async function summarizeCommit(cyberstrike: Awaited<ReturnType<typeof createCyberstrike>>, message: string): Promise<string> {
   console.log("summarizing commit:", message)
-  const session = await opencode.client.session.create()
-  const result = await opencode.client.session
+  const session = await cyberstrike.client.session.create()
+  const result = await cyberstrike.client.session
     .prompt(
       {
         sessionID: session.data!.id,
-        model: { providerID: "opencode", modelID: "claude-sonnet-4-5" },
+        model: { providerID: "cyberstrike", modelID: "claude-sonnet-4-5" },
         tools: {
           "*": false,
         },
@@ -164,13 +164,13 @@ Commit: ${message}`,
   return result.trim()
 }
 
-export async function generateChangelog(commits: Commit[], opencode: Awaited<ReturnType<typeof createOpencode>>) {
+export async function generateChangelog(commits: Commit[], cyberstrike: Awaited<ReturnType<typeof createCyberstrike>>) {
   // Summarize commits in parallel with max 10 concurrent requests
   const BATCH_SIZE = 10
   const summaries: string[] = []
   for (let i = 0; i < commits.length; i += BATCH_SIZE) {
     const batch = commits.slice(i, i + BATCH_SIZE)
-    const results = await Promise.all(batch.map((c) => summarizeCommit(opencode, c.message)))
+    const results = await Promise.all(batch.map((c) => summarizeCommit(cyberstrike, c.message)))
     summaries.push(...results)
   }
 
@@ -201,7 +201,7 @@ export async function getContributors(from: string, to: string) {
   const fromRef = from.startsWith("v") ? from : `v${from}`
   const toRef = to === "HEAD" ? to : to.startsWith("v") ? to : `v${to}`
   const compare =
-    await $`gh api "/repos/anomalyco/opencode/compare/${fromRef}...${toRef}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+    await $`gh api "/repos/CyberStrikeus/cyberstrike/compare/${fromRef}...${toRef}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
   const contributors = new Map<string, Set<string>>()
 
   for (const line of compare.split("\n").filter(Boolean)) {
@@ -227,11 +227,11 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const opencode = await createOpencode({ port: 0 })
+  const cyberstrike = await createCyberstrike({ port: 0 })
   const notes: string[] = []
 
   try {
-    const lines = await generateChangelog(commits, opencode)
+    const lines = await generateChangelog(commits, cyberstrike)
     notes.push(...lines)
     console.log("---- Generated Changelog ----")
     console.log(notes.join("\n"))
@@ -247,7 +247,7 @@ export async function buildNotes(from: string, to: string) {
       throw error
     }
   } finally {
-    await opencode.server.close()
+    await cyberstrike.server.close()
   }
   console.log("changelog generation complete")
 

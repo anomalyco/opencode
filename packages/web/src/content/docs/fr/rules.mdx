@@ -1,21 +1,21 @@
 ---
 title: Règles
-description: Définissez des instructions personnalisées pour opencode.
+description: Définissez des instructions personnalisées pour cyberstrike.
 ---
 
-Vous pouvez fournir des instructions personnalisées à opencode en créant un fichier `AGENTS.md`. Ceci est similaire aux règles du curseur. Il contient des instructions qui seront incluses dans le contexte du LLM pour personnaliser son comportement pour votre projet spécifique.
+Vous pouvez fournir des instructions personnalisées à cyberstrike en créant un fichier `AGENTS.md`. Ceci est similaire aux règles du curseur. Il contient des instructions qui seront incluses dans le contexte du LLM pour personnaliser son comportement pour votre projet spécifique.
 
 ---
 
 ## Initialiser
 
-Pour créer un nouveau fichier `AGENTS.md`, vous pouvez exécuter la commande `/init` dans opencode.
+Pour créer un nouveau fichier `AGENTS.md`, vous pouvez exécuter la commande `/init` dans cyberstrike.
 
 :::tip
 Vous devez valider le fichier `AGENTS.md` de votre projet dans Git.
 :::
 
-Cela analysera votre projet et tout son contenu pour comprendre de quoi il s'agit et générera un fichier `AGENTS.md` avec celui-ci. Cela aide opencode à mieux naviguer dans le projet.
+Cela analysera votre projet et tout son contenu pour comprendre de quoi il s'agit et générera un fichier `AGENTS.md` avec celui-ci. Cela aide cyberstrike à mieux naviguer dans le projet.
 
 Si vous avez un fichier `AGENTS.md` existant, cela tentera de l'ajouter.
 
@@ -54,7 +54,7 @@ Nous ajoutons ici des instructions spécifiques au projet et celles-ci seront pa
 
 ## Types
 
-opencode prend également en charge la lecture du fichier `AGENTS.md` à partir de plusieurs emplacements. Et cela répond à des objectifs différents.
+cyberstrike prend également en charge la lecture du fichier `AGENTS.md` à partir de plusieurs emplacements. Et cela répond à des objectifs différents.
 
 ### Projet
 
@@ -62,58 +62,58 @@ Placez un `AGENTS.md` à la racine de votre projet pour les règles spécifiques
 
 ### Mondial
 
-Vous pouvez également avoir des règles globales dans un fichier `~/.config/opencode/AGENTS.md`. Ceci est appliqué à toutes les sessions opencode.
+Vous pouvez également avoir des règles globales dans un fichier `~/.config/cyberstrike/AGENTS.md`. Ceci est appliqué à toutes les sessions cyberstrike.
 
 Étant donné que cela n'est pas validé par Git ni partagé avec votre équipe, nous vous recommandons de l'utiliser pour spécifier les règles personnelles que le LLM doit suivre.
 
 ### Compatibilité des codes Claude
 
-Pour les utilisateurs migrant depuis Claude Code, OpenCode prend en charge les conventions de fichiers de Claude Code comme solutions de secours :
+Pour les utilisateurs migrant depuis Claude Code, CyberStrike prend en charge les conventions de fichiers de Claude Code comme solutions de secours :
 
 - **Règles du projet** : `CLAUDE.md` dans le répertoire de votre projet (utilisé si aucun `AGENTS.md` n'existe)
-- **Règles globales** : `~/.claude/CLAUDE.md` (utilisé si aucun `~/.config/opencode/AGENTS.md` n'existe)
+- **Règles globales** : `~/.claude/CLAUDE.md` (utilisé si aucun `~/.config/cyberstrike/AGENTS.md` n'existe)
 - **Compétences** : `~/.claude/skills/` — voir [Compétences de l'agent](/docs/skills/) pour plus de détails
 
 Pour désactiver la compatibilité Claude Code, définissez l'une de ces variables d'environnement :
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
 
 ## Priorité
 
-Lorsque opencode démarre, il recherche les fichiers de règles dans cet ordre :
+Lorsque cyberstrike démarre, il recherche les fichiers de règles dans cet ordre :
 
 1. **Fichiers locaux** en parcourant le répertoire actuel (`AGENTS.md`, `CLAUDE.md`)
-2. **Fichier global** à `~/.config/opencode/AGENTS.md`
+2. **Fichier global** à `~/.config/cyberstrike/AGENTS.md`
 3. **Fichier Claude Code** à `~/.claude/CLAUDE.md` (sauf si désactivé)
 
-Le premier fichier correspondant gagne dans chaque catégorie. Par exemple, si vous possédez à la fois `AGENTS.md` et `CLAUDE.md`, seul `AGENTS.md` est utilisé. De même, `~/.config/opencode/AGENTS.md` a priorité sur `~/.claude/CLAUDE.md`.
+Le premier fichier correspondant gagne dans chaque catégorie. Par exemple, si vous possédez à la fois `AGENTS.md` et `CLAUDE.md`, seul `AGENTS.md` est utilisé. De même, `~/.config/cyberstrike/AGENTS.md` a priorité sur `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Instructions personnalisées
 
-Vous pouvez spécifier des fichiers d'instructions personnalisés dans votre `opencode.json` ou dans le `~/.config/opencode/opencode.json` global. Cela vous permet, à vous et à votre équipe, de réutiliser les règles existantes plutôt que d'avoir à les dupliquer dans AGENTS.md.
+Vous pouvez spécifier des fichiers d'instructions personnalisés dans votre `cyberstrike.json` ou dans le `~/.config/cyberstrike/cyberstrike.json` global. Cela vous permet, à vous et à votre équipe, de réutiliser les règles existantes plutôt que d'avoir à les dupliquer dans AGENTS.md.
 
 Exemple:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 
 Vous pouvez également utiliser des URL distantes pour charger des instructions à partir du Web.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -126,22 +126,22 @@ Tous les fichiers d'instructions sont combinés avec vos fichiers `AGENTS.md`.
 
 ## Référencement de fichiers externes
 
-Bien que opencode n'analyse pas automatiquement les références de fichiers dans `AGENTS.md`, vous pouvez obtenir des fonctionnalités similaires de deux manières :
+Bien que cyberstrike n'analyse pas automatiquement les références de fichiers dans `AGENTS.md`, vous pouvez obtenir des fonctionnalités similaires de deux manières :
 
-### Utilisation de opencode.json
+### Utilisation de cyberstrike.json
 
-L'approche recommandée consiste à utiliser le champ `instructions` dans `opencode.json` :
+L'approche recommandée consiste à utiliser le champ `instructions` dans `cyberstrike.json` :
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```
 
 ### Instructions manuelles dans AGENTS.md
 
-Vous pouvez apprendre à opencode à lire des fichiers externes en fournissant des instructions explicites dans votre `AGENTS.md`. Voici un exemple pratique :
+Vous pouvez apprendre à cyberstrike à lire des fichiers externes en fournissant des instructions explicites dans votre `AGENTS.md`. Voici un exemple pratique :
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,8 +173,8 @@ Cette approche vous permet de :
 - Créez des fichiers de règles modulaires et réutilisables
 - Partagez des règles entre projets via des liens symboliques ou des sous-modules git
 - Gardez AGENTS.md concis tout en faisant référence à des directives détaillées
-- Assurez-vous que opencode charge les fichiers uniquement lorsque cela est nécessaire pour une tâche spécifique.
+- Assurez-vous que cyberstrike charge les fichiers uniquement lorsque cela est nécessaire pour une tâche spécifique.
 
 :::tip
-Pour les monorepos ou les projets avec des normes partagées, l'utilisation de `opencode.json` avec des modèles globaux (comme `packages/*/AGENTS.md`) est plus maintenable que les instructions manuelles.
+Pour les monorepos ou les projets avec des normes partagées, l'utilisation de `cyberstrike.json` avec des modèles globaux (comme `packages/*/AGENTS.md`) est plus maintenable que les instructions manuelles.
 :::

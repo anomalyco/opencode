@@ -1,15 +1,15 @@
 ---
 title: Formattatori
-description: OpenCode usa formattatori specifici per linguaggio.
+description: CyberStrike usa formattatori specifici per linguaggio.
 ---
 
-OpenCode formatta automaticamente i file dopo che vengono scritti o modificati usando formattatori specifici per linguaggio. Questo assicura che il codice generato segua lo stile del tuo progetto.
+CyberStrike formatta automaticamente i file dopo che vengono scritti o modificati usando formattatori specifici per linguaggio. Questo assicura che il codice generato segua lo stile del tuo progetto.
 
 ---
 
 ## Integrati
 
-OpenCode include diversi formattatori integrati per linguaggi e framework popolari. Qui sotto trovi la lista dei formattatori, delle estensioni supportate e dei comandi o opzioni di config richiesti.
+CyberStrike include diversi formattatori integrati per linguaggi e framework popolari. Qui sotto trovi la lista dei formattatori, delle estensioni supportate e dei comandi o opzioni di config richiesti.
 
 | Formattatore         | Estensioni                                                                                               | Requisiti                                                                                             |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ OpenCode include diversi formattatori integrati per linguaggi e framework popola
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
 
-Quindi, se il progetto ha `prettier` in `package.json`, OpenCode lo usera automaticamente.
+Quindi, se il progetto ha `prettier` in `package.json`, CyberStrike lo usera automaticamente.
 
 ---
 
 ## Come funziona
 
-Quando OpenCode scrive o modifica un file:
+Quando CyberStrike scrive o modifica un file:
 
 1. Controlla l'estensione del file rispetto a tutti i formattatori abilitati.
 2. Esegue il comando del formattatore appropriato sul file.
@@ -56,11 +56,11 @@ Questo processo avviene in background, mantenendo lo stile del codice senza pass
 
 ## Configurazione
 
-Puoi personalizzare i formattatori nella sezione `formatter` della config di OpenCode.
+Puoi personalizzare i formattatori nella sezione `formatter` della config di CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ Vediamo alcuni esempi.
 
 Per disabilitare **tutti** i formattatori globalmente, imposta `formatter` a `false`:
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": false
 }
 ```
 
 Per disabilitare un formattatore **specifico**, imposta `disabled` a `true`:
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ Per disabilitare un formattatore **specifico**, imposta `disabled` a `true`:
 
 Puoi sovrascrivere i formattatori integrati o aggiungerne di nuovi specificando comando, variabili d'ambiente ed estensioni file:
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

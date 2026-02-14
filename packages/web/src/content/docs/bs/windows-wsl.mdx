@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: Pokrenite OpenCode na Windowsu preko WSL-a.
+description: Pokrenite CyberStrike na Windowsu preko WSL-a.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-Iako OpenCode moze raditi direktno na Windowsu, preporucujemo [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) za najbolje iskustvo. WSL daje Linux okruzenje koje glatko radi sa OpenCode funkcijama.
+Iako CyberStrike moze raditi direktno na Windowsu, preporucujemo [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) za najbolje iskustvo. WSL daje Linux okruzenje koje glatko radi sa CyberStrike funkcijama.
 
 :::tip[Zašto WSL?]
-WSL nudi bolje performanse fajl sistema, punu terminalsku podrsku i kompatibilnost s razvojnim alatima na koje se OpenCode oslanja.
+WSL nudi bolje performanse fajl sistema, punu terminalsku podrsku i kompatibilnost s razvojnim alatima na koje se CyberStrike oslanja.
 :::
 
 ---
@@ -21,21 +21,21 @@ WSL nudi bolje performanse fajl sistema, punu terminalsku podrsku i kompatibilno
 
    Ako vec niste, [instalirajte WSL](https://learn.microsoft.com/en-us/windows/wsl/install) prema zvanicnom Microsoft vodicu.
 
-2. **Instalirajte OpenCode u WSL-u**
+2. **Instalirajte CyberStrike u WSL-u**
 
-   Kad je WSL spreman, otvorite WSL terminal i instalirajte OpenCode jednom od [metoda instalacije](/docs/).
+   Kad je WSL spreman, otvorite WSL terminal i instalirajte CyberStrike jednom od [metoda instalacije](/docs/).
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://cyberstrike.io/install | bash
    ```
 
-3. **Koristite OpenCode iz WSL-a**
+3. **Koristite CyberStrike iz WSL-a**
 
-   Idite u direktorij projekta (Windows fajlovima pristupate preko `/mnt/c/`, `/mnt/d/` itd.) i pokrenite OpenCode.
+   Idite u direktorij projekta (Windows fajlovima pristupate preko `/mnt/c/`, `/mnt/d/` itd.) i pokrenite CyberStrike.
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   cyberstrike
    ```
 
 </Steps>
@@ -44,12 +44,12 @@ WSL nudi bolje performanse fajl sistema, punu terminalsku podrsku i kompatibilno
 
 ## Desktop aplikacija + WSL Server
 
-Ako preferirate OpenCode Desktop aplikaciju, ali zelite da server radi u WSL-u:
+Ako preferirate CyberStrike Desktop aplikaciju, ali zelite da server radi u WSL-u:
 
 1. **Pokrenite server u WSL-u** sa `--hostname 0.0.0.0` da dozvolite vanjske konekcije:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   cyberstrike serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Povezite Desktop aplikaciju** na `http://localhost:4096`
@@ -59,10 +59,10 @@ Ako `localhost` ne radi u vasem setupu, povezte se preko WSL IP adrese (u WSL-u:
 :::
 
 :::caution
-Kada koristite `--hostname 0.0.0.0`, postavite `OPENCODE_SERVER_PASSWORD` da zastitite server.
+Kada koristite `--hostname 0.0.0.0`, postavite `CYBERSTRIKE_SERVER_PASSWORD` da zastitite server.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Za najbolje web iskustvo na Windowsu:
 
-1. **Pokrenite `opencode web` u WSL terminalu** umjesto u PowerShell-u:
+1. **Pokrenite `cyberstrike web` u WSL terminalu** umjesto u PowerShell-u:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   cyberstrike web --hostname 0.0.0.0
    ```
 
-2. **Otvorite iz Windows browsera** na `http://localhost:<port>` (OpenCode ispisuje URL)
+2. **Otvorite iz Windows browsera** na `http://localhost:<port>` (CyberStrike ispisuje URL)
 
-Pokretanje `opencode web` iz WSL-a osigurava ispravan pristup fajl sistemu i terminalsku integraciju, a i dalje je dostupno iz Windows browsera.
+Pokretanje `cyberstrike web` iz WSL-a osigurava ispravan pristup fajl sistemu i terminalsku integraciju, a i dalje je dostupno iz Windows browsera.
 
 ---
 
@@ -97,17 +97,17 @@ Primjer:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+cyberstrike
 ```
 
 :::tip
-Za najgladje iskustvo, razmislite da klonirate/kopirate repo u WSL fajl sistem (npr. pod `~/code/`) i tu pokrenete OpenCode.
+Za najgladje iskustvo, razmislite da klonirate/kopirate repo u WSL fajl sistem (npr. pod `~/code/`) i tu pokrenete CyberStrike.
 :::
 
 ---
 
 ## Savjeti
 
-- Drzite OpenCode u WSL-u za projekte na Windows diskovima - pristup fajlovima je jednostavan
-- Koristite VS Code [WSL ekstenziju](https://code.visualstudio.com/docs/remote/wsl) uz OpenCode za integrisan tok rada
-- Vase OpenCode konfiguracije i sesije cuvaju se u WSL okruzenju na `~/.local/share/opencode/`
+- Drzite CyberStrike u WSL-u za projekte na Windows diskovima - pristup fajlovima je jednostavan
+- Koristite VS Code [WSL ekstenziju](https://code.visualstudio.com/docs/remote/wsl) uz CyberStrike za integrisan tok rada
+- Vase CyberStrike konfiguracije i sesije cuvaju se u WSL okruzenju na `~/.local/share/cyberstrike/`

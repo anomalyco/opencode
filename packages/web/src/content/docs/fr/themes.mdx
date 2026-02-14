@@ -3,9 +3,9 @@ title: Thèmes
 description: Sélectionnez un thème intégré ou définissez le vôtre.
 ---
 
-Avec OpenCode, vous pouvez choisir parmi plusieurs thèmes intégrés, utiliser un thème qui s'adapte au thème de votre terminal ou définir votre propre thème personnalisé.
+Avec CyberStrike, vous pouvez choisir parmi plusieurs thèmes intégrés, utiliser un thème qui s'adapte au thème de votre terminal ou définir votre propre thème personnalisé.
 
-Par défaut, OpenCode utilise notre propre thème `opencode`.
+Par défaut, CyberStrike utilise notre propre thème `cyberstrike`.
 
 ---
 
@@ -23,7 +23,7 @@ Sans la prise en charge de TrueColor, les thèmes peuvent apparaître avec une p
 
 ## Thèmes intégrés
 
-OpenCode est livré avec plusieurs thèmes intégrés.
+CyberStrike est livré avec plusieurs thèmes intégrés.
 
 | Nom                    | Descriptif                                                                  |
 | ---------------------- | --------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ Le thème `system` est conçu pour s'adapter automatiquement à la palette de co
 
 Le thème système est destiné aux utilisateurs qui :
 
-- Vous souhaitez que OpenCode corresponde à l'apparence de leur terminal
+- Vous souhaitez que CyberStrike corresponde à l'apparence de leur terminal
 - Utiliser des schémas de couleurs de terminal personnalisés
 - Préférez une apparence cohérente sur toutes les applications de terminal
 
@@ -63,9 +63,9 @@ Le thème système est destiné aux utilisateurs qui :
 
 Vous pouvez sélectionner un thème en affichant la sélection de thème avec la commande `/theme`. Ou vous pouvez le spécifier dans votre [config](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ Vous pouvez sélectionner un thème en affichant la sélection de thème avec la
 
 ## Thèmes personnalisés
 
-OpenCode prend en charge un système de thèmes flexible basé sur JSON qui permet aux utilisateurs de créer et de personnaliser facilement des thèmes.
+CyberStrike prend en charge un système de thèmes flexible basé sur JSON qui permet aux utilisateurs de créer et de personnaliser facilement des thèmes.
 
 ---
 
@@ -83,9 +83,9 @@ OpenCode prend en charge un système de thèmes flexible basé sur JSON qui perm
 Les thèmes sont chargés à partir de plusieurs répertoires dans l'ordre suivant, les répertoires ultérieurs remplaçant les précédents :
 
 1. **Thèmes intégrés** - Ceux-ci sont intégrés au binaire
-2. **Répertoire de configuration utilisateur** - Défini dans `~/.config/opencode/themes/*.json` ou `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Répertoire racine du projet** - Défini dans `<project-root>/.opencode/themes/*.json`
-4. **Répertoire de travail actuel** - Défini dans `./.opencode/themes/*.json`
+2. **Répertoire de configuration utilisateur** - Défini dans `~/.config/cyberstrike/themes/*.json` ou `$XDG_CONFIG_HOME/cyberstrike/themes/*.json`
+3. **Répertoire racine du projet** - Défini dans `<project-root>/.cyberstrike/themes/*.json`
+4. **Répertoire de travail actuel** - Défini dans `./.cyberstrike/themes/*.json`
 
 Si plusieurs répertoires contiennent un thème portant le même nom, le thème du répertoire ayant la priorité la plus élevée sera utilisé.
 
@@ -98,15 +98,15 @@ Pour créer un thème personnalisé, créez un fichier JSON dans l'un des réper
 Pour les thèmes à l’échelle de l’utilisateur :
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 Et pour des thèmes spécifiques au projet.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ Voici un exemple de thème personnalisé :
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

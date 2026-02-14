@@ -1,15 +1,15 @@
 ---
 title: Formateadores
-description: OpenCode utiliza formateadores específicos del idioma.
+description: CyberStrike utiliza formateadores específicos del idioma.
 ---
 
-OpenCode formatea automáticamente los archivos después de escribirlos o editarlos utilizando formateadores específicos del idioma. Esto garantiza que el código generado siga los estilos de código de su proyecto.
+CyberStrike formatea automáticamente los archivos después de escribirlos o editarlos utilizando formateadores específicos del idioma. Esto garantiza que el código generado siga los estilos de código de su proyecto.
 
 ---
 
 ## Integrados
 
-OpenCode viene con varios formateadores integrados para lenguajes y marcos populares. A continuación se muestra una lista de los formateadores, las extensiones de archivo compatibles y los comandos u opciones de configuración que necesita.
+CyberStrike viene con varios formateadores integrados para lenguajes y marcos populares. A continuación se muestra una lista de los formateadores, las extensiones de archivo compatibles y los comandos u opciones de configuración que necesita.
 
 | Formateador          | Extensiones                                                                                          | Requisitos                                                                                                             |
 | -------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ OpenCode viene con varios formateadores integrados para lenguajes y marcos popul
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                 | Dependencia de `oxfmt` en `package.json` y un [indicador de variable de entorno experimental](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                  | Comando `ormolu` disponible                                                                                            |
 
-Entonces, si su proyecto tiene `prettier` en su `package.json`, OpenCode lo usará automáticamente.
+Entonces, si su proyecto tiene `prettier` en su `package.json`, CyberStrike lo usará automáticamente.
 
 ---
 
 ## Cómo funciona
 
-Cuando OpenCode escribe o edita un archivo:
+Cuando CyberStrike escribe o edita un archivo:
 
 1. Comprueba la extensión del archivo con todos los formateadores habilitados.
 2. Ejecuta el comando de formateo apropiado en el archivo.
@@ -56,11 +56,11 @@ Este proceso ocurre en segundo plano, lo que garantiza que los estilos de su có
 
 ## Configuración
 
-Puede personalizar los formateadores a través de la sección `formatter` en su configuración OpenCode.
+Puede personalizar los formateadores a través de la sección `formatter` en su configuración CyberStrike.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {}
 }
 ```
@@ -82,18 +82,18 @@ Veamos algunos ejemplos.
 
 Para deshabilitar **todos** los formateadores globalmente, configure `formatter` en `false`:
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": false
 }
 ```
 
 Para deshabilitar un formateador **específico**, establezca `disabled` en `true`:
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -108,9 +108,9 @@ Para deshabilitar un formateador **específico**, establezca `disabled` en `true
 
 Puede anular los formateadores integrados o agregar otros nuevos especificando el comando, las variables de entorno y las extensiones de archivo:
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

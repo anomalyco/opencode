@@ -1,7 +1,7 @@
-export const deepLinkEvent = "opencode:deep-link"
+export const deepLinkEvent = "cyberstrike:deep-link"
 
 export const parseDeepLink = (input: string) => {
-  if (!input.startsWith("opencode://")) return
+  if (!input.startsWith("cyberstrike://")) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   const url = (() => {
     try {
@@ -20,15 +20,15 @@ export const parseDeepLink = (input: string) => {
 export const collectOpenProjectDeepLinks = (urls: string[]) =>
   urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
 
-type OpenCodeWindow = Window & {
-  __OPENCODE__?: {
+type CyberStrikeWindow = Window & {
+  __CYBERSTRIKE__?: {
     deepLinks?: string[]
   }
 }
 
-export const drainPendingDeepLinks = (target: OpenCodeWindow) => {
-  const pending = target.__OPENCODE__?.deepLinks ?? []
+export const drainPendingDeepLinks = (target: CyberStrikeWindow) => {
+  const pending = target.__CYBERSTRIKE__?.deepLinks ?? []
   if (pending.length === 0) return []
-  if (target.__OPENCODE__) target.__OPENCODE__.deepLinks = []
+  if (target.__CYBERSTRIKE__) target.__CYBERSTRIKE__.deepLinks = []
   return pending
 }

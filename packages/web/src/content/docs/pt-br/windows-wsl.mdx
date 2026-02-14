@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: Execute o opencode no Windows com WSL para melhor experiência.
+description: Execute o cyberstrike no Windows com WSL para melhor experiência.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-Embora o opencode possa rodar direto no Windows, recomendamos usar [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) para a melhor experiência. O WSL oferece um ambiente Linux que funciona de forma integrada com os recursos do opencode.
+Embora o cyberstrike possa rodar direto no Windows, recomendamos usar [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) para a melhor experiência. O WSL oferece um ambiente Linux que funciona de forma integrada com os recursos do cyberstrike.
 
 :::tip[Por que WSL?]
-O WSL oferece melhor desempenho de sistema de arquivos, suporte completo a terminal e compatibilidade com as ferramentas de desenvolvimento das quais o opencode depende.
+O WSL oferece melhor desempenho de sistema de arquivos, suporte completo a terminal e compatibilidade com as ferramentas de desenvolvimento das quais o cyberstrike depende.
 :::
 
 ---
@@ -21,21 +21,21 @@ O WSL oferece melhor desempenho de sistema de arquivos, suporte completo a termi
 
    Se ainda não instalou, [instale o WSL](https://learn.microsoft.com/en-us/windows/wsl/install) usando o guia oficial da Microsoft.
 
-2. **Instale o opencode no WSL**
+2. **Instale o cyberstrike no WSL**
 
-   Depois de configurar o WSL, abra o terminal do WSL e instale o opencode usando um dos [métodos de instalação](/docs/).
+   Depois de configurar o WSL, abra o terminal do WSL e instale o cyberstrike usando um dos [métodos de instalação](/docs/).
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://cyberstrike.io/install | bash
    ```
 
-3. **Use o opencode pelo WSL**
+3. **Use o cyberstrike pelo WSL**
 
-   Vá para o diretório do seu projeto (acesse arquivos do Windows via `/mnt/c/`, `/mnt/d/` etc.) e execute o opencode.
+   Vá para o diretório do seu projeto (acesse arquivos do Windows via `/mnt/c/`, `/mnt/d/` etc.) e execute o cyberstrike.
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   cyberstrike
    ```
 
 </Steps>
@@ -44,12 +44,12 @@ O WSL oferece melhor desempenho de sistema de arquivos, suporte completo a termi
 
 ## App desktop + servidor WSL
 
-Se você prefere usar o app desktop do opencode, mas quer rodar o servidor no WSL:
+Se você prefere usar o app desktop do cyberstrike, mas quer rodar o servidor no WSL:
 
 1. **Inicie o servidor no WSL** com `--hostname 0.0.0.0` para permitir conexões externas:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   cyberstrike serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Conecte o app desktop** em `http://localhost:4096`
@@ -59,10 +59,10 @@ Se `localhost` não funcionar no seu ambiente, conecte usando o IP do WSL (no WS
 :::
 
 :::caution
-Ao usar `--hostname 0.0.0.0`, defina `OPENCODE_SERVER_PASSWORD` para proteger o servidor.
+Ao usar `--hostname 0.0.0.0`, defina `CYBERSTRIKE_SERVER_PASSWORD` para proteger o servidor.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+CYBERSTRIKE_SERVER_PASSWORD=your-password cyberstrike serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Para a melhor experiência web no Windows:
 
-1. **Execute `opencode web` no terminal WSL** em vez do PowerShell:
+1. **Execute `cyberstrike web` no terminal WSL** em vez do PowerShell:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   cyberstrike web --hostname 0.0.0.0
    ```
 
-2. **Acesse pelo navegador do Windows** em `http://localhost:<port>` (o opencode mostra a URL)
+2. **Acesse pelo navegador do Windows** em `http://localhost:<port>` (o cyberstrike mostra a URL)
 
-Executar `opencode web` a partir do WSL garante acesso correto ao sistema de arquivos e integração com o terminal, continuando acessível no navegador do Windows.
+Executar `cyberstrike web` a partir do WSL garante acesso correto ao sistema de arquivos e integração com o terminal, continuando acessível no navegador do Windows.
 
 ---
 
@@ -97,17 +97,17 @@ Exemplo:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+cyberstrike
 ```
 
 :::tip
-Para uma experiência mais fluida, considere clonar/copiar seu repositório para o sistema de arquivos do WSL (por exemplo em `~/code/`) e executar o opencode por lá.
+Para uma experiência mais fluida, considere clonar/copiar seu repositório para o sistema de arquivos do WSL (por exemplo em `~/code/`) e executar o cyberstrike por lá.
 :::
 
 ---
 
 ## Dicas
 
-- Mantenha o opencode rodando no WSL para projetos armazenados em unidades do Windows - o acesso aos arquivos fica fluido
-- Use a [extensão WSL do VS Code](https://code.visualstudio.com/docs/remote/wsl) junto com o opencode para um fluxo de desenvolvimento integrado
-- Sua configuração e suas sessões do opencode ficam armazenadas no ambiente WSL em `~/.local/share/opencode/`
+- Mantenha o cyberstrike rodando no WSL para projetos armazenados em unidades do Windows - o acesso aos arquivos fica fluido
+- Use a [extensão WSL do VS Code](https://code.visualstudio.com/docs/remote/wsl) junto com o cyberstrike para um fluxo de desenvolvimento integrado
+- Sua configuração e suas sessões do cyberstrike ficam armazenadas no ambiente WSL em `~/.local/share/cyberstrike/`

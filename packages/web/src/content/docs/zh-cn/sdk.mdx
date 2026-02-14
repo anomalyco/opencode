@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: opencode 服务器的类型不同于安全 JS 客户端。
+description: cyberstrike 服务器的类型不同于安全 JS 客户端。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK 提供类型其他安全的客户端用于与服务器交互。
-使用它以程序设计方式构建集成和控制opencode。
+cyberstrike JS/TS SDK 提供类型其他安全的客户端用于与服务器交互。
+使用它以程序设计方式构建集成和控制cyberstrike。
 
 [了解更多关于服务器如何工作的](/docs/server)。例如，查看社区构建的[projects](/docs/ecosystem#projects)。
 
@@ -18,19 +18,19 @@ opencode JS/TS SDK 提供类型其他安全的客户端用于与服务器交互�
 从npm安装SDK：
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @cyberstrike-ai/sdk
 ```
 
 ---
 
 ## 创建客户端
 
-创建opencode的示例项：
+创建cyberstrike的示例项：
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createCyberstrike()
 ```
 
 这会同时启动服务器和客户端
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## 配置
 
-You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
+You can pass a configuration object to customize behavior. The instance still picks up your `cyberstrike.json`, but you can override or add configuration inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const opencode = await createOpencode({
+const cyberstrike = await createCyberstrike({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${cyberstrike.server.url}`)
 
-opencode.server.close()
+cyberstrike.server.close()
 ```
 
 ## 仅限客户端
 
-如果您已经有 opencode 的正在执行示例项，则可以创建一个客户端示例项来连线到它：
+如果您已经有 cyberstrike 的正在执行示例项，则可以创建一个客户端示例项来连线到它：
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createCyberstrikeClient } from "@cyberstrike-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createCyberstrikeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK 包括所有 API 型以外的 TypeScript 定义。直接汇入其中：
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@cyberstrike-ai/sdk"
 ```
 
 所有型别均根据服务器的 OpenAPI 规范生成，并可在 <a href={typesUrl}> 型别文件 </a> 中找到。
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*cyberstrike" },
 })
 
 const files = await client.find.files({

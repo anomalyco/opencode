@@ -20,10 +20,10 @@ body:
       required: false
 
   - type: input
-    id: opencode-version
+    id: cyberstrike-version
     attributes:
-      label: OpenCode version
-      description: What version of OpenCode are you using?
+      label: CyberStrike version
+      description: What version of CyberStrike are you using?
     validations:
       required: false
 

@@ -1,21 +1,21 @@
 ---
 title: Zen
-description: Wyselekcjonowana lista modeli dostarczonych przez opencode.
+description: Wyselekcjonowana lista modeli dostarczonych przez cyberstrike.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół opencode.
+CyberStrike Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół cyberstrike.
 
 :::note
-OpenCode Zen is currently in beta.
+CyberStrike Zen is currently in beta.
 :::
 
-Zen działa jak każdy inny dostawca opencode. Logujesz się do OpenCode Zen i dostajesz
+Zen działa jak każdy inny dostawca cyberstrike. Logujesz się do CyberStrike Zen i dostajesz
 Twój klucz API. Jest **całkowicie opcjonalny** i nie musisz go używać, aby z niego korzystać
-opencode.
+cyberstrike.
 
 ---
 
@@ -26,7 +26,7 @@ działa dobrze jako agenci kodujący. Dodatkowo większość dostawców jest
 skonfigurowana bardzo różnie; więc otrzymujesz zupełnie inną wydajność i jakość.
 
 :::tip
-Przetestowaliśmy wybraną grupę modeli i dostawców, którzy dobrze współpracują z opencode.
+Przetestowaliśmy wybraną grupę modeli i dostawców, którzy dobrze współpracują z cyberstrike.
 :::
 
 Jeśli więc używasz modelu za pośrednictwem czegoś takiego jak OpenRouter, nigdy nie będzie to możliwe
@@ -41,17 +41,17 @@ Aby to naprawić, zrobiliśmy kilka rzeczy:
 3. Na koniec porównaliśmy kombinację modelu/dostawcy i otrzymaliśmy wynik
    z listą, którą z przyjemnością polecamy.
 
-OpenCode Zen to brama AI, która zapewnia dostęp do tych modeli.
+CyberStrike Zen to brama AI, która zapewnia dostęp do tych modeli.
 
 ---
 
 ## Jak to działa
 
-OpenCode Zen działa jak każdy inny dostawca opencode.
+CyberStrike Zen działa jak każdy inny dostawca cyberstrike.
 
-1. Logujesz się do **<a href={console}>OpenCode Zen</a>**, dodajesz swoje rozliczenia
+1. Logujesz się do **<a href={console}>CyberStrike Zen</a>**, dodajesz swoje rozliczenia
    szczegóły i skopiuj klucz API.
-2. Uruchamiasz polecenie `/connect` w TUI, wybierasz OpenCode Zen i wklejasz klucz API.
+2. Uruchamiasz polecenie `/connect` w TUI, wybierasz CyberStrike Zen i wklejasz klucz API.
 3. Uruchom `/models` w TUI, aby zobaczyć listę zalecanych przez nas modeli.
 
 Opłata jest pobierana za każde żądanie i możesz dodać kredyty do swojego konta.
@@ -64,39 +64,39 @@ Dostęp do naszych modeli można również uzyskać za pośrednictwem następuj�
 
 | Modelka            | Identyfikator modelu | Punkt końcowy                                      | Pakiet SDK AI               |
 | ------------------ | -------------------- | -------------------------------------------------- | --------------------------- |
-| GPT 5.2            | gpt-5.2              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex      | gpt-5.2-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1            | gpt-5.1              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex      | gpt-5.1-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max  | gpt-5.1-codex-max    | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini | gpt-5.1-codex-mini   | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5              | gpt-5                | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex        | gpt-5-codex          | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano         | gpt-5-nano           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5  | claude-sonnet-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4    | claude-sonnet-4      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5   | claude-haiku-4-5     | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5   | claude-3-5-haiku     | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3 Pro       | gemini-3-pro         | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| Gemini 3 Flash     | gemini-3-flash       | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| MiniMax M2.1       | minimax-m2.1         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Free  | minimax-m2.1-free    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7            | glm-4.7              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Free       | glm-4.7-free         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.6            | glm-4.6              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5          | kimi-k2.5            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Thinking   | kimi-k2-thinking     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2            | kimi-k2              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3 Coder 480B   | qwen3-coder          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Big Pickle         | big-pickle           | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GPT 5.2            | gpt-5.2              | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex        | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1              | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex        | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max    | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini   | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5                | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex          | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano           | `https://cyberstrike.io/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5    | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4      | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5     | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku     | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6    | claude-opus-4-6      | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5      | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1      | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro         | `https://cyberstrike.io/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash       | `https://cyberstrike.io/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1         | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.1 Free  | minimax-m2.1-free    | `https://cyberstrike.io/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 4.7            | glm-4.7              | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free       | glm-4.7-free         | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.6            | glm-4.6              | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5            | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free     | kimi-k2.5-free       | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking     | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2              | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder          | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle           | `https://cyberstrike.io/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-[Identyfikator modelu](/docs/config/#models) w konfiguracji opencode
-używa formatu `opencode/<model-id>`. Na przykład w przypadku Kodeksu GPT 5.2 zrobiłbyś to
-użyj `opencode/gpt-5.2-codex` w swojej konfiguracji.
+[Identyfikator modelu](/docs/config/#models) w konfiguracji cyberstrike
+używa formatu `cyberstrike/<model-id>`. Na przykład w przypadku Kodeksu GPT 5.2 zrobiłbyś to
+użyj `cyberstrike/gpt-5.2-codex` w swojej konfiguracji.
 
 ---
 
@@ -105,7 +105,7 @@ użyj `opencode/gpt-5.2-codex` w swojej konfiguracji.
 Pełną listę dostępnych modeli i ich metadane możesz pobrać z:
 
 ```
-https://opencode.ai/zen/v1/models
+https://cyberstrike.io/zen/v1/models
 ```
 
 ---
@@ -158,10 +158,10 @@ Opłaty za karty kredytowe są przenoszone na koszt (4,4% + 0,30 USD za transakc
 
 Darmowe modele:
 
-- GLM 4.7 Free jest dostępny na platformie opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- Kimi K2.5 Free jest dostępny na opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- MiniMax M2.1 Free jest dostępny na platformie opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- Big Pickle to ukryty model, który jest bezpłatny w opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- GLM 4.7 Free jest dostępny na platformie cyberstrike przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- Kimi K2.5 Free jest dostępny na cyberstrike przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- MiniMax M2.1 Free jest dostępny na platformie cyberstrike przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- Big Pickle to ukryty model, który jest bezpłatny w cyberstrike przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
 
 <a href={email}>Skontaktuj się z nami</a>, jeśli masz jakieś pytania.
 
@@ -246,9 +246,9 @@ i chcesz go używać zamiast tego, który zapewnia Zen.
 
 ## Cele
 
-Stworzyliśmy OpenCode Zen, aby:
+Stworzyliśmy CyberStrike Zen, aby:
 
 1. **Testować** (Benchmark) najlepsze modele/dostawców dla agentów kodujących.
 2. Miej dostęp do opcji **najwyższej jakości**, a nie obniżaj wydajności ani nie kieruj się do tańszych dostawców.
 3. Przekaż wszelkie **obniżki cen**, sprzedając po kosztach; więc jedyną marżą jest pokrycie naszych opłat manipulacyjnych.
-4. Nie **nie blokuj**, umożliwiając używanie go z dowolnym innym agentem kodującym. I zawsze pozwalaj na korzystanie z opencode dowolnego innego dostawcy.
+4. Nie **nie blokuj**, umożliwiając używanie go z dowolnym innym agentem kodującym. I zawsze pozwalaj na korzystanie z cyberstrike dowolnego innego dostawcy.

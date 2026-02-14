@@ -3,9 +3,9 @@ title: 主题
 description: 选择内建主题或定义您自己的主题。
 ---
 
-使用 opencode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
+使用 cyberstrike，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
 
-By default, opencode uses our own `opencode` theme.
+By default, cyberstrike uses our own `cyberstrike` theme.
 
 ---
 
@@ -23,7 +23,7 @@ By default, opencode uses our own `opencode` theme.
 
 ## 内置主题
 
-opencode 带有几个内建主题。
+cyberstrike 带有几个内建主题。
 
 | 名称                   | 描述                                                                         |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ opencode 带有几个内建主题。
 
 系统主题适合以下用户：
 
-- 希望 opencode 与终端的外观相匹配
+- 希望 cyberstrike 与终端的外观相匹配
 - 使用自定义终端配色方案
 - 希望所有终端应用程序具有一致的外观
 
@@ -63,9 +63,9 @@ opencode 带有几个内建主题。
 
 您可以通过使用 `/theme` 命令调出主题选择来选择主题。或者您可以在 [config](/docs/config) 中指定它。
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ opencode 带有几个内建主题。
 
 ## 自定义主题
 
-opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建和自定义主题。
+cyberstrike 支持灵活的基于 JSON 的主题系统，允许用户轻松创建和自定义主题。
 
 ---
 
@@ -83,9 +83,9 @@ opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建�
 主题按以下顺序从多个目录载入，其中后面的目录覆盖前面的目录：
 
 1. **内建主题** - 这些主题嵌入在二进制文件中
-2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+2. **User config directory** - Defined in `~/.config/cyberstrike/themes/*.json` or `$XDG_CONFIG_HOME/cyberstrike/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.cyberstrike/themes/*.json`
+4. **Current working directory** - Defined in `./.cyberstrike/themes/*.json`
 
 如果多个目录包含同名主题，则将使用优先顺序较高的目录中的主题。
 
@@ -98,15 +98,15 @@ opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建�
 对于用户范围的主题：
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/cyberstrike/themes
+vim ~/.config/cyberstrike/themes/my-theme.json
 ```
 
 以及针对特定项目的主题。
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .cyberstrike/themes
+vim .cyberstrike/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://cyberstrike.io/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

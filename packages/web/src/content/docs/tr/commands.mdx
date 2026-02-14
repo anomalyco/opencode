@@ -17,9 +17,9 @@ description: Tekrarlanan görevler için özel komutlar oluşturulur.
 
 Özel komutları tanımlamak için `commands/` dizininde işaretleme dosyaları oluşturun.
 
-`.opencode/commands/test.md` oluştur:
+`.cyberstrike/commands/test.md` oluştur:
 
-```md title=".opencode/commands/test.md"
+```md title=".cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,17 +42,17 @@ Focus on the failing tests and suggest fixes.
 
 ## Yapılandırma
 
-opencode işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosyalarının oluşturulması özel komutlar ile yapılabilir.
+cyberstrike işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosyalarının oluşturulması özel komutlar ile yapılabilir.
 
 ---
 
 ### JSON
 
-opencode [config](/docs/config)'deki `command` seçeneğini kullanın:
+cyberstrike [config](/docs/config)'deki `command` seçeneğini kullanın:
 
-```json title="opencode.jsonc" {4-12}
+```json title="cyberstrike.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Artık bu komutu TUI'da çalıştırabilirsiniz:
 
 Markdown dosyalarını kullanarak komutları da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
 
-- Küresel: `~/.config/opencode/commands/`
-- Proje başına: `.opencode/commands/`
+- Küresel: `~/.config/cyberstrike/commands/`
+- Proje başına: `.cyberstrike/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/cyberstrike/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ sen koşuyorsun:
 
 `$ARGUMENTS` yer tutucusunu kullanarak komutlara argümanları iletin.
 
-```md title=".opencode/commands/component.md"
+```md title=".cyberstrike/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ Konumsal parametreleri kullanarak bağımsız değişkenlere de erişebilirsiniz
 
 Örneğin:
 
-```md title=".opencode/commands/create-file.md"
+```md title=".cyberstrike/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Bu şunun yerini alır:
 
 Örneğin, test kapsamını analiz eden özel bir komut oluşturmak için:
 
-```md title=".opencode/commands/analyze-coverage.md"
+```md title=".cyberstrike/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Or to review recent changes:
 
-```md title=".opencode/commands/review-changes.md"
+```md title=".cyberstrike/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Komutlar projenizin kök dizininde çalışır ve çıktıları istemin bir par�
 
 Komutunuza `@` ve ardından dosya adını kullanarak dosyaları ekleyin.
 
-```md title=".opencode/commands/review-component.md"
+```md title=".cyberstrike/commands/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Yapılandırma seçeneklerine ayrıntılı olarak bakalım.
 
 `template` seçeneği, komut yürütüldüğünde LLM'ye gönderilecek olan istemi tanımlar.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Bu **gerekli** bir yapılandırma seçeneğidir.
 
 Komutun ne yaptığına ilişkin kısa bir açıklama sağlamak için `description` seçeneğini kullanın.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Bu, komutu yazdığınızda TUI içindeki açıklama olarak gösterilir.
 Bu bir [subagent](/docs/agents/#subagents) ise, komut varsayılan olarak bir alt aracı çağrısını tetikleyecektir.
 Bu davranışı devre dışı bırakmak için `subtask` öğesini `false` olarak ayarlayın.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Komutu bir [subagent](/docs/agents/#subagents) çağrısını tetiklemeye zorlam
 Bu, komutun birincil bağlamınızı kirletmemesini ve aracıyı bir alt aracı olarak davranmaya **zorlamasını** istiyorsanız kullanışlıdır.
 `mode`, [agent](/docs/agents) yapılandırmasında `primary` olarak ayarlanmış olsa bile.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
 
 Bu parçanın varsayılan kodu geçersiz için `model` kontrolünü kullanın.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
 
 ## Yerleşik
 
-opencode, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
+cyberstrike, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
 
 :::note
 Özel komutlar yerleşik komutları geçersiz kılabilir.

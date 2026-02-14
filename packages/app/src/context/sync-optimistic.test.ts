@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@cyberstrike-io/sdk/v2/client"
 import { applyOptimisticAdd, applyOptimisticRemove } from "./sync"
 
 const userMessage = (id: string, sessionID: string): Message => ({

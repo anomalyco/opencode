@@ -1,9 +1,9 @@
 ---
 title: Eklentiler
-description: opencode'u genişletmek için kendi eklentilerinizi yazın.
+description: cyberstrike'u genişletmek için kendi eklentilerinizi yazın.
 ---
 
-Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek opencode'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya opencode'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
+Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek cyberstrike'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya cyberstrike'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
 
 Örnekler için topluluk tarafından oluşturulan [eklentilere](/docs/ecosystem#plugins) göz atın.
 
@@ -19,8 +19,8 @@ Eklentileri yüklemenin iki yolu vardır.
 
 JavaScript veya TypeScript dosyalarını eklenti dizinine yerleştirin.
 
-- `.opencode/plugins/` - Proje düzeyinde eklentiler
-- `~/.config/opencode/plugins/` - Genel eklentiler
+- `.cyberstrike/plugins/` - Proje düzeyinde eklentiler
+- `~/.config/cyberstrike/plugins/` - Genel eklentiler
 
 Bu dizinlerdeki dosyalar başlangıçta otomatik olarak yüklenir.
 
@@ -30,10 +30,10 @@ Bu dizinlerdeki dosyalar başlangıçta otomatik olarak yüklenir.
 
 Yapılandırma dosyanızda npm paketlerini belirtin.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "cyberstrike-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ Hem normal hem de kapsamlı npm paketleri desteklenir.
 
 ### Eklentiler nasıl kurulur?
 
-**npm eklentileri** başlangıçta Bun kullanılarak otomatik olarak yüklenir. Paketler ve bağımlılıkları `~/.cache/opencode/node_modules/`'da önbelleğe alınır.
+**npm eklentileri** başlangıçta Bun kullanılarak otomatik olarak yüklenir. Paketler ve bağımlılıkları `~/.cache/cyberstrike/node_modules/`'da önbelleğe alınır.
 
 **Yerel eklentiler** doğrudan eklenti dizininden yüklenir. Harici paketleri kullanmak için, sisteminizin dizininde bir `package.json` oluşturmanız (bkz. [Bağımlılıklar](#dependencies)) veya eklentiyi npm ve [add it to your config](/docs/config#plugins)'de yayınlamanız gerekir.
 
@@ -55,10 +55,10 @@ Hem normal hem de kapsamlı npm paketleri desteklenir.
 
 Eklentiler tüm kaynaklardan yüklenir ve tüm kancalar sırayla çalışır. Yükleme sırası şöyledir:
 
-1. Global config (`~/.config/opencode/opencode.json`)
-2. Project config (`opencode.json`)
-3. Global eklenti dizini (`~/.config/opencode/plugins/`)
-4. Proje eklenti dizini (`.opencode/plugins/`)
+1. Global config (`~/.config/cyberstrike/cyberstrike.json`)
+2. Project config (`cyberstrike.json`)
+3. Global eklenti dizini (`~/.config/cyberstrike/plugins/`)
+4. Proje eklenti dizini (`.cyberstrike/plugins/`)
 
 Aynı ad ve sürüme sahip yinelenen npm paketleri bir kez yüklenir. Ancak benzer adlara sahip bir yerel eklenti ve bir npm eklentisinin her ikisi de ayrı ayrı yüklenir.
 
@@ -75,7 +75,7 @@ işlevler. Her işlev bir bağlam nesnesi alır ve bir kanca nesnesi döndürür
 
 Yerel eklentiler ve özel araçlar harici npm paketlerini kullanabilir. İhtiyacınız olan bağımlılıkları içeren config dizininize bir `package.json` ekleyin.
 
-```json title=".opencode/package.json"
+```json title=".cyberstrike/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ Yerel eklentiler ve özel araçlar harici npm paketlerini kullanabilir. İhtiyac
 }
 ```
 
-opencode bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
+cyberstrike bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Temel yapı
 
-```js title=".opencode/plugins/example.js"
+```js title=".cyberstrike/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ Eklenti işlevi şunları alır:
 - `project`: Mevcut proje bilgisi.
 - `directory`: güncel çalışma dizini.
 - `worktree`: Git çalışma ağacı yolu.
-- `client`: Yapay zeka ile etkileşime geçmek için opencode'lu bir SDK istemcisi.
+- `client`: Yapay zeka ile etkileşime geçmek için cyberstrike'lu bir SDK istemcisi.
 - `$`: Bun'un komutları yürütmek için kullandığı [shell API](https://bun.com/docs/runtime/shell).
 
 ---
@@ -128,7 +128,7 @@ Eklenti işlevi şunları alır:
 TypeScript eklentileri için türleri eklenti paketinden içe aktarabilirsiniz:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 
 ## Örnekler
 
-opencode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
+cyberstrike'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
 
 ---
 
@@ -219,13 +219,13 @@ opencode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini bur
 
 Belirli olaylar meydana geldiğinde bildirim gönderin:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".cyberstrike/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "cyberstrike"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 MacOS'ta AppleScript'i çalıştırmak için `osascript` kullanıyoruz. Burada bildirim göndermek için kullanıyoruz.
 
 :::note
-opencode masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
+cyberstrike masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
 :::
 
 ---
 
 ### .env Koruması
 
-opencode'un `.env` dosyalarını okumasını önleyin:
+cyberstrike'un `.env` dosyalarını okumasını önleyin:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".cyberstrike/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Ortam değişkenlerini tüm kabuk yürütmeye (AI araçları ve kullanıcı terminalleri) enjekte edin:
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".cyberstrike/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Özel araçlar
 
-Eklentiler ayrıca opencode'a özel araçlar da ekleyebilir:
+Eklentiler ayrıca cyberstrike'a özel araçlar da ekleyebilir:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@cyberstrike-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,7 +300,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` yardımcısı, opencode'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
+`tool` yardımcısı, cyberstrike'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
 
 - `description`: Araç ne yapar?
 - `args`: Aracın argümanları için Zod şeması
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 Yapılandırılmış günlük kaydı için `client.app.log()` yerine `console.log` kullanın:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK documentation](https://opencode.ai/docs/sdk)'e bakın.
+Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK documentation](https://cyberstrike.io/docs/sdk)'e bakın.
 
 ---
 
@@ -335,8 +335,8 @@ Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK documentati
 
 Bir oturum sıkıştırıldığında içerilen bağlamı özelleştirin:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 Ayrıca `output.prompt` ayarını yaparak sıkıştırma istemini tamamen değiştirebilirsiniz:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

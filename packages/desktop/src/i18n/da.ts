@@ -11,18 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Opdateringstjek mislykkedes",
   "desktop.updater.checkFailed.message": "Kunne ikke tjekke for opdateringer",
   "desktop.updater.none.title": "Ingen opdatering tilgængelig",
-  "desktop.updater.none.message": "Du bruger allerede den nyeste version af OpenCode",
+  "desktop.updater.none.message": "Du bruger allerede den nyeste version af CyberStrike",
   "desktop.updater.downloadFailed.title": "Opdatering mislykkedes",
   "desktop.updater.downloadFailed.message": "Kunne ikke downloade opdateringen",
   "desktop.updater.downloaded.title": "Opdatering downloadet",
   "desktop.updater.downloaded.prompt":
-    "Version {{version}} af OpenCode er blevet downloadet. Vil du installere den og genstarte?",
+    "Version {{version}} af CyberStrike er blevet downloadet. Vil du installere den og genstarte?",
   "desktop.updater.installFailed.title": "Opdatering mislykkedes",
   "desktop.updater.installFailed.message": "Kunne ikke installere opdateringen",
 
   "desktop.cli.installed.title": "CLI installeret",
   "desktop.cli.installed.message":
-    "CLI installeret i {{path}}\n\nGenstart din terminal for at bruge 'opencode'-kommandoen.",
+    "CLI installeret i {{path}}\n\nGenstart din terminal for at bruge 'cyberstrike'-kommandoen.",
   "desktop.cli.failed.title": "Installation mislykkedes",
   "desktop.cli.failed.message": "Kunne ikke installere CLI: {{error}}",
 }

@@ -9,20 +9,20 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@cyberstrike-io/util/path"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
-import { AppIcon } from "@opencode-ai/ui/app-icon"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Popover } from "@opencode-ai/ui/popover"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Icon } from "@cyberstrike-io/ui/icon"
+import { IconButton } from "@cyberstrike-io/ui/icon-button"
+import { Button } from "@cyberstrike-io/ui/button"
+import { AppIcon } from "@cyberstrike-io/ui/app-icon"
+import { DropdownMenu } from "@cyberstrike-io/ui/dropdown-menu"
+import { Tooltip, TooltipKeybind } from "@cyberstrike-io/ui/tooltip"
+import { Popover } from "@cyberstrike-io/ui/popover"
+import { TextField } from "@cyberstrike-io/ui/text-field"
+import { Keybind } from "@cyberstrike-io/ui/keybind"
+import { showToast } from "@cyberstrike-io/ui/toast"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -312,9 +312,9 @@ export function SessionHeader() {
   })
 
   const leftMount = createMemo(
-    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
+    () => document.getElementById("cyberstrike-titlebar-left") ?? document.getElementById("cyberstrike-titlebar-center"),
   )
-  const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+  const rightMount = createMemo(() => document.getElementById("cyberstrike-titlebar-right"))
 
   return (
     <>

@@ -20,15 +20,15 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install cyberstrike
+        run: curl -fsSL https://cyberstrike.io/install | bash
 
       - name: Generate daily PR recap
         id: recap
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CYBERSTRIKE_API_KEY: ${{ secrets.CYBERSTRIKE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          CYBERSTRIKE_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -42,7 +42,7 @@ jobs:
         run: |
           TODAY=$(date -u +%Y-%m-%d)
 
-          opencode run -m opencode/claude-sonnet-4-5 "Generate a daily PR activity recap for the OpenCode repository.
+          cyberstrike run -m cyberstrike/claude-sonnet-4-5 "Generate a daily PR activity recap for the CyberStrike repository.
 
           TODAY'S DATE: ${TODAY}
 

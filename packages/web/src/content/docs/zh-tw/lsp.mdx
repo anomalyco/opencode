@@ -1,15 +1,15 @@
 ---
 title: LSP 伺服器
-description: opencode 與您的 LSP 伺服器整合。
+description: cyberstrike 與您的 LSP 伺服器整合。
 ---
 
-opencode 與您的語言伺服器協定 (LSP) 整合，以幫助 LLM 與您的程式碼庫互動。它使用診斷向 LLM 提供回饋。
+cyberstrike 與您的語言伺服器協定 (LSP) 整合，以幫助 LLM 與您的程式碼庫互動。它使用診斷向 LLM 提供回饋。
 
 ---
 
 ## 內建
 
-opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
+cyberstrike 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 | LSP 伺服器         | 副檔名                                                              | 要求                                             |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------ |
@@ -49,14 +49,14 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 當檢測到上述檔案副檔名之一且滿足要求時，LSP 伺服器將自動啟用。
 
 :::note
-您可以透過將 `OPENCODE_DISABLE_LSP_DOWNLOAD` 環境變數設定為 `true` 來禁用自動 LSP 伺服器下載。
+您可以透過將 `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD` 環境變數設定為 `true` 來禁用自動 LSP 伺服器下載。
 :::
 
 ---
 
 ## 它是如何運作的
 
-當 opencode 打開一個檔案時，它：
+當 cyberstrike 打開一個檔案時，它：
 
 1. 根據所有啟用的 LSP 伺服器檢查檔案副檔名。
 2. 如果尚未執行，則啟動相應的 LSP 伺服器。
@@ -65,11 +65,11 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 ## 設定
 
-您可以透過 opencode 設定中的 `lsp` 部分自定義 LSP 伺服器。
+您可以透過 cyberstrike 設定中的 `lsp` 部分自定義 LSP 伺服器。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {}
 }
 ```
@@ -92,9 +92,9 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 啟動 LSP 伺服器時使用 `env` 屬性設定環境變數：
 
-```json title="opencode.json" {5-7}
+```json title="cyberstrike.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -111,9 +111,9 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 使用 `initialization` 屬性將初始化選項傳遞給 LSP 伺服器。這些是在 LSP `initialize` 請求期間發送的伺服器特定設定：
 
-```json title="opencode.json" {5-9}
+```json title="cyberstrike.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -136,18 +136,18 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 要全域禁用**所有** LSP 伺服器，請將 `lsp` 設定為 `false`：
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": false
 }
 ```
 
 要禁用**特定** LSP 伺服器，請將 `disabled` 設定為 `true`：
 
-```json title="opencode.json" {5}
+```json title="cyberstrike.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -162,9 +162,9 @@ opencode 附帶了多種適用於流行語言的內建 LSP 伺服器：
 
 您可以透過指定指令和檔案副檔名來添加自定義 LSP 伺服器：
 
-```json title="opencode.json" {4-7}
+```json title="cyberstrike.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

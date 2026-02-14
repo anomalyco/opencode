@@ -140,7 +140,7 @@ export async function openSettings(page: Page) {
 export async function seedProjects(page: Page, input: { directory: string; extra?: string[] }) {
   await page.addInitScript(
     (args: { directory: string; serverUrl: string; extra: string[] }) => {
-      const key = "opencode.global.dat:server"
+      const key = "cyberstrike.global.dat:server"
       const raw = localStorage.getItem(key)
       const parsed = (() => {
         if (!raw) return undefined
@@ -192,7 +192,7 @@ export async function seedProjects(page: Page, input: { directory: string; extra
 }
 
 export async function createTestProject() {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-"))
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cyberstrike-e2e-project-"))
 
   await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
 

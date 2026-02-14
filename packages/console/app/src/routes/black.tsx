@@ -87,7 +87,7 @@ export default function BlackLayout(props: RouteSectionProps) {
       <header data-component="header">
         <A href={language.route("/")} data-component="header-logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="179" height="32" viewBox="0 0 179 32" fill="none">
-            <title>opencode</title>
+            <title>cyberstrike</title>
             <g clip-path="url(#clip0_3654_210259)">
               <mask
                 id="mask0_3654_210259"

@@ -1,13 +1,13 @@
 {
-  "name": "@opencode-ai/console-app",
+  "name": "@cyberstrike-io/console-app",
   "version": "1.2.1",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",
-    "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
-    "build": "./script/generate-sitemap.ts && vite build && ../../opencode/script/schema.ts ./.output/public/config.json",
+    "dev:remote": "VITE_AUTH_URL=https://auth.dev.cyberstrike.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
+    "build": "./script/generate-sitemap.ts && vite build && ../../cyberstrike/script/schema.ts ./.output/public/config.json",
     "start": "vite start"
   },
   "dependencies": {
@@ -16,10 +16,10 @@
     "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-mail": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@cyberstrike-io/console-core": "workspace:*",
+    "@cyberstrike-io/console-mail": "workspace:*",
+    "@cyberstrike-io/console-resource": "workspace:*",
+    "@cyberstrike-io/ui": "workspace:*",
     "@smithy/eventstream-codec": "4.2.7",
     "@smithy/util-utf8": "4.2.0",
     "@solidjs/meta": "catalog:",

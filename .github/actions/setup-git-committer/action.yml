@@ -1,11 +1,11 @@
 name: "Setup Git Committer"
 description: "Create app token and configure git user"
 inputs:
-  opencode-app-id:
-    description: "OpenCode GitHub App ID"
+  cyberstrike-app-id:
+    description: "CyberStrike GitHub App ID"
     required: true
-  opencode-app-secret:
-    description: "OpenCode GitHub App private key"
+  cyberstrike-app-secret:
+    description: "CyberStrike GitHub App private key"
     required: true
 outputs:
   token:
@@ -21,8 +21,8 @@ runs:
       id: apptoken
       uses: actions/create-github-app-token@v2
       with:
-        app-id: ${{ inputs.opencode-app-id }}
-        private-key: ${{ inputs.opencode-app-secret }}
+        app-id: ${{ inputs.cyberstrike-app-id }}
+        private-key: ${{ inputs.cyberstrike-app-secret }}
         owner: ${{ github.repository_owner }}
 
     - name: Configure git user

@@ -1,9 +1,9 @@
 ---
 title: ปลั๊กอิน
-description: เขียนปลั๊กอินของคุณเองเพื่อขยาย OpenCode
+description: เขียนปลั๊กอินของคุณเองเพื่อขยาย CyberStrike
 ---
 
-ปลั๊กอินช่วยให้คุณสามารถขยาย OpenCode ได้โดยเชื่อมโยงกับเหตุการณ์ต่างๆ และปรับแต่งลักษณะการทำงาน คุณสามารถสร้างปลั๊กอินเพื่อเพิ่มคุณสมบัติใหม่ บูรณาการกับบริการภายนอก หรือแก้ไขการทำงานเริ่มต้นของ OpenCode
+ปลั๊กอินช่วยให้คุณสามารถขยาย CyberStrike ได้โดยเชื่อมโยงกับเหตุการณ์ต่างๆ และปรับแต่งลักษณะการทำงาน คุณสามารถสร้างปลั๊กอินเพื่อเพิ่มคุณสมบัติใหม่ บูรณาการกับบริการภายนอก หรือแก้ไขการทำงานเริ่มต้นของ CyberStrike
 
 ตัวอย่างเช่น ลองดู [ปลั๊กอิน](/docs/ecosystem#ปลั๊กอิน) ที่สร้างโดยชุมชน
 
@@ -19,8 +19,8 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 วางไฟล์ JavaScript หรือ TypeScript ในไดเร็กทอรีปลั๊กอิน
 
-- `.opencode/plugins/` - ​​ปลั๊กอินระดับโครงการ
-- `~/.config/opencode/plugins/` - ​​ปลั๊กอินทั่วโลก
+- `.cyberstrike/plugins/` - ​​ปลั๊กอินระดับโครงการ
+- `~/.config/cyberstrike/plugins/` - ​​ปลั๊กอินทั่วโลก
 
 ไฟล์ในไดเร็กทอรีเหล่านี้จะถูกโหลดโดยอัตโนมัติเมื่อเริ่มต้นระบบ
 
@@ -30,10 +30,10 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 ระบุแพ็คเกจ npm ในไฟล์ปรับแต่งของคุณ
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://cyberstrike.io/config.json",
+  "plugin": ["cyberstrike-helicone-session", "cyberstrike-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 ### วิธีการติดตั้งปลั๊กอิน
 
-**ปลั๊กอิน npm** ได้รับการติดตั้งโดยอัตโนมัติโดยใช้ Bun เมื่อเริ่มต้น แพ็คเกจและการขึ้นต่อกันถูกแคชไว้ใน `~/.cache/opencode/node_modules/`
+**ปลั๊กอิน npm** ได้รับการติดตั้งโดยอัตโนมัติโดยใช้ Bun เมื่อเริ่มต้น แพ็คเกจและการขึ้นต่อกันถูกแคชไว้ใน `~/.cache/cyberstrike/node_modules/`
 
 **ปลั๊กอินท้องถิ่น** โหลดโดยตรงจากไดเร็กทอรีปลั๊กอิน หากต้องการใช้แพ็คเกจภายนอก คุณต้องสร้าง `package.json` ภายในไดเร็กทอรีการกำหนดค่าของคุณ (ดู [การพึ่งพา](#dependencies)) หรือเผยแพร่ปลั๊กอินไปที่ npm และ [เพิ่มลงในการกำหนดค่าของคุณ](/docs/config#plugins)
 
@@ -55,10 +55,10 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 ปลั๊กอินถูกโหลดจากทุกแหล่งและ hooks ทั้งหมดทำงานตามลำดับ ลำดับการโหลดคือ:
 
-1. การกำหนดค่าส่วนกลาง (`~/.config/opencode/opencode.json`)
-2. การกำหนดค่าโครงการ (`opencode.json`)
-3. ไดเร็กทอรีปลั๊กอินสากล (`~/.config/opencode/plugins/`)
-4. ไดเรกทอรีปลั๊กอินโครงการ (`.opencode/plugins/`)
+1. การกำหนดค่าส่วนกลาง (`~/.config/cyberstrike/cyberstrike.json`)
+2. การกำหนดค่าโครงการ (`cyberstrike.json`)
+3. ไดเร็กทอรีปลั๊กอินสากล (`~/.config/cyberstrike/plugins/`)
+4. ไดเรกทอรีปลั๊กอินโครงการ (`.cyberstrike/plugins/`)
 
 แพ็กเกจ npm ที่ซ้ำกันซึ่งมีชื่อและเวอร์ชันเดียวกันจะถูกโหลดหนึ่งครั้ง อย่างไรก็ตาม ทั้งปลั๊กอินในเครื่องและปลั๊กอิน npm ที่มีชื่อคล้ายกันจะโหลดแยกกัน
 
@@ -75,7 +75,7 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 ปลั๊กอินท้องถิ่นและเครื่องมือแบบกำหนดเองสามารถใช้แพ็คเกจ npm ภายนอกได้ เพิ่ม `package.json` ลงในไดเร็กทอรี config ของคุณด้วยการอ้างอิงที่คุณต้องการ
 
-```json title=".opencode/package.json"
+```json title=".cyberstrike/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -83,9 +83,9 @@ description: เขียนปลั๊กอินของคุณเอง�
 }
 ```
 
-OpenCode รัน `bun install` เมื่อเริ่มต้นเพื่อติดตั้งสิ่งเหล่านี้ ปลั๊กอินและเครื่องมือของคุณสามารถนำเข้าได้
+CyberStrike รัน `bun install` เมื่อเริ่มต้นเพื่อติดตั้งสิ่งเหล่านี้ ปลั๊กอินและเครื่องมือของคุณสามารถนำเข้าได้
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### โครงสร้างพื้นฐาน
 
-```js title=".opencode/plugins/example.js"
+```js title=".cyberstrike/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: ข้อมูลโครงการปัจจุบัน
 - `directory`: ไดเร็กทอรีการทำงานปัจจุบัน
 - `worktree`: เส้นทางเวิร์กทรีคอมไพล์
-- `client`: ไคลเอนต์ opencode SDK สำหรับการโต้ตอบกับ AI
+- `client`: ไคลเอนต์ cyberstrike SDK สำหรับการโต้ตอบกับ AI
 - `$`: [shell API](https://bun.com/docs/runtime/shell) ของ Bun สำหรับการดำเนินการคำสั่ง
 
 ---
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 สำหรับปลั๊กอิน TypeScript คุณสามารถนำเข้าประเภทจากแพ็คเกจปลั๊กอินได้:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## ตัวอย่าง
 
-นี่คือตัวอย่างบางส่วนของปลั๊กอินที่คุณสามารถใช้เพื่อขยาย opencode
+นี่คือตัวอย่างบางส่วนของปลั๊กอินที่คุณสามารถใช้เพื่อขยาย cyberstrike
 
 ---
 
@@ -219,13 +219,13 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ส่งการแจ้งเตือนเมื่อมีเหตุการณ์บางอย่างเกิดขึ้น:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".cyberstrike/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "cyberstrike"'`
       }
     },
   }
@@ -235,16 +235,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 เรากำลังใช้ `osascript` เพื่อเรียกใช้ AppleScript บน macOS ที่นี่เราใช้มันเพื่อส่งการแจ้งเตือน
 
 :::note
-หากคุณใช้แอปเดสก์ท็อป OpenCode แอปสามารถส่งการแจ้งเตือนของระบบโดยอัตโนมัติเมื่อมีการตอบกลับพร้อมหรือเมื่อเซสชันเกิดข้อผิดพลาด
+หากคุณใช้แอปเดสก์ท็อป CyberStrike แอปสามารถส่งการแจ้งเตือนของระบบโดยอัตโนมัติเมื่อมีการตอบกลับพร้อมหรือเมื่อเซสชันเกิดข้อผิดพลาด
 :::
 
 ---
 
 ### การป้องกัน .env
 
-ป้องกันไม่ให้ opencode อ่านไฟล์ `.env`:
+ป้องกันไม่ให้ cyberstrike อ่านไฟล์ `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".cyberstrike/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 แทรกตัวแปรสภาพแวดล้อมลงในการดำเนินการ shell ทั้งหมด (เครื่องมือ AI และ terminal ผู้ใช้):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".cyberstrike/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### เครื่องมือที่กำหนดเอง
 
-ปลั๊กอินยังสามารถเพิ่มเครื่องมือที่กำหนดเองให้กับ opencode:
+ปลั๊กอินยังสามารถเพิ่มเครื่องมือที่กำหนดเองให้กับ cyberstrike:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@cyberstrike-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-ตัวช่วย `tool` สร้างเครื่องมือแบบกำหนดเองที่สามารถเรียกใช้ opencode ได้ ใช้ฟังก์ชัน Zod schema และส่งกลับคำจำกัดความของเครื่องมือด้วย:
+ตัวช่วย `tool` สร้างเครื่องมือแบบกำหนดเองที่สามารถเรียกใช้ cyberstrike ได้ ใช้ฟังก์ชัน Zod schema และส่งกลับคำจำกัดความของเครื่องมือด้วย:
 
 - `description`: เครื่องมือนี้ทำอะไร
 - `args`: Zod schema สำหรับข้อโต้แย้งของเครื่องมือ
 - `execute`: ฟังก์ชั่นที่ทำงานเมื่อมีการเรียกใช้เครื่องมือ
 
-เครื่องมือที่คุณกำหนดเองจะพร้อมใช้งานสำหรับ opencode ควบคู่ไปกับเครื่องมือในตัว
+เครื่องมือที่คุณกำหนดเองจะพร้อมใช้งานสำหรับ cyberstrike ควบคู่ไปกับเครื่องมือในตัว
 
 ---
 
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 ใช้ `client.app.log()` แทน `console.log` สำหรับการบันทึกแบบมีโครงสร้าง:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".cyberstrike/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-ระดับ: `debug`, `info`, `warn`, `error` ดู[SDKเอกสารประกอบ](https://opencode.ai/docs/sdk)สำหรับรายละเอียด
+ระดับ: `debug`, `info`, `warn`, `error` ดู[SDKเอกสารประกอบ](https://cyberstrike.io/docs/sdk)สำหรับรายละเอียด
 
 ---
 
@@ -335,8 +335,8 @@ export const MyPlugin = async ({ client }) => {
 
 ปรับแต่งบริบทที่รวมไว้เมื่อมีการกระชับเซสชัน:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,8 +359,8 @@ Include any state that should persist across compaction:
 
 คุณยังสามารถแทนที่พรอมต์การกระชับข้อมูลทั้งหมดได้โดยตั้งค่า `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".cyberstrike/plugins/custom-compaction.ts"
+import type { Plugin } from "@cyberstrike-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI muligheder og kommandoer.
+description: CyberStrike CLI muligheder og kommandoer.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI starter som standard [TUI](/docs/tui), når den kører uden nogen argumenter.
+CyberStrike CLI starter som standard [TUI](/docs/tui), når den kører uden nogen argumenter.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-Men den accepterer også kommandoer som dokumenteret på denne side. Dette giver dig mulighed for at interagere med OpenCode programmatisk.
+Men den accepterer også kommandoer som dokumenteret på denne side. Dette giver dig mulighed for at interagere med CyberStrike programmatisk.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+cyberstrike run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Start OpenCode terminalbrugergrænsefladen.
+Start CyberStrike terminalbrugergrænsefladen.
 
 ```bash
-opencode [project]
+cyberstrike [project]
 ```
 
 #### Flag
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Kommandoer
 
-OpenCode CLI har også følgende kommandoer.
+CyberStrike CLI har også følgende kommandoer.
 
 ---
 
 ### agent
 
-Administrer agenter i OpenCode.
+Administrer agenter i CyberStrike.
 
 ```bash
-opencode agent [command]
+cyberstrike agent [command]
 ```
 
 ---
 
 ### attach
 
-Tilslut en terminal til en allerede kørende OpenCode backend-server startet via `serve` eller `web` kommandoer.
+Tilslut en terminal til en allerede kørende CyberStrike backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
-opencode attach [url]
+cyberstrike attach [url]
 ```
 
-Dette gør det muligt at bruge TUI med en ekstern OpenCode backend. For eksempel:
+Dette gør det muligt at bruge TUI med en ekstern CyberStrike backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+cyberstrike web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+cyberstrike attach http://10.20.30.40:4096
 ```
 
 #### Flag
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Opret en ny agent med brugerdefineret konfiguration.
 
 ```bash
-opencode agent create
+cyberstrike agent create
 ```
 
 Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefineret systemprompt og værktøjskonfiguration.
@@ -102,7 +102,7 @@ Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefin
 Liste over alle tilgængelige agenter.
 
 ```bash
-opencode agent list
+cyberstrike agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Kommando til at administrere legitimationsoplysninger og login for udbydere.
 
 ```bash
-opencode auth [command]
+cyberstrike auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `opencode auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/opencode/auth.json`.
+CyberStrike drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `cyberstrike auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/cyberstrike/auth.json`.
 
 ```bash
-opencode auth login
+cyberstrike auth login
 ```
 
-Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvis der er nogen nøgler defineret i dine miljøer eller en `.env` fil i dit projekt.
+Når CyberStrike starter op, indlæser den udbyderne fra legitimationsfilen. Og hvis der er nogen nøgler defineret i dine miljøer eller en `.env` fil i dit projekt.
 
 ---
 
@@ -134,13 +134,13 @@ Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvi
 Viser alle de godkendte udbydere som gemt i legitimationsfilen.
 
 ```bash
-opencode auth list
+cyberstrike auth list
 ```
 
 Eller den korte version.
 
 ```bash
-opencode auth ls
+cyberstrike auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Logger dig ud af en udbyder ved at rydde den fra legitimationsfilen.
 
 ```bash
-opencode auth logout
+cyberstrike auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Administrator GitHub-agenten til lagerautomatisering.
 
 ```bash
-opencode github [command]
+cyberstrike github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Installatør GitHub-agenten i dit lager.
 
 ```bash
-opencode github install
+cyberstrike github install
 ```
 
 Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem konfigurationsprocessen. [Learn more](/docs/github).
@@ -182,7 +182,7 @@ Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem kon
 Kør GitHub-agenten. Dette bruges typisk i GitHub Actions.
 
 ```bash
-opencode github run
+cyberstrike github run
 ```
 
 ##### Flag
@@ -199,7 +199,7 @@ opencode github run
 Administrator Model Context Protocol-servere.
 
 ```bash
-opencode mcp [command]
+cyberstrike mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Tilføj en MCP-server til din konfiguration.
 
 ```bash
-opencode mcp add
+cyberstrike mcp add
 ```
 
 Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern MCP-server.
@@ -221,13 +221,13 @@ Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern 
 Liste over alle konfigurerede MCP-servere og deres forbindelsesstatus.
 
 ```bash
-opencode mcp list
+cyberstrike mcp list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp ls
+cyberstrike mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Godkendt med en OAuth-aktiveret MCP-server.
 
 ```bash
-opencode mcp auth [name]
+cyberstrike mcp auth [name]
 ```
 
 Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgængelige OAuth-kompatible servere.
@@ -245,13 +245,13 @@ Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgænge
 Du kan også angive OAuth-kompatible servere og deres godkendelsesstatus.
 
 ```bash
-opencode mcp auth list
+cyberstrike mcp auth list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp auth ls
+cyberstrike mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Fjern OAuth-legitimationsoplysninger for en MCP-server.
 
 ```bash
-opencode mcp logout [name]
+cyberstrike mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Fejlfinding af OAuth-forbindelsesproblemer for en MCP-server.
 
 ```bash
-opencode mcp debug <name>
+cyberstrike mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 Liste over alle tilgængelige modeller fra konfigurerede udbydere.
 
 ```bash
-opencode models [provider]
+cyberstrike models [provider]
 ```
 
 Denne kommando viser alle tilgængelige modeller på tværs af dine konfigurerede udbydere i formatet `provider/model`.
@@ -291,7 +291,7 @@ Dette er nyttigt til at finde ud af det nøjagtige modelnavn, der skal bruges i 
 Du kan eventuelt videregive et udbyder-id for at filtrere modeller efter den udbyder.
 
 ```bash
-opencode models anthropic
+cyberstrike models anthropic
 ```
 
 #### Flag
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Opdater modelcachen fra models.dev                                      |
 | `--verbose` | Brug mere detaljeret modeloutput (inkluderer metadata som omkostninger) |
 
-Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i OpenCode.
+Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i CyberStrike.
 
 ```bash
-opencode models --refresh
+cyberstrike models --refresh
 ```
 
 ---
 
 ### run
 
-Kør opencode i ikke-interaktiv tilstand ved at sende en prompt direkte.
+Kør cyberstrike i ikke-interaktiv tilstand ved at sende en prompt direkte.
 
 ```bash
-opencode run [message..]
+cyberstrike run [message..]
 ```
 
 Dette er nyttigt til scripting, automatisering, eller når du vil have et hurtigt svar uden at starte hele TUI. F.eks.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "cyberstrike run"
+cyberstrike run Explain the use of context in Go
 ```
 
-Du kan også vedhæfte til en kørende `opencode serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
+Du kan også vedhæfte til en kørende `cyberstrike serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+cyberstrike serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+cyberstrike run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flag
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | Fil(er), der skal vedhæftes til meddelelsen                                         |
 | `--format`   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
 | `--title`    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
-| `--attach`   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
+| `--attach`   |      | Tilslut til en kørende cyberstrike-server (f.eks. http://localhost:4096)               |
 | `--port`     |      | Port til den lokale server (standard til vilkårlig port)                            |
 
 ---
 
 ### serve
 
-Start en hovedløs OpenCode-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
+Start en hovedløs CyberStrike-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
 
 ```bash
-opencode serve
+cyberstrike serve
 ```
 
-Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet uden TUI-grænsefladen. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server, der giver API-adgang til cyberstrike-funktionalitet uden TUI-grænsefladen. Indstil `CYBERSTRIKE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `cyberstrike`).
 
 #### Flag
 
@@ -375,20 +375,20 @@ Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet u
 
 ### session
 
-Administrator OpenCode sessionsholder.
+Administrator CyberStrike sessionsholder.
 
 ```bash
-opencode session [command]
+cyberstrike session [command]
 ```
 
 ---
 
 #### list
 
-Liste over alle OpenCode sessioner.
+Liste over alle CyberStrike sessioner.
 
 ```bash
-opencode session list
+cyberstrike session list
 ```
 
 ##### Flag
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Vis tokenbrug og omkostningsstatistikker for dine OpenCode-sessioner.
+Vis tokenbrug og omkostningsstatistikker for dine CyberStrike-sessioner.
 
 ```bash
-opencode stats
+cyberstrike stats
 ```
 
 #### Flag
@@ -424,7 +424,7 @@ opencode stats
 Eksporter sessionsdata som JSON.
 
 ```bash
-opencode export [sessionID]
+cyberstrike export [sessionID]
 ```
 
 Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgængelige sessioner.
@@ -433,30 +433,30 @@ Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgæng
 
 ### import
 
-Importer sessionsdata fra en JSON fil eller OpenCode del URL.
+Importer sessionsdata fra en JSON fil eller CyberStrike del URL.
 
 ```bash
-opencode import <file>
+cyberstrike import <file>
 ```
 
-Du kan importere fra en lokal fil eller en OpenCode share URL.
+Du kan importere fra en lokal fil eller en CyberStrike share URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+cyberstrike import session.json
+cyberstrike import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Start en hovedløs OpenCode-server med en webgrænseflade.
+Start en hovedløs CyberStrike-server med en webgrænseflade.
 
 ```bash
-opencode web
+cyberstrike web
 ```
 
-Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenCode via en webgrænseflade. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server og åbner en webbrowser for at få adgang til CyberStrike via en webgrænseflade. Indstil `CYBERSTRIKE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `cyberstrike`).
 
 #### Flag
 
@@ -474,7 +474,7 @@ Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenC
 Start en ACP-server (Agent Client Protocol).
 
 ```bash
-opencode acp
+cyberstrike acp
 ```
 
 Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjælp af nd-JSON.
@@ -491,10 +491,10 @@ Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjæ
 
 ### uninstall
 
-Afinstaller OpenCode og fjern alle relaterede filer.
+Afinstaller CyberStrike og fjern alle relaterede filer.
 
 ```bash
-opencode uninstall
+cyberstrike uninstall
 ```
 
 #### Flag
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Opdaterer OpenCode til den nyeste version eller en specifik version.
+Opdaterer CyberStrike til den nyeste version eller en specifik version.
 
 ```bash
-opencode upgrade [target]
+cyberstrike upgrade [target]
 ```
 
 For at opgradere til den nyeste version.
 
 ```bash
-opencode upgrade
+cyberstrike upgrade
 ```
 
 For at opgradere til en bestemt version.
 
 ```bash
-opencode upgrade v0.1.48
+cyberstrike upgrade v0.1.48
 ```
 
 #### upgrade
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Globale flag
 
-opencode CLI tager følgende globale flag.
+cyberstrike CLI tager følgende globale flag.
 
 | Flag           | Kort | Beskrivelse                          |
 | -------------- | ---- | ------------------------------------ |
@@ -551,34 +551,34 @@ opencode CLI tager følgende globale flag.
 
 ## Miljøvariabler
 
-OpenCode kan konfigureres ved hjælp af miljøvariabler.
+CyberStrike kan konfigureres ved hjælp af miljøvariabler.
 
 | Variabel                              | Skriv   | Beskrivelse                                                           |
 | ------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
-| `OPENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
-| `OPENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
-| `OPENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
-| `OPENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Deaktiver filtidskontrol for optimering                               |
-| `OPENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `CYBERSTRIKE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
+| `CYBERSTRIKE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
+| `CYBERSTRIKE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
+| `CYBERSTRIKE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
+| `CYBERSTRIKE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
+| `CYBERSTRIKE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
+| `CYBERSTRIKE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
+| `CYBERSTRIKE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
+| `CYBERSTRIKE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
+| `CYBERSTRIKE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
+| `CYBERSTRIKE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
+| `CYBERSTRIKE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
+| `CYBERSTRIKE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
+| `CYBERSTRIKE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
+| `CYBERSTRIKE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
+| `CYBERSTRIKE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
+| `CYBERSTRIKE_DISABLE_FILETIME_CHECK`     | boolean | Deaktiver filtidskontrol for optimering                               |
+| `CYBERSTRIKE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
+| `CYBERSTRIKE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
+| `CYBERSTRIKE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `CYBERSTRIKE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `cyberstrike`) |
+| `CYBERSTRIKE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
 
 ---
 
@@ -588,16 +588,16 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 
 | Variabel                                        | Skriv   | Beskrivelse                                |
 | ----------------------------------------------- | ------- | ------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms  |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar           |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir        |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj           |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                   |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner        |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktive forsøg LSP typekontrol              |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Aktive eksperimentelle markdown-funktioner |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                       |
+| `CYBERSTRIKE_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
+| `CYBERSTRIKE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |
+| `CYBERSTRIKE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms  |
+| `CYBERSTRIKE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar           |
+| `CYBERSTRIKE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir        |
+| `CYBERSTRIKE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                    |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj           |
+| `CYBERSTRIKE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                   |
+| `CYBERSTRIKE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner        |
+| `CYBERSTRIKE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktive forsøg LSP typekontrol              |
+| `CYBERSTRIKE_EXPERIMENTAL_MARKDOWN`                | boolean | Aktive eksperimentelle markdown-funktioner |
+| `CYBERSTRIKE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                       |

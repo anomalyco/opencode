@@ -1,18 +1,18 @@
 ---
 title: Przedsiębiorstwo
-description: Bezpieczne korzystanie z opencode w Twojej organizacji.
+description: Bezpieczne korzystanie z cyberstrike w Twojej organizacji.
 ---
 
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-opencode Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
+cyberstrike Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
 
 :::note
-opencode nie przechowuje żadnego kodu ani danych kontekstowych.
+cyberstrike nie przechowuje żadnego kodu ani danych kontekstowych.
 :::
 
-Aby skorzystać z pracy z opencode Przedsiębiorstwo:
+Aby skorzystać z pracy z cyberstrike Przedsiębiorstwo:
 
 1. Przeprowadź próbę wewnętrzną ze swoim systemem.
 2. **<a href={email}>Skontaktuj się z nami</a>**, aby omówić ceny i opcję konfiguracji.
@@ -21,16 +21,16 @@ Aby skorzystać z pracy z opencode Przedsiębiorstwo:
 
 ## Test
 
-opencode jest oprogramowaniem typu open source i nie przechowuje żadnego kodu ani danych kontekstowych, więc programiści mogą po prostu [zacząć](/docs/) i próbować próbną.
+cyberstrike jest oprogramowaniem typu open source i nie przechowuje żadnego kodu ani danych kontekstowych, więc programiści mogą po prostu [zacząć](/docs/) i próbować próbną.
 
 ---
 
 ### Obsługa danych
 
-**opencode nie dotyczy kodu źródłowego ani danych kontekstowych.** Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednio wywołane API do twojego dostawcy AI.
+**cyberstrike nie dotyczy kodu źródłowego ani danych kontekstowych.** Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednio wywołane API do twojego dostawcy AI.
 
 to, że korzystasz z usług dostawcy, lub dostawcy zaufania
-Brama AI, możesz bezpłatnie korzystać z opencode.
+Brama AI, możesz bezpłatnie korzystać z cyberstrike.
 
 Zastrzeżeniem jest opcjonalna funkcja `/share`.
 
@@ -38,15 +38,15 @@ Zastrzeżeniem jest opcjonalna funkcja `/share`.
 
 #### Dzielenie się rozmowami
 
-Jeśli użytkownicy są połączeni z `/share`, połączenie jest połączone z danymi, które zostały przesłane do usług, które są udostępniane przez hosty tych użytkowników w opencode.ai.
+Jeśli użytkownicy są połączeni z `/share`, połączenie jest połączone z danymi, które zostały przesłane do usług, które są udostępniane przez hosty tych użytkowników w cyberstrike.io.
 
 Dane są aktualnie dostępne przez sieć brzegową naszego CDN i są buforowane na brzegu w pobliżu Twoich użytkowników.
 
 Zalecamy tę opcję na okres próbny.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "share": "disabled"
 }
 ```
@@ -57,19 +57,19 @@ Zalecamy tę opcję na okres próbny.
 
 ### Własność kodu
 
-**Jesteś właścicielem całości kodu źródłowego przez opencode.** Nie ma żadnych ograniczeń licencyjnych ani należących do własności.
+**Jesteś właścicielem całości kodu źródłowego przez cyberstrike.** Nie ma żadnych ograniczeń licencyjnych ani należących do własności.
 
 ---
 
 ## Wycena
 
-W przypadku opencode Enterprise model per-seat. Jeśli posiadasz własną bramkę LLM, nie pobieramy opłat za korzystanie z tokenów. Aby uzyskać więcej informacji na temat, jeśli jest możliwe, **<a href={email}>skontaktuj się z nami</a>**.
+W przypadku cyberstrike Enterprise model per-seat. Jeśli posiadasz własną bramkę LLM, nie pobieramy opłat za korzystanie z tokenów. Aby uzyskać więcej informacji na temat, jeśli jest możliwe, **<a href={email}>skontaktuj się z nami</a>**.
 
 ---
 
 ## Zastosowanie
 
-Gdy zasięgsz okres próbny i nadzorujesz użytkowanie z opencode na
+Gdy zasięgsz okres próbny i nadzorujesz użytkowanie z cyberstrike na
 swoją organizację, możesz **<a href={email}>skontaktować się z nami</a>**, aby omówić te dźwięki
 opcja cenowa i wdrożeniowa.
 
@@ -77,7 +77,7 @@ opcja cenowa i wdrożeniowa.
 
 ### Konfiguracja centralna
 
-Możliwości wykorzystania opencode tak, aby skorzystać z jednego zastosowania dla całej organizacji.
+Możliwości wykorzystania cyberstrike tak, aby skorzystać z jednego zastosowania dla całej organizacji.
 
 Tę zapachową konfigurację można zintegrować z dostawcą SSO i specyfikacje wszyscy użytkownicy mają dostęp wyłącznie do bram wewnętrznych AI.
 
@@ -85,15 +85,15 @@ Tę zapachową konfigurację można zintegrować z dostawcą SSO i specyfikacje 
 
 ### Integracja SSO
 
-Dzięki zastosowaniu konfiguracji opencode może zostać włączone z dostawcą SSO Twojej organizacji w celu uwierzytelnienia.
+Dzięki zastosowaniu konfiguracji cyberstrike może zostać włączone z dostawcą SSO Twojej organizacji w celu uwierzytelnienia.
 
-Dzięki temu opencode może uzyskać dane uwierzytelniające dla wewnętrznej bramy AI za pośrednictwem transmisji systemu zarządzania tożsamością.
+Dzięki temu cyberstrike może uzyskać dane uwierzytelniające dla wewnętrznej bramy AI za pośrednictwem transmisji systemu zarządzania tożsamością.
 
 ---
 
 ### Wewnętrzna bramka AI
 
-Dzięki zastosowaniu konfiguracji opencode można również skorzystać z tego, że można korzystać tylko z wewnętrznych bram AI.
+Dzięki zastosowaniu konfiguracji cyberstrike można również skorzystać z tego, że można korzystać tylko z wewnętrznych bram AI.
 
 Możesz także dołączyć do wszystkich innych dostawców sztucznej inteligencji, upewniając się, że wszystkie elementy przechodzą przez zatwierdzenie wykorzystania Twojej organizacji.
 
@@ -111,16 +111,16 @@ Jest to obecnie w naszym planie działania. Jeśli jesteś zainteresowany, **<a 
 ## Często zadawane pytania
 
 <details>
-<summary>What is opencode Enterprise?</summary>
+<summary>What is cyberstrike Enterprise?</summary>
 
-opencode Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
+cyberstrike Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
 
 </details>
 
 <details>
-<summary>How do I get started with opencode Enterprise?</summary>
+<summary>How do I get started with cyberstrike Enterprise?</summary>
 
-Po prostu uruchom wersję próbną ze swoim. opencode urządzenia niezabezpieczone kodu ani danych kontekstowych, co ułatwia uruchomienie pracy.
+Po prostu uruchom wersję próbną ze swoim. cyberstrike urządzenia niezabezpieczone kodu ani danych kontekstowych, co ułatwia uruchomienie pracy.
 
 **<a href={email}>skontaktuj się z nami</a>**, aby omówić ceny i wybrać opcję.
 
@@ -134,16 +134,16 @@ Oferujemy ceny korporacyjne za jedno stanowisko. Jeśli posiadasz własną bramk
 </details>
 
 <details>
-<summary>Is my data secure with opencode Enterprise?</summary>
+<summary>Is my data secure with cyberstrike Enterprise?</summary>
 
-Tak. opencode nie przechowuje kodu ani danych kontekstowych. Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednie wywołanie API przez dostawcę AI. Dostęp do konfiguracji i integracji z logowaniem jednokrotnym Twoje dane pozostają bezpieczne w infrastrukturze organizacji.
+Tak. cyberstrike nie przechowuje kodu ani danych kontekstowych. Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednie wywołanie API przez dostawcę AI. Dostęp do konfiguracji i integracji z logowaniem jednokrotnym Twoje dane pozostają bezpieczne w infrastrukturze organizacji.
 
 </details>
 
 <details>
 <summary>Can we use our own private NPM registry?</summary>
 
-opencode obsługuje prywatny rejestry npm poprzez natywną usługę plików `.npmrc` Buna. Jeśli Twoja organizacja korzysta z rejestru prywatnego, takiego jak JFrog Artifactory, Nexus lub wylot, przed uruchomieniem opencode się, że programiści zostali uwierzytelnieni.
+cyberstrike obsługuje prywatny rejestry npm poprzez natywną usługę plików `.npmrc` Buna. Jeśli Twoja organizacja korzysta z rejestru prywatnego, takiego jak JFrog Artifactory, Nexus lub wylot, przed uruchomieniem cyberstrike się, że programiści zostali uwierzytelnieni.
 
 Aby zapewnić uwierzytelnianie w rejestrze prywatnym:
 
@@ -151,11 +151,11 @@ Aby zapewnić uwierzytelnianie w rejestrze prywatnym:
 npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
-Spowoduje to do `~/.npmrc` ze szczegółami uwierzytelniania. opencode zrobi to automatycznie
+Spowoduje to do `~/.npmrc` ze szczegółami uwierzytelniania. cyberstrike zrobi to automatycznie
 podniesc do.
 
 :::caution
-Przed uruchomieniem opencode musisz być zalogowany do rejestru prywatnego.
+Przed uruchomieniem cyberstrike musisz być zalogowany do rejestru prywatnego.
 :::
 
 Alternatywnie możesz skorzystać z pliku `.npmrc`:
@@ -165,6 +165,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Programiści muszą się zgłosić do rejestru prywatnego przed uruchomieniem opencode, aby mieć dostęp, że pakiety będą dostępne z rejestru przedsiębiorstwa.
+Programiści muszą się zgłosić do rejestru prywatnego przed uruchomieniem cyberstrike, aby mieć dostęp, że pakiety będą dostępne z rejestru przedsiębiorstwa.
 
 </details>

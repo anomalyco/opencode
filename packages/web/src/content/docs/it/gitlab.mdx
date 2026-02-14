@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: Usa OpenCode in issue e merge request su GitLab.
+description: Usa CyberStrike in issue e merge request su GitLab.
 ---
 
-OpenCode si integra nel tuo workflow GitLab tramite la pipeline GitLab CI/CD o con GitLab Duo.
+CyberStrike si integra nel tuo workflow GitLab tramite la pipeline GitLab CI/CD o con GitLab Duo.
 
-In entrambi i casi, OpenCode girera' sui tuoi runner GitLab.
+In entrambi i casi, CyberStrike girera' sui tuoi runner GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode funziona in una pipeline GitLab standard. Puoi integrarlo nella pipeline come [componente CI](https://docs.gitlab.com/ee/ci/components/).
+CyberStrike funziona in una pipeline GitLab standard. Puoi integrarlo nella pipeline come [componente CI](https://docs.gitlab.com/ee/ci/components/).
 
-Qui usiamo un componente CI/CD creato dalla community per OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Qui usiamo un componente CI/CD creato dalla community per CyberStrike — [nagyv/gitlab-cyberstrike](https://gitlab.com/nagyv/gitlab-cyberstrike).
 
 ---
 
 ### Funzionalità
 
-- **Configurazione personalizzata per job**: configura OpenCode con una directory di configurazione personalizzata, ad esempio `./config/#custom-directory`, per abilitare o disabilitare funzionalita' per ogni invocazione di OpenCode.
-- **Setup minimo**: il componente CI prepara OpenCode in background; devi solo creare la configurazione OpenCode e il prompt iniziale.
+- **Configurazione personalizzata per job**: configura CyberStrike con una directory di configurazione personalizzata, ad esempio `./config/#custom-directory`, per abilitare o disabilitare funzionalita' per ogni invocazione di CyberStrike.
+- **Setup minimo**: il componente CI prepara CyberStrike in background; devi solo creare la configurazione CyberStrike e il prompt iniziale.
 - **Flessibile**: il componente CI supporta diversi input per personalizzarne il comportamento.
 
 ---
 
 ### Configurazione
 
-1. Salva il JSON di autenticazione di OpenCode come variabile d'ambiente CI di tipo File in **Settings** > **CI/CD** > **Variables**. Assicurati di marcarla come "Masked and hidden".
+1. Salva il JSON di autenticazione di CyberStrike come variabile d'ambiente CI di tipo File in **Settings** > **CI/CD** > **Variables**. Assicurati di marcarla come "Masked and hidden".
 2. Aggiungi quanto segue al tuo file `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-cyberstrike/cyberstrike@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/cyberstrike-config
+         auth_json: $CYBERSTRIKE_AUTH_JSON # The variable name for your CyberStrike authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Per altri input e casi d'uso, [consulta la documentazione](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) di questo componente.
+Per altri input e casi d'uso, [consulta la documentazione](https://gitlab.com/explore/catalog/nagyv/gitlab-cyberstrike) di questo componente.
 
 ---
 
 ## GitLab Duo
 
-OpenCode si integra nel tuo workflow GitLab.
-Menziona `@opencode` in un commento e OpenCode eseguira' i task dentro la tua pipeline GitLab CI.
+CyberStrike si integra nel tuo workflow GitLab.
+Menziona `@cyberstrike` in un commento e CyberStrike eseguira' i task dentro la tua pipeline GitLab CI.
 
 ---
 
 ### Funzionalità
 
-- **Triage delle issue**: chiedi a OpenCode di indagare su una issue e spiegartela.
-- **Fix e implementazioni**: chiedi a OpenCode di risolvere una issue o implementare una feature.
+- **Triage delle issue**: chiedi a CyberStrike di indagare su una issue e spiegartela.
+- **Fix e implementazioni**: chiedi a CyberStrike di risolvere una issue o implementare una feature.
   Creera' un nuovo branch e aprira' una merge request con le modifiche.
-- **Sicuro**: OpenCode gira sui tuoi runner GitLab.
+- **Sicuro**: CyberStrike gira sui tuoi runner GitLab.
 
 ---
 
 ### Configurazione
 
-OpenCode gira nella pipeline GitLab CI/CD. Ecco cosa ti serve per configurarlo:
+CyberStrike gira nella pipeline GitLab CI/CD. Ecco cosa ti serve per configurarlo:
 
 :::tip
 Dai un'occhiata alle [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) per istruzioni aggiornate.
@@ -82,19 +82,19 @@ Dai un'occhiata alle [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_pl
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing cyberstrike"
+      - npm install --global cyberstrike-ai
       - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_CYBERSTRIKE
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
       - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating CyberStrike auth configuration"
+      - mkdir --parents ~/.local/share/cyberstrike
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/cyberstrike/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ Dai un'occhiata alle [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_pl
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "cyberstrike@gitlab.com"
+      - git config --global user.name "CyberStrike"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running CyberStrike"
       - |
-        opencode run "
+        cyberstrike run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -146,7 +146,7 @@ Dai un'occhiata alle [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_pl
         fi
     variables:
       - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_TOKEN_CYBERSTRIKE
       - GITLAB_HOST
     ```
 
@@ -158,10 +158,10 @@ Puoi fare riferimento alla [documentazione GitLab CLI agents](https://docs.gitla
 
 ### Esempi
 
-Ecco alcuni esempi di come puoi usare OpenCode in GitLab.
+Ecco alcuni esempi di come puoi usare CyberStrike in GitLab.
 
 :::tip
-Puoi configurare una frase trigger diversa da `@opencode`.
+Puoi configurare una frase trigger diversa da `@cyberstrike`.
 :::
 
 - **Spiega una issue**
@@ -169,27 +169,27 @@ Puoi configurare una frase trigger diversa da `@opencode`.
   Aggiungi questo commento in una issue GitLab.
 
   ```
-  @opencode explain this issue
+  @cyberstrike explain this issue
   ```
 
-  OpenCode leggera' la issue e rispondera' con una spiegazione chiara.
+  CyberStrike leggera' la issue e rispondera' con una spiegazione chiara.
 
 - **Risolvi una issue**
 
   In una issue GitLab, scrivi:
 
   ```
-  @opencode fix this
+  @cyberstrike fix this
   ```
 
-  OpenCode creera' un nuovo branch, implementera' le modifiche e aprira' una merge request con i cambiamenti.
+  CyberStrike creera' un nuovo branch, implementera' le modifiche e aprira' una merge request con i cambiamenti.
 
 - **Rivedi merge request**
 
   Lascia il seguente commento su una merge request GitLab.
 
   ```
-  @opencode review this merge request
+  @cyberstrike review this merge request
   ```
 
-  OpenCode rivedra' la merge request e fornira' feedback.
+  CyberStrike rivedra' la merge request e fornira' feedback.

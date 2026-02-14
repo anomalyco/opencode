@@ -1,15 +1,15 @@
 ---
 title: Introducción
-description: Comience con OpenCode.
+description: Comience con CyberStrike.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) es un agente de codificación de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
+[**CyberStrike**](/) es un agente de codificación de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
 
-![OpenCode TUI con el tema opencode](../../../assets/lander/screenshot.png)
+![CyberStrike TUI con el tema cyberstrike](../../../assets/lander/screenshot.png)
 
 Empecemos.
 
@@ -17,7 +17,7 @@ Empecemos.
 
 #### Requisitos previos
 
-Para usar OpenCode en su terminal, necesitará:
+Para usar CyberStrike en su terminal, necesitará:
 
 1. Un emulador de terminal moderno como:
    - [WezTerm](https://wezterm.org), multiplataforma
@@ -31,10 +31,10 @@ Para usar OpenCode en su terminal, necesitará:
 
 ## Instalar
 
-La forma más sencilla de instalar OpenCode es mediante el script de instalación.
+La forma más sencilla de instalar CyberStrike es mediante el script de instalación.
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://cyberstrike.io/install | bash
 ```
 
 También puedes instalarlo con los siguientes comandos:
@@ -45,28 +45,28 @@ También puedes instalarlo con los siguientes comandos:
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g cyberstrike-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g cyberstrike-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g cyberstrike-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add cyberstrike-ai
         ```
 
       </TabItem>
@@ -76,68 +76,68 @@ También puedes instalarlo con los siguientes comandos:
 - **Usando Homebrew en macOS y Linux**
 
   ```bash
-  brew install anomalyco/tap/opencode
+  brew install CyberStrikeus/tap/cyberstrike
   ```
 
-  > Recomendamos utilizar el tap OpenCode para las versiones más actualizadas. La fórmula oficial `brew install opencode` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
+  > Recomendamos utilizar el tap CyberStrike para las versiones más actualizadas. La fórmula oficial `brew install cyberstrike` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
 
 - **Usando Paru en Arch Linux**
 
   ```bash
-  sudo pacman -S opencode           # Arch Linux (Stable)
-  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  sudo pacman -S cyberstrike           # Arch Linux (Stable)
+  paru -S cyberstrike-bin              # Arch Linux (Latest from AUR)
   ```
 
 #### Windows
 
 :::tip[Recomendado: Usar WSL]
-Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Proporciona un mejor rendimiento y compatibilidad total con las funciones de OpenCode.
+Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Proporciona un mejor rendimiento y compatibilidad total con las funciones de CyberStrike.
 :::
 
 - **Usando Chocolatey**
 
   ```bash
-  choco install opencode
+  choco install cyberstrike
   ```
 
 - **Usando Scoop**
 
   ```bash
-  scoop install opencode
+  scoop install cyberstrike
   ```
 
 - **Usando NPM**
 
   ```bash
-  npm install -g opencode-ai
+  npm install -g cyberstrike-ai
   ```
 
 - **Usando Mise**
 
   ```bash
-  mise use -g github:anomalyco/opencode
+  mise use -g github:CyberStrikeus/cyberstrike
   ```
 
 - **Usando Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/anomalyco/opencode
+  docker run -it --rm ghcr.io/CyberStrikeus/cyberstrike
   ```
 
-Actualmente se encuentra en progreso el soporte para instalar OpenCode en Windows usando Bun.
+Actualmente se encuentra en progreso el soporte para instalar CyberStrike en Windows usando Bun.
 
-También puede obtener el binario de [Versiones](https://github.com/anomalyco/opencode/releases).
+También puede obtener el binario de [Versiones](https://github.com/CyberStrikeus/cyberstrike/releases).
 
 ---
 
 ## Configuración
 
-Con OpenCode puedes usar cualquier proveedor LLM configurando sus claves API.
+Con CyberStrike puedes usar cualquier proveedor LLM configurando sus claves API.
 
-Si es nuevo en el uso de proveedores LLM, le recomendamos usar [OpenCode Zen](/docs/zen).
-Es una lista seleccionada de modelos que han sido probados y verificados por el equipo de OpenCode.
+Si es nuevo en el uso de proveedores LLM, le recomendamos usar [CyberStrike Zen](/docs/zen).
+Es una lista seleccionada de modelos que han sido probados y verificados por el equipo de CyberStrike.
 
-1. Ejecute el comando `/connect` en TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
+1. Ejecute el comando `/connect` en TUI, seleccione cyberstrike y diríjase a [cyberstrike.io/auth](https://cyberstrike.io/auth).
 
    ```txt
    /connect
@@ -167,33 +167,33 @@ quieres trabajar.
 cd /path/to/project
 ```
 
-Y ejecute OpenCode.
+Y ejecute CyberStrike.
 
 ```bash
-opencode
+cyberstrike
 ```
 
-A continuación, inicialice OpenCode para el proyecto ejecutando el siguiente comando.
+A continuación, inicialice CyberStrike para el proyecto ejecutando el siguiente comando.
 
 ```bash frame="none"
 /init
 ```
 
-Esto hará que OpenCode analice su proyecto y cree un archivo `AGENTS.md` en
+Esto hará que CyberStrike analice su proyecto y cree un archivo `AGENTS.md` en
 la raíz del proyecto.
 
 :::tip
 Debes enviar el archivo `AGENTS.md` de tu proyecto a Git.
 :::
 
-Esto ayuda a OpenCode a comprender la estructura del proyecto y los patrones de codificación.
+Esto ayuda a CyberStrike a comprender la estructura del proyecto y los patrones de codificación.
 usado.
 
 ---
 
 ## Usar
 
-Ahora está listo para usar OpenCode para trabajar en su proyecto. No dudes en preguntarle
+Ahora está listo para usar CyberStrike para trabajar en su proyecto. No dudes en preguntarle
 ¡cualquier cosa!
 
 Si es nuevo en el uso de un agente de codificación de IA, aquí hay algunos ejemplos que podrían
@@ -203,7 +203,7 @@ ayuda.
 
 ### Hacer preguntas
 
-Puede pedirle a OpenCode que le explique el código base.
+Puede pedirle a CyberStrike que le explique el código base.
 
 :::tip
 Utilice la tecla `@` para realizar una búsqueda aproximada de archivos en el proyecto.
@@ -219,11 +219,11 @@ Esto es útil si hay una parte del código base en la que no trabajaste.
 
 ### Agregar funciones
 
-Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque primero recomendamos pedirle que cree un plan.
+Puede pedirle a CyberStrike que agregue nuevas funciones a su proyecto. Aunque primero recomendamos pedirle que cree un plan.
 
 1. **Crea un plan**
 
-   OpenCode tiene un _Modo Plan_ que desactiva su capacidad para realizar cambios y
+   CyberStrike tiene un _Modo Plan_ que desactiva su capacidad para realizar cambios y
    en su lugar, sugiera _cómo_ implementará la función.
 
    Cambie a él usando la tecla **Tab**. Verás un indicador para esto en la esquina inferior derecha.
@@ -240,11 +240,11 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   Quiere darle a OpenCode suficientes detalles para entender lo que quiere. ayuda
+   Quiere darle a CyberStrike suficientes detalles para entender lo que quiere. ayuda
    hablar con él como si estuviera hablando con un desarrollador junior de su equipo.
 
    :::tip
-   Dale a OpenCode mucho contexto y ejemplos para ayudarlo a comprender lo que
+   Dale a CyberStrike mucho contexto y ejemplos para ayudarlo a comprender lo que
    desear.
    :::
 
@@ -261,7 +261,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
    Arrastre y suelte imágenes en la terminal para agregarlas al mensaje.
    :::
 
-   OpenCode puede escanear cualquier imagen que le proporcione y agregarla al mensaje. Puede
+   CyberStrike puede escanear cualquier imagen que le proporcione y agregarla al mensaje. Puede
    Haga esto arrastrando y soltando una imagen en la terminal.
 
 3. **Crea la función**
@@ -283,7 +283,7 @@ Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque prim
 
 ### Realizar cambios
 
-Para cambios más sencillos, puede pedirle a OpenCode que lo construya directamente.
+Para cambios más sencillos, puede pedirle a CyberStrike que lo construya directamente.
 sin tener que revisar el plan primero.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -292,14 +292,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Desea asegurarse de proporcionar una buena cantidad de detalles para que OpenCode tome la decisión correcta.
+Desea asegurarse de proporcionar una buena cantidad de detalles para que CyberStrike tome la decisión correcta.
 cambios.
 
 ---
 
 ### Deshacer cambios
 
-Digamos que le pides a OpenCode que haga algunos cambios.
+Digamos que le pides a CyberStrike que haga algunos cambios.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -312,14 +312,14 @@ usando el comando `/undo`.
 /undo
 ```
 
-OpenCode ahora revertirá los cambios que realizó y mostrará su mensaje original
+CyberStrike ahora revertirá los cambios que realizó y mostrará su mensaje original
 de nuevo.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Desde aquí puedes modificar el mensaje y pedirle a OpenCode que vuelva a intentarlo.
+Desde aquí puedes modificar el mensaje y pedirle a CyberStrike que vuelva a intentarlo.
 
 :::tip
 Puede ejecutar `/undo` varias veces para deshacer varios cambios.
@@ -335,7 +335,7 @@ O **puedes rehacer** los cambios usando el comando `/redo`.
 
 ## Compartir
 
-Las conversaciones que tengas con OpenCode pueden ser [compartidas con tu
+Las conversaciones que tengas con CyberStrike pueden ser [compartidas con tu
 equipo](/docs/share).
 
 ```bash frame="none"
@@ -348,12 +348,12 @@ Esto creará un enlace a la conversación actual y lo copiará en su portapapele
 Las conversaciones no se comparten de forma predeterminada.
 :::
 
-Aquí hay una [conversación de ejemplo](https://opencode.ai/s/4XP1fce5) con OpenCode.
+Aquí hay una [conversación de ejemplo](https://cyberstrike.io/s/4XP1fce5) con CyberStrike.
 
 ---
 
 ## Personalizar
 
-¡Y eso es todo! Ahora eres un profesional en el uso de OpenCode.
+¡Y eso es todo! Ahora eres un profesional en el uso de CyberStrike.
 
-Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o jugar con la [configuración OpenCode](/docs/config).
+Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o jugar con la [configuración CyberStrike](/docs/config).

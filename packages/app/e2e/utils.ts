@@ -1,5 +1,5 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { createCyberstrikeClient } from "@cyberstrike-io/sdk/v2/client"
+import { base64Encode } from "@cyberstrike-io/util/encode"
 
 export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
 export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -11,7 +11,7 @@ export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
 export function createSdk(directory?: string) {
-  return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
+  return createCyberstrikeClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }
 
 export async function getWorktree() {

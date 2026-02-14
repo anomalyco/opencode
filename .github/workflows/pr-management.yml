@@ -8,7 +8,7 @@ jobs:
   check-duplicates:
     if: |
       github.event.pull_request.user.login != 'actions-user' &&
-      github.event.pull_request.user.login != 'opencode' &&
+      github.event.pull_request.user.login != 'cyberstrike' &&
       github.event.pull_request.user.login != 'rekram1-node' &&
       github.event.pull_request.user.login != 'thdxr' &&
       github.event.pull_request.user.login != 'kommander' &&
@@ -16,7 +16,7 @@ jobs:
       github.event.pull_request.user.login != 'fwang' &&
       github.event.pull_request.user.login != 'adamdotdevin' &&
       github.event.pull_request.user.login != 'iamdavidhill' &&
-      github.event.pull_request.user.login != 'opencode-agent[bot]'
+      github.event.pull_request.user.login != 'cyberstrike-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -33,8 +33,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install cyberstrike
+        run: curl -fsSL https://cyberstrike.io/install | bash
 
       - name: Build prompt
         env:
@@ -54,7 +54,7 @@ jobs:
 
       - name: Check for duplicate PRs
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CYBERSTRIKE_API_KEY: ${{ secrets.CYBERSTRIKE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |

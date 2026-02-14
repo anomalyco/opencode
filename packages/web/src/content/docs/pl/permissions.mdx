@@ -3,7 +3,7 @@ title: Uprawnienia
 description: Kontroluj, które Akcje wymagają zatwierdzenia do uruchomienia.
 ---
 
-opencode używa `permission`, aby uniknąć, czy dana akcja została wykonana automatycznie, zachowana monit lub została zablokowana.
+cyberstrike używa `permission`, aby uniknąć, czy dana akcja została wykonana automatycznie, zachowana monit lub została zablokowana.
 
 Od `v1.1.1` starsza stworzona logiczna `tools` jest przestarzała i została stworzona scalona z `permission`. Stara wersja `tools` jest nadal obsługiwana w celu zapewnienia zgodności wstecznej.
 
@@ -23,9 +23,9 @@ Każda reguła uprawnień skutkuje jedną z:
 
 Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego się w nim narzędzia.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego si�
 
 Możesz także zainstalować wszystkie uprawnienia na raz:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ Możesz także zainstalować wszystkie uprawnienia na raz:
 
 Można skorzystać z różnych działań, które zależą od danych użytkowych.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ Możesz używać `~` lub `$HOME` na początku wzorca, aby zastosować się do sw
 
 ### Katalogi zewnętrzne
 
-Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `list`, `glob`, `grep` i wiele założycieli `bash`).
+Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem cyberstrike. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `list`, `glob`, `grep` i wiele założycieli `bash`).
 
 Rozszerzenie domu (jak `~/...`) wpływa tylko na sposób za zwyczajowy wzorca. Nie powoduje to, że strategie zewnętrzne stają się stosowane przez `external_directory`.
 
 Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
 
 Każdy dopuszczony tutaj katalog jest dziedziczy tych samych ustawień, co dostęp do obszaru roboczego. Ponieważ [`read` ma wartość domyślną `allow`](#defaults), odczyty są również dostępne dla wpisów poniżej `external_directory`, chyba że zagłębione. Dodaj dodatkowe rozwiązanie, kiedy narzędzie powinno być rozwiązaniem w tych ścieżkach, np. blokowanie edycji przy zachowaniu odczytów:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ Skoncentruj listę na zaufanych ścieżkach i dodaj dodatkowe zezwolenie lub odm
 
 ## Dostępne uprawnienia
 
-Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezpieczeń:
+Uprawnienia cyberstrike są określane na podstawie nazwy narzędzia i kilku zabezpieczeń:
 
 - `read` — odczyt pliku (odpowiada ścieżce pliku)
 - `edit` — wszystkie modyfikacje plików (obejmuje `edit`, `write`, `patch`, `multiedit`)
@@ -148,13 +148,13 @@ Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezp
 
 ## Domyślne
 
-Jeżeli nic nie jest określone, opencode zostanie uruchomione od dopuszczalnych rozwiązań diagnostycznych:
+Jeżeli nic nie jest określone, cyberstrike zostanie uruchomione od dopuszczalnych rozwiązań diagnostycznych:
 
 - Dostępne uprawnienia ma wartość domyślną `"allow"`.
 - `doom_loop` i `external_directory` zamek ma wartość `"ask"`.
 - `read` do `"allow"`, ale pliki `.env` są odrzucane:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ Jeżeli nic nie jest określone, opencode zostanie uruchomione od dopuszczalnych
 
 ## Co robi „Zapytaj”.
 
-Gdy opencode poprosi o zatwierdzenie, interfejs użytkownika oferujący trzy wyniki:
+Gdy cyberstrike poprosi o zatwierdzenie, interfejs użytkownika oferujący trzy wyniki:
 
 - `once` — zatwierdź tylko tę prośbę
-- `always` — zastosowanie, które następuje po zastosowaniu sugerowanych wzorców (przez następczą bieżącą sesję opencode)
+- `always` — zastosowanie, które następuje po zastosowaniu sugerowanych wzorców (przez następczą bieżącą sesję cyberstrike)
 - `reject` — odrzucić
 
 Zestaw wzorców, które `always` zatwierdziłby, jest udostępniony przez narzędzie (na przykładzie zatwierdzenia bash zazwyczaj umieszczają na częstotliwości bezpiecznej prefiksy polecenia, takie jak `git status*`).
@@ -189,9 +189,9 @@ Można uzyskać dostęp do poszczególnych agentów. Uprawnienia agenta są skal
 Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekcji [Reguły szczegółowe (składnia obiektu) (#granular-rules-object-syntax) powyżej.
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
 
 Możesz także mieć pozwolenie na agenta w Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: OpenCode サーバー用の型安全な JS クライアント。
+description: CyberStrike サーバー用の型安全な JS クライアント。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-OpenCode JS/TS SDK は、サーバーと対話するための型安全なクライアントを提供します。
-これを使用して、統合を構築し、OpenCode をプログラムで制御します。
+CyberStrike JS/TS SDK は、サーバーと対話するための型安全なクライアントを提供します。
+これを使用して、統合を構築し、CyberStrike をプログラムで制御します。
 
 [サーバーの仕組みについての詳細](/docs/server) をご覧ください。たとえば、コミュニティによって構築された [projects](/docs/ecosystem#projects) をチェックしてください。
 
@@ -18,19 +18,19 @@ OpenCode JS/TS SDK は、サーバーと対話するための型安全なクラ�
 npm から SDK をインストールします。
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @cyberstrike-ai/sdk
 ```
 
 ---
 
 ## クライアントの作成
 
-OpenCode のインスタンスを作成します。
+CyberStrike のインスタンスを作成します。
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createCyberstrike()
 ```
 
 これにより、サーバーとクライアントの両方が起動します
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## 設定
 
-設定オブジェクトを渡して動作をカスタマイズできます。インスタンスは引き続き `opencode.json` を取得しますが、設定をインラインでオーバーライドまたは追加することができます。
+設定オブジェクトを渡して動作をカスタマイズできます。インスタンスは引き続き `cyberstrike.json` を取得しますが、設定をインラインでオーバーライドまたは追加することができます。
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createCyberstrike } from "@cyberstrike-ai/sdk"
 
-const opencode = await createOpencode({
+const cyberstrike = await createCyberstrike({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${cyberstrike.server.url}`)
 
-opencode.server.close()
+cyberstrike.server.close()
 ```
 
 ## クライアントのみ
 
-すでに実行中の OpenCode のインスタンスがある場合は、それに接続するためのクライアントインスタンスを作成できます。
+すでに実行中の CyberStrike のインスタンスがある場合は、それに接続するためのクライアントインスタンスを作成できます。
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createCyberstrikeClient } from "@cyberstrike-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createCyberstrikeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK には、すべての API タイプの TypeScript 定義が含まれています。それらを直接インポートします。
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@cyberstrike-ai/sdk"
 ```
 
 すべてのタイプはサーバーの OpenAPI 仕様から生成され、<a href={typesUrl}>タイプファイル</a> で使用できます。
@@ -304,7 +304,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*cyberstrike" },
 })
 
 const files = await client.find.files({

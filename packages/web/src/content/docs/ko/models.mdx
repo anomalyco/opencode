@@ -3,13 +3,13 @@ title: 모델
 description: LLM 공급자 및 모델 구성.
 ---
 
-opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
+cyberstrike는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
 
 ---
 
 ## 공급자
 
-가장 인기 있는 공급자는 기본적으로 미리 로드되어 있습니다. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 opencode를 시작할 때 사용할 수 있습니다.
+가장 인기 있는 공급자는 기본적으로 미리 로드되어 있습니다. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 cyberstrike를 시작할 때 사용할 수 있습니다.
 
 자세히 알아보기 [providers](/docs/providers).
 
@@ -49,16 +49,16 @@ opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 ## 기본값 설정
 
 기본 모델로 설정하려면 `model` 키를 설정할 수 있습니다.
-opencode 설정.
+cyberstrike 설정.
 
-```json title="opencode.json" {3}
+```json title="cyberstrike.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
+전체 ID는 `provider_id/model_id`입니다. 예를 들어, [CyberStrike Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `cyberstrike/gpt-5.1-codex`를 사용할 수 있습니다.
 
 [custom Provider](/docs/providers#custom)를 구성하면 `provider_id`는 구성의 `provider` 부분에서 키이며 `model_id`는 `provider.models`에서 키입니다.
 
@@ -68,9 +68,9 @@ opencode 설정.
 
 config를 통해 모델의 옵션을 구성할 수 있습니다.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="cyberstrike.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 
 내장 된 것을 확장하는 사용자 정의 변형을 정의 할 수 있습니다. Variants는 중복 항목 생성 없이 동일한 모델을 위한 다른 설정을 구성할 수 있습니다:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="cyberstrike.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
-    "opencode": {
+    "cyberstrike": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -137,11 +137,11 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 
 ## 변형
 
-많은 모델이 다양한 구성의 변형(variant)을 지원합니다. opencode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
+많은 모델이 다양한 구성의 변형(variant)을 지원합니다. cyberstrike는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
 
 ## 내장 변형
 
-opencode는 많은 공급자를 위한 기본 변종으로 발송합니다:
+cyberstrike는 많은 공급자를 위한 기본 변종으로 발송합니다:
 
 **Anthropic**:
 
@@ -172,9 +172,9 @@ opencode는 많은 공급자를 위한 기본 변종으로 발송합니다:
 
 기존의 변형을 과도하게 할 수 있거나 자신에게 추가 할 수 있습니다.
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="cyberstrike.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -203,15 +203,15 @@ keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니�
 
 ## 모델 로딩 순서
 
-opencode가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
+cyberstrike가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
 
 1. `--model` 또는 `-m` 명령 선 깃발. 형식은 구성 파일과 동일합니다. `provider_id/model_id`.
 
-2. opencode config의 모델 목록.
+2. cyberstrike config의 모델 목록.
 
-   ```json title="opencode.json"
+   ```json title="cyberstrike.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://cyberstrike.io/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

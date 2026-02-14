@@ -1,9 +1,9 @@
 ---
 title: 分享
-description: 分享您的 opencode 對話。
+description: 分享您的 cyberstrike 對話。
 ---
 
-opencode 的共享功能允許您建立 opencode 對話的公共連結，以便您可以與團隊成員協作或從其他人那裡獲得幫助。
+cyberstrike 的共享功能允許您建立 cyberstrike 對話的公共連結，以便您可以與團隊成員協作或從其他人那裡獲得幫助。
 
 :::note
 任何知道連結的人都可以公開存取共享對話。
@@ -13,7 +13,7 @@ opencode 的共享功能允許您建立 opencode 對話的公共連結，以便�
 
 ## 它是如何運作的
 
-當您共享對話時，opencode：
+當您共享對話時，cyberstrike：
 
 1. 為您的工作階段建立唯一的公共 URL
 2. 將您的對話歷史記錄同步到我們的伺服器
@@ -23,13 +23,13 @@ opencode 的共享功能允許您建立 opencode 對話的公共連結，以便�
 
 ## 模式
 
-opencode 支援三種控制對話共享方式的共享模式：
+cyberstrike 支援三種控制對話共享方式的共享模式：
 
 ---
 
 ### 手動（預設）
 
-opencode 預設使用手動共享模式。工作階段不會自動共享，但您可以使用 `/share` 指令手動共享它們：
+cyberstrike 預設使用手動共享模式。工作階段不會自動共享，但您可以使用 `/share` 指令手動共享它們：
 
 ```
 /share
@@ -39,7 +39,7 @@ opencode 預設使用手動共享模式。工作階段不會自動共享，但�
 
 要在 [設定檔](/docs/config) 中明確設定手動模式：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ opencode 預設使用手動共享模式。工作階段不會自動共享，但�
 
 您可以在 [設定檔](/docs/config) 中將 `share` 選項設定為 `"auto"` 來為所有新對話啟用自動共享：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ opencode 預設使用手動共享模式。工作階段不會自動共享，但�
 
 您可以在 [設定檔](/docs/config) 中將 `share` 選項設定為 `"disabled"` 來完全禁用共享：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "$schema": "https://opncd.ai/config.json",
   "share": "disabled"
 }
 ```
 
-要在整個團隊中針對給定專案強制執行此操作，請將其添加到專案中的 `opencode.json` 並簽入 Git。
+要在整個團隊中針對給定專案強制執行此操作，請將其添加到專案中的 `cyberstrike.json` 並簽入 Git。
 
 ---
 
@@ -125,4 +125,4 @@ opencode 預設使用手動共享模式。工作階段不會自動共享，但�
 - **僅限**僅透過 SSO 進行身分驗證的使用者
 - **在您自己的基礎架構上自行託管**
 
-[了解更多](/docs/enterprise) 關於在您的組織中使用 opencode。
+[了解更多](/docs/enterprise) 關於在您的組織中使用 cyberstrike。

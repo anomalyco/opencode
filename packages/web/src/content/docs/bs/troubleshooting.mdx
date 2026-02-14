@@ -3,7 +3,7 @@ title: Rješavanje problema
 description: Uobičajeni problemi i kako ih riješiti.
 ---
 
-Da biste otklonili probleme s OpenCode, počnite provjeravanjem dnevnika i lokalnih podataka koje pohranjuje na disku.
+Da biste otklonili probleme s CyberStrike, počnite provjeravanjem dnevnika i lokalnih podataka koje pohranjuje na disku.
 
 ---
 
@@ -11,21 +11,21 @@ Da biste otklonili probleme s OpenCode, počnite provjeravanjem dnevnika i lokal
 
 Log fajlovi se pišu na:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode\log`
+- **macOS/Linux**: `~/.local/share/cyberstrike/log/`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\cyberstrike\log`
 
 Datoteke evidencije se imenuju vremenskim oznakama (npr. `2025-01-09T123456.log`) i čuvaju se najnovijih 10 datoteka dnevnika.
 
-Možete postaviti nivo dnevnika pomoću opcije komandne linije `--log-level` da biste dobili detaljnije informacije o otklanjanju grešaka. Na primjer, `opencode --log-level DEBUG`.
+Možete postaviti nivo dnevnika pomoću opcije komandne linije `--log-level` da biste dobili detaljnije informacije o otklanjanju grešaka. Na primjer, `cyberstrike --log-level DEBUG`.
 
 ---
 
 ## Pohrana
 
-OpenCode pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
+CyberStrike pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/cyberstrike/`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\cyberstrike`
 
 Ovaj direktorij sadrži:
 
@@ -39,13 +39,13 @@ Ovaj direktorij sadrži:
 
 ## Desktop aplikacija
 
-OpenCode Desktop pokreće lokalni OpenCode server (`opencode-cli` sidecar) u pozadini. Većina problema je uzrokovana nedostatkom dodatka, oštećenom keš memorijom ili lošim postavkama servera.
+CyberStrike Desktop pokreće lokalni CyberStrike server (`cyberstrike-cli` sidecar) u pozadini. Većina problema je uzrokovana nedostatkom dodatka, oštećenom keš memorijom ili lošim postavkama servera.
 
 ### Brze provjere
 
 - Potpuno zatvorite i ponovo pokrenite aplikaciju.
 - Ako aplikacija prikaže ekran s greškom, kliknite na **Restart** i kopirajte detalje o grešci.
-- samo za macOS: `OpenCode` meni -> **Ponovo učitaj Webview** (pomaže ako je korisnički interfejs prazan/zamrznut).
+- samo za macOS: `CyberStrike` meni -> **Ponovo učitaj Webview** (pomaže ako je korisnički interfejs prazan/zamrznut).
 
 ---
 
@@ -57,28 +57,28 @@ Ako se desktop aplikacija ruši pri pokretanju, visi ili se čudno ponaša, poč
 
 Otvorite svoju globalnu konfiguracijsku datoteku i potražite ključ `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (ili `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (starije instalacije): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/cyberstrike/cyberstrike.jsonc` (ili `~/.config/cyberstrike/cyberstrike.json`)
+- **macOS/Linux** (starije instalacije): `~/.local/share/cyberstrike/cyberstrike.jsonc`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\cyberstrike\cyberstrike.jsonc`
 
 Ako imate konfigurirane dodatke, privremeno ih onemogućite uklanjanjem ključa ili postavljanjem na prazan niz:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "plugin": [],
 }
 ```
 
 #### Provjera direktorija dodataka
 
-OpenCode također može učitati lokalne dodatke s diska. Privremeno ih maknite s puta (ili preimenujte folder) i ponovo pokrenite desktop aplikaciju:
+CyberStrike također može učitati lokalne dodatke s diska. Privremeno ih maknite s puta (ili preimenujte folder) i ponovo pokrenite desktop aplikaciju:
 
 - **Globalni dodaci**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\plugins`
+  - **macOS/Linux**: `~/.config/cyberstrike/plugins/`
+  - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\cyberstrike\plugins`
 - **Projektni dodaci** (samo ako koristite konfiguraciju po projektu)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.cyberstrike/plugins/`
 
 Ako aplikacija ponovo počne raditi, ponovo omogućite dodatke jedan po jedan kako biste otkrili koji od njih uzrokuje problem.
 
@@ -86,22 +86,22 @@ Ako aplikacija ponovo počne raditi, ponovo omogućite dodatke jedan po jedan ka
 
 ### Brisanje keš memorije
 
-Ako onemogućavanje dodataka ne pomogne (ili se instalacija dodatka zaglavila), obrišite keš memoriju kako bi ga OpenCode mogao ponovo izgraditi.
+Ako onemogućavanje dodataka ne pomogne (ili se instalacija dodatka zaglavila), obrišite keš memoriju kako bi ga CyberStrike mogao ponovo izgraditi.
 
-1. Potpuno zatvorite OpenCode Desktop.
+1. Potpuno zatvorite CyberStrike Desktop.
 2. Izbrišite keš direktorij:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> zalijepi `~/.cache/opencode`
-- **Linux**: obrišite `~/.cache/opencode` (ili pokrenite `rm -rf ~/.cache/opencode`)
-- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> zalijepi `~/.cache/cyberstrike`
+- **Linux**: obrišite `~/.cache/cyberstrike` (ili pokrenite `rm -rf ~/.cache/cyberstrike`)
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.cache\cyberstrike`
 
-3. Ponovo pokrenite OpenCode Desktop.
+3. Ponovo pokrenite CyberStrike Desktop.
 
 ---
 
 ### Rješavanje problema sa vezom na serveru
 
-OpenCode Desktop može ili pokrenuti svoj lokalni server (podrazumevano) ili se povezati na URL servera koji ste konfigurisali.
+CyberStrike Desktop može ili pokrenuti svoj lokalni server (podrazumevano) ili se povezati na URL servera koji ste konfigurisali.
 
 Ako vidite dijaloški okvir **"Povezivanje nije uspjelo"** (ili aplikacija nikada ne prođe kroz početni ekran), provjerite da li postoji prilagođeni URL servera.
 
@@ -111,13 +111,13 @@ Na početnom ekranu kliknite na ime servera (sa tačkom statusa) da otvorite bir
 
 #### Uklonite `server.port` / `server.hostname` iz vaše konfiguracije
 
-Ako vaš `opencode.json(c)` sadrži odjeljak `server`, privremeno ga uklonite i ponovo pokrenite desktop aplikaciju.
+Ako vaš `cyberstrike.json(c)` sadrži odjeljak `server`, privremeno ga uklonite i ponovo pokrenite desktop aplikaciju.
 
 #### Provjerite varijable okruženja
 
-Ako ste postavili `OPENCODE_PORT` u svom okruženju, desktop aplikacija će pokušati da koristi taj port za lokalni server.
+Ako ste postavili `CYBERSTRIKE_PORT` u svom okruženju, desktop aplikacija će pokušati da koristi taj port za lokalni server.
 
-- Poništite `OPENCODE_PORT` (ili odaberite slobodan port) i ponovo pokrenite.
+- Poništite `CYBERSTRIKE_PORT` (ili odaberite slobodan port) i ponovo pokrenite.
 
 ---
 
@@ -132,21 +132,21 @@ Na Linuxu, neka podešavanja Waylanda mogu uzrokovati prazne prozore ili greške
 
 ### Windows: WebView2 izvršno okruženje
 
-Na Windows-u, OpenCode Desktop zahtijeva Microsoft Edge **WebView2 Runtime**. Ako se aplikacija otvori u praznom prozoru ili se ne pokrene, instalirajte/ažurirajte WebView2 i pokušajte ponovo.
+Na Windows-u, CyberStrike Desktop zahtijeva Microsoft Edge **WebView2 Runtime**. Ako se aplikacija otvori u praznom prozoru ili se ne pokrene, instalirajte/ažurirajte WebView2 i pokušajte ponovo.
 
 ---
 
 ### Windows: Opšti problemi sa performansama
 
-Ako imate spore performanse, probleme s pristupom datotekama ili probleme s terminalom na Windows-u, pokušajte koristiti [WSL (Windows podsistem za Linux)](/docs/windows-wsl). WSL pruža Linux okruženje koje radi neprimetnije sa OpenCode karakteristikama.
+Ako imate spore performanse, probleme s pristupom datotekama ili probleme s terminalom na Windows-u, pokušajte koristiti [WSL (Windows podsistem za Linux)](/docs/windows-wsl). WSL pruža Linux okruženje koje radi neprimetnije sa CyberStrike karakteristikama.
 
 ---
 
 ### Obavještenja se ne prikazuju
 
-OpenCode Desktop prikazuje sistemska obavještenja samo kada:
+CyberStrike Desktop prikazuje sistemska obavještenja samo kada:
 
-- obavještenja su omogućena za OpenCode u postavkama vašeg OS-a, i
+- obavještenja su omogućena za CyberStrike u postavkama vašeg OS-a, i
 - prozor aplikacije nije fokusiran.
 
 ---
@@ -155,11 +155,11 @@ OpenCode Desktop prikazuje sistemska obavještenja samo kada:
 
 Ako se aplikacija ne pokrene i ne možete izbrisati postavke unutar korisničkog sučelja, resetirajte spremljeno stanje desktop aplikacije.
 
-1. Zatvorite OpenCode Desktop.
-2. Pronađite i izbrišite ove datoteke (oni žive u direktoriju podataka OpenCode Desktop aplikacije):
+1. Zatvorite CyberStrike Desktop.
+2. Pronađite i izbrišite ove datoteke (oni žive u direktoriju podataka CyberStrike Desktop aplikacije):
 
-- `opencode.settings.dat` (URL zadanog servera za desktop)
-- `opencode.global.dat` i `opencode.workspace.*.dat` (stanje korisničkog interfejsa poput nedavnih servera/projekata)
+- `cyberstrike.settings.dat` (URL zadanog servera za desktop)
+- `cyberstrike.global.dat` i `cyberstrike.workspace.*.dat` (stanje korisničkog interfejsa poput nedavnih servera/projekata)
 
 Da brzo pronađete direktorij:
 
@@ -171,13 +171,13 @@ Da brzo pronađete direktorij:
 
 ## Traženje pomoći
 
-Ako imate problema s OpenCode:
+Ako imate problema s CyberStrike:
 
 1. **Prijavite probleme na GitHub**
 
    Najbolji način da prijavite greške ili zatražite funkcije je putem našeg GitHub spremišta:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/CyberStrikeus/cyberstrike/issues**](https://github.com/CyberStrikeus/cyberstrike/issues)
 
    Prije kreiranja novog problema, pretražite postojeće probleme da vidite je li vaš problem već prijavljen.
 
@@ -185,7 +185,7 @@ Ako imate problema s OpenCode:
 
    Za pomoć u stvarnom vremenu i diskusiju u zajednici, pridružite se našem Discord serveru:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**cyberstrike.io/discord**](https://cyberstrike.io/discord)
 
 ---
 
@@ -195,11 +195,11 @@ Evo nekih uobičajenih problema i kako ih riješiti.
 
 ---
 
-### OpenCode se ne pokreće
+### CyberStrike se ne pokreće
 
 1. Provjerite dnevnike za poruke o greškama
 2. Pokušajte pokrenuti sa `--print-logs` da vidite izlaz u terminalu
-3. Uvjerite se da imate najnoviju verziju sa `opencode upgrade`
+3. Uvjerite se da imate najnoviju verziju sa `cyberstrike upgrade`
 
 ---
 
@@ -225,9 +225,9 @@ primjeri:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `cyberstrike/kimi-k2`
 
-Da saznate kojim modelima imate pristup, pokrenite `opencode models`
+Da saznate kojim modelima imate pristup, pokrenite `cyberstrike models`
 
 ---
 
@@ -241,10 +241,10 @@ Da biste ovo riješili:
 2. Ako se problem nastavi, pokušajte obrisati pohranjenu konfiguraciju:
 
 ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/cyberstrike
 ```
 
-Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\opencode`
+Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\cyberstrike`
 
 3. Ponovo izvršite autentifikaciju kod svog provajdera koristeći naredbu `/connect` u TUI.
 
@@ -252,21 +252,21 @@ Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\openco
 
 ### AI_APICallError i problemi sa paketom dobavljača
 
-Ako naiđete na greške API poziva, to može biti zbog zastarjelih paketa dobavljača. OpenCode dinamički instalira pakete dobavljača (OpenAI, Anthropic, Google, itd.) po potrebi i kešira ih lokalno.
+Ako naiđete na greške API poziva, to može biti zbog zastarjelih paketa dobavljača. CyberStrike dinamički instalira pakete dobavljača (OpenAI, Anthropic, Google, itd.) po potrebi i kešira ih lokalno.
 
 Da biste riješili probleme s paketom dobavljača:
 
 1. Obrišite keš paketa provajdera:
 
 ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/cyberstrike
 ```
 
-Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.cache\opencode`
+Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.cache\cyberstrike`
 
-2. Ponovo pokrenite OpenCode da ponovo instalirate najnovije pakete dobavljača
+2. Ponovo pokrenite CyberStrike da ponovo instalirate najnovije pakete dobavljača
 
-Ovo će prisiliti OpenCode da preuzme najnovije verzije paketa dobavljača, što često rješava probleme kompatibilnosti s parametrima modela i promjenama API-ja.
+Ovo će prisiliti CyberStrike da preuzme najnovije verzije paketa dobavljača, što često rješava probleme kompatibilnosti s parametrima modela i promjenama API-ja.
 
 ---
 
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-OpenCode će otkriti da li koristite Wayland i preferirate `wl-clipboard`, u suprotnom će pokušati pronaći alate međuspremnika po redoslijedu: `xclip` i `xsel`.
+CyberStrike će otkriti da li koristite Wayland i preferirate `wl-clipboard`, u suprotnom će pokušati pronaći alate međuspremnika po redoslijedu: `xclip` i `xsel`.

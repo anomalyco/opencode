@@ -1,13 +1,13 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSXElement } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { Button } from "@opencode-ai/ui/button"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@cyberstrike-io/ui/context/dialog"
+import { Popover } from "@cyberstrike-io/ui/popover"
+import { Tabs } from "@cyberstrike-io/ui/tabs"
+import { Button } from "@cyberstrike-io/ui/button"
+import { Switch } from "@cyberstrike-io/ui/switch"
+import { Icon } from "@cyberstrike-io/ui/icon"
+import { showToast } from "@cyberstrike-io/ui/toast"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, useServer } from "@/context/server"
@@ -180,7 +180,7 @@ export function StatusPopover() {
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
   const pluginCount = createMemo(() => plugins().length)
-  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "cyberstrike.json"))
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
     const anyMcpIssue = mcpNames().some((name) => {

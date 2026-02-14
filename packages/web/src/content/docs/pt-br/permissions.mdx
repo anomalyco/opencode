@@ -3,7 +3,7 @@ title: Permissões
 description: Controle quais ações requerem aprovação para serem executadas.
 ---
 
-O opencode usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
+O cyberstrike usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
 
 A partir da versão `v1.1.1`, a configuração booleana legada `tools` foi descontinuada e mesclada na `permission`. A antiga configuração `tools` ainda é suportada para compatibilidade retroativa.
 
@@ -23,9 +23,9 @@ Cada regra de permissão se resolve em uma das seguintes opções:
 
 Você pode definir permissões globalmente (com `*`), e substituir ferramentas específicas.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -36,9 +36,9 @@ Você pode definir permissões globalmente (com `*`), e substituir ferramentas e
 
 Você também pode definir todas as permissões de uma vez:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": "allow"
 }
 ```
@@ -49,9 +49,9 @@ Você também pode definir todas as permissões de uma vez:
 
 Para a maioria das permissões, você pode usar um objeto para aplicar diferentes ações com base na entrada da ferramenta.
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -88,15 +88,15 @@ Você pode usar `~` ou `$HOME` no início de um padrão para referenciar seu dir
 
 ### Diretórios Externos
 
-Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `list`, `glob`, `grep` e muitos comandos `bash`).
+Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o cyberstrike foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `list`, `glob`, `grep` e muitos comandos `bash`).
 
 A expansão do home (como `~/...`) afeta apenas como um padrão é escrito. Não torna um caminho externo parte do espaço de trabalho atual, então caminhos fora do diretório de trabalho ainda devem ser permitidos via `external_directory`.
 
 Por exemplo, isso permite acesso a tudo sob `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -107,9 +107,9 @@ Por exemplo, isso permite acesso a tudo sob `~/projects/personal/`:
 
 Qualquer diretório permitido aqui herda os mesmos padrões do espaço de trabalho atual. Como [`read` padrão é `allow`](#defaults), leituras também são permitidas para entradas sob `external_directory`, a menos que sejam substituídas. Adicione regras explícitas quando uma ferramenta deve ser restrita nesses caminhos, como bloquear edições enquanto mantém leituras:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -127,7 +127,7 @@ Mantenha a lista focada em caminhos confiáveis e adicione regras adicionais de 
 
 ## Permissões Disponíveis
 
-As permissões do opencode são indexadas pelo nome da ferramenta, além de alguns guardas de segurança:
+As permissões do cyberstrike são indexadas pelo nome da ferramenta, além de alguns guardas de segurança:
 
 - `read` — leitura de um arquivo (corresponde ao caminho do arquivo)
 - `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`, `multiedit`)
@@ -148,13 +148,13 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 
 ## Padrões
 
-Se você não especificar nada, o opencode começa com padrões permissivos:
+Se você não especificar nada, o cyberstrike começa com padrões permissivos:
 
 - A maioria das permissões padrão é `"allow"`.
 - `doom_loop` e `external_directory` padrão é `"ask"`.
 - `read` é `"allow"`, mas arquivos `.env` são negados por padrão:
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "permission": {
     "read": {
@@ -171,10 +171,10 @@ Se você não especificar nada, o opencode começa com padrões permissivos:
 
 ## O que “Ask” Faz
 
-Quando o opencode solicita aprovação, a interface oferece três resultados:
+Quando o cyberstrike solicita aprovação, a interface oferece três resultados:
 
 - `once` — aprovar apenas esta solicitação
-- `always` — aprovar futuras solicitações que correspondam aos padrões sugeridos (para o restante da sessão atual do opencode)
+- `always` — aprovar futuras solicitações que correspondam aos padrões sugeridos (para o restante da sessão atual do cyberstrike)
 - `reject` — negar a solicitação
 
 O conjunto de padrões que `always` aprovaria é fornecido pela ferramenta (por exemplo, aprovações de bash normalmente incluem um prefixo de comando seguro como `git status*`).
@@ -189,9 +189,9 @@ Você pode substituir permissões por agente. As permissões do agente são mesc
 Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-object-syntax) acima para exemplos mais detalhados de correspondência de padrões.
 :::
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -219,7 +219,7 @@ Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-objec
 
 Você também pode configurar permissões de agentes em Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/cyberstrike/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

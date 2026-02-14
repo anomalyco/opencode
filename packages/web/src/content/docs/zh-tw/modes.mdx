@@ -4,14 +4,14 @@ description: 不同的模式適用於不同的使用案例。
 ---
 
 :::caution
-現在透過 opencode 設定中的 `agent` 選項配置模式。這
+現在透過 cyberstrike 設定中的 `agent` 選項配置模式。這
 `mode` 選項現已棄用。 [了解更多](/docs/agents)。
 :::
 
-opencode 中的模式允許您自定義不同使用案例的行為、工具和提示。
+cyberstrike 中的模式允許您自定義不同使用案例的行為、工具和提示。
 
 它具有兩種內建模式：**建置 (Build)**和**計畫 (Plan)**。您可以自定義
-這些或透過 opencode 設定配置您自己的。
+這些或透過 cyberstrike 設定配置您自己的。
 
 您可以在工作階段期間在模式之間切換或在設定檔中配置它們。
 
@@ -19,7 +19,7 @@ opencode 中的模式允許您自定義不同使用案例的行為、工具和�
 
 ## 內建
 
-opencode 有兩種內建模式。
+cyberstrike 有兩種內建模式。
 
 ---
 
@@ -34,7 +34,7 @@ opencode 有兩種內建模式。
 專為規劃和分析而設計的受限模式。在計畫模式下，預設情況下禁用以下工具：
 
 - `write` - 無法建立新檔案
-- `edit` - 無法修改現有檔案，位於 `.opencode/plans/*.md` 的用於詳細說明計畫本身的檔案除外
+- `edit` - 無法修改現有檔案，位於 `.cyberstrike/plans/*.md` 的用於詳細說明計畫本身的檔案除外
 - `patch` - 無法套用 Patch
 - `bash` - 無法執行 shell 指令
 
@@ -56,11 +56,11 @@ opencode 有兩種內建模式。
 
 ### JSON 配置
 
-在 `opencode.json` 設定檔中配置模式：
+在 `cyberstrike.json` 設定檔中配置模式：
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ opencode 有兩種內建模式。
 
 您還可以使用 Markdown 檔案定義模式。將它們放入：
 
-- 全域：`~/.config/opencode/modes/`
-- 專案：`.opencode/modes/`
+- 全域：`~/.config/cyberstrike/modes/`
+- 專案：`.cyberstrike/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/cyberstrike/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 
 使用 `model` 配置覆寫此模式的預設模型。對於使用針對不同任務最佳化的不同模型很有用。例如，更快的規劃模型、更強大的實作模型。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 
 使用 `temperature` 配置控制 AI 回應的隨機性和創造性。較低的值使回應更加集中和確定，而較高的值則增加創造力和可變性。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 - **0.3-0.5**：具有一定創造力的平衡回應，適合一般開發任務
 - **0.6-1.0**：更有創意和多樣化的反應，有助於腦力激盪和探索
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 }
 ```
 
-如果未指定溫度，opencode 將使用特定於模型的預設值（大多數模型通常為 0，Qwen 模型為 0.55）。
+如果未指定溫度，cyberstrike 將使用特定於模型的預設值（大多數模型通常為 0，Qwen 模型為 0.55）。
 
 ---
 
@@ -181,7 +181,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 
 使用 `prompt` 配置為此模式指定自定義系統提示檔案。提示檔案應包含特定於該模式用途的指令。
 
-```json title="opencode.json"
+```json title="cyberstrike.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 ```
 
 該路徑是相對於設定檔所在位置的。所以這適用於
-全域 opencode 配置和專案特定配置。
+全域 cyberstrike 配置和專案特定配置。
 
 ---
 
@@ -247,9 +247,9 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 
 ### 使用 JSON 配置
 
-```json title="opencode.json" {4-14}
+```json title="cyberstrike.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://cyberstrike.io/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -268,9 +268,9 @@ Markdown 檔名成為模式名稱（例如，`review.md` 建立 `review` 模式�
 
 ### 使用 Markdown 檔案
 
-在 `.opencode/modes/` 中為專案特定模式建立模式檔案，在 `~/.config/opencode/modes/` 中為全域模式建立模式檔案：
+在 `.cyberstrike/modes/` 中為專案特定模式建立模式檔案，在 `~/.config/cyberstrike/modes/` 中為全域模式建立模式檔案：
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".cyberstrike/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/cyberstrike/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2
