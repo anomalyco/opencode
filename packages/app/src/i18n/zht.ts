@@ -550,6 +550,7 @@ export const dict = {
   "common.rename": "重新命名",
   "common.reset": "重設",
   "common.archive": "封存",
+  "common.markAsRead": "標記為已讀",
   "common.delete": "刪除",
   "common.close": "關閉",
   "common.edit": "編輯",

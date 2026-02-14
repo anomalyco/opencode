@@ -498,6 +498,7 @@ export const dict = {
   "common.rename": "이름 바꾸기",
   "common.reset": "초기화",
   "common.archive": "보관",
+  "common.markAsRead": "읽음으로 표시",
   "common.delete": "삭제",
   "common.close": "닫기",
   "common.edit": "편집",

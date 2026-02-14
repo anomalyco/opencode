@@ -559,6 +559,7 @@ export const dict = {
   "common.rename": "Preimenuj",
   "common.reset": "Resetuj",
   "common.archive": "Arhiviraj",
+  "common.markAsRead": "Označi kao pročitano",
   "common.delete": "Izbriši",
   "common.close": "Zatvori",
   "common.edit": "Uredi",

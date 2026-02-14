@@ -554,6 +554,7 @@ export const dict = {
   "common.rename": "เปลี่ยนชื่อ",
   "common.reset": "รีเซ็ต",
   "common.archive": "จัดเก็บ",
+  "common.markAsRead": "ทำเครื่องหมายว่าอ่านแล้ว",
   "common.delete": "ลบ",
   "common.close": "ปิด",
   "common.edit": "แก้ไข",

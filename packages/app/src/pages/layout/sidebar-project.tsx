@@ -10,6 +10,7 @@ import { createSortable } from "@thisbeyond/solid-dnd"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
@@ -59,6 +60,8 @@ const ProjectTile = (props: {
   selected: Accessor<boolean>
   active: Accessor<boolean>
   overlay: Accessor<boolean>
+  markAsReadDisabled: Accessor<boolean>
+  markAsRead: () => void
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
@@ -112,6 +115,14 @@ const ProjectTile = (props: {
       <ContextMenu.Content>
         <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
           <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item
+          data-action="project-mark-read"
+          data-project={base64Encode(props.project.worktree)}
+          disabled={props.markAsReadDisabled()}
+          onSelect={props.markAsRead}
+        >
+          <ContextMenu.ItemLabel>{props.language.t("common.markAsRead")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item
           data-action="project-workspaces-toggle"
@@ -248,6 +259,7 @@ export const SortableProject = (props: {
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const notification = useNotification()
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() =>
     projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),
@@ -304,6 +316,14 @@ export const SortableProject = (props: {
       selected={selected}
       active={active}
       overlay={overlay}
+      markAsReadDisabled={() => {
+        const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
+        return dirs.reduce((total, directory) => total + notification.project.unseenCount(directory), 0) === 0
+      }}
+      markAsRead={() => {
+        const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
+        dirs.forEach((directory) => notification.project.markViewed(directory))
+      }}
       onProjectMouseEnter={props.ctx.onProjectMouseEnter}
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}

@@ -555,6 +555,7 @@ export const dict = {
   "common.rename": "Omdøb",
   "common.reset": "Nulstil",
   "common.archive": "Arkivér",
+  "common.markAsRead": "Markér som læst",
   "common.delete": "Slet",
   "common.close": "Luk",
   "common.edit": "Rediger",

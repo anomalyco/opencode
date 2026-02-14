@@ -505,6 +505,7 @@ export const dict = {
   "common.rename": "Renommer",
   "common.reset": "Réinitialiser",
   "common.archive": "Archiver",
+  "common.markAsRead": "Marquer comme lu",
   "common.delete": "Supprimer",
   "common.close": "Fermer",
   "common.edit": "Modifier",

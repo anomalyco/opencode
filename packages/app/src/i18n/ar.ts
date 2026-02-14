@@ -493,6 +493,7 @@ export const dict = {
   "common.rename": "إعادة تسمية",
   "common.reset": "إعادة تعيين",
   "common.archive": "أرشفة",
+  "common.markAsRead": "وضع علامة كمقروء",
   "common.delete": "حذف",
   "common.close": "إغلاق",
   "common.edit": "تحرير",

@@ -560,6 +560,7 @@ export const dict = {
   "common.rename": "Переименовать",
   "common.reset": "Сбросить",
   "common.archive": "Архивировать",
+  "common.markAsRead": "Отметить как прочитанное",
   "common.delete": "Удалить",
   "common.close": "Закрыть",
   "common.edit": "Редактировать",

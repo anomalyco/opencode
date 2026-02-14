@@ -497,6 +497,7 @@ export const dict = {
   "common.rename": "名前変更",
   "common.reset": "リセット",
   "common.archive": "アーカイブ",
+  "common.markAsRead": "既読にする",
   "common.delete": "削除",
   "common.close": "閉じる",
   "common.edit": "編集",

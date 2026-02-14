@@ -499,6 +499,7 @@ export const dict = {
   "common.rename": "Renomear",
   "common.reset": "Redefinir",
   "common.archive": "Arquivar",
+  "common.markAsRead": "Marcar como lida",
   "common.delete": "Excluir",
   "common.close": "Fechar",
   "common.edit": "Editar",
