@@ -103,16 +103,20 @@ export function encodeFilePath(filepath: string): string {
 
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
-    const root = scope()
-    const prefix = root.endsWith("/") ? root : root + "/"
+    const root = scope().replace(/\\/g, "/")
 
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(/\\/g, "/")
 
-    if (path.startsWith(prefix)) {
-      path = path.slice(prefix.length)
-    }
-
-    if (path.startsWith(root)) {
+    // Remove initial root prefix, if it's a complete match or followed by /
+    // (don't want /foo/bar to root of /f).
+    // For Windows paths, also check for case-insensitive match.
+    const windows = /^[A-Za-z]:/.test(root)
+    const canonRoot = windows ? root.toLowerCase() : root
+    const canonPath = windows ? path.toLowerCase() : path
+    if (canonPath.startsWith(canonRoot) &&
+        (canonRoot.endsWith("/") || canonPath === canonRoot ||
+         canonPath.startsWith(canonRoot + "/"))) {
+      // If we match canonRoot + "/", the slash will be removed below.
       path = path.slice(root.length)
     }
 
