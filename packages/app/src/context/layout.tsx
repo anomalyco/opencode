@@ -373,6 +373,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return map
     })
 
+    const [sync, setSync] = createStore({
+      hydrated: false,
+    })
+
     const rootFor = (directory: string) => {
       const map = roots()
       const origin = normalizePath(directory)
@@ -397,6 +401,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
+      if (sync.hydrated) return
+
       const worktrees = globalSync.data.project
         .filter((project) => project.id !== "global")
         .map((project) => project.worktree)
@@ -429,6 +435,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           server.projects.open(raw.get(worktree) ?? worktree)
           seen.add(worktree)
         }
+
+        setSync("hydrated", true)
       })
     })
 
