@@ -413,6 +413,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.permission.list().then((x) => {
+              const grouped: Record<string, PermissionRequest[]> = {}
+              for (const p of x.data ?? []) {
+                if (!grouped[p.sessionID]) grouped[p.sessionID] = []
+                grouped[p.sessionID]!.push(p)
+              }
+              setStore("permission", reconcile(grouped))
+            }),
+            sdk.client.question.list().then((x) => {
+              const grouped: Record<string, QuestionRequest[]> = {}
+              for (const q of x.data ?? []) {
+                if (!grouped[q.sessionID]) grouped[q.sessionID] = []
+                grouped[q.sessionID]!.push(q)
+              }
+              setStore("question", reconcile(grouped))
+            }),
           ]).then(() => {
             setStore("status", "complete")
           })
