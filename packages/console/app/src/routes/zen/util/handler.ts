@@ -110,6 +110,7 @@ export async function handler(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
           model: providerInfo.model,
+          ...(providerInfo.payloadModifier ?? {}),
         }),
       )
       logger.debug("REQUEST URL: " + reqUrl)
@@ -274,8 +275,8 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.bodyModifier) {
-                  for (const [k, v] of Object.entries(providerInfo.bodyModifier)) {
+                if (providerInfo.responseModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.responseModifier)) {
                     part = part.replace(k, v)
                   }
                   c.enqueue(encoder.encode(part + "\n\n"))
@@ -285,7 +286,7 @@ export async function handler(
                 }
               }
 
-              if (!providerInfo.bodyModifier && providerInfo.format === opts.format) {
+              if (!providerInfo.responseModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
