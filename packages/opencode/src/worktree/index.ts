@@ -345,11 +345,11 @@ export namespace Worktree {
     }, 0)
   }
 
-  async function resolveBaseBranch(input?: string) {
+  async function resolveBaseBranch(project: Project.Info, input?: string) {
     if (input) return input
-    if (Instance.project.worktreeSettings?.baseBranch) return Instance.project.worktreeSettings.baseBranch
+    if (project.worktreeSettings?.baseBranch) return project.worktreeSettings.baseBranch
 
-    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree)
+    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(project.worktree)
     if (mainCheck.exitCode === 0) return "main"
     return "master"
   }
@@ -359,26 +359,31 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const root = path.join(Global.Path.data, "worktree", Instance.project.id)
+    const project = Project.get(Instance.project.id)
+    if (!project) {
+      throw new CreateFailedError({ message: "Project not found" })
+    }
+
+    const root = path.join(Global.Path.data, "worktree", project.id)
     await fs.mkdir(root, { recursive: true })
 
     const base = input?.name ? slug(input.name) : ""
     const info = await candidate(root, { name: base || undefined, branch: input?.branch })
 
-    const baseBranch = await resolveBaseBranch(input?.baseBranch)
+    const baseBranch = await resolveBaseBranch(project, input?.baseBranch)
     const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory} ${baseBranch}`
       .quiet()
       .nothrow()
-      .cwd(Instance.worktree)
+      .cwd(project.worktree)
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
 
-    const settings = Instance.project.worktreeSettings
+    const settings = project.worktreeSettings
     if (settings) {
       if (settings.symlinks) {
         for (const item of settings.symlinks) {
-          const src = path.resolve(Instance.worktree, item)
+          const src = path.resolve(project.worktree, item)
           const dst = path.resolve(info.directory, item)
           if (await exists(src)) {
             await fs.mkdir(path.dirname(dst), { recursive: true })
@@ -388,7 +393,7 @@ export namespace Worktree {
       }
       if (settings.copies) {
         for (const item of settings.copies) {
-          const src = path.resolve(Instance.worktree, item)
+          const src = path.resolve(project.worktree, item)
           const dst = path.resolve(info.directory, item)
           if (await exists(src)) {
             await fs.mkdir(path.dirname(dst), { recursive: true })
@@ -400,9 +405,9 @@ export namespace Worktree {
       }
     }
 
-    await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
+    await Project.addSandbox(project.id, info.directory).catch(() => undefined)
 
-    const projectID = Instance.project.id
+    const projectID = project.id
     const extra = input?.startCommand?.trim()
     setTimeout(() => {
       const start = async () => {
