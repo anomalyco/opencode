@@ -72,12 +72,41 @@ export function unquoteGitPath(input: string) {
   return new TextDecoder().decode(new Uint8Array(bytes))
 }
 
+export function decodeFilePath(input: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
+  }
+}
+
+export function encodeFilePath(filepath: string): string {
+  // Normalize Windows paths: convert backslashes to forward slashes
+  let normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  if (/^[A-Za-z]:/.test(normalized)) {
+    normalized = "/" + normalized
+  }
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
+  // can reliably detect drives.
+  return normalized
+    .split("/")
+    .map((segment, index) => {
+      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
+      return encodeURIComponent(segment)
+    })
+    .join("/")
+}
+
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
     const prefix = root.endsWith("/") ? root : root + "/"
 
-    let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
 
     if (path.startsWith(prefix)) {
       path = path.slice(prefix.length)
@@ -100,7 +129,7 @@ export function createPathHelpers(scope: () => string) {
 
   const tab = (input: string) => {
     const path = normalize(input)
-    return `file://${path}`
+    return `file://${encodeFilePath(path)}`
   }
 
   const pathFromTab = (tabValue: string) => {

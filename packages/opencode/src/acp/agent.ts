@@ -29,6 +29,7 @@ import {
 } from "@agentclientprotocol/sdk"
 
 import { Log } from "../util/log"
+import { pathToFileURL } from "bun"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -227,8 +228,8 @@ export namespace ACP {
                 const metadata = permission.metadata || {}
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
-
-                const content = await Bun.file(filepath).text()
+                const file = Bun.file(filepath)
+                const content = (await file.exists()) ? await file.text() : ""
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {
@@ -434,46 +435,68 @@ export namespace ACP {
                 return
             }
           }
+          return
+        }
 
-          if (part.type === "text") {
-            const delta = props.delta
-            if (delta && part.ignored !== true) {
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "agent_message_chunk",
-                    content: {
-                      type: "text",
-                      text: delta,
-                    },
+        case "message.part.delta": {
+          const props = event.properties
+          const session = this.sessionManager.tryGet(props.sessionID)
+          if (!session) return
+          const sessionId = session.id
+
+          const message = await this.sdk.session
+            .message(
+              {
+                sessionID: props.sessionID,
+                messageID: props.messageID,
+                directory: session.cwd,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((error) => {
+              log.error("unexpected error when fetching message", { error })
+              return undefined
+            })
+
+          if (!message || message.info.role !== "assistant") return
+
+          const part = message.parts.find((p) => p.id === props.partID)
+          if (!part) return
+
+          if (part.type === "text" && props.field === "text" && part.ignored !== true) {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: {
+                    type: "text",
+                    text: props.delta,
                   },
-                })
-                .catch((error) => {
-                  log.error("failed to send text to ACP", { error })
-                })
-            }
+                },
+              })
+              .catch((error) => {
+                log.error("failed to send text delta to ACP", { error })
+              })
             return
           }
 
-          if (part.type === "reasoning") {
-            const delta = props.delta
-            if (delta) {
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "agent_thought_chunk",
-                    content: {
-                      type: "text",
-                      text: delta,
-                    },
+          if (part.type === "reasoning" && props.field === "text") {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_thought_chunk",
+                  content: {
+                    type: "text",
+                    text: props.delta,
                   },
-                })
-                .catch((error) => {
-                  log.error("failed to send reasoning to ACP", { error })
-                })
-            }
+                },
+              })
+              .catch((error) => {
+                log.error("failed to send reasoning delta to ACP", { error })
+              })
           }
           return
         }
@@ -986,7 +1009,7 @@ export namespace ACP {
                       type: "image",
                       mimeType: effectiveMime,
                       data: base64Data,
-                      uri: `file://${filename}`,
+                      uri: pathToFileURL(filename).href,
                     },
                   },
                 })
@@ -996,13 +1019,14 @@ export namespace ACP {
             } else {
               // Non-image: text types get decoded, binary types stay as blob
               const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const fileUri = pathToFileURL(filename).href
               const resource = isText
                 ? {
-                    uri: `file://${filename}`,
+                    uri: fileUri,
                     mimeType: effectiveMime,
                     text: Buffer.from(base64Data, "base64").toString("utf-8"),
                   }
-                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
+                : { uri: fileUri, mimeType: effectiveMime, blob: base64Data }
 
               await this.connection
                 .sessionUpdate({
@@ -1544,7 +1568,7 @@ export namespace ACP {
           const name = path.split("/").pop() || path
           return {
             type: "file",
-            url: `file://${path}`,
+            url: pathToFileURL(path).href,
             filename: name,
             mime: "text/plain",
           }

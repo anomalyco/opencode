@@ -35,9 +35,15 @@ import { Persist, persisted } from "@/utils/persist"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
-import { navigatePromptHistory, prependHistoryEntry, promptLength } from "./prompt-input/history"
+import {
+  canNavigateHistoryAtCursor,
+  navigatePromptHistory,
+  prependHistoryEntry,
+  promptLength,
+} from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -97,6 +103,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   const permission = usePermission()
   const language = useLanguage()
+  const platform = usePlatform()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -156,14 +163,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
     if (wantsReview) {
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
-      layout.fileTree.open()
       layout.fileTree.setTab("changes")
+      tabs().setActive("review")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.open()
     layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
@@ -205,7 +211,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
-    dragging: boolean
+    draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -213,7 +219,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
-    dragging: false,
+    draggingType: null,
     mode: "normal",
     applyingHistory: false,
   })
@@ -275,6 +281,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isFocused = createFocusSignal(() => editorRef)
 
+  const closePopover = () => setStore("popover", null)
+
+  const resetHistoryNavigation = (force = false) => {
+    if (!force && (store.historyIndex < 0 || store.applyingHistory)) return
+    setStore("historyIndex", -1)
+    setStore("savedPrompt", null)
+  }
+
+  const clearEditor = () => {
+    editorRef.innerHTML = ""
+  }
+
+  const setEditorText = (text: string) => {
+    clearEditor()
+    editorRef.textContent = text
+  }
+
+  const focusEditorEnd = () => {
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      const range = document.createRange()
+      const selection = window.getSelection()
+      range.selectNodeContents(editorRef)
+      range.collapse(false)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    })
+  }
+
+  const currentCursor = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return null
+    return getCursorPosition(editorRef)
+  }
+
+  const renderEditorWithCursor = (parts: Prompt) => {
+    const cursor = currentCursor()
+    renderEditor(parts)
+    if (cursor !== null) setCursorPosition(editorRef, cursor)
+  }
+
   createEffect(() => {
     params.id
     if (params.id) return
@@ -288,7 +335,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   createEffect(() => {
-    if (!isFocused()) setStore("popover", null)
+    if (!isFocused()) closePopover()
   })
 
   // Safety: reset composing state on focus change to prevent stuck state
@@ -302,6 +349,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
+  const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -379,26 +427,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
-    setStore("popover", null)
+    closePopover()
 
     if (cmd.type === "custom") {
       const text = `/${cmd.trigger} `
-      editorRef.innerHTML = ""
-      editorRef.textContent = text
+      setEditorText(text)
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      requestAnimationFrame(() => {
-        editorRef.focus()
-        const range = document.createRange()
-        const sel = window.getSelection()
-        range.selectNodeContents(editorRef)
-        range.collapse(false)
-        sel?.removeAllRanges()
-        sel?.addRange(range)
-      })
+      focusEditorEnd()
       return
     }
 
-    editorRef.innerHTML = ""
+    clearEditor()
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     command.trigger(cmd.id, "slash")
   }
@@ -413,7 +452,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title", "description"],
+    filterKeys: ["trigger", "title"],
     onSelect: handleSlashSelect,
   })
 
@@ -439,10 +478,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         const prev = node.previousSibling
         const next = node.nextSibling
         const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
-        const nextIsBr = next?.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).tagName === "BR"
-        if (!prevIsBr && !nextIsBr) return false
-        if (nextIsBr && !prevIsBr && prev) return false
-        return true
+        return !!prevIsBr && !next
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return false
       const el = node as HTMLElement
@@ -452,7 +488,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
 
   const renderEditor = (parts: Prompt) => {
-    editorRef.innerHTML = ""
+    clearEditor()
     for (const part of parts) {
       if (part.type === "text") {
         editorRef.appendChild(createTextFragment(part.content))
@@ -461,6 +497,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (part.type === "file" || part.type === "agent") {
         editorRef.appendChild(createPill(part))
       }
+    }
+
+    const last = editorRef.lastChild
+    if (last?.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR") {
+      editorRef.appendChild(document.createTextNode("\u200B"))
     }
   }
 
@@ -512,34 +553,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           mirror.input = false
           if (isNormalizedEditor()) return
 
-          const selection = window.getSelection()
-          let cursorPosition: number | null = null
-          if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
-            cursorPosition = getCursorPosition(editorRef)
-          }
-
-          renderEditor(inputParts)
-
-          if (cursorPosition !== null) {
-            setCursorPosition(editorRef, cursorPosition)
-          }
+          renderEditorWithCursor(inputParts)
           return
         }
 
         const domParts = parseFromDOM()
         if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
-        const selection = window.getSelection()
-        let cursorPosition: number | null = null
-        if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
-          cursorPosition = getCursorPosition(editorRef)
-        }
-
-        renderEditor(inputParts)
-
-        if (cursorPosition !== null) {
-          setCursorPosition(editorRef, cursorPosition)
-        }
+        renderEditorWithCursor(inputParts)
       },
     ),
   )
@@ -634,11 +655,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
-      setStore("popover", null)
-      if (store.historyIndex >= 0 && !store.applyingHistory) {
-        setStore("historyIndex", -1)
-        setStore("savedPrompt", null)
-      }
+      closePopover()
+      resetHistoryNavigation()
       if (prompt.dirty()) {
         mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
@@ -660,16 +678,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
       } else {
-        setStore("popover", null)
+        closePopover()
       }
     } else {
-      setStore("popover", null)
+      closePopover()
     }
 
-    if (store.historyIndex >= 0 && !store.applyingHistory) {
-      setStore("historyIndex", -1)
-      setStore("savedPrompt", null)
-    }
+    resetHistoryNavigation()
 
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
@@ -721,7 +736,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }
         }
         if (last.nodeType !== Node.TEXT_NODE) {
-          range.setStartAfter(last)
+          const isBreak = last.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR"
+          const next = last.nextSibling
+          const emptyText = next?.nodeType === Node.TEXT_NODE && (next.textContent ?? "") === ""
+          if (isBreak && (!next || emptyText)) {
+            const placeholder = next && emptyText ? next : document.createTextNode("\u200B")
+            if (!next) last.parentNode?.insertBefore(placeholder, null)
+            placeholder.textContent = "\u200B"
+            range.setStart(placeholder, 0)
+          } else {
+            range.setStartAfter(last)
+          }
         }
       }
       range.collapse(true)
@@ -730,7 +755,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     handleInput()
-    setStore("popover", null)
+    closePopover()
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
@@ -760,8 +785,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editor: () => editorRef,
     isFocused,
     isDialogActive: () => !!dialog.active,
-    setDragging: (value) => setStore("dragging", value),
+    setDraggingType: (type) => setStore("draggingType", type),
+    focusEditor: () => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+    },
     addPart,
+    readClipboardImage: platform.readClipboardImage,
   })
 
   const { abort, handleSubmit } = createPromptSubmit({
@@ -775,12 +805,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     promptLength,
     addToHistory,
     resetHistoryNavigation: () => {
-      setStore("historyIndex", -1)
-      setStore("savedPrompt", null)
+      resetHistoryNavigation(true)
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionWorktree: props.newSessionWorktree,
+    newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
   })
@@ -865,7 +894,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
-        setStore("popover", null)
+        closePopover()
         event.preventDefault()
         return
       }
@@ -887,6 +916,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .current()
         .map((part) => ("content" in part ? part.content : ""))
         .join("")
+      const direction = event.key === "ArrowUp" ? "up" : "down"
+      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition)) return
       const isEmpty = textContent.trim() === "" || textLength <= 1
       const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
@@ -895,7 +926,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
       const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
-      if (event.key === "ArrowUp") {
+      if (direction === "up") {
         if (!allowUp) return
         if (navigateHistory("up")) {
           event.preventDefault()
@@ -916,7 +947,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     if (event.key === "Escape") {
       if (store.popover) {
-        setStore("popover", null)
+        closePopover()
       } else if (working()) {
         abort()
       }
@@ -946,11 +977,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
-          "border-icon-info-active border-dashed": store.dragging,
+          "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <PromptDragOverlay dragging={store.dragging} label={language.t("prompt.dropzone.label")} />
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+        />
         <PromptContextItems
           items={prompt.context.items()}
           active={(item) => {
@@ -983,6 +1017,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-multiline="true"
             aria-label={placeholder()}
             contenteditable="true"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck={false}
             onInput={handleInput}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
@@ -1020,10 +1057,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   keybind={command.keybind("agent.cycle")}
                 >
                   <Select
-                    options={local.agent.list().map((agent) => agent.name)}
+                    options={agentNames()}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[80px]" : "max-w-[120px]"}`}
+                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-full" : "max-w-[120px]"}`}
                     valueClass="truncate"
                     variant="ghost"
                   />

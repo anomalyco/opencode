@@ -9,8 +9,6 @@ export async function GET(input: APIEvent) {
     const workspaceID = await getLastSeenWorkspaceID()
     return redirect(route(locale, `/workspace/${workspaceID}`))
   } catch {
-    const cont = route(locale, "/auth")
-    if (cont === "/auth") return redirect("/auth/authorize")
-    return redirect(`/auth/authorize?continue=${encodeURIComponent(cont)}`)
+    return redirect("/auth/authorize")
   }
 }
