@@ -374,19 +374,6 @@ export const spotlessMaven: Info = {
     for (const pom of pomFiles) {
       const content = await Bun.file(pom).text()
       if (/\<artifactId\>spotless-maven-plugin\<\/artifactId\>/i.test(content)) {
-        const mvnw = await Filesystem.findUp("mvnw", Instance.directory, Instance.worktree)
-        if (mvnw.length > 0) {
-          this.command = ["./mvnw", "spotless:apply", "-DspotlessFiles=$FILE"]
-          return true
-        }
-
-        const mvnwCmd = await Filesystem.findUp("mvnw.cmd", Instance.directory, Instance.worktree)
-        if (mvnwCmd.length > 0) {
-          this.command = ["./mvnw.cmd", "spotless:apply", "-DspotlessFiles=$FILE"]
-          return true
-        }
-
-        this.command = ["mvn", "spotless:apply", "-DspotlessFiles=$FILE"]
         return true
       }
     }
@@ -403,23 +390,9 @@ export const spotlessGradle: Info = {
     for (const gradle of gradleFiles) {
       const content = await Bun.file(gradle).text()
       if (/['"]com\.diffplug\.spotless['"]/.test(content)) {
-        const gradlewUnix = await Filesystem.findUp("gradlew", Instance.directory, Instance.worktree)
-        if (gradlewUnix.length > 0) {
-          this.command = ["./gradlew", "spotlessApply", "-PspotlessIdeHook=$FILE"]
-          return true
-        }
-
-        const gradlewWin = await Filesystem.findUp("gradlew.bat", Instance.directory, Instance.worktree)
-        if (gradlewWin.length > 0) {
-          this.command = ["./gradlew.bat", "spotlessApply", "-PspotlessIdeHook=$FILE"]
-          return true
-        }
-
-        this.command = ["gradle", "spotlessApply", "-PspotlessIdeHook=$FILE"]
         return true
       }
     }
-
     return false
   },
 }

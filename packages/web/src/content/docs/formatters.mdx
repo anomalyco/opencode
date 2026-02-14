@@ -42,46 +42,6 @@ OpenCode comes with several built-in formatters for popular languages and framew
 
 So if your project has `prettier` in your `package.json`, OpenCode will automatically use it.
 
-### Spotless (Java Formatter)
-
-Spotless is a code formatter for Java that supports multiple formatters (Google Java Format, Eclipse, Palantir, etc.). OpenCode detects Spotless configuration in your project and formats files automatically.
-
-**Maven Projects**: Requires `spotless-maven-plugin` in `pom.xml`
-
-```xml
-<plugin>
-  <groupId>com.diffplug.spotless</groupId>
-  <artifactId>spotless-maven-plugin</artifactId>
-  <configuration>
-    <java>
-      <googleJavaFormat/>  <!-- or <eclipse/>, <palantir/>, etc. -->
-    </java>
-  </configuration>
-</plugin>
-```
-
-**Gradle Projects**: Requires `com.diffplug.spotless` plugin in `build.gradle`
-
-```gradle
-plugins {
-  id 'com.diffplug.spotless' version '6.15.0'
-}
-
-spotless {
-  java {
-    googleJavaFormat()  // or eclipse(), palantir(), etc.
-  }
-}
-```
-
-When a Java file is saved, OpenCode will run:
-- **Maven**: `mvn spotless:apply -DspotlessFiles=$FILE` (or `./mvnw` if Maven wrapper exists)
-- **Gradle**: `./gradlew spotlessApply -PspotlessIdeHook=$FILE` (or `gradle` if no wrapper)
-
-This ensures only the saved file is formatted, not the entire project.
-
----
-
 ## How it works
 
 When OpenCode writes or edits a file, it:
