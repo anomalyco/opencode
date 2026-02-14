@@ -35,7 +35,14 @@ test("dialog edit project updates name and startup script", async ({ page, withP
     const nameInput = dialog.getByLabel("Name")
     await nameInput.fill(name)
 
+    // Enable workspaces to show startup script input
+    const toggle = dialog.getByRole("switch")
+    if (!(await toggle.isChecked())) {
+      await toggle.click({ force: true })
+    }
+
     const startupInput = dialog.getByLabel("Workspace startup script")
+    await expect(startupInput).toBeVisible()
     await startupInput.fill(startup)
 
     await dialog.getByRole("button", { name: "Save" }).click()
@@ -46,6 +53,11 @@ test("dialog edit project updates name and startup script", async ({ page, withP
 
     const reopened = await open()
     await expect(reopened.getByLabel("Name")).toHaveValue(name)
+
+    // Ensure workspaces are still enabled and startup script is preserved
+    const reopenedToggle = reopened.getByRole("switch")
+    await expect(reopenedToggle).toBeChecked()
+
     await expect(reopened.getByLabel("Workspace startup script")).toHaveValue(startup)
     await reopened.getByRole("button", { name: "Cancel" }).click()
     await expect(reopened).toHaveCount(0)

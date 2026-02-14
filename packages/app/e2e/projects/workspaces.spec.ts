@@ -29,6 +29,10 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   await setWorkspacesEnabled(page, rootSlug, true)
 
   await page.getByRole("button", { name: "New workspace" }).first().click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name: "New workspace" }).click({ force: true })
+
   await expect
     .poll(
       () => {
@@ -91,6 +95,9 @@ test("can create a workspace", async ({ page, withProject }) => {
     await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
+    const dialog = page.getByRole("dialog")
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole("button", { name: "New workspace" }).click({ force: true })
 
     await expect
       .poll(
@@ -357,6 +364,10 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
       for (const _ of [0, 1]) {
         const prev = slugFromUrl(page.url())
         await page.getByRole("button", { name: "New workspace" }).first().click()
+        const dialog = page.getByRole("dialog")
+        await expect(dialog).toBeVisible()
+        await dialog.getByRole("button", { name: "New workspace" }).click({ force: true })
+
         await expect
           .poll(
             () => {

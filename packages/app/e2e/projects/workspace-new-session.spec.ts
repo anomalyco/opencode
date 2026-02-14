@@ -30,6 +30,9 @@ async function waitWorkspaceReady(page: Page, slug: string) {
 async function createWorkspace(page: Page, root: string, seen: string[]) {
   await openSidebar(page)
   await page.getByRole("button", { name: "New workspace" }).first().click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name: "New workspace" }).click({ force: true })
 
   await expect
     .poll(
