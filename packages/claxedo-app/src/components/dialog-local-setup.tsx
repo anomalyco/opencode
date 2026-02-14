@@ -432,44 +432,7 @@ export function DialogLocalSetup(props: { onDismiss: () => void }) {
 
 // ── Auto-detection logic ────────────────────────────────────────
 
-const DISMISSED_KEY = "claxedo.localSetupDismissed"
-
-/**
- * Check if the current host is remote (not localhost).
- */
-function isRemoteHost(): boolean {
-  const hostname = window.location.hostname
-  return hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "0.0.0.0"
-}
-
-/**
- * Check if the user has dismissed the setup dialog.
- */
-function isDismissed(): boolean {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === "true"
-  } catch {
-    return false
-  }
-}
-
-/**
- * Detect if the local setup dialog should be shown.
- * Conditions: remote host, sandbox disabled, health check fails, not dismissed.
- *
- * /global/health is proxied to the upstream OpenCode server.
- * When the upstream is unreachable (502), we know the setup dialog should show.
- *
- * For local testing, add `?setup` to the URL to force-show the dialog.
- */
-export async function shouldShowLocalSetup(sandboxEnabled: boolean | undefined): Promise<boolean> {
-  // ?setup flag for local testing — bypasses all checks
-  if (new URLSearchParams(window.location.search).has("setup")) return true
-
-  if (!isRemoteHost()) return false
-  if (sandboxEnabled) return false
-  if (isDismissed()) return false
-
-  const result = await checkServerHealth(window.location.origin, fetch, { timeoutMs: 3000 })
-  return !result.healthy
+export async function shouldShowLocalSetup(_sandboxEnabled: boolean | undefined): Promise<boolean> {
+  // Onboarding dialog disabled
+  return false
 }
