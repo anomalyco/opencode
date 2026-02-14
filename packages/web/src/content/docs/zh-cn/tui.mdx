@@ -29,17 +29,17 @@ Give me a quick summary of the codebase.
 
 ## 文件引用
 
-您可以使用 `@` 在消息中引用文件。这会在当前工作目录中進行模糊文件搜索。
+您可以使用 `@` 在消息中引用文件。这会在当前工作目录中进行模糊文件搜索。
 
 :::tip
-您还可以使用 `@` 來引用消息中的文件。
+您还可以使用 `@` 来引用消息中的文件。
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-文件的內容会自动添加到对话中。
+文件的内容会自动添加到对话中。
 
 ---
 
@@ -51,7 +51,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 !ls -la
 ```
 
-命令的輸出将作为工具結果添加到对话中。
+命令的输出将作为工具结果添加到对话中。
 
 ---
 
@@ -65,11 +65,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 大多数命令还是以使用 `ctrl+x` 作为主键的键系结，其中 `ctrl+x` 是默认主键。 [了解更多](/docs/keybinds)。
 
-以下是所有可用的斜槓命令：
+以下是所有可用的斜杠命令：
 
 ---
 
-### 连接
+### connect
 
 将提供商添加到 opencode。你可以从可用提供商中选择，并添加它们的 API 密钥。
 
@@ -79,7 +79,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 紧凑
+### compact
 
 压缩当前会话。_别名_： `/summarize`
 
@@ -91,9 +91,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 細節
+### details
 
-切換工具执行详细信息。
+切换工具执行详细信息。
 
 ```bash frame="none"
 /details
@@ -103,7 +103,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 編輯
+### editor
 
 开启外部编辑器来编写消息。使用`EDITOR`环境变量中设定的编辑器。 [了解更多](#editor-setup)。
 
@@ -115,7 +115,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 退出
+### exit
 
 退出opencode。 _别名_：`/quit`、`/q`
 
@@ -127,7 +127,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 导出
+### export
 
 将当前对话汇出到 Markdown 并在默认编辑器中开启。使用 `EDITOR` 环境变数中设定的编辑器。 [了解更多](#editor-setup)。
 
@@ -139,9 +139,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 幫助
+### help
 
-显示幫助对话方塊。
+显示帮助对话方块。
 
 ```bash frame="none"
 /help
@@ -151,7 +151,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 初始化
+### init
 
 Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
@@ -163,7 +163,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 模型
+### models
 
 列出可用模型。
 
@@ -175,7 +175,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 新的
+### new
 
 开始新的会话。 _别名_： `/clear`
 
@@ -187,7 +187,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 重做
+### redo
 
 删除之前重做消除的讯息。仅在使用`/undo`后可用。
 
@@ -206,7 +206,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 会话
+### sessions
 
 上市会话并在会话之间切换。 _别名_：`/resume`、`/continue`
 
@@ -218,7 +218,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 分享
+### share
 
 共享当前会话。 [了解更多](/docs/share)。
 
@@ -230,7 +230,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 主题
+### themes
 
 列出可用的主题。
 
@@ -242,9 +242,9 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 思維
+### thinking
 
-切换对话中 thinking/reasoning 块的可视性。启用后，您可以看到支持增强套件思维的模型的推理过程。
+切换对话中 thinking/reasoning 块的可视性。启用后，您可以看到支持扩展思考的模型的推理过程。
 
 :::note
 该命令仅控制是否**显示** - 不启用或取消模型的推理功能。要切换实际推理功能，请使用 `ctrl+t` 回圈切换模型变体。
@@ -256,9 +256,9 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 撤消
+### undo
 
-撤消对话中的最后一条消息。删除最近的用户消息、所有后续響应以及任何文件更改。
+撤消对话中的最后一条消息。删除最近的用户消息、所有后续响应以及任何文件更改。
 
 :::tip
 所做的任何文件更改也将被恢复。
@@ -275,7 +275,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-### 取消共享
+### unshare
 
 取消共享当前会话。 [了解更多](/docs/share#un-sharing)。
 
@@ -334,7 +334,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
   </TabItem>
 </Tabs>
 
-流行的编辑器選項包括：
+流行的编辑器选项包括：
 
 - `code` - Visual Studio Code
 - `cursor` - 游标
@@ -369,7 +369,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 }
 ```
 
-### 選項
+### 选项
 
 - `scroll_acceleration` - 启用 macOS 式滚动加速以实现平滑、自然的滚动。启用后，滚动速度会随着快速滚动滚动而增加，并在较慢的移动时保持精确。 **此设定优先于 `scroll_speed` 并在启用时覆盖它。 **
 - `scroll_speed` - 控制使用滚动控制器时 TUI 滚动的速度（简单：`1`）。默认为 `3`。 **注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则忽略此设置。 **
@@ -384,7 +384,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 #### 用户名称显示
 
-切換您的用户名称是否出現在聊天消息中。通过以下方式访问：
+切换您的用户名称是否出现在聊天消息中。通过以下方式访问：
 
 - 命令面板：搜索“用户名称”或“隐藏用户名称”
 - 该设置会自动保留，放在 TUI 会话中被记住
