@@ -9,7 +9,7 @@
  * - Keyboard navigation
  */
 
-import { For, Show, createMemo, createSignal, createEffect, onCleanup } from "solid-js"
+import { For, Show, createMemo, createSignal, createEffect, on, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
 import { SortableProvider, createSortable, createDroppable } from "@thisbeyond/solid-dnd"
 import { useClaxedoLayout, type TabItem, type TabType } from "../context/claxedo-layout"
@@ -173,6 +173,7 @@ function SortableTab(props: {
     <div
       // @ts-ignore - solid-dnd directive
       use:sortable
+      data-tab-id={props.tab.id}
       class="group flex items-center h-10 pl-2 pr-0 cursor-pointer flex-shrink-0 max-w-[200px] min-w-[100px] select-none bg-transparent max-md:min-w-[60px] max-md:max-w-[150px] max-md:pl-1.5"
       classList={{ "opacity-50": sortable.isActiveDraggable }}
       onClick={handleSelect}
@@ -257,13 +258,18 @@ export function TopTabBar(props: TopTabBarProps) {
   const language = useLanguage()
   const theme = useTheme()
 
-  // Muted worktree border colors for dark mode — desaturated to avoid glare
+  // Worktree border colors for dark mode — brightened for better visibility
   const DARK_WORKTREE_COLORS: Record<string, string> = {
-    "#3b82f6": "#6e93b8", // blue → dusty blue
-    "#22c55e": "#6da88a", // green → sage
-    "#a855f7": "#9a82b5", // purple → lavender
-    "#f97316": "#c09060", // orange → warm tan
-    "#ec4899": "#b57e95", // pink → dusty rose
+    "#3b82f6": "#60a5fa", // blue → bright blue
+    "#22c55e": "#4ade80", // green → bright green
+    "#a855f7": "#c084fc", // purple → bright purple
+    "#f97316": "#fb923c", // orange → bright orange
+    "#ec4899": "#f472b6", // pink → bright pink
+    "#14b8a6": "#2dd4bf", // teal → bright teal
+    "#f59e0b": "#fbbf24", // amber → bright amber
+    "#6366f1": "#818cf8", // indigo → bright indigo
+    "#ef4444": "#f87171", // red → bright red
+    "#06b6d4": "#22d3ee", // cyan → bright cyan
   }
 
   const wtBorderColor = (color: string | undefined) => {
@@ -345,6 +351,23 @@ export function TopTabBar(props: TopTabBarProps) {
   // Close context menu on click anywhere
   const closeContextMenu = () => setContextMenu(null)
 
+  // Scroll active tab into view when it changes (e.g., new tab created off-screen)
+  let tabScrollContainer: HTMLDivElement | undefined
+  createEffect(
+    on(
+      () => tabs().activeId(),
+      (activeId) => {
+        if (!activeId || !tabScrollContainer) return
+        requestAnimationFrame(() => {
+          const el = tabScrollContainer?.querySelector(`[data-tab-id="${CSS.escape(activeId)}"]`)
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" })
+          }
+        })
+      },
+    ),
+  )
+
   return (
     <div
       class={`flex items-center h-10 bg-background-base px-2 gap-0 overflow-hidden border-b border-border-weak-base box-content ${props.class ?? ""}`}
@@ -367,6 +390,7 @@ export function TopTabBar(props: TopTabBarProps) {
 
       {/* Droppable zone wraps the tab bar area for cross-panel drops */}
       <div
+        ref={tabScrollContainer}
         // @ts-ignore - solid-dnd directive
         use:droppable
         class="flex items-center gap-1 min-w-0 overflow-x-auto overflow-y-hidden flex-1 no-scrollbar"
@@ -378,7 +402,7 @@ export function TopTabBar(props: TopTabBarProps) {
               const isLastGroup = groupIndex() === tabGroups().length - 1
 
               return (
-                <div class="flex items-center border-b" style={{ "border-color": wtBorderColor(color) }}>
+                <div class="flex items-center" style={{ "box-shadow": `inset 0 -1px 0 0 ${wtBorderColor(color)}` }}>
                   <For each={groupTabs}>
                     {(tab, tabIndex) => (
                       <>
@@ -410,8 +434,8 @@ export function TopTabBar(props: TopTabBarProps) {
         {/* Action buttons - immediately after tabs */}
         <Show when={wt().default() || active()?.directory}>
           <div
-            class="flex items-center gap-0 flex-shrink-0 border-b"
-            style={{ "border-color": wtBorderColor(activeWorktreeColor()) }}
+            class="flex items-center gap-0 flex-shrink-0"
+            style={{ "box-shadow": `inset 0 -1px 0 0 ${wtBorderColor(activeWorktreeColor())}` }}
           >
             <Tooltip value={language.t("command.session.new")}>
               <button
@@ -848,7 +872,8 @@ export function WorkspaceBar(props: WorkspaceBarProps) {
               trigger={<Icon name="kebab" size="small" />}
               triggerAs="button"
               triggerProps={{
-                class: "flex items-center justify-center size-6 rounded text-icon-weak hover:text-icon-base hover:bg-surface-base-hover transition-colors cursor-pointer border-none bg-transparent",
+                class:
+                  "flex items-center justify-center size-6 rounded text-icon-weak hover:text-icon-base hover:bg-surface-base-hover transition-colors cursor-pointer border-none bg-transparent",
               }}
               class="w-[300px] [&_[data-slot=popover-body]]:p-0 [&_[data-slot=list-item]:hover_.ws-delete]:opacity-100 [&_[data-slot=list-item][data-active=true]_.ws-delete]:opacity-100"
             >

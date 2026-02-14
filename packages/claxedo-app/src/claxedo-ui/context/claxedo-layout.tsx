@@ -181,6 +181,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         terminalAgentSeen: {},
         terminalLifecycle: {},
         workspaceRecency: {},
+        worktreeColorMap: {},
       }),
     )
 

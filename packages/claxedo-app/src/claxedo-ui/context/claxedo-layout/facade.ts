@@ -8,14 +8,16 @@ import { createWorkspaceRecency } from "./workspace-recency"
 import type { ClaxedoLayoutStore, TabItem } from "./types"
 
 const WORKTREE_COLORS = [
-  "#3b82f6",
-  "#22c55e",
-  "#a855f7",
-  "#f97316",
-  "#ec4899",
-  "#14b8a6",
-  "#f59e0b",
-  "#6366f1",
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#a855f7", // purple
+  "#f97316", // orange
+  "#ec4899", // pink
+  "#14b8a6", // teal
+  "#f59e0b", // amber
+  "#6366f1", // indigo
+  "#ef4444", // red
+  "#06b6d4", // cyan
 ]
 
 export function createClaxedoLayoutFacade(input: {
@@ -102,15 +104,28 @@ export function createClaxedoLayoutFacade(input: {
     terminal: terminalState.terminal,
 
     getWorktreeColor(directory: string): string {
-      let hash = 0
-      for (let i = 0; i < directory.length; i++) {
-        const char = directory.charCodeAt(i)
-        hash = (hash << 5) - hash + char
-        hash = hash & hash
+      // Return persisted color if already assigned
+      const existing = store.worktreeColorMap[directory]
+      if (existing) return existing
+
+      // Find colors already in use
+      const usedColors = new Set(Object.values(store.worktreeColorMap))
+
+      // Pick the first unused color; fall back to hash if all are taken
+      let color = WORKTREE_COLORS.find((c) => !usedColors.has(c))
+      if (!color) {
+        let hash = 0
+        for (let i = 0; i < directory.length; i++) {
+          const char = directory.charCodeAt(i)
+          hash = (hash << 5) - hash + char
+          hash = hash & hash
+        }
+        color = WORKTREE_COLORS[Math.abs(hash) % WORKTREE_COLORS.length]
       }
 
-      const index = Math.abs(hash) % WORKTREE_COLORS.length
-      return WORKTREE_COLORS[index]
+      // Persist assignment
+      setStore("worktreeColorMap", directory, color)
+      return color
     },
 
     getWorktreeName(directory: string): string {
@@ -194,6 +209,11 @@ export function createClaxedoLayoutFacade(input: {
           if (cleaned.length !== current.length) {
             setStore("workspaceRecency", projectId, cleaned)
           }
+        }
+
+        // Free the color assignment so it can be reused
+        if (store.worktreeColorMap[directory]) {
+          setStore("worktreeColorMap", directory, undefined)
         }
       })
     },

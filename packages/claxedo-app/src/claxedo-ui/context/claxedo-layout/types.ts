@@ -87,6 +87,8 @@ export type ClaxedoLayoutStore = {
   terminalAgentSeen: Record<string, true | undefined>
   terminalLifecycle: Record<string, TerminalLifecycleState | undefined>
   workspaceRecency: Record<string, string[]>
+  /** Persisted directory → color assignments for worktree indicators */
+  worktreeColorMap: Record<string, string>
 }
 
 export const createEmptyTabsState = (): TopTabsState => ({
