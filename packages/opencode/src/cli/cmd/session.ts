@@ -38,8 +38,26 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).demandCommand(),
+  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
   async handler() {},
+})
+
+export const SessionDeleteCommand = cmd({
+  command: "delete <sessionID>",
+  describe: "delete a session",
+  builder: (yargs: Argv) => {
+    return yargs.positional("sessionID", {
+      describe: "session ID to delete",
+      type: "string",
+      demandOption: true,
+    })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      await Session.remove(args.sessionID)
+      console.log(`Session ${args.sessionID} deleted`)
+    })
+  },
 })
 
 export const SessionListCommand = cmd({
