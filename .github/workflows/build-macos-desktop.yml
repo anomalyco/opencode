@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., v1.1.51-test). Leave empty to skip release creation.'
+        description: "Version to release (e.g., v1.2.1-test). Leave empty to skip release creation."
         required: false
         type: string
 
@@ -31,7 +31,7 @@ jobs:
           cd packages/opencode
           bun run build
         env:
-          OPENCODE_VERSION: "1.1.54"
+          OPENCODE_VERSION: "1.2.1"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -72,7 +72,7 @@ jobs:
         run: |
           cd packages/desktop
           # Update version
-          jq '.version = "1.1.54"' package.json > package.json.tmp
+          jq '.version = "1.2.1"' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # List downloaded files for debugging
@@ -153,7 +153,7 @@ jobs:
         run: |
           cd packages/desktop
           # Update version
-          jq '.version = "1.1.54"' package.json > package.json.tmp
+          jq '.version = "1.2.1"' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # List downloaded files for debugging

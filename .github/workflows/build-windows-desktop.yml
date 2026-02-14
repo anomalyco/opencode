@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., v1.1.51). Leave empty to skip release creation.'
+        description: "Version to release (e.g., v1.2.1). Leave empty to skip release creation."
         required: false
         type: string
 
@@ -31,7 +31,7 @@ jobs:
           cd packages/opencode
           bun run build
         env:
-          OPENCODE_VERSION: "1.1.54"
+          OPENCODE_VERSION: "1.2.1"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -73,7 +73,7 @@ jobs:
           cd packages/desktop
           # Update version
           $pkg = Get-Content package.json | ConvertFrom-Json
-          $pkg.version = "1.1.54"
+          $pkg.version = "1.2.1"
           $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
 
           # List downloaded files for debugging
