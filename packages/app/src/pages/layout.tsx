@@ -18,6 +18,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
+import { sameWorktreePath } from "@/utils/worktree-path"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -519,7 +520,7 @@ export default function Layout(props: ParentProps) {
           return
         }
 
-        const next = value.list.find((project) => project.worktree === last)
+        const next = value.list.find((project) => sameWorktreePath(project.worktree, last))
         setState("autoselect", false)
         if (next) {
           openProject(next.worktree, false)

@@ -3,6 +3,7 @@ import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
+import { normalizeWorktreePath } from "@/utils/worktree-path"
 import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
@@ -181,38 +182,43 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
+          const normalized = normalizeWorktreePath(directory)
+          if (current.find((x) => normalizeWorktreePath(x.worktree) === normalized)) return
+          setStore("projects", key, [{ worktree: normalized, expanded: true }, ...current])
         },
         close(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
+          const normalized = normalizeWorktreePath(directory)
           setStore(
             "projects",
             key,
-            current.filter((x) => x.worktree !== directory),
+            current.filter((x) => normalizeWorktreePath(x.worktree) !== normalized),
           )
         },
         expand(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          const normalized = normalizeWorktreePath(directory)
+          const index = current.findIndex((x) => normalizeWorktreePath(x.worktree) === normalized)
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          const normalized = normalizeWorktreePath(directory)
+          const index = current.findIndex((x) => normalizeWorktreePath(x.worktree) === normalized)
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
+          const normalized = normalizeWorktreePath(directory)
+          const fromIndex = current.findIndex((x) => normalizeWorktreePath(x.worktree) === normalized)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
@@ -227,7 +233,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         touch(directory: string) {
           const key = origin()
           if (!key) return
-          setStore("lastProject", key, directory)
+          const normalized = normalizeWorktreePath(directory)
+          const current = store.projects[key] ?? []
+          const match = current.find((x) => normalizeWorktreePath(x.worktree) === normalized)
+          setStore("lastProject", key, match?.worktree ?? normalized)
         },
       },
     }

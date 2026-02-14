@@ -8,6 +8,7 @@ import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
+import { normalizeWorktreePath } from "@/utils/worktree-path"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
@@ -356,67 +357,65 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const normalizePath = (directory: string) => {
-      const normalized = directory.replaceAll("\\", "/").replace(/\/+$/, "")
-      if (/^[a-z]:\//i.test(normalized)) return normalized.toLowerCase()
-      return normalized
-    }
-
     const roots = createMemo(() => {
       const map = new Map<string, string>()
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(normalizePath(sandbox), normalizePath(project.worktree))
+          map.set(normalizeWorktreePath(sandbox), normalizeWorktreePath(project.worktree))
         }
       }
       return map
     })
 
     const [sync, setSync] = createStore({
-      hydrated: false,
+      hydrated: {} as Record<string, boolean>,
     })
 
-    const rootFor = (directory: string) => {
+    const syncKey = createMemo(() => server.url)
+
+    const rootFor = (_directory: string) => {
       const map = roots()
-      const origin = normalizePath(directory)
-      if (map.size === 0) return origin
+      const directory = normalizeWorktreePath(_directory)
+      if (map.size === 0) return directory
 
       const visited = new Set<string>()
-      const chain = [origin]
+      const chain = [directory]
 
       while (chain.length) {
         const current = chain[chain.length - 1]
-        if (!current) return origin
+        if (!current) return directory
 
         const next = map.get(current)
         if (!next) return current
 
-        if (visited.has(next)) return origin
+        if (visited.has(next)) return directory
         visited.add(next)
         chain.push(next)
       }
 
-      return origin
+      return directory
     }
 
     createEffect(() => {
-      if (sync.hydrated) return
+      const key = syncKey()
+      if (!key) return
+      if (sync.hydrated[key]) return
 
       const worktrees = globalSync.data.project
         .filter((project) => project.id !== "global")
         .map((project) => project.worktree)
         .filter((worktree): worktree is string => !!worktree)
-      const raw = new Map(worktrees.map((worktree) => [normalizePath(worktree), worktree]))
+      const raw = new Map(worktrees.map((worktree) => [normalizeWorktreePath(worktree), worktree]))
       const known = new Set(worktrees.map(rootFor))
       if (known.size === 0) return
 
       const projects = untrack(() => server.projects.list())
-      const seen = new Set(projects.map((project) => normalizePath(project.worktree)))
+      const seen = new Set(projects.map((project) => normalizeWorktreePath(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
-          const worktree = normalizePath(project.worktree)
+          const worktree = normalizeWorktreePath(project.worktree)
           const root = rootFor(project.worktree)
           if (root === worktree) continue
 
@@ -436,7 +435,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           seen.add(worktree)
         }
 
-        setSync("hydrated", true)
+        setSync("hydrated", key, true)
       })
     })
 
