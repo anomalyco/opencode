@@ -1,5 +1,4 @@
 import { Plugin } from "../plugin"
-import { Share } from "../share/share"
 import { Format } from "../format"
 import { LSP } from "../lsp"
 import { FileWatcher } from "../file/watcher"
@@ -18,7 +17,6 @@ import { HotReload } from "./hotreload"
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
-  Share.init()
   ShareNext.init()
   Format.init()
   await LSP.init()

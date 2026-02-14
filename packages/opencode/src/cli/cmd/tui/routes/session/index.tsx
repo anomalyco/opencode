@@ -2042,8 +2042,8 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing apply_patch..." complete={false} part={props.part}>
-          apply_patch
+        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
+          Patch
         </InlineTool>
       </Match>
     </Switch>
