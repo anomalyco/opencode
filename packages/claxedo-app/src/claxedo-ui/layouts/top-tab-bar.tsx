@@ -138,7 +138,6 @@ function SortableTab(props: {
   onSetActive: (tabId: string) => void
   onDblClick: (dir: string) => void
   onContextMenu?: (e: MouseEvent, tabId: string) => void
-  worktreeName?: string
   worktreeColor?: string
 }) {
   const sortable = createSortable(props.tab.id)
@@ -190,19 +189,6 @@ function SortableTab(props: {
           {props.tab.title}
         </span>
 
-        {/* Worktree indicator - shows on last tab of each group */}
-        <Show when={props.worktreeName}>
-          {(name) => (
-            <Tooltip value={`Worktree: ${name()}`}>
-              <span
-                class="w-4 flex items-center justify-center opacity-0 group-hover/title:opacity-100 shrink-0"
-                style={{ color: props.worktreeColor }}
-              >
-                <Icon name="branch" size="small" />
-              </span>
-            </Tooltip>
-          )}
-        </Show>
       </div>
 
       {/* Loading spinner - shows when session/terminal is working */}
@@ -253,30 +239,32 @@ export function TabDragOverlay(props: { tab: TabItem | undefined }) {
   )
 }
 
+// Worktree border colors for dark mode — brightened for better visibility
+const DARK_WORKTREE_COLORS: Record<string, string> = {
+  "#3b82f6": "#60a5fa", // blue → bright blue
+  "#22c55e": "#4ade80", // green → bright green
+  "#a855f7": "#c084fc", // purple → bright purple
+  "#f97316": "#fb923c", // orange → bright orange
+  "#ec4899": "#f472b6", // pink → bright pink
+  "#14b8a6": "#2dd4bf", // teal → bright teal
+  "#f59e0b": "#fbbf24", // amber → bright amber
+  "#6366f1": "#818cf8", // indigo → bright indigo
+  "#ef4444": "#f87171", // red → bright red
+  "#06b6d4": "#22d3ee", // cyan → bright cyan
+}
+
+function brightenWorktreeColor(color: string | undefined, mode: string): string {
+  if (!color || color === "transparent") return "transparent"
+  if (mode === "dark") return DARK_WORKTREE_COLORS[color] ?? color
+  return color
+}
+
 export function TopTabBar(props: TopTabBarProps) {
   const claxedo = useClaxedoLayout()
   const language = useLanguage()
   const theme = useTheme()
 
-  // Worktree border colors for dark mode — brightened for better visibility
-  const DARK_WORKTREE_COLORS: Record<string, string> = {
-    "#3b82f6": "#60a5fa", // blue → bright blue
-    "#22c55e": "#4ade80", // green → bright green
-    "#a855f7": "#c084fc", // purple → bright purple
-    "#f97316": "#fb923c", // orange → bright orange
-    "#ec4899": "#f472b6", // pink → bright pink
-    "#14b8a6": "#2dd4bf", // teal → bright teal
-    "#f59e0b": "#fbbf24", // amber → bright amber
-    "#6366f1": "#818cf8", // indigo → bright indigo
-    "#ef4444": "#f87171", // red → bright red
-    "#06b6d4": "#22d3ee", // cyan → bright cyan
-  }
-
-  const wtBorderColor = (color: string | undefined) => {
-    if (!color || color === "transparent") return "transparent"
-    if (theme.mode() === "dark") return DARK_WORKTREE_COLORS[color] ?? color
-    return color
-  }
+  const wtBorderColor = (color: string | undefined) => brightenWorktreeColor(color, theme.mode())
 
   // Use group-specific tabs when groupId is provided, otherwise backward-compatible topTabs
   const tabs = createMemo(() => (props.groupId ? claxedo.groupTabs(props.groupId) : claxedo.topTabs))
@@ -417,9 +405,6 @@ export function TopTabBar(props: TopTabBarProps) {
                           onSetActive={handleTabSetActive}
                           onDblClick={handleTabDblClick}
                           onContextMenu={handleTabContextMenu}
-                          worktreeName={
-                            tabIndex() === groupTabs.length - 1 ? claxedo.getWorktreeName(directory) : undefined
-                          }
                           worktreeColor={color}
                         />
                       </>
@@ -731,6 +716,8 @@ function WorkspaceBarProjectGroup(props: {
   onProjectClick?: (projectId: string) => void
   onNewWorktree?: (projectId: string) => Promise<WorkspaceBarItem | undefined>
 }) {
+  const claxedo = useClaxedoLayout()
+  const theme = useTheme()
   const current = () => props.pinnedDirectory ?? props.defaultDirectory
   const [creating, setCreating] = createSignal<"idle" | "loading" | "done">("idle")
   const [createdName, setCreatedName] = createSignal<string | null>(null)
@@ -780,6 +767,8 @@ function WorkspaceBarProjectGroup(props: {
           const text = () => (isCurrent() ? "text-text-base font-semibold" : "text-text-weak hover:text-text-base")
           const line = () => (isPinned() ? "underline underline-offset-4" : "")
 
+          const dotColor = () => brightenWorktreeColor(claxedo.getWorktreeColor(ws.directory), theme.mode())
+
           return (
             <button
               type="button"
@@ -793,6 +782,10 @@ function WorkspaceBarProjectGroup(props: {
               }}
             >
               <span class="text-text-weak/50">/</span>
+              <span
+                class="size-1.5 rounded-full shrink-0"
+                style={{ "background-color": dotColor() }}
+              />
               <span class={line()}>{ws.name}</span>
               <Show when={ws.notification}>
                 <WorkspaceNotificationDot />
