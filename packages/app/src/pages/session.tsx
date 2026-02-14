@@ -56,7 +56,8 @@ import { useComments, type LineComment } from "@/context/comments"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
-import { decode64 } from "@/utils/base64"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
@@ -143,10 +144,24 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
     })
   }
 
-  const fetchOlderMessages = async () => {
-    const id = input.sessionID()
-    if (!id) return
-    if (!input.historyMore() || input.historyLoading()) return
+export default function Page() {
+  const layout = useLayout()
+  const local = useLocal()
+  const file = useFile()
+  const sync = useSync()
+  const terminal = useTerminal()
+  const dialog = useDialog()
+  const codeComponent = useCodeComponent()
+  const command = useCommand()
+  const language = useLanguage()
+  const params = useParams()
+  const navigate = useNavigate()
+  const sdk = useSDK()
+  const prompt = usePrompt()
+  const comments = useComments()
+  const permission = usePermission()
+  const platform = usePlatform()
+  const server = useServer()
 
     // TODO(session-timeline): switch this to core cursor-based part pagination when that API lands.
     const beforeVisible = input.visibleUserMessages().length
@@ -1277,6 +1292,29 @@ export default function Page() {
   }
 
   useSessionCommands({
+    command,
+    dialog,
+    file,
+    language,
+    local,
+    permission,
+    platform,
+    prompt,
+    server,
+    sdk,
+    sync,
+    terminal,
+    layout,
+    params,
+    navigate,
+    tabs,
+    view,
+    info,
+    status,
+    userMessages,
+    visibleUserMessages,
+    activeMessage,
+    showAllFiles,
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,

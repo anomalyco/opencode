@@ -9,6 +9,7 @@ import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
+import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -21,6 +22,29 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
+  command: ReturnType<typeof useCommand>
+  dialog: ReturnType<typeof useDialog>
+  file: ReturnType<typeof useFile>
+  language: ReturnType<typeof useLanguage>
+  local: ReturnType<typeof useLocal>
+  permission: ReturnType<typeof usePermission>
+  platform: ReturnType<typeof usePlatform>
+  prompt: ReturnType<typeof usePrompt>
+  server: ReturnType<typeof useServer>
+  sdk: ReturnType<typeof useSDK>
+  sync: ReturnType<typeof useSync>
+  terminal: ReturnType<typeof useTerminal>
+  layout: ReturnType<typeof useLayout>
+  params: ReturnType<typeof useParams>
+  navigate: ReturnType<typeof useNavigate>
+  tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
+  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
+  info: () => { revert?: { messageID?: string }; share?: { url?: string } } | undefined
+  status: () => { type: string }
+  userMessages: () => UserMessage[]
+  visibleUserMessages: () => UserMessage[]
+  activeMessage: () => UserMessage | undefined
+  showAllFiles: () => void
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
@@ -103,17 +127,109 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     prompt.context.add({ type: "file", path, selection, preview })
   }
 
-  const canAddSelectionContext = () => {
-    const tab = activeFileTab()
-    if (!tab) return false
-    const path = file.pathFromTab(tab)
-    if (!path) return false
-    return file.selectedLines(path) != null
-  }
+  const viewCommands = createMemo(() => [
+    viewCommand({
+      id: "terminal.toggle",
+      title: input.language.t("command.terminal.toggle"),
+      keybind: "ctrl+`",
+      slash: "terminal",
+      onSelect: () => input.view().terminal.toggle(),
+    }),
+    viewCommand({
+      id: "review.toggle",
+      title: input.language.t("command.review.toggle"),
+      keybind: "mod+shift+r",
+      onSelect: () => input.view().reviewPanel.toggle(),
+    }),
+    viewCommand({
+      id: "fileTree.toggle",
+      title: input.language.t("command.fileTree.toggle"),
+      keybind: "mod+\\",
+      onSelect: () => input.layout.fileTree.toggle(),
+    }),
+    viewCommand({
+      id: "input.focus",
+      title: input.language.t("command.input.focus"),
+      keybind: "ctrl+l",
+      onSelect: () => input.focusInput(),
+    }),
+    terminalCommand({
+      id: "terminal.new",
+      title: input.language.t("command.terminal.new"),
+      description: input.language.t("command.terminal.new.description"),
+      keybind: "ctrl+alt+t",
+      onSelect: () => {
+        if (input.terminal.all().length > 0) input.terminal.new()
+        input.view().terminal.open()
+      },
+    }),
+    terminalCommand({
+      id: "terminal.openGhostty",
+      title: input.language.t("command.terminal.openGhostty"),
+      description: input.language.t("command.terminal.openGhostty.description"),
+      disabled: input.platform.platform !== "desktop" || !input.platform.openPath || !input.server.isLocal(),
+      onSelect: () => {
+        const directory = input.sdk.directory
+        if (!directory) return
+        Promise.resolve(input.platform.openPath?.(directory, "Ghostty")).catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            title: input.language.t("common.requestFailed"),
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+      },
+    }),
+    terminalCommand({
+      id: "terminal.openWezTerm",
+      title: input.language.t("command.terminal.openWezTerm"),
+      description: input.language.t("command.terminal.openWezTerm.description"),
+      disabled: input.platform.platform !== "desktop" || !input.platform.openInEditor || !input.server.isLocal(),
+      onSelect: () => {
+        const directory = input.sdk.directory
+        if (!directory) return
+        Promise.resolve(input.platform.openInEditor?.("WezTerm", directory)).catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            title: input.language.t("common.requestFailed"),
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+      },
+    }),
+    viewCommand({
+      id: "steps.toggle",
+      title: input.language.t("command.steps.toggle"),
+      description: input.language.t("command.steps.toggle.description"),
+      keybind: "mod+e",
+      slash: "steps",
+      disabled: !input.params.id,
+      onSelect: () => {
+        const msg = input.activeMessage()
+        if (!msg) return
+        input.setExpanded(msg.id, (open: boolean | undefined) => !open)
+      },
+    }),
+  ])
 
-  const navigateMessageByOffset = actions.navigateMessageByOffset
-  const setActiveMessage = actions.setActiveMessage
-  const focusInput = actions.focusInput
+  const messageCommands = createMemo(() => [
+    sessionCommand({
+      id: "message.previous",
+      title: input.language.t("command.message.previous"),
+      description: input.language.t("command.message.previous.description"),
+      keybind: "mod+shift+arrowup",
+      disabled: !input.params.id,
+      onSelect: () => input.navigateMessageByOffset(-1),
+    }),
+    sessionCommand({
+      id: "message.next",
+      title: input.language.t("command.message.next"),
+      description: input.language.t("command.message.next.description"),
+      keybind: "mod+shift+arrowdown",
+      disabled: !input.params.id,
+      onSelect: () => input.navigateMessageByOffset(1),
+    }),
+  ])
 
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
