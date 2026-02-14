@@ -7,9 +7,10 @@ import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { type LocalProject, getAvatarColors } from "@/context/layout"
+import { type LocalProject, getAvatarColors, useLayout } from "@/context/layout"
 import { getFilename } from "@opencode-ai/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
@@ -19,6 +20,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const layout = useLayout()
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
@@ -31,6 +33,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     baseBranch: props.project.worktreeSettings?.baseBranch ?? "",
     symlinks: props.project.worktreeSettings?.symlinks?.join("\n") ?? "",
     copies: props.project.worktreeSettings?.copies?.join("\n") ?? "",
+    workspacesEnabled: layout.sidebar.workspaces(props.project.worktree)(),
     saving: false,
     dragOver: false,
     iconHover: false,
@@ -98,6 +101,10 @@ export function DialogEditProject(props: { project: LocalProject }) {
           copies: copies.length > 0 ? copies : undefined,
         }
 
+        if (store.workspacesEnabled !== layout.sidebar.workspaces(props.project.worktree)()) {
+          layout.sidebar.setWorkspaces(props.project.worktree, store.workspacesEnabled)
+        }
+
         if (props.project.id && props.project.id !== "global") {
           await globalSDK.client.project.update({
             projectID: props.project.id,
@@ -126,179 +133,205 @@ export function DialogEditProject(props: { project: LocalProject }) {
   }
 
   return (
-    <Dialog title={language.t("dialog.project.edit.title")} class="w-full max-w-[480px] mx-auto">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
-        <div class="flex flex-col gap-4">
-          <TextField
-            autofocus
-            type="text"
-            label={language.t("dialog.project.edit.name")}
-            placeholder={folderName()}
-            value={store.name}
-            onChange={(v) => setStore("name", v)}
-          />
+    <Dialog fit title={language.t("dialog.project.edit.title")} class="w-full max-w-[480px] mx-auto">
+      <style>{`
+        [data-slot="input-description"] {
+          color: var(--text-weak);
+          font-family: var(--font-family-sans);
+          font-size: var(--font-size-small);
+          font-weight: var(--font-weight-regular);
+          line-height: var(--line-height-large);
+        }
+      `}</style>
+      <form onSubmit={handleSubmit} class="flex flex-col max-h-[80vh] overflow-y-auto session-scroller">
+        <div class="flex flex-col gap-6 p-6 pt-0">
+          <div class="flex flex-col gap-4">
+            <TextField
+              autofocus
+              type="text"
+              label={language.t("dialog.project.edit.name")}
+              placeholder={folderName()}
+              value={store.name}
+              onChange={(v) => setStore("name", v)}
+            />
 
-          <div class="flex flex-col gap-2">
-            <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
-            <div class="flex gap-3 items-start">
-              <div
-                class="relative"
-                onMouseEnter={() => setStore("iconHover", true)}
-                onMouseLeave={() => setStore("iconHover", false)}
-              >
+            <div class="flex flex-col gap-2">
+              <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
+              <div class="flex gap-3 items-start">
                 <div
-                  class="relative size-16 rounded-md transition-colors cursor-pointer"
-                  classList={{
-                    "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
-                    "border-border-base hover:border-border-strong": !store.dragOver,
-                    "overflow-hidden": !!store.iconUrl,
-                  }}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onClick={() => {
-                    if (store.iconUrl && store.iconHover) {
-                      clearIcon()
-                    } else {
-                      iconInput?.click()
-                    }
-                  }}
+                  class="relative"
+                  onMouseEnter={() => setStore("iconHover", true)}
+                  onMouseLeave={() => setStore("iconHover", false)}
                 >
-                  <Show
-                    when={store.iconUrl}
-                    fallback={
-                      <div class="size-full flex items-center justify-center">
+                  <div
+                    class="relative size-16 rounded-md transition-colors cursor-pointer"
+                    classList={{
+                      "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
+                      "border-border-base hover:border-border-strong": !store.dragOver,
+                      "overflow-hidden": !!store.iconUrl,
+                    }}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => {
+                      if (store.iconUrl && store.iconHover) {
+                        clearIcon()
+                      } else {
+                        iconInput?.click()
+                      }
+                    }}
+                  >
+                    <Show
+                      when={store.iconUrl}
+                      fallback={
+                        <div class="size-full flex items-center justify-center">
+                          <Avatar
+                            fallback={store.name || defaultName()}
+                            {...getAvatarColors(store.color)}
+                            class="size-full text-[32px]"
+                          />
+                        </div>
+                      }
+                    >
+                      <img
+                        src={store.iconUrl}
+                        alt={language.t("dialog.project.edit.icon.alt")}
+                        class="size-full object-cover"
+                      />
+                    </Show>
+                  </div>
+                  <div
+                    class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                    classList={{
+                      "opacity-100": store.iconHover && !store.iconUrl,
+                      "opacity-0": !(store.iconHover && !store.iconUrl),
+                    }}
+                  >
+                    <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
+                  </div>
+                  <div
+                    class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                    classList={{
+                      "opacity-100": store.iconHover && !!store.iconUrl,
+                      "opacity-0": !(store.iconHover && !!store.iconUrl),
+                    }}
+                  >
+                    <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
+                  </div>
+                </div>
+                <input
+                  id="icon-upload"
+                  ref={(el) => {
+                    iconInput = el
+                  }}
+                  type="file"
+                  accept="image/*"
+                  class="hidden"
+                  onChange={handleInputChange}
+                />
+                <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
+                  <span>{language.t("dialog.project.edit.icon.hint")}</span>
+                  <span>{language.t("dialog.project.edit.icon.recommended")}</span>
+                </div>
+              </div>
+            </div>
+
+            <Show when={!store.iconUrl}>
+              <div class="flex flex-col gap-2">
+                <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
+                <div class="flex gap-1.5">
+                  <For each={AVATAR_COLOR_KEYS}>
+                    {(color) => (
+                      <button
+                        type="button"
+                        aria-label={language.t("dialog.project.edit.color.select", { color })}
+                        aria-pressed={store.color === color}
+                        classList={{
+                          "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,
+                          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
+                            store.color === color,
+                          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+                            store.color !== color,
+                        }}
+                        onClick={() => setStore("color", color)}
+                      >
                         <Avatar
                           fallback={store.name || defaultName()}
-                          {...getAvatarColors(store.color)}
-                          class="size-full text-[32px]"
+                          {...getAvatarColors(color)}
+                          class="size-full rounded"
                         />
-                      </div>
-                    }
-                  >
-                    <img
-                      src={store.iconUrl}
-                      alt={language.t("dialog.project.edit.icon.alt")}
-                      class="size-full object-cover"
-                    />
-                  </Show>
-                </div>
-                <div
-                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
-                  classList={{
-                    "opacity-100": store.iconHover && !store.iconUrl,
-                    "opacity-0": !(store.iconHover && !store.iconUrl),
-                  }}
-                >
-                  <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
-                </div>
-                <div
-                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
-                  classList={{
-                    "opacity-100": store.iconHover && !!store.iconUrl,
-                    "opacity-0": !(store.iconHover && !!store.iconUrl),
-                  }}
-                >
-                  <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
+                      </button>
+                    )}
+                  </For>
                 </div>
               </div>
-              <input
-                id="icon-upload"
-                ref={(el) => {
-                  iconInput = el
-                }}
-                type="file"
-                accept="image/*"
-                class="hidden"
-                onChange={handleInputChange}
-              />
-              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
-                <span>{language.t("dialog.project.edit.icon.hint")}</span>
-                <span>{language.t("dialog.project.edit.icon.recommended")}</span>
+            </Show>
+
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex flex-col gap-0.5">
+                <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.worktree.enable")}</label>
+                <div class="text-12-regular text-text-weak">
+                  {language.t("dialog.project.edit.worktree.enable.description")}
+                </div>
               </div>
+              <Switch checked={store.workspacesEnabled} onChange={(v) => setStore("workspacesEnabled", v)} />
             </div>
+
+            <Show when={store.workspacesEnabled}>
+              <div class="flex flex-col gap-4 pl-4 border-l-2 border-border-weak-base">
+                <TextField
+                  multiline
+                  label={language.t("dialog.project.edit.worktree.startup")}
+                  description={language.t("dialog.project.edit.worktree.startup.description")}
+                  placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
+                  value={store.startup}
+                  onChange={(v) => setStore("startup", v)}
+                  spellcheck={false}
+                  class="max-h-14 w-full overflow-y-auto font-mono text-xs"
+                />
+
+                <TextField
+                  type="text"
+                  label={language.t("dialog.project.edit.worktree.baseBranch")}
+                  description={language.t("dialog.project.edit.worktree.baseBranch.description")}
+                  placeholder={language.t("dialog.project.edit.worktree.baseBranch.placeholder")}
+                  value={store.baseBranch}
+                  onChange={(v) => setStore("baseBranch", v)}
+                />
+
+                <TextField
+                  multiline
+                  label={language.t("dialog.project.edit.worktree.symlinks")}
+                  description={language.t("dialog.project.edit.worktree.symlinks.description")}
+                  placeholder={language.t("dialog.project.edit.worktree.symlinks.placeholder")}
+                  value={store.symlinks}
+                  onChange={(v) => setStore("symlinks", v)}
+                  spellcheck={false}
+                  class="max-h-24 w-full overflow-y-auto font-mono text-xs"
+                />
+
+                <TextField
+                  multiline
+                  label={language.t("dialog.project.edit.worktree.copies")}
+                  description={language.t("dialog.project.edit.worktree.copies.description")}
+                  placeholder={language.t("dialog.project.edit.worktree.copies.placeholder")}
+                  value={store.copies}
+                  onChange={(v) => setStore("copies", v)}
+                  spellcheck={false}
+                  class="max-h-24 w-full overflow-y-auto font-mono text-xs"
+                />
+              </div>
+            </Show>
           </div>
 
-          <Show when={!store.iconUrl}>
-            <div class="flex flex-col gap-2">
-              <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
-              <div class="flex gap-1.5">
-                <For each={AVATAR_COLOR_KEYS}>
-                  {(color) => (
-                    <button
-                      type="button"
-                      aria-label={language.t("dialog.project.edit.color.select", { color })}
-                      aria-pressed={store.color === color}
-                      classList={{
-                        "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,
-                        "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
-                          store.color === color,
-                        "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-                          store.color !== color,
-                      }}
-                      onClick={() => setStore("color", color)}
-                    >
-                      <Avatar
-                        fallback={store.name || defaultName()}
-                        {...getAvatarColors(color)}
-                        class="size-full rounded"
-                      />
-                    </button>
-                  )}
-                </For>
-              </div>
-            </div>
-          </Show>
-
-          <TextField
-            multiline
-            label={language.t("dialog.project.edit.worktree.startup")}
-            description={language.t("dialog.project.edit.worktree.startup.description")}
-            placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
-            value={store.startup}
-            onChange={(v) => setStore("startup", v)}
-            spellcheck={false}
-            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
-          />
-
-          <TextField
-            type="text"
-            label={language.t("dialog.project.edit.worktree.baseBranch")}
-            placeholder={language.t("dialog.project.edit.worktree.baseBranch.placeholder")}
-            value={store.baseBranch}
-            onChange={(v) => setStore("baseBranch", v)}
-          />
-
-          <TextField
-            multiline
-            label={language.t("dialog.project.edit.worktree.symlinks")}
-            description={language.t("dialog.project.edit.worktree.symlinks.description")}
-            placeholder={language.t("dialog.project.edit.worktree.symlinks.placeholder")}
-            value={store.symlinks}
-            onChange={(v) => setStore("symlinks", v)}
-            spellcheck={false}
-            class="max-h-24 w-full overflow-y-auto font-mono text-xs"
-          />
-
-          <TextField
-            multiline
-            label={language.t("dialog.project.edit.worktree.copies")}
-            description={language.t("dialog.project.edit.worktree.copies.description")}
-            placeholder={language.t("dialog.project.edit.worktree.copies.placeholder")}
-            value={store.copies}
-            onChange={(v) => setStore("copies", v)}
-            spellcheck={false}
-            class="max-h-24 w-full overflow-y-auto font-mono text-xs"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2">
-          <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" size="large" disabled={store.saving}>
-            {store.saving ? language.t("common.saving") : language.t("common.save")}
-          </Button>
+          <div class="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" size="large" disabled={store.saving}>
+              {store.saving ? language.t("common.saving") : language.t("common.save")}
+            </Button>
+          </div>
         </div>
       </form>
     </Dialog>
