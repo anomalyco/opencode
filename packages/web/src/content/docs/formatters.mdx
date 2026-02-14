@@ -20,7 +20,8 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
 | clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
 | ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                            |
-| google-java-format   | .java                                                                                                    | `google-java-format` command available or `google-java-format-all-deps.jar` in project root           |
+| spotless-maven       | .java                                                                                                    | `spotless-maven-plugin` in `pom.xml`                                                                  |
+| spotless-gradle      | .java                                                                                                    | `com.diffplug.spotless` plugin in `build.gradle`                                                      |
 | ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
 | rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
 | cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
@@ -41,29 +42,43 @@ OpenCode comes with several built-in formatters for popular languages and framew
 
 So if your project has `prettier` in your `package.json`, OpenCode will automatically use it.
 
-### Google Java Format
+### Spotless (Java Formatter)
 
-Google Java Format requires either:
+Spotless is a code formatter for Java that supports multiple formatters (Google Java Format, Eclipse, Palantir, etc.). OpenCode detects Spotless configuration in your project and formats files automatically.
 
-1. **`google-java-format` command in PATH** - Install via [releases](https://github.com/google/google-java-format/releases)
-2. **`google-java-format-all-deps.jar` in project root** - Download from [releases](https://github.com/google/google-java-format/releases)
+**Maven Projects**: Requires `spotless-maven-plugin` in `pom.xml`
 
-Example project structure:
-
-```
-my-java-project/
-├── src/
-│   └── Main.java
-└── google-java-format-all-deps.jar
-```
-
-When the JAR is in your project root, OpenCode will automatically run:
-
-```bash
-java -jar google-java-format-all-deps.jar $FILE
+```xml
+<plugin>
+  <groupId>com.diffplug.spotless</groupId>
+  <artifactId>spotless-maven-plugin</artifactId>
+  <configuration>
+    <java>
+      <googleJavaFormat/>  <!-- or <eclipse/>, <palantir/>, etc. -->
+    </java>
+  </configuration>
+</plugin>
 ```
 
-If you prefer a different location, you can configure it:
+**Gradle Projects**: Requires `com.diffplug.spotless` plugin in `build.gradle`
+
+```gradle
+plugins {
+  id 'com.diffplug.spotless' version '6.15.0'
+}
+
+spotless {
+  java {
+    googleJavaFormat()  // or eclipse(), palantir(), etc.
+  }
+}
+```
+
+When a Java file is saved, OpenCode will run:
+- **Maven**: `mvn spotless:apply -DspotlessFiles=$FILE` (or `./mvnw` if Maven wrapper exists)
+- **Gradle**: `./gradlew spotlessApply -PspotlessIdeHook=$FILE` (or `gradle` if no wrapper)
+
+This ensures only the saved file is formatted, not the entire project.
 
 ---
 
@@ -154,14 +169,17 @@ You can override the built-in formatters or add new ones by specifying the comma
 
 The **`$FILE` placeholder** in the command will be replaced with the path to the file being formatted.
 
-For example, to use a custom JAR location:
+For example, to disable Spotless formatters or customize the command:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
-    "google-java-format": {
-      "command": ["java", "-jar", "C:\\tools\\google-java-format-all-deps.jar", "$FILE"]
+    "spotless-maven": {
+      "disabled": true
+    },
+    "spotless-gradle": {
+      "command": ["./gradlew", "spotlessApply", "-PspotlessIdeHook=$FILE"]
     }
   }
 }

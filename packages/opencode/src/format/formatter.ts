@@ -365,36 +365,57 @@ export const ormolu: Info = {
   },
 }
 
-export const googleJavaFormat: Info = {
-  name: "google-java-format",
-  command: ["java", "-jar", "google-java-format-all-deps.jar", "$FILE"],
+export const spotlessMaven: Info = {
+  name: "spotless-maven",
+  command: ["mvn", "spotless:apply", "-DspotlessFiles=$FILE"],
   extensions: [".java"],
   async enabled() {
-    if (Bun.which("google-java-format")) return true
-
-    const jarFound = await Filesystem.findUp("google-java-format-all-deps.jar", Instance.directory, Instance.worktree)
-    if (jarFound.length > 0) return true
-
     const pomFiles = await Filesystem.findUp("pom.xml", Instance.directory, Instance.worktree)
     for (const pom of pomFiles) {
       const content = await Bun.file(pom).text()
-      if (content.includes("spotless") && content.includes("google-java-format")) {
+      if (/\<artifactId\>spotless-maven-plugin\<\/artifactId\>/i.test(content)) {
+        const mvnw = await Filesystem.findUp("mvnw", Instance.directory, Instance.worktree)
+        if (mvnw.length > 0) {
+          this.command = ["./mvnw", "spotless:apply", "-DspotlessFiles=$FILE"]
+          return true
+        }
+
+        const mvnwCmd = await Filesystem.findUp("mvnw.cmd", Instance.directory, Instance.worktree)
+        if (mvnwCmd.length > 0) {
+          this.command = ["./mvnw.cmd", "spotless:apply", "-DspotlessFiles=$FILE"]
+          return true
+        }
+
+        this.command = ["mvn", "spotless:apply", "-DspotlessFiles=$FILE"]
         return true
       }
     }
+    return false
+  },
+}
 
+export const spotlessGradle: Info = {
+  name: "spotless-gradle",
+  command: ["gradle", "spotlessApply", "-PspotlessIdeHook=$FILE"],
+  extensions: [".java"],
+  async enabled() {
     const gradleFiles = await Filesystem.findUp("build.gradle", Instance.directory, Instance.worktree)
     for (const gradle of gradleFiles) {
       const content = await Bun.file(gradle).text()
-      if (content.includes("spotless") && content.includes("google-java-format")) {
-        return true
-      }
-    }
+      if (/['"]com\.diffplug\.spotless['"]/.test(content)) {
+        const gradlewUnix = await Filesystem.findUp("gradlew", Instance.directory, Instance.worktree)
+        if (gradlewUnix.length > 0) {
+          this.command = ["./gradlew", "spotlessApply", "-PspotlessIdeHook=$FILE"]
+          return true
+        }
 
-    const gradleKtsFiles = await Filesystem.findUp("build.gradle.kts", Instance.directory, Instance.worktree)
-    for (const gradle of gradleKtsFiles) {
-      const content = await Bun.file(gradle).text()
-      if (content.includes("spotless") && content.includes("google-java-format")) {
+        const gradlewWin = await Filesystem.findUp("gradlew.bat", Instance.directory, Instance.worktree)
+        if (gradlewWin.length > 0) {
+          this.command = ["./gradlew.bat", "spotlessApply", "-PspotlessIdeHook=$FILE"]
+          return true
+        }
+
+        this.command = ["gradle", "spotlessApply", "-PspotlessIdeHook=$FILE"]
         return true
       }
     }
