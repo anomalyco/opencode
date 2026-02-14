@@ -359,6 +359,7 @@ opencode serve --hostname 0.0.0.0 --port 4096
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 opencode session [command]
 opencode session list
+opencode session delete <sessionID>
 opencode stats
 opencode uninstall
 opencode upgrade
