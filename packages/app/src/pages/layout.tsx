@@ -1950,8 +1950,8 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
+              renderProject={(project, index) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} index={index} />
               )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
@@ -2015,8 +2015,8 @@ export default function Layout(props: ParentProps) {
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
+              renderProject={(project, index) => (
+                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile index={index} />
               )}
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
