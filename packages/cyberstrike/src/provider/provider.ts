@@ -41,6 +41,8 @@ import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { createClaudeCliProvider, isClaudeCliProviderAvailable } from "./claude-cli-provider"
+import { getValidClaudeCliToken, hasValidClaudeCliCredentials } from "../auth/cli-credentials"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -80,6 +82,7 @@ export namespace Provider {
     "@gitlab/gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@cyberstrike-io/claude-cli": createClaudeCliProvider as any,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -535,6 +538,27 @@ export namespace Provider {
         },
       }
     },
+    "claude-api": async () => {
+      if (!hasValidClaudeCliCredentials()) {
+        return { autoload: false }
+      }
+
+      const token = await getValidClaudeCliToken()
+      if (!token) {
+        return { autoload: false }
+      }
+
+      return {
+        autoload: true,
+        options: {
+          apiKey: token,
+          headers: {
+            "anthropic-beta":
+              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -930,6 +954,140 @@ export namespace Provider {
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
+    }
+
+    // Add claude-cli provider if Claude Code CLI is installed
+    if (!disabled.has("claude-cli") && isClaudeCliProviderAvailable()) {
+      const claudeCapabilities = {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: true,
+      }
+      const claudeDefaults = {
+        family: "claude",
+        api: { url: "local", npm: "@cyberstrike-io/claude-cli" },
+        status: "active" as const,
+        headers: {},
+        options: {},
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        release_date: "2025-01-01",
+      }
+      const claudeCliModels: Record<string, Model> = {
+        opus: {
+          ...claudeDefaults,
+          id: "opus",
+          providerID: "claude-cli",
+          name: "Claude Opus 4.5",
+          api: { ...claudeDefaults.api, id: "opus" },
+          limit: { context: 200000, output: 32000 },
+          capabilities: claudeCapabilities,
+          variants: {},
+        },
+        "opus-4.6": {
+          ...claudeDefaults,
+          id: "opus-4.6",
+          providerID: "claude-cli",
+          name: "Claude Opus 4.6",
+          api: { ...claudeDefaults.api, id: "opus" },
+          limit: { context: 200000, output: 32000 },
+          capabilities: claudeCapabilities,
+          variants: {},
+        },
+        sonnet: {
+          ...claudeDefaults,
+          id: "sonnet",
+          providerID: "claude-cli",
+          name: "Claude Sonnet 4.5",
+          api: { ...claudeDefaults.api, id: "sonnet" },
+          limit: { context: 200000, output: 64000 },
+          capabilities: claudeCapabilities,
+          variants: {},
+        },
+        haiku: {
+          ...claudeDefaults,
+          id: "haiku",
+          providerID: "claude-cli",
+          name: "Claude Haiku 4.5",
+          api: { ...claudeDefaults.api, id: "haiku" },
+          limit: { context: 200000, output: 8192 },
+          capabilities: { ...claudeCapabilities, interleaved: false },
+          variants: {},
+        },
+      }
+
+      providers["claude-cli"] = {
+        id: "claude-cli",
+        name: "Claude Code CLI (Subprocess)",
+        source: "env",
+        env: [],
+        options: {},
+        models: claudeCliModels,
+      }
+      log.info("claude-cli provider available")
+
+      // Also add claude-api provider if we have valid credentials
+      if (!disabled.has("claude-api") && hasValidClaudeCliCredentials()) {
+        const claudeApiDefaults = {
+          ...claudeDefaults,
+          api: { url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
+        }
+        const claudeApiModels: Record<string, Model> = {
+          "claude-opus-4-5-20250514": {
+            ...claudeApiDefaults,
+            id: "claude-opus-4-5-20250514",
+            providerID: "claude-api",
+            name: "Claude Opus 4.5",
+            api: { ...claudeApiDefaults.api, id: "claude-opus-4-5-20250514" },
+            limit: { context: 200000, output: 32000 },
+            capabilities: claudeCapabilities,
+            variants: {},
+          },
+          "claude-opus-4-6-20250514": {
+            ...claudeApiDefaults,
+            id: "claude-opus-4-6-20250514",
+            providerID: "claude-api",
+            name: "Claude Opus 4.6",
+            api: { ...claudeApiDefaults.api, id: "claude-opus-4-6-20250514" },
+            limit: { context: 200000, output: 32000 },
+            capabilities: claudeCapabilities,
+            variants: {},
+          },
+          "claude-sonnet-4-5-20250514": {
+            ...claudeApiDefaults,
+            id: "claude-sonnet-4-5-20250514",
+            providerID: "claude-api",
+            name: "Claude Sonnet 4.5",
+            api: { ...claudeApiDefaults.api, id: "claude-sonnet-4-5-20250514" },
+            limit: { context: 200000, output: 64000 },
+            capabilities: claudeCapabilities,
+            variants: {},
+          },
+          "claude-haiku-4-5-20250514": {
+            ...claudeApiDefaults,
+            id: "claude-haiku-4-5-20250514",
+            providerID: "claude-api",
+            name: "Claude Haiku 4.5",
+            api: { ...claudeApiDefaults.api, id: "claude-haiku-4-5-20250514" },
+            limit: { context: 200000, output: 8192 },
+            capabilities: { ...claudeCapabilities, interleaved: false },
+            variants: {},
+          },
+        }
+
+        providers["claude-api"] = {
+          id: "claude-api",
+          name: "Claude Code CLI (API)",
+          source: "env",
+          env: [],
+          options: {},
+          models: claudeApiModels,
+        }
+        log.info("claude-api provider available")
+      }
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
