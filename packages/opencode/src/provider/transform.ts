@@ -763,6 +763,21 @@ export namespace ProviderTransform {
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
+    // Strip $schema meta field from Zod 4 toJSONSchema() output.
+    // Claude API's input_schema rejects this field.
+    if ("$schema" in schema) {
+      const { $schema: _, ...rest } = schema as any
+      schema = rest as JSONSchema.BaseSchema
+    }
+
+    // Claude API (especially thinking models) requires the "required" field
+    // to be present when "properties" exists, even if it's an empty array.
+    // Without this, the API returns "JSON schema is invalid" errors.
+    const s = schema as any
+    if (s.type === "object" && s.properties && !s.required) {
+      s.required = []
+    }
+
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
