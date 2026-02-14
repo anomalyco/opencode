@@ -51,7 +51,8 @@ scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS i Linux (preporučeno, uvijek ažurno)
 brew install opencode              # macOS i Linux (zvanična brew formula, rjeđe se ažurira)
-paru -S opencode-bin               # Arch Linux
+sudo pacman -S opencode            # Arch Linux (Stable)
+paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Bilo koji OS
 nix run nixpkgs#opencode           # ili github:anomalyco/opencode za najnoviji dev branch
 ```
