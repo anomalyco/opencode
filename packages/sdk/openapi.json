@@ -7338,12 +7338,40 @@
             "properties": {
               "part": {
                 "$ref": "#/components/schemas/Part"
+              }
+            },
+            "required": ["part"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.message.part.delta": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "message.part.delta"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string"
+              },
+              "partID": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
               },
               "delta": {
                 "type": "string"
               }
             },
-            "required": ["part"]
+            "required": ["sessionID", "messageID", "partID", "field", "delta"]
           }
         },
         "required": ["type", "properties"]
@@ -7757,13 +7785,9 @@
           "priority": {
             "description": "Priority level of the task: high, medium, low",
             "type": "string"
-          },
-          "id": {
-            "description": "Unique identifier for the todo item",
-            "type": "string"
           }
         },
-        "required": ["content", "status", "priority", "id"]
+        "required": ["content", "status", "priority"]
       },
       "Event.todo.updated": {
         "type": "object",
@@ -8433,6 +8457,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.message.part.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.part.delta"
           },
           {
             "$ref": "#/components/schemas/Event.message.part.removed"
