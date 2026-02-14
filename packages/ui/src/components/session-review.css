@@ -222,4 +222,30 @@
     --line-comment-popover-z: 30;
     --line-comment-open-z: 6;
   }
+
+  [data-slot="session-review-large-diff"] {
+    padding: 12px;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-large-diff-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+    margin-bottom: 4px;
+  }
+
+  [data-slot="session-review-large-diff-meta"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+    word-break: break-word;
+  }
+
+  [data-slot="session-review-large-diff-actions"] {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
 }

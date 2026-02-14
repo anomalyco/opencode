@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Suspense, lazy, type JSX, type ParentProps } from "solid-js"
+import { ErrorBoundary, Show, Suspense, lazy, type JSX, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -156,8 +156,11 @@ export function AppBaseProviders(props: ParentProps) {
 
 function ServerKey(props: ParentProps) {
   const server = useServer()
-  if (!server.url) return null
-  return props.children
+  return (
+    <Show when={server.url} keyed>
+      {props.children}
+    </Show>
+  )
 }
 
 export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {
