@@ -25,7 +25,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
@@ -958,16 +958,12 @@ async fn initialize(app: AppHandle) {
         sleep(Duration::from_secs(1)).await;
         Some(loading_window)
     } else {
-<<<<<<< HEAD
+        tracing::debug!("Showing main window without loading window");
         let initial_path = app
             .try_state::<InitialPathState>()
             .and_then(|s| s.0.lock().ok()?.take());
         MainWindow::create_with_path(&app, initial_path.as_deref())
             .expect("Failed to create main window");
-=======
-        tracing::debug!("Showing main window without loading window");
-        MainWindow::create(&app).expect("Failed to create main window");
->>>>>>> origin/dev
 
         None
     };
@@ -981,13 +977,13 @@ async fn initialize(app: AppHandle) {
         loading_window_complete.await;
 
         tracing::info!("Loading window completed");
-    }
 
-    let initial_path = app
-        .try_state::<InitialPathState>()
-        .and_then(|s| s.0.lock().ok()?.take());
-    MainWindow::create_with_path(&app, initial_path.as_deref())
-        .expect("Failed to create main window");
+        let initial_path = app
+            .try_state::<InitialPathState>()
+            .and_then(|s| s.0.lock().ok()?.take());
+        MainWindow::create_with_path(&app, initial_path.as_deref())
+            .expect("Failed to create main window");
+    }
 
     if let Some(loading_window) = loading_window {
         let _ = loading_window.close();
