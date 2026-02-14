@@ -529,7 +529,17 @@ export type EventMessagePartUpdated = {
   type: "message.part.updated"
   properties: {
     part: Part
-    delta?: string
+  }
+}
+
+export type EventMessagePartDelta = {
+  type: "message.part.delta"
+  properties: {
+    sessionID: string
+    messageID: string
+    partID: string
+    field: string
+    delta: string
   }
 }
 
@@ -699,10 +709,6 @@ export type Todo = {
    * Priority level of the task: high, medium, low
    */
   priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
 }
 
 export type EventTodoUpdated = {
@@ -952,6 +958,7 @@ export type Event =
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
+  | EventMessagePartDelta
   | EventMessagePartRemoved
   | EventPermissionAsked
   | EventPermissionReplied

@@ -215,3 +215,8 @@
     display: block;
   }
 }
+
+[data-component="markdown"] a.external-link:hover > code {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

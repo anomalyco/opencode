@@ -428,7 +428,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
-      await client.session.prompt({
+      await client.session.promptAsync({
         sessionID: session.id,
         agent,
         model,
