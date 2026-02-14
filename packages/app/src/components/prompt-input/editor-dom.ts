@@ -4,8 +4,6 @@ export function createTextFragment(content: string): DocumentFragment {
   segments.forEach((segment, index) => {
     if (segment) {
       fragment.appendChild(document.createTextNode(segment))
-    } else if (segments.length > 1) {
-      fragment.appendChild(document.createTextNode("\u200B"))
     }
     if (index < segments.length - 1) {
       fragment.appendChild(document.createElement("br"))

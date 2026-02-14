@@ -347,9 +347,9 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     tabs().open(value)
     file.load(path)
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
+    tabs().setActive(value)
   }
 
   const handleSelect = (item: Entry | undefined) => {
