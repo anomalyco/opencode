@@ -47,7 +47,7 @@ function overrideResolver(): Plugin {
     const files = list(overridesRoot).filter((p) => p.endsWith(".ts") || p.endsWith(".tsx"))
     for (const f of files) {
       const rel = path.relative(overridesRoot, f).replace(/\\/g, "/").replace(/\.(ts|tsx)$/, "")
-      overrideMap.set(rel, f)
+      overrideMap.set(rel, normalizePath(f))
     }
   }
 
