@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, like } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, like, desc } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -519,6 +519,7 @@ export namespace Session {
             // or(eq(SessionTable.directory, Instance.directory), like(SessionTable.directory, `%${suffix}`)),
           ),
         )
+        .orderBy(desc(SessionTable.time_updated), desc(SessionTable.time_created), desc(SessionTable.id))
         .all(),
     )
     for (const row of rows) {
@@ -533,6 +534,7 @@ export namespace Session {
         .select()
         .from(SessionTable)
         .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+        .orderBy(desc(SessionTable.time_updated), desc(SessionTable.time_created), desc(SessionTable.id))
         .all(),
     )
     return rows.map(fromRow)
