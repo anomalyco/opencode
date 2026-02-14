@@ -138,7 +138,8 @@ export namespace Pty {
   interface ActiveSession {
     info: Info
     process: IPty
-    buffer: string
+    bufferChunks: string[]
+    bufferLen: number
     bufferCursor: number
     cursor: number
     subscribers: Map<Socket, Subscriber>
@@ -215,7 +216,8 @@ export namespace Pty {
     const session: ActiveSession = {
       info,
       process: ptyProcess,
-      buffer: "",
+      bufferChunks: [],
+      bufferLen: 0,
       bufferCursor: 0,
       cursor: 0,
       subscribers: new Map(),
@@ -247,11 +249,13 @@ export namespace Pty {
         }
       }
 
-      session.buffer += chunk
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      const excess = session.buffer.length - BUFFER_LIMIT
-      session.buffer = session.buffer.slice(excess)
-      session.bufferCursor += excess
+      session.bufferChunks.push(chunk)
+      session.bufferLen += chunk.length
+      while (session.bufferLen > BUFFER_LIMIT && session.bufferChunks.length > 1) {
+        const removed = session.bufferChunks.shift()!
+        session.bufferLen -= removed.length
+        session.bufferCursor += removed.length
+      }
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
@@ -351,11 +355,12 @@ export namespace Pty {
       cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
 
     const data = (() => {
-      if (!session.buffer) return ""
+      if (session.bufferChunks.length === 0) return ""
       if (from >= end) return ""
+      const combined = session.bufferChunks.join("")
       const offset = Math.max(0, from - start)
-      if (offset >= session.buffer.length) return ""
-      return session.buffer.slice(offset)
+      if (offset >= combined.length) return ""
+      return combined.slice(offset)
     })()
 
     if (data) {

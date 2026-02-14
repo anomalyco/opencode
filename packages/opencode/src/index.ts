@@ -32,6 +32,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { Instance } from "./project/instance"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -195,6 +196,12 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // Dispose all instance-scoped resources (LSP clients, bus subscriptions, PTY sessions, etc.)
+  try {
+    await Instance.disposeAll()
+  } catch {
+    // best-effort cleanup
+  }
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.

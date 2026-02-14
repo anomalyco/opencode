@@ -19,6 +19,7 @@ import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024 // 10 MB output buffer cap
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -179,7 +180,8 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
+      const outputChunks: Buffer[] = []
+      let outputBytes = 0
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -189,12 +191,22 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
+      const getOutput = () => {
+        return Buffer.concat(outputChunks).toString()
+      }
+
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        outputChunks.push(chunk)
+        outputBytes += chunk.length
+        // evict oldest chunks when over cap
+        while (outputBytes > MAX_OUTPUT_BYTES && outputChunks.length > 1) {
+          const removed = outputChunks.shift()!
+          outputBytes -= removed.length
+        }
+        const preview = getOutput()
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: preview.length > MAX_METADATA_LENGTH ? preview.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : preview,
             description: params.description,
           },
         })
@@ -254,6 +266,8 @@ export const BashTool = Tool.define("bash", async () => {
       if (aborted) {
         resultMetadata.push("User aborted the command")
       }
+
+      let output = getOutput()
 
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"

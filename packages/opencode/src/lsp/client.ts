@@ -48,6 +48,7 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
+    const MAX_DIAGNOSTICS_ENTRIES = 5_000
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
@@ -56,7 +57,14 @@ export namespace LSPClient {
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
+      // LRU eviction: delete before re-set so entry moves to end of insertion order
+      if (exists) diagnostics.delete(filePath)
       diagnostics.set(filePath, params.diagnostics)
+      // evict oldest entries when map exceeds cap
+      if (diagnostics.size > MAX_DIAGNOSTICS_ENTRIES) {
+        const first = diagnostics.keys().next().value
+        if (first !== undefined) diagnostics.delete(first)
+      }
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
@@ -237,6 +245,7 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
+        diagnostics.clear()
         connection.end()
         connection.dispose()
         input.server.process.kill()
