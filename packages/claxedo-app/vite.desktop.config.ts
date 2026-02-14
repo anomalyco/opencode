@@ -100,6 +100,9 @@ export default defineConfig({
     outDir: "../../dist-desktop",
     emptyOutDir: true,
   },
+  worker: {
+    format: "es",
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port,

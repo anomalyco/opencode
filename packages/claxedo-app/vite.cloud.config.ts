@@ -86,6 +86,9 @@ function cloudConfig({ mode }: { mode: string }): UserConfig {
       allowedHosts: true,
       port: 4444,
     },
+    worker: {
+      format: "es",
+    },
     build: {
       target: "esnext",
       outDir: "dist",
