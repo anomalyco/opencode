@@ -162,7 +162,7 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset ?? 1
     const start = offset - 1
-    const stream = fs.createReadStream(filepath, { encoding: "utf8" })
+    const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader()
     let buf = ""
 
     const raw: string[] = []
@@ -176,8 +176,10 @@ export const ReadTool = Tool.define("read", {
     let stopped = false
     const cap = MAX_BYTES + MAX_LINE_LENGTH
 
-    for await (const chunk of stream) {
-      buf += chunk
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      buf += chunk.value
 
       const idx = buf.lastIndexOf("\n")
       if (idx === -1) {
@@ -237,7 +239,8 @@ export const ReadTool = Tool.define("read", {
       if (stopped) break
     }
 
-    if (stopped) stream.destroy()
+    if (stopped) await reader.cancel()
+    reader.releaseLock()
 
     if (!stopped) {
       if (line >= start) inRange = true
