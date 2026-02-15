@@ -403,15 +403,6 @@ export namespace SessionPrompt {
           subagent_type: task.agent,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          { args: taskArgs },
-        )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
         const taskCtx: Tool.Context = {
@@ -440,10 +431,18 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-          return undefined
+        const result = await Tool.invoke({
+          tool: "task",
+          sessionID,
+          callID: part.id,
+          agent: task.agent,
+          args: taskArgs,
+          fn: () =>
+            taskTool.execute(taskArgs, taskCtx).catch((error) => {
+              executionError = error
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+              return undefined
+            }),
         })
         const attachments = result?.attachments?.map((attachment) => ({
           ...attachment,
@@ -451,16 +450,6 @@ export namespace SessionPrompt {
           sessionID,
           messageID: assistantMessage.id,
         }))
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-            args: taskArgs,
-          },
-          result,
-        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -791,38 +780,23 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, ctx)
-          const output = {
-            ...result,
-            attachments: result.attachments?.map((attachment) => ({
+          const result = await Tool.invoke({
+            tool: item.id,
+            sessionID: ctx.sessionID,
+            callID: ctx.callID,
+            agent: ctx.agent,
+            args,
+            fn: () => item.execute(args, ctx),
+          })
+          return {
+            ...result!,
+            attachments: result?.attachments?.map((attachment) => ({
               ...attachment,
               id: Identifier.ascending("part"),
               sessionID: ctx.sessionID,
               messageID: input.processor.message.id,
             })),
           }
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              args,
-            },
-            output,
-          )
-          return output
         },
       })
     }

@@ -182,16 +182,17 @@ export interface Hooks {
     output: { parts: Part[] },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; callID: string },
+    input: { tool: string; sessionID: string; callID: string; agent?: string },
     output: { args: any },
   ) => Promise<void>
   "shell.env"?: (input: { cwd: string }, output: { env: Record<string, string> }) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any },
+    input: { tool: string; sessionID: string; callID: string; args: any; agent?: string },
     output: {
       title: string
       output: string
       metadata: any
+      status?: "success" | "error"
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (
