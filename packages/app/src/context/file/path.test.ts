@@ -17,7 +17,7 @@ describe("file path helpers", () => {
     const path = createPathHelpers(() => "C:\\repo")
     expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src/app.ts")
     expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
-    expect(path.normalize("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src/app.ts")
   })
 
