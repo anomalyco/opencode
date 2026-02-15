@@ -251,8 +251,8 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title="Message Font Size"
-          description="Adjust the font size for user and assistant messages"
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
         >
           <div class="flex items-center gap-2">
             <Button
@@ -265,7 +265,7 @@ export const SettingsGeneral: Component = () => {
                 }
               }}
               disabled={settings.appearance.fontSize() <= 10}
-              aria-label="Decrease font size"
+              aria-label={language.t("settings.general.row.fontSize.decrease")}
             >
               −
             </Button>
@@ -282,7 +282,7 @@ export const SettingsGeneral: Component = () => {
                 }
               }}
               disabled={settings.appearance.fontSize() >= 24}
-              aria-label="Increase font size"
+              aria-label={language.t("settings.general.row.fontSize.increase")}
             >
               +
             </Button>
@@ -290,8 +290,8 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title="Content Width"
-          description="Adjust the maximum width of conversation messages"
+          title={language.t("settings.general.row.contentWidth.title")}
+          description={language.t("settings.general.row.contentWidth.description")}
         >
           <div class="flex items-center gap-2">
             <Button
@@ -306,16 +306,16 @@ export const SettingsGeneral: Component = () => {
                 }
               }}
               disabled={settings.appearance.contentWidth() <= 200}
-              aria-label="Decrease content width"
+              aria-label={language.t("settings.general.row.contentWidth.decrease")}
             >
               −
             </Button>
             <span class="text-14-regular text-text-strong min-w-[80px] text-center">
-              {settings.appearance.contentWidth() === 200 && "Narrow"}
-              {settings.appearance.contentWidth() === 250 && "Medium"}
-              {settings.appearance.contentWidth() === 300 && "Wide"}
-              {settings.appearance.contentWidth() === 350 && "Extra Wide"}
-              {settings.appearance.contentWidth() === 400 && "Full Width"}
+              {settings.appearance.contentWidth() === 200 && language.t("settings.general.row.contentWidth.narrow")}
+              {settings.appearance.contentWidth() === 250 && language.t("settings.general.row.contentWidth.medium")}
+              {settings.appearance.contentWidth() === 300 && language.t("settings.general.row.contentWidth.wide")}
+              {settings.appearance.contentWidth() === 350 && language.t("settings.general.row.contentWidth.extraWide")}
+              {settings.appearance.contentWidth() === 400 && language.t("settings.general.row.contentWidth.fullWidth")}
             </span>
             <Button
               variant="secondary"
@@ -329,7 +329,7 @@ export const SettingsGeneral: Component = () => {
                 }
               }}
               disabled={settings.appearance.contentWidth() >= 400}
-              aria-label="Increase content width"
+              aria-label={language.t("settings.general.row.contentWidth.increase")}
             >
               +
             </Button>

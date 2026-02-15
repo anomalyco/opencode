@@ -16,6 +16,7 @@ export const dict = {
   "command.category.terminal": "终端",
   "command.category.model": "模型",
   "command.category.mcp": "MCP",
+  "command.category.skill": "技能",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
   "command.category.workspace": "工作区",
@@ -90,6 +91,9 @@ export const dict = {
   "command.mcp.toggle": "切换 MCPs",
   "command.mcp.toggle.description": "切换 MCPs",
 
+  "command.skill.list": "查看技能",
+  "command.skill.list.description": "查看已加载的技能",
+
   "command.agent.cycle": "切换智能体",
   "command.agent.cycle.description": "切换到下一个智能体",
   "command.agent.cycle.reverse": "反向切换智能体",
@@ -145,6 +149,7 @@ export const dict = {
   "dialog.model.empty": "未找到模型",
   "dialog.model.manage": "管理模型",
   "dialog.model.manage.description": "自定义模型选择器中显示的模型。",
+  "dialog.model.manage.provider.toggle": "切换所有 {{provider}} 模型",
   "dialog.model.unpaid.freeModels.title": "OpenCode 提供的免费模型",
   "dialog.model.unpaid.addMore.title": "从热门提供商添加更多模型",
 
@@ -312,6 +317,10 @@ export const dict = {
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
   "dialog.mcp.empty": "未配置 MCPs",
+
+  "dialog.skill.title": "技能",
+  "dialog.skill.description": "已加载 {{count}} 个",
+  "dialog.skill.empty": "未加载技能",
 
   "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
 
@@ -584,6 +593,9 @@ export const dict = {
   "sidebar.gettingStarted.line2": "连接任意提供商即可使用更多模型，如 Claude、GPT、Gemini 等。",
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
+  "sidebar.project.viewArchivedSessions": "查看已归档会话",
+  "sidebar.project.archivedSessions": "已归档会话",
+  "sidebar.project.noArchivedSessions": "没有已归档会话",
   "sidebar.dropFolder": "释放文件夹以打开项目",
   "sidebar.dropFile": "释放以添加为附件",
 
@@ -612,6 +624,22 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+
+  "settings.general.row.fontSize.title": "消息字体大小",
+  "settings.general.row.fontSize.description": "调整用户和助手消息的字体大小",
+  "settings.general.row.fontSize.decrease": "减小字体大小",
+  "settings.general.row.fontSize.increase": "增大字体大小",
+
+  "settings.general.row.contentWidth.title": "内容宽度",
+  "settings.general.row.contentWidth.description": "调整对话消息的最大宽度",
+  "settings.general.row.contentWidth.decrease": "减小内容宽度",
+  "settings.general.row.contentWidth.increase": "增大内容宽度",
+  "settings.general.row.contentWidth.narrow": "窄",
+  "settings.general.row.contentWidth.medium": "中",
+  "settings.general.row.contentWidth.wide": "宽",
+  "settings.general.row.contentWidth.extraWide": "较宽",
+  "settings.general.row.contentWidth.fullWidth": "全宽",
+
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上禁用 X11 回退。需要重启。",
   "settings.general.row.wayland.tooltip": "在混合刷新率显示器的 Linux 系统上，原生 Wayland 可能更稳定。",

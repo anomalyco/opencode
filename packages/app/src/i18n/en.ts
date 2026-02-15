@@ -600,6 +600,9 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
+  "sidebar.project.viewArchivedSessions": "View archived sessions",
+  "sidebar.project.archivedSessions": "Archived sessions",
+  "sidebar.project.noArchivedSessions": "No archived sessions",
   "sidebar.dropFolder": "Drop folder to open project",
   "sidebar.dropFile": "Drop to add as attachment",
 
@@ -627,6 +630,21 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+
+  "settings.general.row.fontSize.title": "Message Font Size",
+  "settings.general.row.fontSize.description": "Adjust the font size for user and assistant messages",
+  "settings.general.row.fontSize.decrease": "Decrease font size",
+  "settings.general.row.fontSize.increase": "Increase font size",
+
+  "settings.general.row.contentWidth.title": "Content Width",
+  "settings.general.row.contentWidth.description": "Adjust the maximum width of conversation messages",
+  "settings.general.row.contentWidth.decrease": "Decrease content width",
+  "settings.general.row.contentWidth.increase": "Increase content width",
+  "settings.general.row.contentWidth.narrow": "Narrow",
+  "settings.general.row.contentWidth.medium": "Medium",
+  "settings.general.row.contentWidth.wide": "Wide",
+  "settings.general.row.contentWidth.extraWide": "Extra Wide",
+  "settings.general.row.contentWidth.fullWidth": "Full Width",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
