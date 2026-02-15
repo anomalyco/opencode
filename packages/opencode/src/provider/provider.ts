@@ -690,6 +690,22 @@ export namespace Provider {
     return m
   }
 
+  export function filter(config: Config.Info): {
+    disabled: Set<string>
+    allowed(providerID: string): boolean
+  } {
+    const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+    return {
+      disabled,
+      allowed(providerID: string) {
+        if (enabled && !enabled.has(providerID)) return false
+        if (disabled.has(providerID)) return false
+        return true
+      },
+    }
+  }
+
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
       id: provider.id,
@@ -707,14 +723,7 @@ export namespace Provider {
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
-    const disabled = new Set(config.disabled_providers ?? [])
-    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
-
-    function isProviderAllowed(providerID: string): boolean {
-      if (enabled && !enabled.has(providerID)) return false
-      if (disabled.has(providerID)) return false
-      return true
-    }
+    const pf = filter(config)
 
     const providers: { [providerID: string]: Info } = {}
     const languages = new Map<string, LanguageModelV2>()
@@ -840,7 +849,7 @@ export namespace Provider {
     // load env
     const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue
+      if (pf.disabled.has(providerID)) continue
       const apiKey = provider.env.map((item) => env[item]).find(Boolean)
       if (!apiKey) continue
       mergeProvider(providerID, {
@@ -851,7 +860,7 @@ export namespace Provider {
 
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue
+      if (pf.disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, {
           source: "api",
@@ -863,7 +872,7 @@ export namespace Provider {
     for (const plugin of await Plugin.list()) {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
-      if (disabled.has(providerID)) continue
+      if (pf.disabled.has(providerID)) continue
 
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
@@ -890,7 +899,7 @@ export namespace Provider {
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
       if (providerID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
+        if (!pf.disabled.has(enterpriseProviderID)) {
           const enterpriseAuth = await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
             const enterpriseOptions = await plugin.auth.loader(
@@ -908,7 +917,7 @@ export namespace Provider {
     }
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
+      if (pf.disabled.has(providerID)) continue
       const data = database[providerID]
       if (!data) {
         log.error("Provider does not exist in model list " + providerID)
@@ -933,7 +942,7 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
-      if (!isProviderAllowed(providerID)) {
+      if (!pf.allowed(providerID)) {
         delete providers[providerID]
         continue
       }
