@@ -158,7 +158,7 @@ describe("tool.read external_directory permission", () => {
         await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
       },
     })
-    await using tmp = await tmpdir({ git: true })
+    await using tmp = await tmpdir()
 
     const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
     process.env["OPENCODE_CONFIG_DIR"] = profileTmp.path
