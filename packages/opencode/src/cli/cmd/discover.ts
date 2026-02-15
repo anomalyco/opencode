@@ -16,25 +16,18 @@ export const DiscoverCommand = cmd({
     prompts.intro(`Discovering OpenCode servers (${args.timeout}ms timeout)`)
 
     try {
-      let count = 0
-
-      for await (const server of MDNS.find(AbortSignal.timeout(args.timeout))) {
-        if (count === 0) {
-          console.log("Name                  URL")
-          console.log("────────────────────  ──────────────────────────────")
-        }
-
-        console.log(formatServerRow(server))
-        count += 1
-      }
-
-      if (count === 0) {
+      const servers = await MDNS.find(AbortSignal.timeout(args.timeout))
+      if (servers.length === 0) {
         prompts.log.warn("No OpenCode servers found on the network")
         prompts.outro("Done")
         return
       }
 
-      prompts.outro(`Found ${count} server(s)`)
+      console.log("Name                  URL")
+      console.log("────────────────────  ──────────────────────────────")
+      servers.forEach((server) => console.log(formatServerRow(server)))
+
+      prompts.outro(`Found ${servers.length} server(s)`)
       return
     } catch (error) {
       prompts.log.error(`Discovery failed: ${error instanceof Error ? error.message : String(error)}`)
