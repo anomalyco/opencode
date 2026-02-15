@@ -3,6 +3,7 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
+import { Provider } from "../../provider/provider"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
@@ -254,14 +255,12 @@ export const AuthLoginCommand = cmd({
         await ModelsDev.refresh().catch(() => {})
 
         const config = await Config.get()
-
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+        const pf = Provider.filter(config)
 
         const providers = await ModelsDev.get().then((x) => {
           const filtered: Record<string, (typeof x)[string]> = {}
           for (const [key, value] of Object.entries(x)) {
-            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+            if (pf.allowed(key)) {
               filtered[key] = value
             }
           }

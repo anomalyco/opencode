@@ -36,13 +36,12 @@ export const ProviderRoutes = lazy(() =>
       }),
       async (c) => {
         const config = await Config.get()
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+        const pf = Provider.filter(config)
 
         const allProviders = await ModelsDev.get()
         const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
         for (const [key, value] of Object.entries(allProviders)) {
-          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+          if (pf.allowed(key)) {
             filteredProviders[key] = value
           }
         }
