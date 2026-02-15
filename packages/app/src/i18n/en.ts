@@ -577,6 +577,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
+  "sidebar.project.clearNotifications": "Clear notifications",
 
   "app.name.desktop": "OpenCode Desktop",
 
