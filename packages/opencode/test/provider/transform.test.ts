@@ -620,6 +620,141 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - strip non-standard keywords", () => {
+  const model = {
+    providerID: "openai-compatible",
+    api: { id: "gemini-2.5-flash" },
+  } as any
+
+  test("strips $schema from root", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { name: { type: "string" } },
+    } as any
+
+    const result = ProviderTransform.schema(model, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.properties.name.type).toBe("string")
+  })
+
+  test("strips ref from nested objects", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            ref: "QuestionOption",
+            type: "object",
+            properties: { label: { type: "string" } },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(model, schema) as any
+
+    expect(result.properties.items.items.ref).toBeUndefined()
+    expect(result.properties.items.items.type).toBe("object")
+    expect(result.properties.items.items.properties.label.type).toBe("string")
+  })
+})
+
+describe("ProviderTransform.schema - strict required for additionalProperties false", () => {
+  const model = {
+    providerID: "openai-compatible",
+    api: { id: "gpt-5" },
+  } as any
+
+  test("adds missing properties to required when additionalProperties is false", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        header: { type: "string" },
+        options: { type: "array", items: { type: "string" } },
+        multiple: { type: "boolean" },
+      },
+      required: ["question", "header", "options"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(model, schema) as any
+
+    expect(result.required).toContain("multiple")
+    expect(result.required).toContain("question")
+    expect(result.required).toContain("header")
+    expect(result.required).toContain("options")
+    expect(result.required).toHaveLength(4)
+  })
+
+  test("handles nested objects with additionalProperties false", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question: { type: "string" },
+              multiple: { type: "boolean" },
+            },
+            required: ["question"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["questions"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(model, schema) as any
+
+    expect(result.properties.questions.items.required).toContain("multiple")
+    expect(result.properties.questions.items.required).toContain("question")
+  })
+
+  test("does not modify schemas without additionalProperties false", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        age: { type: "number" },
+      },
+      required: ["name"],
+    } as any
+
+    const result = ProviderTransform.schema(model, schema) as any
+
+    expect(result.required).toEqual(["name"])
+  })
+
+  test("works for all providers not just gemini", () => {
+    const codexModel = {
+      providerID: "openai-compatible",
+      api: { id: "gpt-5.3-codex" },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        a: { type: "string" },
+        b: { type: "number" },
+      },
+      required: ["a"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(codexModel, schema) as any
+
+    expect(result.required).toContain("a")
+    expect(result.required).toContain("b")
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [

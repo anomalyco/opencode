@@ -869,6 +869,24 @@ export namespace ProviderTransform {
     }
     */
 
+    // Sanitize tool schemas for strict validators (OpenAI Codex, Vertex AI, etc.)
+    // 1. Strip non-standard keywords ($schema, ref) that Zod meta injects
+    // 2. Ensure all properties are in required when additionalProperties is false
+    const sanitize = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map(sanitize)
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === "$schema" || key === "ref") continue
+        result[key] = typeof value === "object" && value !== null ? sanitize(value) : value
+      }
+      if (result.type === "object" && result.additionalProperties === false && result.properties) {
+        result.required = Object.keys(result.properties)
+      }
+      return result
+    }
+    schema = sanitize(schema)
+
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
       const sanitizeGemini = (obj: any): any => {
