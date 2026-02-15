@@ -1,1 +1,1 @@
-/// <reference path="../../ui/src/custom-elements.d.ts" />
+../../ui/src/custom-elements.d.ts
