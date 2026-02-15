@@ -99,7 +99,8 @@
       transition: opacity 0.15s ease;
     }
 
-    &:hover [data-slot="user-message-actions-wrapper"] {
+    &:hover [data-slot="user-message-actions-wrapper"],
+    &:focus-within [data-slot="user-message-actions-wrapper"] {
       opacity: 1;
     }
   }
@@ -514,11 +515,7 @@
     }
   }
 
-  &[data-question="true"] {
-    background: var(--background-base);
-    border: 1px solid var(--border-weak-base);
-  }
-
+  &[data-question="true"],
   &[data-revert="true"] {
     background: var(--background-base);
     border: 1px solid var(--border-weak-base);

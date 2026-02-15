@@ -342,6 +342,7 @@ export function UserMessageDisplay(props: {
   )
 
   const text = createMemo(() => textPart()?.text || "")
+  const canRevert = createMemo(() => !!props.onRevert && (props.canRevert ?? true))
 
   createEffect(() => {
     text()
@@ -432,7 +433,7 @@ export function UserMessageDisplay(props: {
             <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-actions-wrapper">
-            <Show when={props.canRevert && props.onRevert}>
+            <Show when={canRevert()}>
               <Tooltip value={i18n.t("ui.sessionTurn.revert")} placement="top" gutter={8}>
                 <IconButton
                   icon="undo"
