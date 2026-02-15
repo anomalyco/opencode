@@ -169,7 +169,7 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 1. 检测 401 响应并启动 OAuth 流程
 2. 如果服务器支持，请使用**动态客户端注册 (RFC 7591)**
-3. 安全地存儲Tokens以供将來的请求
+3. 安全地存储Tokens以供将来的请求
 
 ---
 
@@ -189,7 +189,7 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 }
 ```
 
-如果服務器需要身份验证，opencode 将在您第一次嘗試使用它時提示您进行身份验证。如果沒有，您可以使用 `timeout`[手动觸發流量](#authenticating)。
+如果服务器需要身份验证，opencode 将在您第一次尝试使用它时提示您进行身份验证。如果没有，您可以使用 `timeout`[手动触发流量](#authenticating)。
 
 ---
 
@@ -218,7 +218,7 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 ### 身份验证
 
-您可以手动觸發身份验证或管理憑據。
+您可以手动触发身份验证或管理凭据。
 
 使用特定MCP服务器进行身份验证：
 
@@ -232,7 +232,7 @@ opencode mcp auth my-oauth-server
 opencode mcp list
 ```
 
-删除存儲的憑據：
+删除存储的凭据：
 
 ```bash
 opencode mcp logout my-oauth-server
@@ -297,7 +297,7 @@ opencode mcp debug my-oauth-server
 
 ### 全局
 
-这意味著您可以全局启用或禁用它們。
+这意味著您可以全局启用或禁用它们。
 
 ```json title="opencode.json" {14}
 {
