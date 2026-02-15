@@ -23,7 +23,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
-    todo: true,
     lsp: true,
     plans: true,
   })
@@ -64,6 +63,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
   const directory = useDirectory()
   const kv = useKV()
   const [progressExpanded, setProgressExpanded] = kv.signal("sidebar_progress_observability_expanded", false)
+  const toggleProgressExpanded = () => setProgressExpanded((prev) => !prev)
+  const onProgressHeaderKeyDown = (evt: { name?: string; sequence?: string; preventDefault?: () => void }) => {
+    if (evt.name !== "enter" && evt.name !== "return" && evt.name !== "space" && evt.sequence !== " ") return
+    evt.preventDefault?.()
+    toggleProgressExpanded()
+  }
   const parts = createMemo(() => messages().flatMap((message) => sync.data.part[message.id] ?? []))
   const toolParts = createMemo(() => parts().filter((part): part is SessionToolPart => part.type === "tool"))
   const isReadToolName = (tool: string | undefined) => {
@@ -281,7 +286,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
             </box>
             <Show when={props.progressPlaceholder}>
               <box>
-                <box flexDirection="row" gap={1} onMouseDown={() => setProgressExpanded((prev) => !prev)}>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={toggleProgressExpanded}
+                  {...({ tabIndex: 0, onKeyDown: onProgressHeaderKeyDown } as any)}
+                >
                   <text fg={theme.text}>{progressExpanded() ? "▼" : "▶"}</text>
                   <text fg={theme.text}>
                     <b>진행/관찰</b>
@@ -334,7 +344,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                 </Show>
               </box>
             </Show>
-            <Show when={todo().length > 0 || sync.data.lsp.length > 0}>
+            <Show when={todo().length > 0}>
               <box>
                 <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("plans", !expanded.plans)}>
                   <text fg={theme.text}>{expanded.plans ? "▼" : "▶"}</text>
@@ -343,7 +353,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     <Show when={!expanded.plans}>
                       <span style={{ fg: theme.textMuted }}>
                         {" "}
-                        ({todo().length} todo, {sync.data.lsp.length} lsp)
+                        ({todo().length} todo)
                       </span>
                     </Show>
                   </text>
@@ -352,29 +362,86 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                   <Show when={todo().length > 0} fallback={<text fg={theme.textMuted}>할 일이 없습니다</text>}>
                     <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
                   </Show>
-                  <Show when={sync.data.lsp.length > 0}>
-                    <text fg={theme.textMuted}>LSP 참고</text>
-                    <For each={sync.data.lsp}>
-                      {(item) => (
-                        <box flexDirection="row" gap={1}>
-                          <text
-                            flexShrink={0}
-                            style={{
-                              fg: {
-                                connected: theme.success,
-                                error: theme.error,
-                              }[item.status],
-                            }}
-                          >
-                            •
-                          </text>
-                          <text fg={theme.textMuted}>
-                            {item.id} {item.root}
-                          </text>
-                        </box>
-                      )}
-                    </For>
+                </Show>
+              </box>
+            </Show>
+            <box>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)}
+              >
+                <Show when={sync.data.lsp.length > 2}>
+                  <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
+                </Show>
+                <text fg={theme.text}>
+                  <b>LSP</b>
+                </text>
+              </box>
+              <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
+                <Show when={sync.data.lsp.length === 0}>
+                  <text fg={theme.textMuted}>
+                    {sync.data.config.lsp === false
+                      ? "설정에서 LSP가 비활성화되었습니다"
+                      : "파일을 읽으면 LSP가 활성화됩니다"}
+                  </text>
+                </Show>
+                <For each={sync.data.lsp}>
+                  {(item) => (
+                    <box flexDirection="row" gap={1}>
+                      <text
+                        flexShrink={0}
+                        style={{
+                          fg: {
+                            connected: theme.success,
+                            error: theme.error,
+                          }[item.status],
+                        }}
+                      >
+                        •
+                      </text>
+                      <text fg={theme.textMuted}>
+                        {item.id} {item.root}
+                      </text>
+                    </box>
+                  )}
+                </For>
+              </Show>
+            </box>
+            <Show when={diff().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
+                >
+                  <Show when={diff().length > 2}>
+                    <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
+                  <text fg={theme.text}>
+                    <b>수정된 파일</b>
+                  </text>
+                </box>
+                <Show when={diff().length <= 2 || expanded.diff}>
+                  <For each={diff() || []}>
+                    {(item) => {
+                      return (
+                        <box flexDirection="row" gap={1} justifyContent="space-between">
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {item.file}
+                          </text>
+                          <box flexDirection="row" gap={1} flexShrink={0}>
+                            <Show when={item.additions}>
+                              <text fg={theme.diffAdded}>+{item.additions}</text>
+                            </Show>
+                            <Show when={item.deletions}>
+                              <text fg={theme.diffRemoved}>-{item.deletions}</text>
+                            </Show>
+                          </box>
+                        </box>
+                      )
+                    }}
+                  </For>
                 </Show>
               </box>
             </Show>
@@ -435,105 +502,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                         </text>
                       </box>
                     )}
-                  </For>
-                </Show>
-              </box>
-            </Show>
-            <box>
-              <box
-                flexDirection="row"
-                gap={1}
-                onMouseDown={() => sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)}
-              >
-                <Show when={sync.data.lsp.length > 2}>
-                  <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
-                </Show>
-                <text fg={theme.text}>
-                  <b>LSP</b>
-                </text>
-              </box>
-              <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
-                <Show when={sync.data.lsp.length === 0}>
-                  <text fg={theme.textMuted}>
-                    {sync.data.config.lsp === false
-                      ? "설정에서 LSP가 비활성화되었습니다"
-                      : "파일을 읽으면 LSP가 활성화됩니다"}
-                  </text>
-                </Show>
-                <For each={sync.data.lsp}>
-                  {(item) => (
-                    <box flexDirection="row" gap={1}>
-                      <text
-                        flexShrink={0}
-                        style={{
-                          fg: {
-                            connected: theme.success,
-                            error: theme.error,
-                          }[item.status],
-                        }}
-                      >
-                        •
-                      </text>
-                      <text fg={theme.textMuted}>
-                        {item.id} {item.root}
-                      </text>
-                    </box>
-                  )}
-                </For>
-              </Show>
-            </box>
-            <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
-                >
-                  <Show when={todo().length > 2}>
-                    <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>할 일</b>
-                  </text>
-                </box>
-                <Show when={todo().length <= 2 || expanded.todo}>
-                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
-                </Show>
-              </box>
-            </Show>
-            <Show when={diff().length > 0}>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
-                >
-                  <Show when={diff().length > 2}>
-                    <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>수정된 파일</b>
-                  </text>
-                </box>
-                <Show when={diff().length <= 2 || expanded.diff}>
-                  <For each={diff() || []}>
-                    {(item) => {
-                      return (
-                        <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="none">
-                            {item.file}
-                          </text>
-                          <box flexDirection="row" gap={1} flexShrink={0}>
-                            <Show when={item.additions}>
-                              <text fg={theme.diffAdded}>+{item.additions}</text>
-                            </Show>
-                            <Show when={item.deletions}>
-                              <text fg={theme.diffRemoved}>-{item.deletions}</text>
-                            </Show>
-                          </box>
-                        </box>
-                      )
-                    }}
                   </For>
                 </Show>
               </box>
