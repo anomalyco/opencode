@@ -1692,6 +1692,13 @@ export default function Layout(props: ParentProps) {
     })
     const projectId = createMemo(() => panelProps.project?.id ?? "")
     const workspaces = createMemo(() => workspaceIds(panelProps.project))
+    const unseenCount = createMemo(() =>
+      workspaces().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+    )
+    const clearNotifications = () =>
+      workspaces()
+        .filter((directory) => notification.project.unseenCount(directory) > 0)
+        .forEach((directory) => notification.project.markViewed(directory))
     const workspacesEnabled = createMemo(() => {
       const project = panelProps.project
       if (!project) return false
@@ -1767,6 +1774,16 @@ export default function Layout(props: ParentProps) {
                             {layout.sidebar.workspaces(p().worktree)()
                               ? language.t("sidebar.workspaces.disable")
                               : language.t("sidebar.workspaces.enable")}
+                          </DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          data-action="project-clear-notifications"
+                          data-project={base64Encode(p().worktree)}
+                          disabled={unseenCount() === 0}
+                          onSelect={clearNotifications}
+                        >
+                          <DropdownMenu.ItemLabel>
+                            {language.t("sidebar.project.clearNotifications")}
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />

@@ -911,31 +911,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!collapsed) return
 
       const cursorPosition = getCursorPosition(editorRef)
-      const textLength = promptLength(prompt.current())
       const textContent = prompt
         .current()
         .map((part) => ("content" in part ? part.content : ""))
         .join("")
       const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition)) return
-      const isEmpty = textContent.trim() === "" || textLength <= 1
-      const hasNewlines = textContent.includes("\n")
-      const inHistory = store.historyIndex >= 0
-      const atStart = cursorPosition <= (isEmpty ? 1 : 0)
-      const atEnd = cursorPosition >= (isEmpty ? textLength - 1 : textLength)
-      const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
-      const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
-
-      if (direction === "up") {
-        if (!allowUp) return
-        if (navigateHistory("up")) {
-          event.preventDefault()
-        }
-        return
-      }
-
-      if (!allowDown) return
-      if (navigateHistory("down")) {
+      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
+      if (navigateHistory(direction)) {
         event.preventDefault()
       }
       return
