@@ -245,7 +245,7 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
   if (fileSize === 0) return false
 
   const bufferSize = Math.min(4096, fileSize)
-  const buffer = await file.arrayBuffer()
+  const buffer = await file.slice(0, bufferSize).arrayBuffer()
   if (buffer.byteLength === 0) return false
   const bytes = new Uint8Array(buffer.slice(0, bufferSize))
 
