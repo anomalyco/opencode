@@ -358,11 +358,13 @@ export const dict = {
   "context.stats.cacheTokens": "快取 token（讀/寫）",
   "context.stats.userMessages": "使用者訊息",
   "context.stats.assistantMessages": "助手訊息",
+  "context.stats.totalCost": "總成本",
   "context.stats.sessionCreated": "建立時間",
   "context.stats.lastActivity": "最後活動",
 
   "context.usage.tokens": "Token",
   "context.usage.usage": "使用量",
+  "context.usage.cost": "成本",
   "context.usage.clickToView": "點擊查看上下文",
   "context.usage.view": "檢視上下文用量",
 

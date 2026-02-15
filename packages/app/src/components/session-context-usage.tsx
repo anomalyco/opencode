@@ -36,6 +36,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const view = createMemo(() => layout.view(sessionKey))
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
+  const usd = createMemo(
+    () =>
+      new Intl.NumberFormat(language.locale(), {
+        style: "currency",
+        currency: "USD",
+      }),
+  )
+
   const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all, sync.data))
   createEffect(() => {
     const missing = metrics().missing
@@ -46,6 +54,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     }
   })
   const context = createMemo(() => metrics().context)
+  const cost = createMemo(() => {
+    const value = language.t("context.stats.costBreakdown", {
+      agentCost: usd().format(metrics().ownCost),
+      totalCost: usd().format(metrics().totalCost),
+    })
+    return metrics().missing.length > 0 ? `${value}${language.t("context.stats.loaded")}` : value
+  })
 
   const openContext = () => {
     if (!params.id) return
@@ -78,6 +93,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           </>
         )}
       </Show>
+      <div class="flex items-center gap-2">
+        <span class="text-text-invert-strong">{cost()}</span>
+        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
+      </div>
     </div>
   )
 
@@ -86,7 +105,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <Tooltip value={tooltipValue()} placement="top">
         <Switch>
           <Match when={variant() === "indicator"}>
-            <div class="flex items-center gap-1.5">{circle()}</div>
+            <div class="flex items-center gap-1.5">
+              {circle()}
+              <span class="text-12-regular text-text-weak">{cost()}</span>
+            </div>
           </Match>
           <Match when={true}>
             <Button
@@ -97,6 +119,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               aria-label={language.t("context.usage.view")}
             >
               {circle()}
+              <span class="text-12-regular text-text-weak">{cost()}</span>
             </Button>
           </Match>
         </Switch>

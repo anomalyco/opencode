@@ -1,9 +1,14 @@
 import { useSync } from "@tui/context/sync"
+import { costs } from "@opencode-ai/util/cost"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
+import { Locale } from "@/util/locale"
+import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import { Global } from "@/global"
 import { Installation } from "@/installation"
+import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
@@ -35,6 +40,16 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
       ).length,
   )
+
+  const cost = createMemo(() => {
+    const result = costs(props.sessionID, sync.data)
+    const formatter = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    })
+    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
+    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
+  })
 
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
@@ -84,6 +99,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
+              <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
             <Show when={mcpEntries().length > 0}>
               <box>

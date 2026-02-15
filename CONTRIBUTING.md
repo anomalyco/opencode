@@ -64,16 +64,6 @@ Then run it with:
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
-### Updating the local CLI
-
-After making code changes, you can update your local `opencode` command by rebuilding the standalone executable:
-
-```bash
-bun run ./packages/opencode/script/build.ts --single
-```
-
-If you have added the `dist/bin` directory to your PATH, the `opencode` command will automatically pick up the new build. On Windows, if the build fails because `opencode.exe` is in use, try closing any running opencode processes or renaming the existing `opencode.exe` to `opencode.exe.old` before rebuilding.
-
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)

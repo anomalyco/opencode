@@ -135,9 +135,7 @@ const targets = singleFlag
     })
   : allTargets
 
-try {
-  await $`rm -rf dist`
-} catch (e) {}
+await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
 if (!skipInstall) {

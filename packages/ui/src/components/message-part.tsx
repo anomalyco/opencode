@@ -994,6 +994,7 @@ ToolRegistry.register({
                 {s().tokens.toLocaleString() + " tokens"}
                 {s().usage !== undefined ? ` (${s().usage}%)` : ""}
                 {` ($${s().total.toFixed(2)})`}
+                {s().missing.length > 0 ? i18n.t("ui.messagePart.loaded") : ""}
               </span>
             )}
           </Show>

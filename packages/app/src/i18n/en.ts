@@ -360,11 +360,16 @@ export const dict = {
   "context.stats.cacheTokens": "Cache Tokens (read/write)",
   "context.stats.userMessages": "User Messages",
   "context.stats.assistantMessages": "Assistant Messages",
+  "context.stats.ownCost": "Session Cost",
+  "context.stats.totalCost": "Total Cost",
+  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
+  "context.stats.loaded": " (loaded)",
   "context.stats.sessionCreated": "Session Created",
   "context.stats.lastActivity": "Last Activity",
 
   "context.usage.tokens": "Tokens",
   "context.usage.usage": "Usage",
+  "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
 

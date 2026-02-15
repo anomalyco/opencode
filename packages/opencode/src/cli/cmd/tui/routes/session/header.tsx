@@ -1,6 +1,7 @@
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { costs } from "@opencode-ai/util/cost"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -19,12 +20,12 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined> }) => {
+const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
   const { theme } = useTheme()
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()}
+        {props.context()} {props.cost()}
       </text>
     </Show>
   )
@@ -35,6 +36,16 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
+  const cost = createMemo(() => {
+    const result = costs(route.sessionID, sync.data)
+    const formatter = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    })
+    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
+    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
+  })
 
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
@@ -76,7 +87,7 @@ export function Header() {
                 <text fg={theme.text}>
                   <b>Subagent session</b>
                 </text>
-                <ContextInfo context={context} />
+                <ContextInfo context={context} cost={cost} />
               </box>
               <box flexDirection="row" gap={2}>
                 <box
@@ -115,7 +126,7 @@ export function Header() {
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
               <Title session={session} />
-              <ContextInfo context={context} />
+              <ContextInfo context={context} cost={cost} />
             </box>
           </Match>
         </Switch>

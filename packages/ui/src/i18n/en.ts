@@ -42,6 +42,8 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps",
 
   "ui.messagePart.diagnostic.error": "Error",
+  "ui.messagePart.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
+  "ui.messagePart.loaded": " (loaded)",
   "ui.messagePart.title.edit": "Edit",
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
