@@ -1009,6 +1009,61 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  const collectRemovedSessionIDs = (sessions: Session[], sessionID: string) => {
+    const removed = new Set<string>([sessionID])
+    const byParent = new Map<string, string[]>()
+    for (const item of sessions) {
+      const parentID = item.parentID
+      if (!parentID) continue
+      const existing = byParent.get(parentID)
+      if (existing) {
+        existing.push(item.id)
+        continue
+      }
+      byParent.set(parentID, [item.id])
+    }
+    const stack = [sessionID]
+    while (stack.length) {
+      const parentID = stack.pop()
+      if (!parentID) continue
+      const children = byParent.get(parentID)
+      if (!children) continue
+      for (const child of children) {
+        if (removed.has(child)) continue
+        removed.add(child)
+        stack.push(child)
+      }
+    }
+    return removed
+  }
+
+  async function deleteSession(session: Session) {
+    const result = await globalSDK.client.session
+      .delete({ directory: session.directory, sessionID: session.id })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+    if (!result) return false
+
+    const [, setStore] = globalSync.child(session.directory)
+    setStore(
+      produce((draft) => {
+        const removed = collectRemovedSessionIDs(draft.session, session.id)
+        draft.session = draft.session.filter((item) => !removed.has(item.id))
+      }),
+    )
+
+    if (params.id === session.id && params.dir === base64Encode(session.directory)) {
+      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session`)
+    }
+    return true
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1459,7 +1514,8 @@ export default function Layout(props: ParentProps) {
     const dragDropEventName = "opencode:drag-drop"
 
     const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>)
+        .detail
       if (!detail) return
 
       if (detail.type === "enter") {
@@ -1868,10 +1924,135 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const activeRoute = {
-    session: "",
-    sessionProject: "",
-    directory: "",
+  function DialogDeleteSession(props: { session: Session; onDeleted?: () => void }) {
+    const handleDelete = async () => {
+      const ok = await deleteSession(props.session)
+      if (!ok) return
+      props.onDeleted?.()
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.delete.confirm", { name: props.session.title })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function DialogArchivedSessions(props: { project: LocalProject }) {
+    const [state, setState] = createStore({
+      status: "loading" as "loading" | "ready" | "error",
+      sessions: [] as Session[],
+    })
+
+    const load = async () => {
+      const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
+      const rows = await Promise.all(
+        dirs.map((directory) =>
+          globalSDK.client.session
+            .list({ directory, roots: true })
+            .then((x) => x.data ?? [])
+            .catch(() => []),
+        ),
+      )
+      const sessions = rows
+        .flatMap((list) => list)
+        .filter((item) => item.time.archived !== undefined)
+        .toSorted(sortSessions(Date.now()))
+      setState({ status: "ready", sessions })
+    }
+
+    onMount(() => {
+      load().catch(() => {
+        setState("status", "error")
+      })
+    })
+
+    const removeDeleted = (sessionID: string) => {
+      setState("sessions", (list) => list.filter((item) => item.id !== sessionID))
+    }
+
+    const openSession = (session: Session) => {
+      dialog.close()
+      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    }
+
+    const directoryLabel = (session: Session) => {
+      if (session.directory === props.project.worktree) return language.t("workspace.type.local")
+      const [workspace] = globalSync.child(session.directory, { bootstrap: false })
+      return workspaceLabel(session.directory, workspace.vcs?.branch, props.project.id)
+    }
+
+    return (
+      <Dialog title={language.t("sidebar.project.archivedSessions")} fit>
+        <div class="flex flex-col gap-3 pl-6 pr-2.5 pb-3 min-w-[32rem] max-w-[40rem]">
+          <Show when={state.status === "loading"}>
+            <div class="flex items-center gap-2 text-12-regular text-text-weak">
+              <Spinner class="size-4" />
+              {language.t("prompt.loading")}
+            </div>
+          </Show>
+          <Show when={state.status === "error"}>
+            <div class="text-12-regular text-text-weak">{language.t("common.requestFailed")}</div>
+          </Show>
+          <Show when={state.status === "ready" && state.sessions.length === 0}>
+            <div class="text-12-regular text-text-weak">{language.t("sidebar.project.noArchivedSessions")}</div>
+          </Show>
+          <Show when={state.status === "ready" && state.sessions.length > 0}>
+            <div class="max-h-80 overflow-y-auto flex flex-col gap-1 pr-1">
+              <For each={state.sessions}>
+                {(session) => (
+                  <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
+                    <button class="flex-1 min-w-0 text-left" onClick={() => openSession(session)}>
+                      <div class="text-14-regular text-text-strong truncate">{session.title}</div>
+                      <div class="text-12-regular text-text-weak truncate">{directoryLabel(session)}</div>
+                    </button>
+                    <Tooltip value={language.t("common.delete")} placement="top">
+                      <IconButton
+                        icon="trash"
+                        variant="ghost"
+                        class="size-6 rounded-md cursor-pointer"
+                        style={{ "--icon-base": "var(--icon-critical-base)" }}
+                        aria-label={language.t("common.delete")}
+                        onClick={() =>
+                          dialog.show(() => (
+                            <DialogDeleteSession
+                              session={session}
+                              onDeleted={() => {
+                                removeDeleted(session.id)
+                              }}
+                            />
+                          ))
+                        }
+                      />
+                    </Tooltip>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.close")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
   }
 
   createEffect(
@@ -2268,43 +2449,19 @@ export default function Layout(props: ParentProps) {
             "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
           }}
         >
-          <DropdownMenu modal={!sidebarHovering()} open={menu.open} onOpenChange={(open) => setMenu("open", open)}>
-            <Tooltip value={language.t("common.moreOptions")} placement="top">
-              <DropdownMenu.Trigger
-                as={IconButton}
-                icon="dot-grid"
-                variant="ghost"
-                class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                aria-label={language.t("common.moreOptions")}
-              />
-            </Tooltip>
-            <DropdownMenu.Portal mount={!props.mobile ? state.nav : undefined}>
-              <DropdownMenu.Content
-                onCloseAutoFocus={(event) => {
-                  if (!menu.pendingRename) return
-                  event.preventDefault()
-                  setMenu("pendingRename", false)
-                  openEditor(`session:${props.session.id}`, props.session.title)
-                }}
-              >
-                <DropdownMenu.Item
-                  onSelect={() => {
-                    setMenu("pendingRename", true)
-                    setMenu("open", false)
-                  }}
-                >
-                  <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                </DropdownMenu.Item>
-                <DropdownMenu.Item onSelect={() => archiveSession(props.session)}>
-                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                </DropdownMenu.Item>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogDeleteSession session={props.session} />)}>
-                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu>
+          <Tooltip value={language.t("common.archive")} placement="top">
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              class="size-6 rounded-md cursor-pointer"
+              aria-label={language.t("common.archive")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void archiveSession(props.session)
+              }}
+            />
+          </Tooltip>
         </div>
       </div>
     )
@@ -3239,19 +3396,32 @@ export default function Layout(props: ParentProps) {
                   when={workspacesEnabled()}
                   fallback={
                     <>
-                      <div class="shrink-0 py-4">
-                        <Button
-                          size="large"
-                          icon="new-session"
-                          class="w-full"
-                          onClick={() => {
-                            const dir = worktree()
-                            if (!dir) return
-                            navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
-                          }}
-                        >
-                          {language.t("command.session.new")}
-                        </Button>
+                      <div class="shrink-0 py-4 px-3">
+                        <div class="flex flex-col gap-2">
+                          <TooltipKeybind
+                            title={language.t("command.session.new")}
+                            keybind={command.keybind("session.new")}
+                            placement="top"
+                          >
+                            <Button
+                              size="large"
+                              icon="plus-small"
+                              class="w-full"
+                              onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                            >
+                              {language.t("command.session.new")}
+                            </Button>
+                          </TooltipKeybind>
+                          <Button
+                            size="large"
+                            icon="archive"
+                            variant="ghost"
+                            class="w-full"
+                            onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
+                          >
+                            {language.t("sidebar.project.viewArchivedSessions")}
+                          </Button>
+                        </div>
                       </div>
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
@@ -3265,17 +3435,27 @@ export default function Layout(props: ParentProps) {
                   }
                 >
                   <>
-                    <div class="shrink-0 py-4">
-                      <Button
-                        size="large"
-                        icon="plus-small"
-                        class="w-full"
-                        onClick={() => {
-                          void createWorkspace(project)
-                        }}
-                      >
-                        {language.t("workspace.new")}
-                      </Button>
+                    <div class="shrink-0 py-4 px-3">
+                      <div class="flex flex-col gap-2">
+                        <TooltipKeybind
+                          title={language.t("workspace.new")}
+                          keybind={command.keybind("workspace.new")}
+                          placement="top"
+                        >
+                          <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                            {language.t("workspace.new")}
+                          </Button>
+                        </TooltipKeybind>
+                        <Button
+                          size="large"
+                          icon="archive"
+                          variant="ghost"
+                          class="w-full"
+                          onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
+                        >
+                          {language.t("sidebar.project.viewArchivedSessions")}
+                        </Button>
+                      </div>
                     </div>
                     <div class="relative flex-1 min-h-0">
                       <DragDropProvider
