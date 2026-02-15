@@ -768,6 +768,11 @@ export const dict = {
   "session.delete.button": "删除会话",
 
   "workspace.new": "新建工作区",
+  "workspace.create.title": "创建工作区",
+  "workspace.create.branch.label": "分支名称",
+  "workspace.create.branch.placeholder": "my-feature-branch",
+  "workspace.create.branch.help": "可选。留空以使用自动生成的名称。",
+  "workspace.create.button": "创建工作区",
   "workspace.type.local": "本地",
   "workspace.type.sandbox": "沙盒",
   "workspace.create.failed.title": "创建工作区失败",

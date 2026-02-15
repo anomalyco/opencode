@@ -777,6 +777,11 @@ export const dict = {
   "session.delete.button": "Delete session",
 
   "workspace.new": "New workspace",
+  "workspace.create.title": "Create workspace",
+  "workspace.create.branch.label": "Branch name",
+  "workspace.create.branch.placeholder": "my-feature-branch",
+  "workspace.create.branch.help": "Optional. Leave empty to use a generated name.",
+  "workspace.create.button": "Create workspace",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
   "workspace.create.failed.title": "Failed to create workspace",

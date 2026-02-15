@@ -19,6 +19,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -993,7 +994,7 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const project = currentProject()
           if (!project) return
-          return createWorkspace(project)
+          dialog.show(() => <DialogCreateWorkspace project={project} />)
         },
       },
       {
@@ -1311,6 +1312,50 @@ export default function Layout(props: ParentProps) {
     })
   }
 
+  function DialogCreateWorkspace(props: { project: LocalProject }) {
+    const [state, setState] = createStore({
+      branch: "",
+      loading: false,
+    })
+
+    const handleSubmit = async (e: Event) => {
+      e.preventDefault()
+      const branch = state.branch.trim() || undefined
+
+      setState("loading", true)
+      const created = await createWorkspace(props.project, branch)
+      if (!created) {
+        setState("loading", false)
+        return
+      }
+
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("workspace.create.title")} fit>
+        <form onSubmit={handleSubmit} class="flex flex-col gap-4 pl-6 pr-2.5 pb-3 w-[400px]">
+          <TextField
+            autofocus
+            label={language.t("workspace.create.branch.label")}
+            placeholder={language.t("workspace.create.branch.placeholder")}
+            value={state.branch}
+            onChange={(branch) => setState("branch", branch)}
+            description={language.t("workspace.create.branch.help")}
+          />
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()} type="button">
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" type="submit" disabled={state.loading}>
+              {language.t("workspace.create.button")}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    )
+  }
+
   function DialogDeleteWorkspace(props: { root: string; directory: string }) {
     const name = createMemo(() => getFilename(props.directory))
     const [data, setData] = createStore({
@@ -1584,10 +1629,13 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", undefined)
   }
 
-  const createWorkspace = async (project: LocalProject) => {
+  const createWorkspace = async (project: LocalProject, branch?: string) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree })
+      .create({
+        directory: project.worktree,
+        worktreeCreateInput: branch ? { branch } : undefined,
+      })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -1623,6 +1671,8 @@ export default function Layout(props: ParentProps) {
 
     globalSync.child(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
+
+    return created
   }
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
@@ -1839,7 +1889,12 @@ export default function Layout(props: ParentProps) {
                         keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                        <Button
+                          size="large"
+                          icon="plus-small"
+                          class="w-full"
+                          onClick={() => dialog.show(() => <DialogCreateWorkspace project={p()} />)}
+                        >
                           {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>

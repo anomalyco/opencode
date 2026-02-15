@@ -139,6 +139,7 @@ const WorkspaceActions = (props: {
   directory: string
   local: Accessor<boolean>
   busy: Accessor<boolean>
+  branch?: Accessor<string | undefined>
   menuOpen: Accessor<boolean>
   pendingRename: Accessor<boolean>
   setMenuOpen: (open: boolean) => void
@@ -156,86 +157,94 @@ const WorkspaceActions = (props: {
   setHoverSession: WorkspaceSidebarContext["setHoverSession"]
   clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
   navigateToNewSession: () => void
-}): JSX.Element => (
-  <div
-    class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
-    classList={{
-      "opacity-100 pointer-events-auto": props.menuOpen(),
-      "opacity-0 pointer-events-none": !props.menuOpen(),
-      "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
-      "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
-    }}
-  >
-    <DropdownMenu
-      modal={!props.sidebarHovering()}
-      open={props.menuOpen()}
-      onOpenChange={(open) => props.setMenuOpen(open)}
+}): JSX.Element => {
+  const managed = () => {
+    const branch = props.branch?.()
+    if (!branch) return false
+    return branch.startsWith("opencode/")
+  }
+
+  return (
+    <div
+      class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
+      classList={{
+        "opacity-100 pointer-events-auto": props.menuOpen(),
+        "opacity-0 pointer-events-none": !props.menuOpen(),
+        "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
+        "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
+      }}
     >
-      <Tooltip value={props.language.t("common.moreOptions")} placement="top">
-        <DropdownMenu.Trigger
-          as={IconButton}
-          icon="dot-grid"
-          variant="ghost"
-          class="size-6 rounded-md"
-          data-action="workspace-menu"
-          data-workspace={base64Encode(props.directory)}
-          aria-label={props.language.t("common.moreOptions")}
-        />
-      </Tooltip>
-      <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
-        <DropdownMenu.Content
-          onCloseAutoFocus={(event) => {
-            if (!props.pendingRename()) return
-            event.preventDefault()
-            props.setPendingRename(false)
-            props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
-          }}
-        >
-          <DropdownMenu.Item
-            disabled={props.local()}
-            onSelect={() => {
-              props.setPendingRename(true)
-              props.setMenuOpen(false)
+      <DropdownMenu
+        modal={!props.sidebarHovering()}
+        open={props.menuOpen()}
+        onOpenChange={(open) => props.setMenuOpen(open)}
+      >
+        <Tooltip value={props.language.t("common.moreOptions")} placement="top">
+          <DropdownMenu.Trigger
+            as={IconButton}
+            icon="dot-grid"
+            variant="ghost"
+            class="size-6 rounded-md"
+            data-action="workspace-menu"
+            data-workspace={base64Encode(props.directory)}
+            aria-label={props.language.t("common.moreOptions")}
+          />
+        </Tooltip>
+        <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+          <DropdownMenu.Content
+            onCloseAutoFocus={(event) => {
+              if (!props.pendingRename()) return
+              event.preventDefault()
+              props.setPendingRename(false)
+              props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
             }}
           >
-            <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            disabled={props.local() || props.busy()}
-            onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
-          >
-            <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            disabled={props.local() || props.busy()}
-            onSelect={() => props.showDeleteWorkspaceDialog(props.root, props.directory)}
-          >
-            <DropdownMenu.ItemLabel>{props.language.t("common.delete")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
-    <Show when={!props.touch()}>
-      <Tooltip value={props.language.t("command.session.new")} placement="top">
-        <IconButton
-          icon="plus-small"
-          variant="ghost"
-          class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
-          data-action="workspace-new-session"
-          data-workspace={base64Encode(props.directory)}
-          aria-label={props.language.t("command.session.new")}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            props.setHoverSession(undefined)
-            props.clearHoverProjectSoon()
-            props.navigateToNewSession()
-          }}
-        />
-      </Tooltip>
-    </Show>
-  </div>
-)
+            <DropdownMenu.Item
+              disabled={props.local()}
+              onSelect={() => {
+                props.setPendingRename(true)
+                props.setMenuOpen(false)
+              }}
+            >
+              <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              disabled={props.local() || props.busy() || !managed()}
+              onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
+            >
+              <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              disabled={props.local() || props.busy()}
+              onSelect={() => props.showDeleteWorkspaceDialog(props.root, props.directory)}
+            >
+              <DropdownMenu.ItemLabel>{props.language.t("common.delete")}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+      <Show when={!props.touch()}>
+        <Tooltip value={props.language.t("command.session.new")} placement="top">
+          <IconButton
+            icon="plus-small"
+            variant="ghost"
+            class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
+            data-action="workspace-new-session"
+            data-workspace={base64Encode(props.directory)}
+            aria-label={props.language.t("command.session.new")}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              props.setHoverSession(undefined)
+              props.clearHoverProjectSoon()
+              props.navigateToNewSession()
+            }}
+          />
+        </Tooltip>
+      </Show>
+    </div>
+  )
+}
 
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
@@ -421,6 +430,7 @@ export const SortableWorkspace = (props: {
                 directory={props.directory}
                 local={local}
                 busy={busy}
+                branch={() => workspaceStore.vcs?.branch}
                 menuOpen={() => menu.open}
                 pendingRename={() => menu.pendingRename}
                 setMenuOpen={(open) => setMenu("open", open)}
