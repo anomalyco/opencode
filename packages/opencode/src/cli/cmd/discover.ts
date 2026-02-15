@@ -1,5 +1,5 @@
 import { cmd } from "./cmd"
-import { MDNS, type DiscoveredServer } from "../../mdns/client"
+import { MDNS } from "../../mdns"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 
@@ -40,14 +40,14 @@ export const DiscoverCommand = cmd({
       prompts.outro(`Found ${servers.length} server(s)`)
       return
     } catch (error) {
-      prompts.log.error("Discovery failed", { error: String(error) })
+      prompts.log.error(`Discovery failed: ${error instanceof Error ? error.message : String(error)}`)
       prompts.outro("Done")
       process.exit(1)
     }
   },
 })
 
-function formatServerTable(servers: DiscoveredServer[]): string {
+function formatServerTable(servers: MDNS.DiscoveredServer[]): string {
   const lines: string[] = []
 
   const maxNameWidth = Math.max(20, ...servers.map((s) => s.name.length))
