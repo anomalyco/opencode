@@ -1175,6 +1175,7 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          legal_mode: z.boolean().optional().describe("Enable legal domain mode with law tools"),
           openTelemetry: z
             .boolean()
             .optional()
