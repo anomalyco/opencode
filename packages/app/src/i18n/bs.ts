@@ -576,6 +576,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Poveži bilo kojeg provajdera da koristiš modele, npr. Claude, GPT, Gemini itd.",
   "sidebar.project.recentSessions": "Nedavne sesije",
   "sidebar.project.viewAllSessions": "Prikaži sve sesije",
+  "sidebar.project.clearNotifications": "Očisti obavijesti",
 
   "app.name.desktop": "OpenCode Desktop",
 
