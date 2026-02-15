@@ -871,13 +871,148 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
-      const sanitizeGemini = (obj: any): any => {
+      const sanitizeGemini = (obj: any, rootSchema: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
         }
 
         if (Array.isArray(obj)) {
-          return obj.map(sanitizeGemini)
+          return obj.map((item) => sanitizeGemini(item, rootSchema))
+        }
+
+        // Resolve local refs when possible before keyword stripping
+        if (typeof obj.$ref === "string") {
+          let resolved: any
+          if (obj.$ref.startsWith("#/$defs/")) {
+            const defName = obj.$ref.slice("#/$defs/".length)
+            resolved = rootSchema?.$defs?.[defName]
+          } else if (obj.$ref.startsWith("#/definitions/")) {
+            const defName = obj.$ref.slice("#/definitions/".length)
+            resolved = rootSchema?.definitions?.[defName]
+          }
+
+          if (resolved && typeof resolved === "object") {
+            const merged: any = { ...resolved, ...obj }
+            delete merged.$ref
+            return sanitizeGemini(merged, rootSchema)
+          }
+        }
+
+        // Merge allOf into a single schema before processing
+        if (Array.isArray(obj.allOf)) {
+          const mergedAllOf: any = {}
+          const mergedRequired = new Set<any>()
+          let mergedProperties: Record<string, any> = {}
+          let hasMergedProperties = false
+          let mergedItems: any
+
+          for (const variant of obj.allOf) {
+            if (!variant || typeof variant !== "object") {
+              continue
+            }
+
+            if (mergedAllOf.type === undefined && variant.type !== undefined) {
+              mergedAllOf.type = variant.type
+            }
+
+            if (mergedAllOf.description === undefined && variant.description !== undefined) {
+              mergedAllOf.description = variant.description
+            }
+
+            if (variant.properties && typeof variant.properties === "object" && !Array.isArray(variant.properties)) {
+              mergedProperties = {
+                ...mergedProperties,
+                ...variant.properties,
+              }
+              hasMergedProperties = true
+            }
+
+            if (Array.isArray(variant.required)) {
+              for (const field of variant.required) {
+                mergedRequired.add(field)
+              }
+            }
+
+            if (variant.items !== undefined) {
+              if (
+                mergedItems &&
+                typeof mergedItems === "object" &&
+                !Array.isArray(mergedItems) &&
+                variant.items &&
+                typeof variant.items === "object" &&
+                !Array.isArray(variant.items)
+              ) {
+                mergedItems = {
+                  ...mergedItems,
+                  ...variant.items,
+                }
+              } else {
+                mergedItems = variant.items
+              }
+            }
+          }
+
+          if (hasMergedProperties) {
+            mergedAllOf.properties = mergedProperties
+          }
+
+          if (mergedRequired.size > 0) {
+            mergedAllOf.required = Array.from(mergedRequired)
+          }
+
+          if (mergedItems !== undefined) {
+            mergedAllOf.items = mergedItems
+          }
+
+          const merged: any = { ...mergedAllOf, ...obj }
+          delete merged.allOf
+
+          if (
+            mergedAllOf.properties &&
+            merged.properties &&
+            typeof merged.properties === "object" &&
+            !Array.isArray(merged.properties)
+          ) {
+            merged.properties = {
+              ...mergedAllOf.properties,
+              ...merged.properties,
+            }
+          }
+
+          if (Array.isArray(mergedAllOf.required) || Array.isArray(obj.required)) {
+            const required = new Set<any>()
+            if (Array.isArray(mergedAllOf.required)) {
+              for (const field of mergedAllOf.required) {
+                required.add(field)
+              }
+            }
+            if (Array.isArray(obj.required)) {
+              for (const field of obj.required) {
+                required.add(field)
+              }
+            }
+            merged.required = Array.from(required)
+          }
+
+          if (mergedAllOf.items !== undefined && obj.items !== undefined) {
+            if (
+              mergedAllOf.items &&
+              typeof mergedAllOf.items === "object" &&
+              !Array.isArray(mergedAllOf.items) &&
+              obj.items &&
+              typeof obj.items === "object" &&
+              !Array.isArray(obj.items)
+            ) {
+              merged.items = {
+                ...mergedAllOf.items,
+                ...obj.items,
+              }
+            } else {
+              merged.items = obj.items
+            }
+          }
+
+          return sanitizeGemini(merged, rootSchema)
         }
 
         // Convert anyOf/oneOf with const values to enum before processing
@@ -892,15 +1027,67 @@ export namespace ProviderTransform {
               delete merged.anyOf
               delete merged.oneOf
               delete merged.const
-              return sanitizeGemini(merged)
+              return sanitizeGemini(merged, rootSchema)
             }
-            // If anyOf/oneOf contains type variants, pick the first valid one
+            // Merge object variants when all typed variants are objects
             const typeVariants = variants.filter((v: any) => v && typeof v === "object" && v.type)
+            const objectVariants = typeVariants.filter((v: any) => v.type === "object")
+            if (objectVariants.length > 0 && objectVariants.length === typeVariants.length) {
+              const merged: any = { ...obj, type: "object" }
+              const mergedRequired = new Set<any>()
+              let mergedProperties: Record<string, any> = {}
+              let hasMergedProperties = false
+
+              for (const variant of objectVariants) {
+                if (variant.properties && typeof variant.properties === "object" && !Array.isArray(variant.properties)) {
+                  mergedProperties = {
+                    ...mergedProperties,
+                    ...variant.properties,
+                  }
+                  hasMergedProperties = true
+                }
+                if (Array.isArray(variant.required)) {
+                  for (const field of variant.required) {
+                    mergedRequired.add(field)
+                  }
+                }
+              }
+
+              if (hasMergedProperties) {
+                if (merged.properties && typeof merged.properties === "object" && !Array.isArray(merged.properties)) {
+                  merged.properties = {
+                    ...mergedProperties,
+                    ...merged.properties,
+                  }
+                } else {
+                  merged.properties = mergedProperties
+                }
+              }
+
+              if (mergedRequired.size > 0 || Array.isArray(merged.required)) {
+                const required = new Set<any>()
+                if (Array.isArray(merged.required)) {
+                  for (const field of merged.required) {
+                    required.add(field)
+                  }
+                }
+                for (const field of mergedRequired) {
+                  required.add(field)
+                }
+                merged.required = Array.from(required)
+              }
+
+              delete merged.anyOf
+              delete merged.oneOf
+              return sanitizeGemini(merged, rootSchema)
+            }
+
+            // If anyOf/oneOf contains mixed type variants, pick the first valid one
             if (typeVariants.length > 0) {
               const merged: any = { ...obj, ...typeVariants[0] }
               delete merged.anyOf
               delete merged.oneOf
-              return sanitizeGemini(merged)
+              return sanitizeGemini(merged, rootSchema)
             }
           }
         }
@@ -935,7 +1122,6 @@ export namespace ProviderTransform {
             key === "else" ||
             key === "not" ||
             key === "title" ||
-            key === "allOf" ||
             key === "anyOf" ||
             key === "oneOf"
           ) {
@@ -949,14 +1135,14 @@ export namespace ProviderTransform {
               result.type = "string"
             }
           } else if (typeof value === "object" && value !== null) {
-            result[key] = sanitizeGemini(value)
+            result[key] = sanitizeGemini(value, rootSchema)
           } else {
             result[key] = value
           }
         }
 
         // Infer type="object" when properties exist but type is missing
-        if (!result.type && (result.properties || result.required)) {
+        if (!result.type && (result.properties || result.required || obj === rootSchema)) {
           result.type = "object"
         }
 
@@ -985,7 +1171,7 @@ export namespace ProviderTransform {
         return result
       }
 
-      schema = sanitizeGemini(schema)
+      schema = sanitizeGemini(schema, schema)
     }
 
     return schema as JSONSchema7
