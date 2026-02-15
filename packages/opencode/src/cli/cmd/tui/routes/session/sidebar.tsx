@@ -71,6 +71,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     let completed = 0
     let error = 0
     let filesRead = 0
+    const filesReadUnique = new Set<string>()
 
     for (const item of items) {
       if (item.state.status === "pending") pending++
@@ -81,7 +82,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
       if (item.tool !== "read" || item.state.status !== "completed") continue
       const loaded = (item.state.metadata as { loaded?: unknown })?.loaded
       if (!Array.isArray(loaded)) continue
-      filesRead += loaded.filter((value): value is string => typeof value === "string").length
+      for (const value of loaded) {
+        if (typeof value !== "string") continue
+        filesRead++
+        filesReadUnique.add(value)
+      }
     }
 
     return {
@@ -90,6 +95,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
       completed,
       error,
       filesRead,
+      filesReadUnique: filesReadUnique.size,
       toolCalls: items.length,
     }
   })
@@ -128,6 +134,39 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     if (toolMetrics().filesRead > 60) return "critical"
     if (toolMetrics().filesRead > 30) return "warning"
     return "none"
+  })
+  const latestActiveTool = createMemo(() =>
+    toolParts().findLast((item) => item.state.status === "running" || item.state.status === "pending"),
+  )
+  const latestSettledTool = createMemo(() =>
+    toolParts().findLast((item) => item.state.status === "completed" || item.state.status === "error"),
+  )
+  const stageFromTool = (tool: string | undefined, input: Record<string, any> | undefined) => {
+    if (!tool) return undefined
+    if (["plan_enter", "plan_exit", "task", "todoread", "todowrite", "question", "skill"].includes(tool)) return "PLAN"
+    if (["read", "grep", "glob", "list", "ls", "webfetch", "websearch", "codesearch"].includes(tool)) return "READ"
+    if (["edit", "write", "multiedit", "apply_patch", "patch"].includes(tool)) return "APPLY"
+    if (tool === "bash") {
+      const command = String(input?.command ?? input?.cmd ?? "").toLowerCase()
+      if (command.includes("test") || command.includes("lint")) return "TEST"
+      if (command.includes("diff") || command.includes("git status")) return "DIFF"
+      return "APPLY"
+    }
+    return undefined
+  }
+  const stageLine = createMemo(() => {
+    const metrics = toolMetrics()
+    const active = latestActiveTool()
+    const settled = latestSettledTool()
+    if (metrics.running > 0 || metrics.pending > 0) {
+      const stage = stageFromTool(active?.tool, active?.state.input) ?? (diff().length > 0 ? "DIFF" : "PLAN")
+      return stage
+    }
+    if (metrics.error > 0) {
+      return stageFromTool(settled?.tool, settled?.state.input) ?? (diff().length > 0 ? "DIFF" : "PLAN")
+    }
+    if (metrics.completed > 0) return "DONE"
+    return "PLAN"
   })
 
   const hasProviders = createMemo(() =>
@@ -182,6 +221,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     {(aux) => <> ({aux()})</>}
                   </Show>
                 </text>
+                <text fg={theme.textMuted}>Stage: {stageLine()}</text>
                 <text fg={theme.textMuted}>
                   Files Read: {toolMetrics().filesRead}
                   <Show when={fileReadWarning() !== "none"}>
@@ -191,6 +231,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     </span>
                   </Show>
                 </text>
+                <text fg={theme.textMuted}>Files Read (Unique): {toolMetrics().filesReadUnique}</text>
                 <text fg={theme.textMuted}>Files Modified: {filesModified()}</text>
                 <text fg={theme.textMuted}>Tool Calls: {toolMetrics().toolCalls}</text>
                 <text fg={theme.textMuted}>Errors: {toolMetrics().error}</text>
