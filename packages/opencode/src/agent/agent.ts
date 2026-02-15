@@ -13,6 +13,12 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+
+// 法律领域专用提示词
+import PROMPT_LEGAL_BASE from "../session/prompt/legal_base.txt"
+import PROMPT_CASE_REVIEW from "../session/prompt/case_review.txt"
+import PROMPT_DOCUMENT_DRAFT from "../session/prompt/document_draft.txt"
+
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -199,6 +205,65 @@ export namespace Agent {
         ),
         prompt: PROMPT_SUMMARY,
       },
+      // 法律智能体
+      case_reviewer: {
+        name: "case_reviewer",
+        description: "案件审查官 - 协助检察官进行案件审查工作，包括案情梳理、证据审查、法律适用分析",
+        mode: "primary",
+        native: false,
+        hidden: true, // 默认隐藏，仅在法律模式下显示
+        prompt: PROMPT_CASE_REVIEW,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            glob: "deny",
+            grep: "deny",
+            lsp: "deny",
+            codesearch: "deny",
+          }),
+          user,
+        ),
+        options: {},
+      },
+      legal_advisor: {
+        name: "legal_advisor",
+        description: "法律顾问 - 提供法律咨询、法规解读、类案参考",
+        mode: "primary",
+        native: false,
+        hidden: true,
+        prompt: PROMPT_LEGAL_BASE,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            glob: "deny",
+            grep: "deny",
+            lsp: "deny",
+            codesearch: "deny",
+            edit: "deny",
+          }),
+          user,
+        ),
+        options: {},
+      },
+      doc_assistant: {
+        name: "doc_assistant",
+        description: "文书助手 - 协助起草各类法律文书，包括起诉书、审查报告、不起诉决定书等",
+        mode: "primary",
+        native: false,
+        hidden: true,
+        prompt: PROMPT_DOCUMENT_DRAFT,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            glob: "deny",
+            grep: "deny",
+            lsp: "deny",
+            codesearch: "deny",
+          }),
+          user,
+        ),
+        options: {},
+      },
     }
 
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
@@ -244,6 +309,24 @@ export namespace Agent {
         result[name].permission,
         PermissionNext.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
       )
+    }
+
+    // 法律模式：取消隐藏法律智能体，隐藏编码智能体
+    if (cfg.experimental?.legal_mode) {
+      // 显示法律智能体
+      const legalAgents = ["case_reviewer", "legal_advisor", "doc_assistant"]
+      for (const name of legalAgents) {
+        if (result[name]) {
+          result[name].hidden = false
+        }
+      }
+      // 隐藏编码智能体
+      const codingAgents = ["explore", "general"]
+      for (const name of codingAgents) {
+        if (result[name]) {
+          result[name].hidden = true
+        }
+      }
     }
 
     return result
