@@ -82,7 +82,7 @@ const cli = yargs(hideBin(process.argv))
 
     const marker = path.join(Global.Path.data, "opencode.db")
     if (!(await Bun.file(marker).exists())) {
-      const tty = process.stdout.isTTY
+      const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36
       const orange = "\x1b[38;5;214m"
