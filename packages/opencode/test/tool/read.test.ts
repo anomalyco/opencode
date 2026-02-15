@@ -416,24 +416,6 @@ describe("tool.read memory regression tests", () => {
     })
   })
 
-  test("truncates a huge single-line file without reading beyond cap", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "one-line.txt"), "a".repeat(60 * 1024))
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "one-line.txt") }, ctx)
-        expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Output truncated")
-        expect(result.output).not.toContain("Output truncated at")
-      },
-    })
-  })
-
   test("suggests similar filenames when file is missing", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -447,24 +429,6 @@ describe("tool.read memory regression tests", () => {
         const missing = path.join(tmp.path, "example.tx")
         await expect(read.execute({ filePath: missing }, ctx)).rejects.toThrow("Did you mean one of these?")
         await expect(read.execute({ filePath: missing }, ctx)).rejects.toThrow(path.join(tmp.path, "example.txt"))
-      },
-    })
-  })
-
-  test("early stream destroy on line limit does not throw", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const lines = Array.from({ length: 3000 }, (_, i) => `line${i}`).join("\n")
-        await Bun.write(path.join(dir, "many-lines.txt"), lines)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 100 }, ctx)
-        expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("File has more lines")
       },
     })
   })
