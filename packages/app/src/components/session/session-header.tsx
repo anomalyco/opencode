@@ -101,11 +101,11 @@ function useSessionShare(args: {
   globalSDK: ReturnType<typeof useGlobalSDK>
   currentSession: () =>
     | {
-      id: string
-      share?: {
-        url?: string
+        id: string
+        share?: {
+          url?: string
+        }
       }
-    }
     | undefined
   projectDirectory: () => string
   platform: ReturnType<typeof usePlatform>
