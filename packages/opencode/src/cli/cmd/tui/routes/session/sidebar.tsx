@@ -64,6 +64,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
   const kv = useKV()
   const parts = createMemo(() => messages().flatMap((message) => sync.data.part[message.id] ?? []))
   const toolParts = createMemo(() => parts().filter((part): part is SessionToolPart => part.type === "tool"))
+  const isReadToolName = (tool: string | undefined) => {
+    const normalized = (tool ?? "").toLowerCase()
+    return normalized === "read" || normalized === "functions.read"
+  }
   const toolMetrics = createMemo(() => {
     const items = toolParts()
     let pending = 0
@@ -79,7 +83,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
       if (item.state.status === "completed") completed++
       if (item.state.status === "error") error++
 
-      if (item.tool !== "read" || item.state.status !== "completed") continue
+      if (!isReadToolName(item.tool) || item.state.status !== "completed") continue
       const loaded = (item.state.metadata as { loaded?: unknown })?.loaded
       if (!Array.isArray(loaded)) continue
       for (const value of loaded) {
@@ -111,16 +115,25 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     }
   })
   const sessionStatus = createMemo(() => sync.data.session_status?.[props.sessionID]?.type)
+  const statusFromSession = (status: string | undefined) => {
+    if (status === "error") return "Error"
+    if (status === "busy") return "Running"
+    if (status === "idle") return "Waiting"
+    return undefined
+  }
   const statusLine = createMemo(() => {
     const metrics = toolMetrics()
-    let label = "Waiting"
-    if (metrics.running > 0) label = "Running"
-    else if (metrics.pending > 0) label = "Waiting"
-    else if (metrics.error > 0) label = "Error"
-    else if (metrics.completed > 0) label = "Completed"
+    if (metrics.error > 0) return { label: "Error", auxiliary: undefined }
+    if (metrics.running > 0) return { label: "Running", auxiliary: undefined }
+    if (metrics.pending > 0) return { label: "Waiting", auxiliary: undefined }
+    if (metrics.toolCalls > 0) return { label: "Completed", auxiliary: undefined }
 
-    const auxiliary = sessionStatus() && sessionStatus() !== "idle" ? sessionStatus() : undefined
-    return { label, auxiliary }
+    const status = sessionStatus()
+    const mapped = statusFromSession(status)
+    return {
+      label: mapped ?? "Waiting",
+      auxiliary: status ?? undefined,
+    }
   })
   const statusColor = createMemo(() => {
     if (statusLine().label === "Running") return theme.warning
