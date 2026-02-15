@@ -19,6 +19,7 @@ import {
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
 import semver from "semver"
+import { Config } from "@/config/config"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
@@ -124,7 +125,10 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
-function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
+async function rendererConfig(_config: TuiConfig.Info): Promise<CliRendererConfig> {
+  const globalConfig = await Config.getGlobal()
+  const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (globalConfig.tui?.mouse ?? true)
+
   return {
     externalOutputMode: "passthrough",
     targetFps: 60,
@@ -133,6 +137,8 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
     useKittyKeyboard: { events: process.platform === "win32" },
     autoFocus: false,
     openConsoleOnError: false,
+    useMouse: mouseEnabled,
+    enableMouseMovement: mouseEnabled,
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -191,7 +197,7 @@ export function tui(input: {
       await TuiPluginRuntime.dispose()
     }
 
-    const renderer = await createCliRenderer(rendererConfig(input.config))
+    const renderer = await createCliRenderer(await rendererConfig(input.config))
 
     await render(() => {
       return (

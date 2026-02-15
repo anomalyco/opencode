@@ -767,6 +767,21 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
+  export const TUI = z.object({
+    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
+    scroll_acceleration: z
+      .object({
+        enabled: z.boolean().describe("Enable scroll acceleration"),
+      })
+      .optional()
+      .describe("Scroll acceleration settings"),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    mouse: z.boolean().optional().describe("Enable mouse capture in the TUI (default: true)"),
+  })
+
   export const Server = z
     .object({
       port: z.number().int().positive().optional().describe("Port to listen on"),
@@ -851,6 +866,7 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       logLevel: Log.Level.optional().describe("Log level"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      tui: TUI.optional().describe("TUI configuration"),
       command: z
         .record(z.string(), Command)
         .optional()
