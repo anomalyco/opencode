@@ -52,7 +52,7 @@ export const ReadTool = Tool.define("read", {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
-      const dirEntries = await fs.promises.readdir(dir)
+      const dirEntries = await fs.promises.readdir(dir).catch(() => [] as string[])
       const suggestions = dirEntries
         .filter(
           (entry) =>
@@ -168,6 +168,7 @@ export const ReadTool = Tool.define("read", {
     const raw: string[] = []
     let bytes = 0
     let truncatedByBytes = false
+    let truncatedByCap = false
     let hasMoreLines = false
     let totalLines = 0
     let line = 0
@@ -178,31 +179,35 @@ export const ReadTool = Tool.define("read", {
       buf += chunk
 
       const cap = MAX_BYTES + MAX_LINE_LENGTH
-      if (buf.length > cap && !buf.includes("\n")) {
-        if (line >= start) {
-          inRange = true
-          const clipped = buf.length > MAX_LINE_LENGTH ? buf.substring(0, MAX_LINE_LENGTH) + "..." : buf
-          const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
-          if (bytes + size > MAX_BYTES) {
-            truncatedByBytes = true
-            hasMoreLines = true
-            stopped = true
-            stream.destroy()
-            break
+      const idx = buf.lastIndexOf("\n")
+      if (idx === -1) {
+        if (buf.length > cap) {
+          if (line >= start) {
+            inRange = true
+            const clipped = buf.length > MAX_LINE_LENGTH ? buf.substring(0, MAX_LINE_LENGTH) + "..." : buf
+            const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
+            if (bytes + size > MAX_BYTES) {
+              truncatedByBytes = true
+              hasMoreLines = true
+              stopped = true
+            } else {
+              raw.push(clipped)
+              bytes += size
+              truncatedByCap = true
+              hasMoreLines = true
+              stopped = true
+            }
+          } else {
+            buf = ""
           }
-          raw.push(clipped)
-          bytes += size
-          truncatedByBytes = true
-          hasMoreLines = true
-          stopped = true
-          stream.destroy()
-          break
         }
 
-        buf = ""
+        if (stopped) break
+        continue
       }
-      const parts = buf.split("\n")
-      buf = parts.pop() ?? ""
+
+      const parts = buf.slice(0, idx).split("\n")
+      buf = buf.slice(idx + 1)
 
       for (const value of parts) {
         if (line >= start) inRange = true
@@ -214,7 +219,6 @@ export const ReadTool = Tool.define("read", {
         if (raw.length >= limit) {
           hasMoreLines = true
           stopped = true
-          stream.destroy()
           break
         }
 
@@ -224,7 +228,6 @@ export const ReadTool = Tool.define("read", {
           truncatedByBytes = true
           hasMoreLines = true
           stopped = true
-          stream.destroy()
           break
         }
 
@@ -235,6 +238,8 @@ export const ReadTool = Tool.define("read", {
 
       if (stopped) break
     }
+
+    if (stopped) stream.destroy()
 
     if (!stopped) {
       if (line >= start) inRange = true
@@ -270,10 +275,12 @@ export const ReadTool = Tool.define("read", {
     output += content.join("\n")
 
     const lastReadLine = offset + raw.length - 1
-    const truncated = hasMoreLines || truncatedByBytes
+    const truncated = hasMoreLines || truncatedByBytes || truncatedByCap
 
     if (truncatedByBytes) {
       output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else if (truncatedByCap) {
+      output += `\n\n(Output truncated. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else {
