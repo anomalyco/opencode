@@ -1,6 +1,6 @@
 ---
 title: 网络
-description: 配置代理和自定義證書。
+description: 配置代理和自定义证书。
 ---
 
 opencode支持企业网络环境的标准代理环境变量和自定义证书。
@@ -9,7 +9,7 @@ opencode支持企业网络环境的标准代理环境变量和自定义证书。
 
 ## 代理
 
-opencode 尊重标准代理环境变量。
+opencode 遵循标准代理环境变量。
 
 ```bash
 # HTTPS proxy (recommended)
@@ -39,7 +39,7 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 ```
 
 :::caution
-避免对密碼進行硬編碼。使用環境變量或安全憑證存儲。
+避免对密码进行硬编码。使用环境变量或安全凭证存储。
 :::
 
 对于需要高级身份验证（例如 NTLM 或 Kerberos）的代理，请考虑使用支持您的身份验证方法的 LLM 网关。
