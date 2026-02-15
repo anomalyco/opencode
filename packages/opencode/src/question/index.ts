@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
+import { Pending } from "@/pending"
 import z from "zod"
 
 export namespace Question {
@@ -80,14 +81,7 @@ export namespace Question {
   }
 
   const state = Instance.state(async () => {
-    const pending: Record<
-      string,
-      {
-        info: Request
-        resolve: (answers: Answer[]) => void
-        reject: (e: any) => void
-      }
-    > = {}
+    const pending: Record<string, Pending.Entry<Request, Answer[]>> = {}
 
     return {
       pending,
@@ -159,7 +153,7 @@ export namespace Question {
     existing.reject(new RejectedError())
   }
 
-  export class RejectedError extends Error {
+  export class RejectedError extends Pending.RejectedError {
     constructor() {
       super("The user dismissed this question")
     }
