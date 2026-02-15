@@ -101,11 +101,11 @@ function useSessionShare(args: {
   globalSDK: ReturnType<typeof useGlobalSDK>
   currentSession: () =>
     | {
-        id: string
-        share?: {
-          url?: string
-        }
+      id: string
+      share?: {
+        url?: string
       }
+    }
     | undefined
   projectDirectory: () => string
   platform: ReturnType<typeof usePlatform>
@@ -321,12 +321,15 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 h-[24px] pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="flex md:w-[240px] max-w-full min-w-0 h-[24px] pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
-              <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
-                <Icon name="magnifying-glass" size="small" class="icon-base shrink-0 size-4" />
+              <Icon name="magnifying-glass" size="small" class="icon-base shrink-0 size-4" />
+              <span class="md:hidden text-12-regular text-text-weak">
+                {language.t("common.search.placeholder")}
+              </span>
+              <div class="hidden md:flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
                 <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
                   {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
@@ -334,7 +337,7 @@ export function SessionHeader() {
 
               <Show when={hotkey()}>
                 {(keybind) => (
-                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
+                  <Keybind class="hidden md:flex shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
                 )}
               </Show>
             </button>
