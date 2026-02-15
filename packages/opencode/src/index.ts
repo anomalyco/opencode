@@ -105,9 +105,9 @@ const cli = yargs(hideBin(process.argv))
                 `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
               )
               if (event.current === event.total) process.stderr.write("\n")
-              return
+            } else {
+              process.stderr.write(`sqlite-migration:${percent}${EOL}`)
             }
-            process.stderr.write(`sqlite-migration:${percent}${EOL}`)
           },
         })
       } finally {
