@@ -1377,7 +1377,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={true}
+              streaming={!props.message.time.completed}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
             />
