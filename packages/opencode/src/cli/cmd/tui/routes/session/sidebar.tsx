@@ -25,6 +25,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     diff: true,
     todo: true,
     lsp: true,
+    plans: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -62,6 +63,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
 
   const directory = useDirectory()
   const kv = useKV()
+  const [progressExpanded, setProgressExpanded] = kv.signal("sidebar_progress_observability_expanded", false)
   const parts = createMemo(() => messages().flatMap((message) => sync.data.part[message.id] ?? []))
   const toolParts = createMemo(() => parts().filter((part): part is SessionToolPart => part.type === "tool"))
   const isReadToolName = (tool: string | undefined) => {
@@ -114,6 +116,55 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
       mode: info?.mode ?? lastAssistant?.mode,
     }
   })
+  const assistantAgentByMessageID = createMemo(() => {
+    const result = new Map<string, string>()
+    for (const message of messages()) {
+      if (message.role !== "assistant") continue
+      result.set(message.id, message.agent)
+    }
+    return result
+  })
+  const recentAgents = createMemo(() => {
+    const seen = new Set<string>()
+    const result: string[] = []
+    const messageItems = messages()
+    for (let i = messageItems.length - 1; i >= 0; i--) {
+      const message = messageItems[i]
+      if (message.role !== "assistant") continue
+      if (!message.agent || seen.has(message.agent)) continue
+      seen.add(message.agent)
+      result.push(message.agent)
+    }
+    const partItems = parts()
+    for (let i = partItems.length - 1; i >= 0; i--) {
+      const part = partItems[i]
+      const name = part.type === "subtask" ? part.agent : part.type === "agent" ? part.name : undefined
+      if (!name || seen.has(name)) continue
+      seen.add(name)
+      result.push(name)
+    }
+    return result
+  })
+  const recentAgentSummary = createMemo(() => {
+    const items = recentAgents()
+    if (items.length === 0) return "없음"
+    return items.join(", ")
+  })
+  const agentToolCallCounts = createMemo(() => {
+    const counts = new Map<string, number>()
+    const agentByMessageID = assistantAgentByMessageID()
+    for (const part of toolParts()) {
+      const agent = agentByMessageID.get(part.messageID)
+      if (!agent) continue
+      counts.set(agent, (counts.get(agent) ?? 0) + 1)
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
+  })
+  const agentToolCallSummary = createMemo(() => {
+    const items = agentToolCallCounts()
+    if (items.length === 0) return "없음"
+    return items.map(([name, count]) => `${name} ${count}`).join(" · ")
+  })
   const sessionStatus = createMemo(() => sync.data.session_status?.[props.sessionID]?.type)
   const statusFromSession = (status: string | undefined) => {
     if (status === "error") return "Error"
@@ -141,6 +192,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     if (statusLine().label === "Completed") return theme.success
     return theme.textMuted
   })
+  const statusLabelText = (label: string) => {
+    if (label === "Error") return "오류"
+    if (label === "Running") return "실행 중"
+    if (label === "Waiting") return "대기 중"
+    if (label === "Completed") return "완료"
+    return label
+  }
   const messageWarning = createMemo(() => messages().length >= 40)
   const toolPartWarning = createMemo(() => toolMetrics().toolCalls >= 80)
   const fileReadWarning = createMemo(() => {
@@ -181,6 +239,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     if (metrics.completed > 0) return "DONE"
     return "PLAN"
   })
+  const summaryWarningBadge = createMemo(() => {
+    if (fileReadWarning() === "critical" || toolMetrics().error > 0) return "🔴"
+    if (messageWarning() || toolPartWarning() || fileReadWarning() === "warning") return "⚠️"
+    return ""
+  })
+  const progressSummary = createMemo(() => {
+    const text = `상태: ${statusLabelText(statusLine().label)} · 단계: ${stageLine()}`
+    return summaryWarningBadge() ? `${text} · ${summaryWarningBadge()}` : text
+  })
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -201,65 +268,114 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box paddingRight={1}>
-              <text fg={theme.text}>
-                <b>{session().title}</b>
-              </text>
-              <Show when={session().share?.url}>
-                <text fg={theme.textMuted}>{session().share!.url}</text>
-              </Show>
-            </box>
+            <Show when={session().share?.url}>
+              <text fg={theme.textMuted}>{session().share!.url}</text>
+            </Show>
             <box>
               <text fg={theme.text}>
-                <b>Context</b>
+                <b>컨텍스트</b>
               </text>
-              <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
-              <text fg={theme.textMuted}>{cost()} spent</text>
+              <text fg={theme.textMuted}>{context()?.tokens ?? 0} 토큰</text>
+              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% 사용됨</text>
+              <text fg={theme.textMuted}>{cost()} 사용</text>
             </box>
             <Show when={props.progressPlaceholder}>
               <box>
-                <text fg={theme.text}>
-                  <b>Progress / Observability</b>
-                </text>
-                <text fg={theme.textMuted}>
-                  Agent: {currentAgent().name}
-                  <Show when={currentAgent().mode}>
-                    {(mode) => <> ({mode()})</>}
+                <box flexDirection="row" gap={1} onMouseDown={() => setProgressExpanded((prev) => !prev)}>
+                  <text fg={theme.text}>{progressExpanded() ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>진행/관찰</b>
+                  </text>
+                  <Show when={!progressExpanded()}>
+                    <text fg={theme.textMuted}> {progressSummary()}</text>
                   </Show>
-                </text>
-                <text fg={statusColor()}>
-                  Status: {statusLine().label}
-                  <Show when={statusLine().auxiliary}>
-                    {(aux) => <> ({aux()})</>}
+                </box>
+                <Show when={progressExpanded()}>
+                  <text fg={theme.textMuted}>
+                    에이전트: {currentAgent().name}
+                    <Show when={currentAgent().mode}>
+                      {(mode) => <> ({mode()})</>}
+                    </Show>
+                  </text>
+                  <text fg={theme.textMuted}>최근 에이전트: {recentAgentSummary()}</text>
+                  <text fg={theme.textMuted}>에이전트별 호출: {agentToolCallSummary()}</text>
+                  <text fg={statusColor()}>
+                    상태: {statusLabelText(statusLine().label)}
+                    <Show when={statusLine().auxiliary}>
+                      {(aux) => <> ({aux()})</>}
+                    </Show>
+                  </text>
+                  <text fg={theme.textMuted}>단계: {stageLine()}</text>
+                  <text fg={theme.textMuted}>
+                    읽은 파일: {toolMetrics().filesRead}
+                    <Show when={fileReadWarning() !== "none"}>
+                      <span style={{ fg: fileReadWarning() === "critical" ? theme.error : theme.warning }}>
+                        {" "}
+                        {fileReadWarning() === "critical" ? "🔴" : "⚠️"}
+                      </span>
+                    </Show>
+                  </text>
+                  <text fg={theme.textMuted}>읽은 파일(고유): {toolMetrics().filesReadUnique}</text>
+                  <text fg={theme.textMuted}>수정된 파일: {filesModified()}</text>
+                  <text fg={theme.textMuted}>도구 호출: {toolMetrics().toolCalls}</text>
+                  <text fg={theme.textMuted}>오류 수: {toolMetrics().error}</text>
+                  <text fg={theme.textMuted}>
+                    메시지 수: {messages().length}
+                    <Show when={messageWarning()}>
+                      <span style={{ fg: theme.warning }}> ⚠️</span>
+                    </Show>
+                  </text>
+                  <text fg={theme.textMuted}>
+                    도구 파트: {toolMetrics().toolCalls}
+                    <Show when={toolPartWarning()}>
+                      <span style={{ fg: theme.warning }}> ⚠️</span>
+                    </Show>
+                  </text>
+                </Show>
+              </box>
+            </Show>
+            <Show when={todo().length > 0 || sync.data.lsp.length > 0}>
+              <box>
+                <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("plans", !expanded.plans)}>
+                  <text fg={theme.text}>{expanded.plans ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>계획 (Plans)</b>
+                    <Show when={!expanded.plans}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({todo().length} todo, {sync.data.lsp.length} lsp)
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.plans}>
+                  <Show when={todo().length > 0} fallback={<text fg={theme.textMuted}>할 일이 없습니다</text>}>
+                    <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
                   </Show>
-                </text>
-                <text fg={theme.textMuted}>Stage: {stageLine()}</text>
-                <text fg={theme.textMuted}>
-                  Files Read: {toolMetrics().filesRead}
-                  <Show when={fileReadWarning() !== "none"}>
-                    <span style={{ fg: fileReadWarning() === "critical" ? theme.error : theme.warning }}>
-                      {" "}
-                      {fileReadWarning() === "critical" ? "🔴" : "⚠️"}
-                    </span>
+                  <Show when={sync.data.lsp.length > 0}>
+                    <text fg={theme.textMuted}>LSP 참고</text>
+                    <For each={sync.data.lsp}>
+                      {(item) => (
+                        <box flexDirection="row" gap={1}>
+                          <text
+                            flexShrink={0}
+                            style={{
+                              fg: {
+                                connected: theme.success,
+                                error: theme.error,
+                              }[item.status],
+                            }}
+                          >
+                            •
+                          </text>
+                          <text fg={theme.textMuted}>
+                            {item.id} {item.root}
+                          </text>
+                        </box>
+                      )}
+                    </For>
                   </Show>
-                </text>
-                <text fg={theme.textMuted}>Files Read (Unique): {toolMetrics().filesReadUnique}</text>
-                <text fg={theme.textMuted}>Files Modified: {filesModified()}</text>
-                <text fg={theme.textMuted}>Tool Calls: {toolMetrics().toolCalls}</text>
-                <text fg={theme.textMuted}>Errors: {toolMetrics().error}</text>
-                <text fg={theme.textMuted}>
-                  Messages: {messages().length}
-                  <Show when={messageWarning()}>
-                    <span style={{ fg: theme.warning }}> ⚠️</span>
-                  </Show>
-                </text>
-                <text fg={theme.textMuted}>
-                  Tool Parts: {toolMetrics().toolCalls}
-                  <Show when={toolPartWarning()}>
-                    <span style={{ fg: theme.warning }}> ⚠️</span>
-                  </Show>
-                </text>
+                </Show>
               </box>
             </Show>
             <Show when={mcpEntries().length > 0}>
@@ -277,8 +393,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     <Show when={!expanded.mcp}>
                       <span style={{ fg: theme.textMuted }}>
                         {" "}
-                        ({connectedMcpCount()} active
-                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} error${errorMcpCount() > 1 ? "s" : ""}` : ""})
+                        ({connectedMcpCount()} 활성
+                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} 오류` : ""})
                       </span>
                     </Show>
                   </text>
@@ -307,12 +423,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
+                              <Match when={item.status === "connected"}>연결됨</Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled</Match>
-                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                              <Match when={item.status === "disabled"}>비활성화됨</Match>
+                              <Match when={(item.status as string) === "needs_auth"}>인증 필요</Match>
                               <Match when={(item.status as string) === "needs_client_registration"}>
-                                Needs client ID
+                                클라이언트 ID 필요
                               </Match>
                             </Switch>
                           </span>
@@ -340,8 +456,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                 <Show when={sync.data.lsp.length === 0}>
                   <text fg={theme.textMuted}>
                     {sync.data.config.lsp === false
-                      ? "LSPs have been disabled in settings"
-                      : "LSPs will activate as files are read"}
+                      ? "설정에서 LSP가 비활성화되었습니다"
+                      : "파일을 읽으면 LSP가 활성화됩니다"}
                   </text>
                 </Show>
                 <For each={sync.data.lsp}>
@@ -377,7 +493,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Todo</b>
+                    <b>할 일</b>
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
@@ -396,7 +512,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Modified Files</b>
+                    <b>수정된 파일</b>
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
@@ -442,18 +558,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
               <box flexGrow={1} gap={1}>
                 <box flexDirection="row" justifyContent="space-between">
                   <text fg={theme.text}>
-                    <b>Getting started</b>
+                    <b>시작하기</b>
                   </text>
                   <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
                     ✕
                   </text>
                 </box>
-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
+                <text fg={theme.textMuted}>OpenCode는 즉시 시작할 수 있는 무료 모델을 제공합니다.</text>
                 <text fg={theme.textMuted}>
-                  Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+                  75개 이상의 제공자를 연결해 Claude, GPT, Gemini 등 다양한 모델을 사용할 수 있습니다
                 </text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text fg={theme.text}>Connect provider</text>
+                  <text fg={theme.text}>제공자 연결</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
