@@ -579,6 +579,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Conecta cualquier proveedor para usar modelos, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Sesiones recientes",
   "sidebar.project.viewAllSessions": "Ver todas las sesiones",
+  "sidebar.project.clearNotifications": "Borrar notificaciones",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -634,6 +635,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "Alerta 01",
   "sound.option.alert02": "Alerta 02",
   "sound.option.alert03": "Alerta 03",
