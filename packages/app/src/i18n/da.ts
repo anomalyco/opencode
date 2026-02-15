@@ -494,6 +494,8 @@ export const dict = {
   "session.review.loadingChanges": "Indlæser ændringer...",
   "session.review.empty": "Ingen ændringer i denne session endnu",
   "session.review.noChanges": "Ingen ændringer",
+  "session.review.trackingUnavailable":
+    "Sporing er deaktiveret.\nInitialiser et Git-repository for at aktivere ændringssporing.",
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
   "session.files.binaryContent": "Binær fil (indhold kan ikke vises)",

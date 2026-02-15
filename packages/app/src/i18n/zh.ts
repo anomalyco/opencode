@@ -496,6 +496,7 @@ export const dict = {
   "session.review.loadingChanges": "正在加载更改...",
   "session.review.empty": "此会话暂无更改",
   "session.review.noChanges": "无更改",
+  "session.review.trackingUnavailable": "跟踪已禁用。\n初始化 Git 仓库以启用变更跟踪。",
   "session.files.selectToOpen": "选择要打开的文件",
   "session.files.all": "所有文件",
   "session.files.binaryContent": "二进制文件（无法显示内容）",

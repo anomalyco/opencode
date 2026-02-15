@@ -498,6 +498,8 @@ export const dict = {
   "session.review.loadingChanges": "Загрузка изменений...",
   "session.review.empty": "Изменений в этой сессии пока нет",
   "session.review.noChanges": "Нет изменений",
+  "session.review.trackingUnavailable":
+    "Отслеживание отключено.\nИнициализируйте Git-репозиторий для включения отслеживания изменений.",
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
   "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",

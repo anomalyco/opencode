@@ -444,6 +444,8 @@ export const dict = {
   "session.review.loadingChanges": "Ładowanie zmian...",
   "session.review.empty": "Brak zmian w tej sesji",
   "session.review.noChanges": "Brak zmian",
+  "session.review.trackingUnavailable":
+    "Śledzenie jest wyłączone.\nZainicjuj repozytorium Git, aby włączyć śledzenie zmian.",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
   "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",

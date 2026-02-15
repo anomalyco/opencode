@@ -443,6 +443,8 @@ export const dict = {
   "session.review.loadingChanges": "変更を読み込み中...",
   "session.review.empty": "このセッションでの変更はまだありません",
   "session.review.noChanges": "変更なし",
+  "session.review.trackingUnavailable":
+    "トラッキングは無効です。\n変更追跡を有効にするには Git リポジトリを初期化してください。",
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
   "session.files.binaryContent": "バイナリファイル（内容を表示できません）",

@@ -445,6 +445,8 @@ export const dict = {
   "session.review.loadingChanges": "Carregando alterações...",
   "session.review.empty": "Nenhuma alteração nesta sessão ainda",
   "session.review.noChanges": "Sem alterações",
+  "session.review.trackingUnavailable":
+    "O rastreamento está desativado.\nInicialize um repositório Git para habilitar o rastreamento de alterações.",
   "session.files.selectToOpen": "Selecione um arquivo para abrir",
   "session.files.all": "Todos os arquivos",
   "session.files.binaryContent": "Arquivo binário (conteúdo não pode ser exibido)",

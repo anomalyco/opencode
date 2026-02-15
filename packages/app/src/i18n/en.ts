@@ -496,6 +496,7 @@ export const dict = {
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
   "session.review.noChanges": "No changes",
+  "session.review.trackingUnavailable": "Tracking is disabled.\nInitialize a Git repository to enable change tracking.",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",

@@ -445,6 +445,8 @@ export const dict = {
   "session.review.loadingChanges": "변경 사항 로드 중...",
   "session.review.empty": "이 세션에 변경 사항이 아직 없습니다",
   "session.review.noChanges": "변경 없음",
+  "session.review.trackingUnavailable":
+    "추적이 비활성화되었습니다.\n변경 추적을 활성화하려면 Git 저장소를 초기화하세요.",
   "session.files.selectToOpen": "열 파일을 선택하세요",
   "session.files.all": "모든 파일",
   "session.files.binaryContent": "바이너리 파일 (내용을 표시할 수 없음)",

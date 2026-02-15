@@ -498,6 +498,8 @@ export const dict = {
   "session.review.loadingChanges": "Laster endringer...",
   "session.review.empty": "Ingen endringer i denne sesjonen ennå",
   "session.review.noChanges": "Ingen endringer",
+  "session.review.trackingUnavailable":
+    "Sporing er deaktivert.\nInitialiser et Git-repositorium for å aktivere endringssporing.",
 
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",

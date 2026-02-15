@@ -498,6 +498,8 @@ export const dict = {
   "session.review.loadingChanges": "Cargando cambios...",
   "session.review.empty": "No hay cambios en esta sesión aún",
   "session.review.noChanges": "Sin cambios",
+  "session.review.trackingUnavailable":
+    "El seguimiento está desactivado.\nInicializa un repositorio Git para habilitar el seguimiento de cambios.",
 
   "session.files.selectToOpen": "Selecciona un archivo para abrir",
   "session.files.all": "Todos los archivos",

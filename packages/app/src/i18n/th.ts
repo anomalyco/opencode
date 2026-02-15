@@ -493,6 +493,8 @@ export const dict = {
   "session.review.loadingChanges": "กำลังโหลดการเปลี่ยนแปลง...",
   "session.review.empty": "ยังไม่มีการเปลี่ยนแปลงในเซสชันนี้",
   "session.review.noChanges": "ไม่มีการเปลี่ยนแปลง",
+  "session.review.trackingUnavailable":
+    "การติดตามถูกปิดใช้งาน\nเริ่มต้นใช้งาน Git repository เพื่อเปิดใช้งานการติดตามการเปลี่ยนแปลง",
 
   "session.files.selectToOpen": "เลือกไฟล์เพื่อเปิด",
   "session.files.all": "ไฟล์ทั้งหมด",

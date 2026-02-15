@@ -31,6 +31,7 @@ export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  tracked: boolean
 }) {
   const params = useParams()
   const layout = useLayout()
@@ -377,8 +378,8 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Match>
                     <Match when={true}>
-                      <div class="mt-8 text-center text-12-regular text-text-weak">
-                        {language.t("session.review.noChanges")}
+                      <div class="mt-8 text-center text-12-regular text-text-weak whitespace-pre-line">
+                        {language.t(props.tracked ? "session.review.noChanges" : "session.review.trackingUnavailable")}
                       </div>
                     </Match>
                   </Switch>

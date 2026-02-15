@@ -497,6 +497,8 @@ export const dict = {
   "session.review.loadingChanges": "Učitavanje izmjena...",
   "session.review.empty": "Još nema izmjena u ovoj sesiji",
   "session.review.noChanges": "Nema izmjena",
+  "session.review.trackingUnavailable":
+    "Praćenje je onemogućeno.\nInicijalizirajte Git repozitorij da biste omogućili praćenje promjena.",
 
   "session.files.selectToOpen": "Odaberi datoteku za otvaranje",
   "session.files.all": "Sve datoteke",

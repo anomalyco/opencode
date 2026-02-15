@@ -491,6 +491,7 @@ export const dict = {
   "session.review.loadingChanges": "正在載入變更...",
   "session.review.empty": "此工作階段暫無變更",
   "session.review.noChanges": "沒有變更",
+  "session.review.trackingUnavailable": "追蹤已停用。\n初始化 Git 倉庫以啟用變更追蹤。",
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
   "session.files.binaryContent": "二進位檔案（無法顯示內容）",

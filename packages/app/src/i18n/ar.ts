@@ -442,6 +442,7 @@ export const dict = {
   "session.review.loadingChanges": "جارٍ تحميل التغييرات...",
   "session.review.empty": "لا توجد تغييرات في هذه الجلسة بعد",
   "session.review.noChanges": "لا توجد تغييرات",
+  "session.review.trackingUnavailable": "التتبع معطل.\nقم بتهيئة مستودع Git لتمكين تتبع التغييرات.",
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",

@@ -160,6 +160,12 @@ export default function Page() {
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
+
+  const tracked = createMemo(() => {
+    const project = sync.project
+    if (!project) return true
+    return project.vcs === "git"
+  })
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const messagesReady = createMemo(() => {
@@ -470,7 +476,9 @@ export default function Page() {
   const emptyTurn = () => (
     <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
       <Mark class="w-14 opacity-10" />
-      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
+      <div class="text-14-regular text-text-weak max-w-56 whitespace-pre-line">
+        {language.t(tracked() ? "session.review.noChanges" : "session.review.trackingUnavailable")}
+      </div>
     </div>
   )
 
@@ -531,7 +539,9 @@ export default function Page() {
             ) : (
               <div class={input.emptyClass}>
                 <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                <div class="text-14-regular text-text-weak max-w-56 whitespace-pre-line">
+                  {language.t(tracked() ? "session.review.empty" : "session.review.trackingUnavailable")}
+                </div>
               </div>
             )
           }
@@ -1115,7 +1125,12 @@ export default function Page() {
           </Show>
         </div>
 
-        <SessionSidePanel reviewPanel={reviewPanel} activeDiff={tree.activeDiff} focusReviewDiff={focusReviewDiff} />
+        <SessionSidePanel
+          reviewPanel={reviewPanel}
+          activeDiff={tree.activeDiff}
+          focusReviewDiff={focusReviewDiff}
+          tracked={tracked()}
+        />
       </div>
 
       <TerminalPanel />

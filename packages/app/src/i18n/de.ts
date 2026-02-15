@@ -453,6 +453,8 @@ export const dict = {
   "session.review.loadingChanges": "Lade Änderungen...",
   "session.review.empty": "Noch keine Änderungen in dieser Sitzung",
   "session.review.noChanges": "Keine Änderungen",
+  "session.review.trackingUnavailable":
+    "Tracking ist deaktiviert.\nInitialisieren Sie ein Git-Repository, um die Änderungsnachverfolgung zu aktivieren.",
   "session.files.selectToOpen": "Datei zum Öffnen auswählen",
   "session.files.all": "Alle Dateien",
   "session.files.binaryContent": "Binärdatei (Inhalt kann nicht angezeigt werden)",
