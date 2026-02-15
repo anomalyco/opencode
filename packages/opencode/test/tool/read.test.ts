@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import * as fs from "fs"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
