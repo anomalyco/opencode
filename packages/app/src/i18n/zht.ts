@@ -765,6 +765,8 @@ export const dict = {
   "session.delete.title": "刪除工作階段",
   "session.delete.confirm": '刪除工作階段 "{{name}}"?',
   "session.delete.button": "刪除工作階段",
+  "session.restore": "復原",
+  "session.restore.failed.title": "復原工作階段失敗",
 
   "workspace.new": "新增工作區",
   "workspace.type.local": "本地",

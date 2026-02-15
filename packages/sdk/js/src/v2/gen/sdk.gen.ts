@@ -1092,7 +1092,7 @@ export class Session extends HeyApiClient {
       directory?: string
       title?: string
       time?: {
-        archived?: number
+        archived?: number | null
       }
     },
     options?: Options<never, ThrowOnError>,

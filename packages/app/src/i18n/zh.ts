@@ -810,6 +810,8 @@ export const dict = {
   "session.delete.title": "删除会话",
   "session.delete.confirm": '删除会话 "{{name}}"？',
   "session.delete.button": "删除会话",
+  "session.restore": "恢复",
+  "session.restore.failed.title": "恢复会话失败",
 
   "workspace.new": "新建工作区",
   "workspace.type.local": "本地",

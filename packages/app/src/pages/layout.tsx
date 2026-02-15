@@ -1839,6 +1839,29 @@ export default function Layout(props: ParentProps) {
       return workspaceLabel(session.directory, workspace.vcs?.branch, props.project.id)
     }
 
+    const restoreSession = async (session: Session) => {
+      try {
+        await globalSDK.client.session.update({
+          directory: session.directory,
+          sessionID: session.id,
+          time: { archived: null },
+        })
+        const [, setChildStore] = globalSync.child(session.directory)
+        setChildStore(
+          produce((draft) => {
+            draft.session.push(session)
+            draft.session.sort((a, b) => b.time.updated - a.time.updated)
+          }),
+        )
+        removeDeleted(session.id)
+      } catch (err) {
+        showToast({
+          title: language.t("session.restore.failed.title"),
+          description: errorMessage(err),
+        })
+      }
+    }
+
     return (
       <Dialog title={language.t("sidebar.project.archivedSessions")} fit>
         <div class="flex flex-col gap-3 pl-6 pr-2.5 pb-3 min-w-[32rem] max-w-[40rem]">
@@ -1857,33 +1880,77 @@ export default function Layout(props: ParentProps) {
           <Show when={state.status === "ready" && state.sessions.length > 0}>
             <div class="max-h-80 overflow-y-auto flex flex-col gap-1 pr-1">
               <For each={state.sessions}>
-                {(session) => (
-                  <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
-                    <button class="flex-1 min-w-0 text-left" onClick={() => openSession(session)}>
-                      <div class="text-14-regular text-text-strong truncate">{session.title}</div>
-                      <div class="text-12-regular text-text-weak truncate">{directoryLabel(session)}</div>
-                    </button>
-                    <Tooltip value={language.t("common.delete")} placement="top">
-                      <IconButton
-                        icon="trash"
-                        variant="ghost"
-                        class="size-6 rounded-md cursor-pointer"
-                        style={{ "--icon-base": "var(--icon-critical-base)" }}
-                        aria-label={language.t("common.delete")}
-                        onClick={() =>
-                          dialog.show(() => (
-                            <DialogDeleteSession
-                              session={session}
-                              onDeleted={() => {
-                                removeDeleted(session.id)
-                              }}
-                            />
-                          ))
-                        }
-                      />
-                    </Tooltip>
-                  </div>
-                )}
+                {(session) => {
+                  const [confirming, setConfirming] = createSignal(false)
+                  let timer: ReturnType<typeof setTimeout> | undefined
+
+                  const startConfirm = () => {
+                    setConfirming(true)
+                    clearTimeout(timer)
+                    timer = setTimeout(() => setConfirming(false), 3000)
+                  }
+
+                  const handleDelete = async () => {
+                    clearTimeout(timer)
+                    const ok = await deleteSession(session)
+                    if (!ok) {
+                      setConfirming(false)
+                      return
+                    }
+                    removeDeleted(session.id)
+                  }
+
+                  onCleanup(() => clearTimeout(timer))
+
+                  return (
+                    <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
+                      <button class="flex-1 min-w-0 text-left" onClick={() => openSession(session)}>
+                        <div class="text-14-regular text-text-strong truncate">{session.title}</div>
+                        <div class="text-12-regular text-text-weak truncate">{directoryLabel(session)}</div>
+                      </button>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <Tooltip value={language.t("session.restore")} placement="top">
+                          <IconButton
+                            icon="arrow-left"
+                            variant="ghost"
+                            class="size-6 rounded-md cursor-pointer"
+                            aria-label={language.t("session.restore")}
+                            onClick={() => void restoreSession(session)}
+                          />
+                        </Tooltip>
+                        <Show
+                          when={confirming()}
+                          fallback={
+                            <Tooltip value={language.t("common.delete")} placement="top">
+                              <IconButton
+                                icon="trash"
+                                variant="ghost"
+                                class="size-6 rounded-md cursor-pointer"
+                                style={{ "--icon-base": "var(--icon-critical-base)" }}
+                                aria-label={language.t("common.delete")}
+                                onClick={startConfirm}
+                              />
+                            </Tooltip>
+                          }
+                        >
+                          <Button
+                            variant="primary"
+                            size="small"
+                            class="shrink-0 cursor-pointer"
+                            style={{
+                              "background-color": "var(--surface-critical-base)",
+                              "border-color": "var(--surface-critical-base)",
+                              color: "var(--text-on-critical-base)",
+                            }}
+                            onClick={handleDelete}
+                          >
+                            {language.t("session.delete.button")}
+                          </Button>
+                        </Show>
+                      </div>
+                    </div>
+                  )
+                }}
               </For>
             </div>
           </Show>

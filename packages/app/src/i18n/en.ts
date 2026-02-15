@@ -817,6 +817,8 @@ export const dict = {
   "session.delete.title": "Delete session",
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
+  "session.restore": "Restore",
+  "session.restore.failed.title": "Failed to restore session",
 
   "workspace.new": "New workspace",
   "workspace.type.local": "local",

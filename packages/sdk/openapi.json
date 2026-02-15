@@ -1615,7 +1615,8 @@
                     "type": "object",
                     "properties": {
                       "archived": {
-                        "type": "number"
+                        "type": "number",
+                        "nullable": true
                       }
                     }
                   }
