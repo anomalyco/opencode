@@ -48,6 +48,10 @@ export namespace Worktree {
   export const CreateInput = z
     .object({
       name: z.string().optional(),
+      branch: z
+        .string()
+        .optional()
+        .describe("Git branch name to use for this workspace (worktree). If omitted, OpenCode creates a new branch."),
       startCommand: z
         .string()
         .optional()
@@ -265,13 +269,20 @@ export namespace Worktree {
     return process.platform === "win32" ? normalized.toLowerCase() : normalized
   }
 
-  async function candidate(root: string, base?: string) {
+  const MANAGED_PREFIX = "opencode/"
+
+  async function candidate(root: string, base?: string, fixedBranch?: string) {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
-      const branch = `opencode/${name}`
       const directory = path.join(root, name)
 
       if (await exists(directory)) continue
+
+      if (fixedBranch) {
+        return Info.parse({ name, branch: fixedBranch, directory })
+      }
+
+      const branch = `${MANAGED_PREFIX}${name}`
 
       const ref = `refs/heads/${branch}`
       const branchCheck = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
@@ -339,13 +350,77 @@ export namespace Worktree {
     const root = path.join(Global.Path.data, "worktree", Instance.project.id)
     await fs.mkdir(root, { recursive: true })
 
-    const base = input?.name ? slug(input.name) : ""
-    const info = await candidate(root, base || undefined)
+    const branch = input?.branch?.trim() || ""
+    if (branch && branch.startsWith(MANAGED_PREFIX)) {
+      throw new CreateFailedError({
+        message: `Branches under '${MANAGED_PREFIX}' are reserved for auto-generated worktrees`,
+      })
+    }
 
-    const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
+    if (branch) {
+      const checked = await $`git check-ref-format --branch ${branch}`.quiet().nothrow().cwd(Instance.worktree)
+      if (checked.exitCode !== 0) {
+        throw new CreateFailedError({ message: `Invalid branch name: ${branch}` })
+      }
+
+      const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+      if (list.exitCode !== 0) {
+        throw new CreateFailedError({ message: errorText(list) || "Failed to read git worktrees" })
+      }
+
+      const used = outputText(list.stdout)
+        .split("\n")
+        .map((line) => line.trim())
+        .reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+          if (!line) return acc
+          if (line.startsWith("worktree ")) {
+            acc.push({ path: line.slice("worktree ".length).trim() })
+            return acc
+          }
+          const current = acc[acc.length - 1]
+          if (!current) return acc
+          if (line.startsWith("branch ")) {
+            current.branch = line.slice("branch ".length).trim()
+          }
+          return acc
+        }, [])
+        .map((entry) => ({
+          path: entry.path,
+          branch: entry.branch?.replace(/^refs\/heads\//, ""),
+        }))
+        .find((entry) => entry.branch === branch)
+
+      if (used?.path) {
+        throw new CreateFailedError({ message: `Branch '${branch}' is already checked out at ${used.path}` })
+      }
+    }
+
+    const base = input?.name ? slug(input.name) : branch ? slug(branch) : ""
+    const info = await candidate(root, base || undefined, branch || undefined)
+
+    const ref = branch ? `refs/heads/${branch}` : ""
+    const branchExists = branch
+      ? await $`git show-ref --verify --quiet ${ref}`
+          .quiet()
+          .nothrow()
+          .cwd(Instance.worktree)
+          .then((x) => x.exitCode === 0)
+      : false
+
+    const created = await (async () => {
+      if (!branch) {
+        return $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
+          .quiet()
+          .nothrow()
+          .cwd(Instance.worktree)
+      }
+
+      if (branchExists) {
+        return $`git worktree add --no-checkout ${info.directory} ${branch}`.quiet().nothrow().cwd(Instance.worktree)
+      }
+
+      return $`git worktree add --no-checkout -b ${branch} ${info.directory}`.quiet().nothrow().cwd(Instance.worktree)
+    })()
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
@@ -495,7 +570,7 @@ export namespace Worktree {
     await clean(entry.path)
 
     const branch = entry.branch?.replace(/^refs\/heads\//, "")
-    if (branch) {
+    if (branch && branch.startsWith(MANAGED_PREFIX)) {
       const deleted = await $`git branch -D ${branch}`.quiet().nothrow().cwd(Instance.worktree)
       if (deleted.exitCode !== 0) {
         throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
@@ -547,6 +622,14 @@ export namespace Worktree {
     })()
     if (!entry?.path) {
       throw new ResetFailedError({ message: "Worktree not found" })
+    }
+
+    const branch = entry.branch?.replace(/^refs\/heads\//, "")
+    if (!branch) {
+      throw new ResetFailedError({ message: "Worktree branch not found" })
+    }
+    if (!branch.startsWith(MANAGED_PREFIX)) {
+      throw new ResetFailedError({ message: `Cannot reset a workspace on branch '${branch}'` })
     }
 
     const remoteList = await $`git remote`.quiet().nothrow().cwd(Instance.worktree)

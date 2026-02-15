@@ -10475,6 +10475,10 @@
           "name": {
             "type": "string"
           },
+          "branch": {
+            "description": "Git branch name to use for this workspace (worktree). If omitted, OpenCode creates a new branch.",
+            "type": "string"
+          },
           "startCommand": {
             "description": "Additional startup script to run after the project's start command",
             "type": "string"

@@ -2031,6 +2031,10 @@ export type Worktree = {
 export type WorktreeCreateInput = {
   name?: string
   /**
+   * Git branch name to use for this workspace (worktree). If omitted, OpenCode creates a new branch.
+   */
+  branch?: string
+  /**
    * Additional startup script to run after the project's start command
    */
   startCommand?: string
