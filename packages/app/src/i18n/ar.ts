@@ -441,6 +441,8 @@ export const dict = {
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
+  "session.files.viewPreview": "استعراض",
+  "session.files.viewSource": "مصدر",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
   "session.messages.loadingEarlier": "جارٍ تحميل الرسائل السابقة...",
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",

@@ -497,6 +497,8 @@ export const dict = {
   "session.files.selectToOpen": "Odaberi datoteku za otvaranje",
   "session.files.all": "Sve datoteke",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
+  "session.files.viewPreview": "Pregled",
+  "session.files.viewSource": "Izvorni kod",
 
   "session.messages.renderEarlier": "Prikaži ranije poruke",
   "session.messages.loadingEarlier": "Učitavanje ranijih poruka...",

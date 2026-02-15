@@ -443,6 +443,8 @@ export const dict = {
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
   "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",
+  "session.files.viewPreview": "Podgląd",
+  "session.files.viewSource": "Źródło",
   "session.messages.renderEarlier": "Renderuj wcześniejsze wiadomości",
   "session.messages.loadingEarlier": "Ładowanie wcześniejszych wiadomości...",
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",

@@ -490,6 +490,8 @@ export const dict = {
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
   "session.files.binaryContent": "二進位檔案（無法顯示內容）",
+  "session.files.viewPreview": "預覽",
+  "session.files.viewSource": "原始碼",
   "session.messages.renderEarlier": "顯示更早的訊息",
   "session.messages.loadingEarlier": "正在載入更早的訊息...",
   "session.messages.loadEarlier": "載入更早的訊息",

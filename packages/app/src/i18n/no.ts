@@ -498,6 +498,8 @@ export const dict = {
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
   "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
+  "session.files.viewPreview": "Forhåndsvisning",
+  "session.files.viewSource": "Kilde",
 
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",

@@ -497,6 +497,8 @@ export const dict = {
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
   "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",
+  "session.files.viewPreview": "Предпросмотр",
+  "session.files.viewSource": "Исходный код",
   "session.messages.renderEarlier": "Показать предыдущие сообщения",
   "session.messages.loadingEarlier": "Загрузка предыдущих сообщений...",
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",
