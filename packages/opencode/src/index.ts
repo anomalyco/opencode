@@ -31,6 +31,7 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import path from "path"
+import { Instance } from "./project/instance"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
@@ -165,6 +166,19 @@ cli = cli
   })
   .strict()
 
+// Dispose instances on termination to prevent orphan MCP/LSP processes
+let cleanupDone = false
+async function cleanup(signal: string) {
+  if (cleanupDone) return
+  cleanupDone = true
+  Log.Default.info("cleanup triggered", { signal })
+  try {
+    await Instance.disposeAll()
+  } catch {}
+}
+process.on("SIGINT", () => cleanup("SIGINT").then(() => process.exit(130)))
+process.on("SIGTERM", () => cleanup("SIGTERM").then(() => process.exit(143)))
+
 try {
   await cli.parse()
 } catch (e) {
@@ -205,6 +219,7 @@ try {
   }
   process.exitCode = 1
 } finally {
+  await cleanup("exit")
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
