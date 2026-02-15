@@ -452,6 +452,8 @@ export const dict = {
   "session.files.selectToOpen": "Datei zum Öffnen auswählen",
   "session.files.all": "Alle Dateien",
   "session.files.binaryContent": "Binärdatei (Inhalt kann nicht angezeigt werden)",
+  "session.files.viewPreview": "Vorschau",
+  "session.files.viewSource": "Quelltext",
   "session.messages.renderEarlier": "Frühere Nachrichten rendern",
   "session.messages.loadingEarlier": "Lade frühere Nachrichten...",
   "session.messages.loadEarlier": "Frühere Nachrichten laden",

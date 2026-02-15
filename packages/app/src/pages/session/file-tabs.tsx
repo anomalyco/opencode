@@ -1,4 +1,4 @@
-import { type ValidComponent, createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { type ValidComponent, createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { sampledChecksum } from "@opencode-ai/util/encode"
@@ -7,6 +7,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { useLayout } from "@/context/layout"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
@@ -59,6 +61,18 @@ export function FileTabContent(props: {
     return c?.mimeType === "image/svg+xml"
   })
   const isBinary = createMemo(() => state()?.content?.type === "binary")
+  const isMarkdown = createMemo(() => {
+    const p = path()
+    return p?.toLowerCase().endsWith(".md") || p?.toLowerCase().endsWith(".markdown")
+  })
+  const [previewMode, setPreviewMode] = createSignal(true)
+
+  createEffect(() => {
+    const isMarkdownFile = isMarkdown()
+    if (isMarkdownFile) {
+      setPreviewMode(true)
+    }
+  })
   const svgContent = createMemo(() => {
     if (!isSvg()) return
     const c = state()?.content
@@ -483,6 +497,28 @@ export function FileTabContent(props: {
       }}
       onScroll={handleScroll}
     >
+      <Show when={state()?.loaded && isMarkdown()}>
+        <div class="sticky top-0 z-10 flex justify-end items-center gap-2 px-6 py-2 bg-background-base border-b border-border-weak-base">
+          <div class="flex items-center gap-1 bg-background-stronger rounded-md p-1">
+            <IconButton
+              icon="code"
+              size="small"
+              variant={!previewMode() ? "primary" : "ghost"}
+              onClick={() => setPreviewMode(false)}
+              aria-label={props.language.t("session.files.viewSource")}
+              title={props.language.t("session.files.viewSource")}
+            />
+            <IconButton
+              icon="eye"
+              size="small"
+              variant={previewMode() ? "primary" : "ghost"}
+              onClick={() => setPreviewMode(true)}
+              aria-label={props.language.t("session.files.viewPreview")}
+              title={props.language.t("session.files.viewPreview")}
+            />
+          </div>
+        </div>
+      </Show>
       <Switch>
         <Match when={state()?.loaded && isImage()}>
           <div class="px-6 py-4 pb-40">
@@ -511,6 +547,11 @@ export function FileTabContent(props: {
               <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
               <div class="text-14-regular text-text-weak">{props.language.t("session.files.binaryContent")}</div>
             </div>
+          </div>
+        </Match>
+        <Match when={state()?.loaded && isMarkdown() && previewMode()}>
+          <div class="px-6 py-4 pb-40">
+            <Markdown text={contents()} cacheKey={cacheKey()} />
           </div>
         </Match>
         <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
