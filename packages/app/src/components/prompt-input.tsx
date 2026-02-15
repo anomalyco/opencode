@@ -1043,8 +1043,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
     // and should always insert a newline regardless of composition state
     if (event.key === "Enter" && event.shiftKey) {
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
+      event.stopPropagation()
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
       return
     }
 
@@ -1728,6 +1729,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Show>
       <form
         onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          // Prevent form submission on Shift+Enter - we want newline insertion instead
+          if (e.key === "Enter" && e.shiftKey) {
+            e.preventDefault()
+          }
+        }}
         classList={{
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,

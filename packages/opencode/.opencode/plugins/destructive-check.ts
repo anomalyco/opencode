@@ -319,24 +319,55 @@ async function destructiveCheck(_input: {
     async ["permission.ask"](
       input: {
         id: string
-        type: string
+        // Old permission system uses 'type', new system uses 'permission'
+        type?: string
+        permission?: string
         pattern?: string | string[]
+        patterns?: string[]
         sessionID: string
-        messageID: string
+        messageID?: string
         callID?: string
-        title: string
+        title?: string
         metadata: Record<string, unknown>
-        time: { created: number }
+        time?: { created: number }
       },
       output: { status: "ask" | "deny" | "allow" },
     ): Promise<void> {
       const stats = getStats(input.sessionID)
 
-      // Check if this is a bash/command execution permission
-      if (input.type === "bash" || input.type === "command" || input.type === "shell") {
-        const command = (input.metadata?.command as string) || input.title || ""
+      // Get permission type from either old or new system
+      const permissionType = input.permission || input.type || ""
 
-        if (command) {
+      // Check if this is a bash/command execution permission
+      if (permissionType === "bash" || permissionType === "command" || permissionType === "shell") {
+        // Get commands from patterns (new system) or metadata/title (old system)
+        const patterns =
+          input.patterns || (Array.isArray(input.pattern) ? input.pattern : input.pattern ? [input.pattern] : [])
+
+        // Check each pattern individually for destructive commands
+        for (const pattern of patterns) {
+          const match = checkCommand(pattern)
+          if (match) {
+            stats.permissionsRequested++
+            global.permissionsRequested++
+            stats.lastMatch = match
+
+            console.warn(
+              `[destructive-check] PERMISSION REQUIRED: ${match.severity.toUpperCase()} destructive command detected`,
+            )
+            console.warn(`  Category: ${match.category}`)
+            console.warn(`  Severity: ${match.severity}`)
+            console.warn(`  Command: ${pattern.slice(0, 100)}${pattern.length > 100 ? "..." : ""}`)
+
+            // Ask for permission for all severity levels
+            output.status = "ask"
+            return
+          }
+        }
+
+        // Also check joined patterns and metadata as fallback
+        const command = patterns.join(" ") || (input.metadata?.command as string) || input.title || ""
+        if (command && patterns.length === 0) {
           const match = checkCommand(command)
           if (match) {
             stats.permissionsRequested++
@@ -358,8 +389,9 @@ async function destructiveCheck(_input: {
       }
 
       // Check file operations
-      if (input.type === "write" || input.type === "edit" || input.type === "delete") {
-        const patterns = Array.isArray(input.pattern) ? input.pattern : input.pattern ? [input.pattern] : []
+      if (permissionType === "write" || permissionType === "edit" || permissionType === "delete") {
+        const patterns =
+          input.patterns || (Array.isArray(input.pattern) ? input.pattern : input.pattern ? [input.pattern] : [])
         for (const p of patterns) {
           if (isDangerousPath(p)) {
             stats.permissionsRequested++

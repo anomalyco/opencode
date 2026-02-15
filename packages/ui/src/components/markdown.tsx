@@ -117,9 +117,28 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
     const content = code?.textContent ?? ""
     if (!content) return
-    const clipboard = navigator?.clipboard
-    if (!clipboard) return
-    await clipboard.writeText(content)
+    const fallbackCopy = () => {
+      const area = document.createElement("textarea")
+      area.value = content
+      area.style.position = "fixed"
+      area.style.left = "-9999px"
+      area.style.top = "0"
+      document.body.appendChild(area)
+      area.focus()
+      area.select()
+      document.execCommand("copy")
+      area.remove()
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content)
+      } catch {
+        fallbackCopy()
+      }
+    } else {
+      fallbackCopy()
+    }
     setCopyState(button, labels, true)
     const existing = timeouts.get(button)
     if (existing) clearTimeout(existing)

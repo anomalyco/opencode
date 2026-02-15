@@ -1,0 +1,19 @@
+{
+  "name": "@opencode-ai/loop-runner",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.51.0",
+    "@tsconfig/bun": "^1.0.7",
+    "bun-types": "latest"
+  }
+}

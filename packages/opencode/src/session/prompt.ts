@@ -447,10 +447,34 @@ export namespace SessionPrompt {
             } satisfies MessageV2.ToolPart)
           },
           async ask(req) {
+            // Allow plugins to intercept permission requests
+            const pluginResult = await Plugin.trigger(
+              "permission.ask",
+              {
+                ...req,
+                sessionID: sessionID,
+              },
+              {
+                status: undefined as "ask" | "deny" | "allow" | undefined,
+              },
+            )
+
+            // If plugin denies, throw error
+            if (pluginResult.status === "deny") {
+              throw new Error(`Permission denied by plugin for ${req.permission}`)
+            }
+
+            // If plugin allows, skip the normal permission flow
+            if (pluginResult.status === "allow") {
+              return
+            }
+
+            // If plugin explicitly requests "ask", bypass ruleset auto-allow to force prompt
+            const forceAsk = pluginResult.status === "ask"
             await PermissionNext.ask({
               ...req,
               sessionID: sessionID,
-              ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
+              ruleset: forceAsk ? [] : PermissionNext.merge(taskAgent.permission, session.permission ?? []),
             })
           },
         }
@@ -729,11 +753,35 @@ export namespace SessionPrompt {
         }
       },
       async ask(req) {
+        // Allow plugins to intercept permission requests
+        const pluginResult = await Plugin.trigger(
+          "permission.ask",
+          {
+            ...req,
+            sessionID: input.session.id,
+          },
+          {
+            status: undefined as "ask" | "deny" | "allow" | undefined,
+          },
+        )
+
+        // If plugin denies, throw error
+        if (pluginResult.status === "deny") {
+          throw new Error(`Permission denied by plugin for ${req.permission}`)
+        }
+
+        // If plugin allows, skip the normal permission flow
+        if (pluginResult.status === "allow") {
+          return
+        }
+
+        // If plugin explicitly requests "ask", bypass ruleset auto-allow to force prompt
+        const forceAsk = pluginResult.status === "ask"
         await PermissionNext.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset: forceAsk ? [] : PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
         })
       },
     })

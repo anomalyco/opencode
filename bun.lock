@@ -389,6 +389,17 @@
         "zod-to-json-schema": "3.24.5",
       },
     },
+    "packages/opencode-destructive-check": {
+      "name": "@sureshsankaran/opencode-destructive-check",
+      "version": "1.0.5",
+      "devDependencies": {
+        "@opencode-ai/plugin": "^1.2.2",
+        "typescript": "^5.0.0",
+      },
+      "peerDependencies": {
+        "@opencode-ai/plugin": ">=1.0.0",
+      },
+    },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
       "version": "1.1.34",
@@ -1747,6 +1758,8 @@
     "@stripe/stripe-js": ["@stripe/stripe-js@8.6.1", "", {}, "sha512-UJ05U2062XDgydbUcETH1AoRQLNhigQ2KmDn1BG8sC3xfzu6JKg95Qt6YozdzFpxl1Npii/02m2LEWFt1RYjVA=="],
 
     "@sureshsankaran/context-drain": ["@sureshsankaran/context-drain@workspace:packages/context-drain"],
+
+    "@sureshsankaran/opencode-destructive-check": ["@sureshsankaran/opencode-destructive-check@workspace:packages/opencode-destructive-check"],
 
     "@sureshsankaran/ralph-wiggum": ["@sureshsankaran/ralph-wiggum@workspace:packages/ralph-wiggum"],
 
@@ -4354,6 +4367,10 @@
 
     "@sureshsankaran/context-drain/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
+    "@sureshsankaran/opencode-destructive-check/@opencode-ai/plugin": ["@opencode-ai/plugin@1.2.2", "", { "dependencies": { "@opencode-ai/sdk": "1.2.2", "zod": "4.1.8" } }, "sha512-uw/pY1VO5vYY1+x2r2DJPxT1N41cI9Q/J0rNIcb/5e9Cmt69dB9BEaDdG+y8XQIlVerRFKLllO+FbE7z1b3XTA=="],
+
+    "@sureshsankaran/opencode-destructive-check/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
     "@sureshsankaran/ralph-wiggum/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "@tailwindcss/oxide/detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
@@ -5007,6 +5024,8 @@
     "@solidjs/start/shiki/@shikijs/types": ["@shikijs/types@1.29.2", "", { "dependencies": { "@shikijs/vscode-textmate": "^10.0.1", "@types/hast": "^3.0.4" } }, "sha512-VJjK0eIijTZf0QSTODEXCqinjBn0joAHQ+aPSBzrv4O2d/QSbsMw+ZeSRx03kV34Hy7NzUvV/7NqfYGRLrASmw=="],
 
     "@solidjs/start/vite/fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
+
+    "@sureshsankaran/opencode-destructive-check/@opencode-ai/plugin/@opencode-ai/sdk": ["@opencode-ai/sdk@1.2.2", "", {}, "sha512-vdCSRoqZdh2ruof8w5nIRuCXeVdNP0ffOHm9p74cAAKkupptQ5khRwBB9U0mcWEL7ey7cZ4gttvGnHMRGn+TPg=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@napi-rs/wasm-runtime/@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 

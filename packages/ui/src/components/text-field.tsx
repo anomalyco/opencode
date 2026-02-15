@@ -55,7 +55,30 @@ export function TextField(props: TextFieldProps) {
 
   async function handleCopy() {
     const value = local.value ?? local.defaultValue ?? ""
-    await navigator.clipboard.writeText(value)
+
+    const fallbackCopy = () => {
+      const area = document.createElement("textarea")
+      area.value = value
+      area.style.position = "fixed"
+      area.style.left = "-9999px"
+      area.style.top = "0"
+      document.body.appendChild(area)
+      area.focus()
+      area.select()
+      document.execCommand("copy")
+      area.remove()
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value)
+      } catch {
+        fallbackCopy()
+      }
+    } else {
+      fallbackCopy()
+    }
+
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

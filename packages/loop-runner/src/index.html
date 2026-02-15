@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenCode Loop Runner</title>
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --surface: #141414;
+        --border: #2a2a2a;
+        --text: #e0e0e0;
+        --text-dim: #888;
+        --accent: #6366f1;
+        --accent-dim: #4f46e5;
+        --success: #22c55e;
+        --error: #ef4444;
+        --warning: #f59e0b;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 24px;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--text-dim);
+      }
+      .status-dot.running {
+        background: var(--success);
+        animation: pulse 1.5s infinite;
+      }
+      .status-dot.stopped {
+        background: var(--error);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 24px;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+      }
+      .panel-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 16px;
+      }
+      .form-group {
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 80px;
+        font-family: "Monaco", "Menlo", monospace;
+        font-size: 12px;
+      }
+      textarea.large {
+        min-height: 150px;
+      }
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: white;
+      }
+      .btn-primary:hover {
+        background: var(--accent-dim);
+      }
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-danger {
+        background: var(--error);
+        color: white;
+      }
+      .btn-danger:hover {
+        background: #dc2626;
+      }
+      .btn-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 20px;
+      }
+      .output-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .output-section {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        flex: 1;
+        overflow: auto;
+      }
+      .output-section h3 {
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .output-content {
+        font-family: "Monaco", "Menlo", monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .iteration-badge {
+        background: var(--accent);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+      .log-entry {
+        padding: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+      .log-time {
+        font-size: 10px;
+        color: var(--text-dim);
+      }
+      .log-type {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-left: 8px;
+      }
+      .log-type.prompt {
+        background: #3b82f6;
+        color: white;
+      }
+      .log-type.response {
+        background: var(--success);
+        color: white;
+      }
+      .log-type.error {
+        background: var(--error);
+        color: white;
+      }
+      .log-type.monitor {
+        background: var(--warning);
+        color: black;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+      }
+      .tab {
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .tab.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      .memory-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+      }
+      .inline-group {
+        display: flex;
+        gap: 12px;
+      }
+      .inline-group .form-group {
+        flex: 1;
+      }
+      .help-text {
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+      .history-list {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .history-item {
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+      .history-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      .history-prompt,
+      .history-response {
+        font-family: "Monaco", "Menlo", monospace;
+        font-size: 11px;
+        padding: 8px;
+        background: var(--bg);
+        border-radius: 4px;
+        margin-top: 8px;
+        max-height: 100px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .history-label {
+        font-size: 10px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>OpenCode Loop Runner</h1>
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Disconnected</span>
+          <span style="margin-left: 12px; color: var(--text-dim)">Iteration: <span id="iterationCount">0</span></span>
+        </div>
+      </header>
+
+      <div class="grid">
+        <div class="sidebar">
+          <div class="panel">
+            <div class="panel-title">Configuration</div>
+
+            <div class="form-group">
+              <label>Model</label>
+              <select id="modelSelect">
+                <option value="">Loading models...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>System Prompt</label>
+              <textarea id="systemPrompt" class="large" placeholder="Enter the fixed system prompt..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>User Prompt (per iteration)</label>
+              <textarea id="userPrompt" placeholder="Enter the user prompt that runs each iteration..."></textarea>
+            </div>
+
+            <div class="inline-group">
+              <div class="form-group">
+                <label>Interval (ms)</label>
+                <input type="number" id="interval" value="5000" min="1000" />
+              </div>
+              <div class="form-group">
+                <label>Max Iterations</label>
+                <input type="number" id="maxIterations" value="0" min="0" />
+                <div class="help-text">0 = unlimited</div>
+              </div>
+            </div>
+
+            <div class="memory-section">
+              <div class="panel-title">Monitor Command</div>
+              <div class="form-group">
+                <label>Command</label>
+                <input type="text" id="monitorCommand" placeholder="e.g., tail -n 20 /var/log/app.log" />
+              </div>
+              <div class="form-group">
+                <label>Interval (ms)</label>
+                <input type="number" id="monitorInterval" value="10000" min="1000" />
+              </div>
+            </div>
+
+            <div class="btn-group">
+              <button class="btn-primary" id="startBtn">Start Loop</button>
+              <button class="btn-danger" id="stopBtn" disabled>Stop</button>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top: 16px">
+            <div class="panel-title">Memory Sections</div>
+
+            <div class="form-group">
+              <label>Working Memory <span style="color: var(--warning)">(cleared each iteration)</span></label>
+              <textarea id="workingMemory" placeholder="Temporary notes for this iteration only..."></textarea>
+              <button class="btn-primary" style="margin-top: 8px; width: 100%" id="updateWorkingBtn">
+                Update Working Memory
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label>Persistent Memory <span style="color: var(--success)">(maintained across iterations)</span></label>
+              <textarea
+                id="persistentMemory"
+                class="large"
+                placeholder="Long-term context, goals, instructions..."
+              ></textarea>
+              <button class="btn-primary" style="margin-top: 8px; width: 100%" id="updatePersistentBtn">
+                Update Persistent Memory
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-panel">
+          <div class="tabs">
+            <button class="tab active" data-tab="live">Live Output</button>
+            <button class="tab" data-tab="history">History</button>
+            <button class="tab" data-tab="logs">Event Log</button>
+          </div>
+
+          <div id="liveTab" class="tab-content">
+            <div class="panel" style="flex: 1">
+              <div class="output-section">
+                <h3>
+                  Current Prompt
+                  <span class="iteration-badge" id="promptIteration">-</span>
+                </h3>
+                <div class="output-content" id="currentPrompt">Waiting for loop to start...</div>
+              </div>
+            </div>
+
+            <div class="panel" style="flex: 1">
+              <div class="output-section">
+                <h3>
+                  Last Response
+                  <span class="iteration-badge" id="responseIteration">-</span>
+                </h3>
+                <div class="output-content" id="lastResponse">No response yet...</div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="output-section">
+                <h3>Monitor Output</h3>
+                <div class="output-content" id="monitorOutput">No monitor configured...</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="historyTab" class="tab-content" style="display: none">
+            <div class="panel">
+              <div class="panel-title">Iteration History</div>
+              <div class="history-list" id="historyList">
+                <div style="color: var(--text-dim); text-align: center; padding: 40px">
+                  No history yet. Start the loop to see iterations here.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="logsTab" class="tab-content" style="display: none">
+            <div class="panel">
+              <div class="panel-title">Event Log</div>
+              <div class="output-section">
+                <div id="eventLog" style="max-height: 500px; overflow-y: auto"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API = "http://localhost:3456/api"
+      let eventSource = null
+      let state = { running: false, iteration: 0 }
+      let config = {}
+      let logs = []
+
+      // Elements
+      const $ = (id) => document.getElementById(id)
+      const statusDot = $("statusDot")
+      const statusText = $("statusText")
+      const iterationCount = $("iterationCount")
+      const modelSelect = $("modelSelect")
+      const systemPrompt = $("systemPrompt")
+      const userPrompt = $("userPrompt")
+      const interval = $("interval")
+      const maxIterations = $("maxIterations")
+      const monitorCommand = $("monitorCommand")
+      const monitorInterval = $("monitorInterval")
+      const workingMemory = $("workingMemory")
+      const persistentMemory = $("persistentMemory")
+      const startBtn = $("startBtn")
+      const stopBtn = $("stopBtn")
+      const currentPrompt = $("currentPrompt")
+      const lastResponse = $("lastResponse")
+      const monitorOutput = $("monitorOutput")
+      const promptIteration = $("promptIteration")
+      const responseIteration = $("responseIteration")
+      const eventLog = $("eventLog")
+      const historyList = $("historyList")
+
+      // Tab switching
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"))
+          document.querySelectorAll(".tab-content").forEach((c) => (c.style.display = "none"))
+          tab.classList.add("active")
+          $(`${tab.dataset.tab}Tab`).style.display = "block"
+        })
+      })
+
+      function updateUI() {
+        statusDot.className = "status-dot " + (state.running ? "running" : "stopped")
+        statusText.textContent = state.running ? "Running" : "Stopped"
+        iterationCount.textContent = state.iteration
+        startBtn.disabled = state.running
+        stopBtn.disabled = !state.running
+      }
+
+      function addLog(type, message) {
+        const time = new Date().toLocaleTimeString()
+        logs.unshift({ time, type, message })
+        if (logs.length > 100) logs.pop()
+        renderLogs()
+      }
+
+      function renderLogs() {
+        eventLog.innerHTML = logs
+          .map(
+            (log) => `
+        <div class="log-entry">
+          <span class="log-time">${log.time}</span>
+          <span class="log-type ${log.type}">${log.type}</span>
+          <div style="margin-top: 4px; font-size: 12px;">${escapeHtml(log.message.substring(0, 200))}${log.message.length > 200 ? "..." : ""}</div>
+        </div>
+      `,
+          )
+          .join("")
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div")
+        div.textContent = text
+        return div.innerHTML
+      }
+
+      function renderHistory(history) {
+        if (!history || history.length === 0) {
+          historyList.innerHTML =
+            '<div style="color: var(--text-dim); text-align: center; padding: 40px;">No history yet.</div>'
+          return
+        }
+        historyList.innerHTML = history
+          .slice()
+          .reverse()
+          .map(
+            (item) => `
+        <div class="history-item">
+          <div class="history-header">
+            <span>Iteration ${item.iteration}</span>
+            <span>${new Date(item.timestamp).toLocaleString()}</span>
+          </div>
+          <div class="history-label">Prompt</div>
+          <div class="history-prompt">${escapeHtml(item.prompt)}</div>
+          <div class="history-label" style="margin-top: 8px;">Response</div>
+          <div class="history-response">${escapeHtml(item.response)}</div>
+        </div>
+      `,
+          )
+          .join("")
+      }
+
+      async function loadModels() {
+        try {
+          const res = await fetch(`${API}/models`)
+          const models = await res.json()
+          modelSelect.innerHTML = models
+            .map((m) => `<option value="${m.providerID}/${m.modelID}">${m.providerID}/${m.name}</option>`)
+            .join("")
+          if (config.model) {
+            modelSelect.value = `${config.model.providerID}/${config.model.modelID}`
+          }
+        } catch (err) {
+          modelSelect.innerHTML = '<option value="">Failed to load models</option>'
+        }
+      }
+
+      function connectEvents() {
+        if (eventSource) eventSource.close()
+
+        eventSource = new EventSource(`${API}/events`)
+
+        eventSource.onmessage = (e) => {
+          const data = JSON.parse(e.data)
+
+          switch (data.type) {
+            case "connected":
+              state = data.state
+              config = data.config
+              updateUI()
+              loadConfig()
+              break
+            case "state":
+              state = data.state
+              updateUI()
+              break
+            case "iteration":
+              state.iteration = data.iteration
+              updateUI()
+              addLog("info", `Starting iteration ${data.iteration}`)
+              break
+            case "prompt":
+              currentPrompt.textContent = data.prompt
+              promptIteration.textContent = data.iteration
+              addLog("prompt", data.prompt)
+              break
+            case "response":
+              lastResponse.textContent = data.response
+              responseIteration.textContent = data.iteration
+              addLog("response", data.response)
+              loadHistory()
+              break
+            case "monitor":
+              monitorOutput.textContent = data.output
+              break
+            case "error":
+              addLog("error", data.message)
+              break
+            case "stopped":
+              state.running = false
+              updateUI()
+              addLog("info", "Loop stopped")
+              break
+            case "config":
+              config = data.config
+              break
+          }
+        }
+
+        eventSource.onerror = () => {
+          statusDot.className = "status-dot"
+          statusText.textContent = "Disconnected"
+          setTimeout(connectEvents, 3000)
+        }
+      }
+
+      function loadConfig() {
+        systemPrompt.value = config.system || ""
+        userPrompt.value = config.user || ""
+        interval.value = config.interval || 5000
+        maxIterations.value = config.maxIterations || 0
+        workingMemory.value = config.working || ""
+        persistentMemory.value = config.persistent || ""
+        if (config.monitor) {
+          monitorCommand.value = config.monitor.command || ""
+          monitorInterval.value = config.monitor.interval || 10000
+        }
+        loadModels()
+      }
+
+      async function loadHistory() {
+        try {
+          const res = await fetch(`${API}/history`)
+          const history = await res.json()
+          renderHistory(history)
+        } catch (err) {
+          console.error("Failed to load history:", err)
+        }
+      }
+
+      async function saveConfig() {
+        const [providerID, modelID] = modelSelect.value.split("/")
+        const newConfig = {
+          model: { providerID, modelID },
+          system: systemPrompt.value,
+          user: userPrompt.value,
+          interval: parseInt(interval.value) || 5000,
+          maxIterations: parseInt(maxIterations.value) || 0,
+          monitor: monitorCommand.value
+            ? {
+                command: monitorCommand.value,
+                interval: parseInt(monitorInterval.value) || 10000,
+              }
+            : null,
+        }
+
+        await fetch(`${API}/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newConfig),
+        })
+      }
+
+      startBtn.addEventListener("click", async () => {
+        await saveConfig()
+        await fetch(`${API}/start`, { method: "POST" })
+        addLog("info", "Loop started")
+      })
+
+      stopBtn.addEventListener("click", async () => {
+        await fetch(`${API}/stop`, { method: "POST" })
+      })
+
+      $("updateWorkingBtn").addEventListener("click", async () => {
+        await fetch(`${API}/working`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ working: workingMemory.value }),
+        })
+        addLog("info", "Working memory updated")
+      })
+
+      $("updatePersistentBtn").addEventListener("click", async () => {
+        await fetch(`${API}/persistent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ persistent: persistentMemory.value }),
+        })
+        addLog("info", "Persistent memory updated")
+      })
+
+      // Initialize
+      connectEvents()
+      loadHistory()
+    </script>
+  </body>
+</html>

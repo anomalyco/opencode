@@ -1,7 +1,6 @@
 ---
 description: Analyzes screen snapshots and provides insights on user activity
-mode: subagent
-model: anthropic/claude-haiku-4-20250514
+mode: primary
 temperature: 0.2
 steps: 3
 tools:

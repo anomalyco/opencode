@@ -1,6 +1,6 @@
 {
   "name": "@sureshsankaran/opencode-destructive-check",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "OpenCode plugin that checks for destructive commands before any tool/bash call and asks for permission",
   "main": "src/index.ts",
   "types": "src/index.ts",

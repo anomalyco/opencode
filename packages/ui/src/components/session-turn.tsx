@@ -363,7 +363,30 @@ export function SessionTurn(
   const handleCopy = async () => {
     const content = response() ?? ""
     if (!content) return
-    await navigator.clipboard.writeText(content)
+
+    const fallbackCopy = () => {
+      const area = document.createElement("textarea")
+      area.value = content
+      area.style.position = "fixed"
+      area.style.left = "-9999px"
+      area.style.top = "0"
+      document.body.appendChild(area)
+      area.focus()
+      area.select()
+      document.execCommand("copy")
+      area.remove()
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content)
+      } catch {
+        fallbackCopy()
+      }
+    } else {
+      fallbackCopy()
+    }
+
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
