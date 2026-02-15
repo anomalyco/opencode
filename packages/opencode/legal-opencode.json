@@ -1,0 +1,45 @@
+{
+  "//": "法律智能助手配置文件",
+  "//": "复制此文件为 opencode.json 并填入你的 API 密钥",
+
+  "model": "deepseek/deepseek-chat",
+
+  "experimental": {
+    "legal_mode": true
+  },
+
+  "providers": {
+    "deepseek": {
+      "type": "openai",
+      "baseURL": "https://api.deepseek.com",
+      "apiKey": "YOUR_DEEPSEEK_API_KEY"
+    },
+    "qwen": {
+      "type": "openai",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "apiKey": "YOUR_DASHSCOPE_API_KEY"
+    },
+    "zhipu": {
+      "type": "openai",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKey": "YOUR_ZHIPU_API_KEY"
+    }
+  },
+
+  "mcp": {
+    "law-regulation": {
+      "type": "remote",
+      "url": "https://your-law-server.com/mcp",
+      "enabled": false,
+      "description": "法规库检索服务"
+    },
+    "law-case": {
+      "type": "remote",
+      "url": "https://your-case-server.com/mcp",
+      "enabled": false,
+      "description": "案例库检索服务"
+    }
+  },
+
+  "agent": "case_reviewer"
+}

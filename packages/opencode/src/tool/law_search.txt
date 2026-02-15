@@ -1,0 +1,33 @@
+检索法律法规和类案参考。
+
+检索类型：
+- law: 法律法规（刑法、民法、行政法规等）
+- case: 类案参考（指导性案例、典型案例）
+- all: 全部（默认）
+
+参数：
+- query: 检索关键词或法律问题
+- searchType: 检索类型（可选，默认all）
+- limit: 返回结果数量（可选，默认10条）
+
+输出：
+- 匹配的法规或案例列表
+- 每条结果包含：类型、标题、来源、相关度、摘要
+
+使用示例：
+- 检索盗窃罪法条：law_search({ query: "盗窃罪 构成要件" })
+- 检索类案：law_search({ query: "合同诈骗", searchType: "case" })
+- 综合检索：law_search({ query: "自首 认定", searchType: "all", limit: 20 })
+
+注意：
+需要配置法律检索MCP服务才能使用此功能。
+在 opencode.json 中添加：
+{
+  "mcp": {
+    "law-regulation": {
+      "type": "remote",
+      "url": "https://your-law-server.com/mcp",
+      "enabled": true
+    }
+  }
+}

@@ -9,11 +9,30 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+
+// 法律领域专用提示词
+import PROMPT_LEGAL_BASE from "./prompt/legal_base.txt"
+import PROMPT_CASE_REVIEW from "./prompt/case_review.txt"
+import PROMPT_DOCUMENT_DRAFT from "./prompt/document_draft.txt"
+
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
   export function instructions() {
     return PROMPT_CODEX.trim()
+  }
+
+  // 法律领域专用提示词选择
+  export function legal(agentName: string): string[] {
+    switch (agentName) {
+      case "case_reviewer":
+        return [PROMPT_LEGAL_BASE, PROMPT_CASE_REVIEW]
+      case "doc_assistant":
+        return [PROMPT_LEGAL_BASE, PROMPT_DOCUMENT_DRAFT]
+      case "legal_advisor":
+      default:
+        return [PROMPT_LEGAL_BASE]
+    }
   }
 
   export function provider(model: Provider.Model) {

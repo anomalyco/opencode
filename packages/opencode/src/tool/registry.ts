@@ -28,6 +28,21 @@ import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
 
+// 法律领域专用工具
+import { LawReadTool } from "./law_read"
+import { LawWriteTool } from "./law_write"
+import { LawSearchTool } from "./law_search"
+
+// 法律领域禁用的编码工具
+export const DISABLED_TOOLS_FOR_LEGAL = new Set([
+  "glob",
+  "grep",
+  "lsp",
+  "apply_patch",
+  "multiedit",
+  "codesearch",
+])
+
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
@@ -95,13 +110,15 @@ export namespace ToolRegistry {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
 
-    return [
+    // 检查是否为法律模式
+    const isLegalMode = config.experimental?.legal_mode === true
+
+    // 基础工具列表
+    const baseTools: Tool.Info[] = [
       InvalidTool,
       ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
-      GlobTool,
-      GrepTool,
       EditTool,
       WriteTool,
       TaskTool,
@@ -109,12 +126,30 @@ export namespace ToolRegistry {
       TodoWriteTool,
       // TodoReadTool,
       WebSearchTool,
-      CodeSearchTool,
       SkillTool,
-      ApplyPatchTool,
-      ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
+    ]
+
+    // 法律模式工具配置
+    if (isLegalMode) {
+      return [
+        ...baseTools.filter(t => !DISABLED_TOOLS_FOR_LEGAL.has(t.id)),
+        LawReadTool,
+        LawWriteTool,
+        LawSearchTool,
+        ...custom,
+      ]
+    }
+
+    // 标准编码模式
+    return [
+      ...baseTools,
+      GlobTool,
+      GrepTool,
+      CodeSearchTool,
+      ApplyPatchTool,
+      ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...custom,
     ]
   }
