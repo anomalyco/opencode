@@ -37,8 +37,12 @@ export const ReadTool = Tool.define("read", {
 
     const stat = Filesystem.stat(filepath)
 
+    const bypassExternal =
+      Boolean(ctx.extra?.["bypassCwdCheck"]) ||
+      (!Instance.containsPath(filepath) && (await InstructionPrompt.systemPaths()).has(filepath))
+
     await assertExternalDirectory(ctx, filepath, {
-      bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+      bypass: bypassExternal,
       kind: stat?.isDirectory() ? "directory" : "file",
     })
 
