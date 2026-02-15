@@ -364,6 +364,7 @@ export const dict = {
   "context.stats.totalCost": "Ukupni trošak",
   "context.stats.sessionCreated": "Sesija kreirana",
   "context.stats.lastActivity": "Posljednja aktivnost",
+
   "context.usage.tokens": "Tokeni",
   "context.usage.usage": "Korištenje",
   "context.usage.cost": "Trošak",

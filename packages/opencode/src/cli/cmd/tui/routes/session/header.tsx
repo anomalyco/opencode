@@ -37,10 +37,8 @@ export function Header() {
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
   const cost = createMemo(() => {
-    const total = pipe(
-      messages(),
-      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
-    )
+	const result = costs(route.sessionID, sync.data)
+    const total = result.total
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
