@@ -267,63 +267,88 @@ export namespace ACP {
           const prev = this.permissionQueues.get(question.sessionID) ?? Promise.resolve()
           const next = prev
             .then(async () => {
-              const firstQuestion = question.questions[0]
-              if (!firstQuestion) return
+              // 收集所有答案
+              const allAnswers: string[][] = []
 
-              const options: PermissionOption[] = firstQuestion.options.map((o: any) => ({
-                optionId: o.label.toLowerCase().replace(/\s+/g, "-"),
-                kind: "allow_once",
-                name: o.label,
-                description: o.description,
-              }))
-              options.push({ optionId: "cancel", kind: "reject_once", name: "Cancel" })
+              // Check for text-only questions (no options = requires free-form text input)
+              const textOnlyQuestions = question.questions.filter((q) => !q.options || q.options.length === 0)
 
-              const res = await this.connection
-                .requestPermission({
-                  sessionId: question.sessionID,
-                  toolCall: {
-                    toolCallId: question.id,
-                    status: "pending",
-                    title: firstQuestion.header || firstQuestion.question,
-                    rawInput: { questions: question.questions },
-                    kind: "other",
-                  },
-                  options,
+              // Reject if any text-only questions exist (text input not supported in ACP mode)
+              // This maintains the question tool contract - we can only provide complete answers or reject
+              if (textOnlyQuestions.length > 0) {
+                log.info("Text-only questions not supported in ACP mode, rejecting question tool", {
+                  questionID: question.id,
+                  textOnlyCount: textOnlyQuestions.length,
+                  totalCount: question.questions.length,
                 })
-                .catch(async (error) => {
-                  log.error("failed to request permission for question", {
-                    error,
-                    questionID: question.id,
-                    sessionID: question.sessionID,
+                await this.sdk.question.reject({ requestID: question.id })
+                return
+              }
+
+              for (let i = 0; i < question.questions.length; i++) {
+                const q = question.questions[i]
+                if (!q) continue
+
+                const options: PermissionOption[] = q.options.map((o: any) => ({
+                  optionId: o.label.toLowerCase().replace(/\s+/g, "-"),
+                  kind: "allow_once",
+                  name: o.label,
+                  description: o.description,
+                }))
+                options.push({ optionId: "cancel", kind: "reject_once", name: "Cancel" })
+
+                // 为每个问题单独发起 request_permission
+                const res = await this.connection
+                  .requestPermission({
+                    sessionId: question.sessionID,
+                    toolCall: {
+                      toolCallId: `${question.id}-${i}`,
+                      status: "pending",
+                      title: q.header && q.question ? `${q.header}: ${q.question}` : q.header || q.question,
+                      rawInput: { questions: [q] },
+                      kind: "other",
+                    },
+                    options,
                   })
+                  .catch(async (error) => {
+                    log.error("failed to request permission for question", {
+                      error,
+                      questionID: question.id,
+                      sessionID: question.sessionID,
+                    })
+                    return undefined
+                  })
+
+                if (!res || res.outcome.outcome !== "selected") {
                   await this.sdk.question.reject({ requestID: question.id })
-                  return undefined
+                  return
+                }
+
+                const outcome = res.outcome as { outcome: "selected"; optionId: string }
+                if (outcome.optionId === "cancel") {
+                  await this.sdk.question.reject({ requestID: question.id })
+                  return
+                }
+
+                const selectedOption = q.options.find(
+                  (o: any) => o.label.toLowerCase().replace(/\s+/g, "-") === outcome.optionId,
+                )
+                if (!selectedOption) {
+                  await this.sdk.question.reject({ requestID: question.id })
+                  return
+                }
+
+                // 收集答案（即使是多选题，当前也按单选处理）
+                allAnswers.push([selectedOption.label])
+              }
+
+              // 一次性回复所有答案
+              if (allAnswers.length > 0) {
+                await this.sdk.question.reply({
+                  requestID: question.id,
+                  answers: allAnswers,
                 })
-
-              if (!res) return
-              if (res.outcome.outcome !== "selected") {
-                await this.sdk.question.reject({ requestID: question.id })
-                return
               }
-
-              const outcome = res.outcome as { outcome: "selected"; optionId: string }
-              if (outcome.optionId === "cancel") {
-                await this.sdk.question.reject({ requestID: question.id })
-                return
-              }
-
-              const selectedOption = firstQuestion.options.find(
-                (o: any) => o.label.toLowerCase().replace(/\s+/g, "-") === outcome.optionId,
-              )
-              if (!selectedOption) {
-                await this.sdk.question.reject({ requestID: question.id })
-                return
-              }
-
-              await this.sdk.question.reply({
-                requestID: question.id,
-                answers: [[selectedOption.label]],
-              })
             })
             .catch((error) => {
               log.error("failed to handle question", { error, questionID: question.id })

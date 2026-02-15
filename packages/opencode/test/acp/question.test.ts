@@ -73,7 +73,10 @@ function createFakeAgent() {
     },
     async requestPermission(params: RequestPermissionParams): Promise<RequestPermissionResult> {
       permissionRequests.push(params)
-      return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
+      // Return the first option (skip Cancel which is always last)
+      const firstOption = params.options.find((o: any) => o.optionId !== "cancel")
+      const optionId = firstOption ? firstOption.optionId : "cancel"
+      return { outcome: { outcome: "selected", optionId } } as RequestPermissionResult
     },
   } as unknown as AgentSideConnection
 
@@ -237,8 +240,8 @@ describe("acp.agent question handling", () => {
 
         expect(permissionRequests.length).toBe(1)
         expect(permissionRequests[0].sessionId).toBe(sessionId)
-        expect(permissionRequests[0].toolCall.toolCallId).toBe("question_1")
-        expect(permissionRequests[0].toolCall.title).toBe("Choose Action")
+        expect(permissionRequests[0].toolCall.toolCallId).toBe("question_1-0")
+        expect(permissionRequests[0].toolCall.title).toBe("Choose Action: What would you like to do?")
 
         stop()
       },
@@ -384,12 +387,12 @@ describe("acp.agent question handling", () => {
     })
   })
 
-  test("multiple questions uses only the first one", async () => {
+  test("multiple questions triggers sequential requestPermission calls", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const { agent, controller, stop, permissionRequests } = createFakeAgent()
+        const { agent, controller, stop, permissionRequests, questionReplies } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
 
         const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
@@ -419,13 +422,22 @@ describe("acp.agent question handling", () => {
 
         await new Promise((r) => setTimeout(r, 20))
 
-        const options = permissionRequests[0].options
+        // Should have 2 requestPermission calls (one per question)
+        expect(permissionRequests.length).toBe(2)
 
-        const hasFirstOption = options.some((o: any) => o.name === "First Option")
-        const hasSecondOption = options.some((o: any) => o.name === "Second Option")
+        // First call for Q1
+        expect(permissionRequests[0].toolCall.title).toBe("Q1: First question?")
+        const options1 = permissionRequests[0].options
+        expect(options1.some((o: any) => o.name === "First Option")).toBe(true)
 
-        expect(hasFirstOption).toBe(true)
-        expect(hasSecondOption).toBe(false)
+        // Second call for Q2
+        expect(permissionRequests[1].toolCall.title).toBe("Q2: Second question?")
+        const options2 = permissionRequests[1].options
+        expect(options2.some((o: any) => o.name === "Second Option")).toBe(true)
+
+        // Verify answers collected after both responses
+        expect(questionReplies.length).toBe(1)
+        expect(questionReplies[0].answers.length).toBe(2)
 
         stop()
       },
@@ -469,6 +481,93 @@ describe("acp.agent question handling", () => {
 
         expect(questionRejections.length).toBe(1)
         expect(questionRejections[0]).toBe("question_1")
+
+        stop()
+      },
+    })
+  })
+
+  test("text-only questions are rejected in ACP mode", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, stop, questionRejections } = createFakeAgent()
+
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "text_question_1",
+              sessionID: sessionId,
+              questions: [
+                {
+                  question: "Tell me about your biggest technical challenge",
+                  header: "Open Question",
+                  // No options = text-only question
+                  options: [],
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        // Should reject immediately without calling requestPermission
+        expect(questionRejections.length).toBe(1)
+        expect(questionRejections[0]).toBe("text_question_1")
+
+        stop()
+      },
+    })
+  })
+
+  test("mixed questions with text-only are rejected entirely", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, stop, questionRejections } = createFakeAgent()
+
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "mixed_question_1",
+              sessionID: sessionId,
+              questions: [
+                {
+                  question: "Select a language",
+                  header: "Language",
+                  options: [{ label: "TypeScript" }, { label: "Python" }],
+                },
+                {
+                  question: "Tell me why you chose this language",
+                  header: "Reason",
+                  // Text-only question mixed with selectable one
+                  options: [],
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        // Should reject entire question set when any text-only question exists
+        expect(questionRejections.length).toBe(1)
+        expect(questionRejections[0]).toBe("mixed_question_1")
 
         stop()
       },
