@@ -117,8 +117,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const formatter = createMemo(() => createSessionContextFormatter(language.locale()))
 
   const cost = createMemo(() => {
-    const value = usd().format(metrics().totalCost)
-    return metrics().missing.length > 0 ? `${value}${language.t("context.stats.loaded")}` : value
+    return usd().format(metrics().totalCost)
   })
 
   const counts = createMemo(() => {
