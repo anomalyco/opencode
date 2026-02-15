@@ -176,6 +176,31 @@ export const ReadTool = Tool.define("read", {
 
     for await (const chunk of stream) {
       buf += chunk
+
+      const cap = MAX_BYTES + MAX_LINE_LENGTH
+      if (buf.length > cap && !buf.includes("\n")) {
+        if (line >= start) {
+          inRange = true
+          const clipped = buf.length > MAX_LINE_LENGTH ? buf.substring(0, MAX_LINE_LENGTH) + "..." : buf
+          const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
+          if (bytes + size > MAX_BYTES) {
+            truncatedByBytes = true
+            hasMoreLines = true
+            stopped = true
+            stream.destroy()
+            break
+          }
+          raw.push(clipped)
+          bytes += size
+          truncatedByBytes = true
+          hasMoreLines = true
+          stopped = true
+          stream.destroy()
+          break
+        }
+
+        buf = ""
+      }
       const parts = buf.split("\n")
       buf = parts.pop() ?? ""
 
