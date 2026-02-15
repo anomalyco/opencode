@@ -18,6 +18,18 @@ function docsAlias(pathname: string) {
   }
 }
 
+function docsRouteLocale(pathname: string) {
+  if (pathname === "/docs" || pathname === "/docs/") return "root"
+
+  const hit = /^\/docs\/([^/]+)(\/.*)?$/.exec(pathname)
+  if (!hit) return null
+
+  const value = hit[1] ?? ""
+  if (!value || value.startsWith("_") || value.includes(".")) return null
+
+  return exactLocale(value) ?? "root"
+}
+
 function cookie(locale: string) {
   const value = locale === "root" ? "en" : locale
   return `oc_locale=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`
@@ -83,11 +95,16 @@ export const onRequest = defineMiddleware((ctx, next) => {
     return redirect(ctx.url, alias.path, alias.locale)
   }
 
-  if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
-
   const locale =
     localeFromCookie(ctx.request.headers.get("cookie")) ??
     localeFromAcceptLanguage(ctx.request.headers.get("accept-language"))
+
+  if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") {
+    if (docsRouteLocale(ctx.url.pathname) !== "root") return next()
+    if (!locale || locale === "root") return next()
+    return redirect(ctx.url, ctx.url.pathname, "root")
+  }
+
   if (!locale || locale === "root") return next()
 
   return redirect(ctx.url, `/docs/${locale}/`)
