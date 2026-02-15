@@ -7,12 +7,12 @@ import { ToolRegistry } from "../../src/tool/registry"
 
 async function ids(client: string, flag?: string) {
   const originalClient = process.env["OPENCODE_CLIENT"]
-  const originalFlag = process.env["OPENCODE_ENABLE_ACP_QUESTION_TOOL"]
+  const originalFlag = process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
 
   try {
     process.env["OPENCODE_CLIENT"] = client
-    if (flag === undefined) delete process.env["OPENCODE_ENABLE_ACP_QUESTION_TOOL"]
-    if (flag !== undefined) process.env["OPENCODE_ENABLE_ACP_QUESTION_TOOL"] = flag
+    if (flag === undefined) delete process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
+    if (flag !== undefined) process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"] = flag
 
     await using tmp = await tmpdir()
     return await Instance.provide({
@@ -23,8 +23,8 @@ async function ids(client: string, flag?: string) {
     if (originalClient === undefined) delete process.env["OPENCODE_CLIENT"]
     if (originalClient !== undefined) process.env["OPENCODE_CLIENT"] = originalClient
 
-    if (originalFlag === undefined) delete process.env["OPENCODE_ENABLE_ACP_QUESTION_TOOL"]
-    if (originalFlag !== undefined) process.env["OPENCODE_ENABLE_ACP_QUESTION_TOOL"] = originalFlag
+    if (originalFlag === undefined) delete process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
+    if (originalFlag !== undefined) process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"] = originalFlag
   }
 }
 
@@ -143,15 +143,15 @@ describe("tool.registry", () => {
     })
   })
 
-  test("excludes question tool for acp when flag is unset", async () => {
+  test("excludes question tool for acp when experimental flag is unset", async () => {
     expect(await ids("acp")).not.toContain("question")
   })
 
-  test("excludes question tool for acp when flag is 0", async () => {
+  test("excludes question tool for acp when experimental flag is 0", async () => {
     expect(await ids("acp", "0")).not.toContain("question")
   })
 
-  test("includes question tool for acp when flag is enabled", async () => {
+  test("includes question tool for acp when experimental flag is enabled", async () => {
     expect(await ids("acp", "1")).toContain("question")
     expect(await ids("acp", "true")).toContain("question")
   })

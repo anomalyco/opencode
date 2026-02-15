@@ -96,7 +96,7 @@ export namespace ToolRegistry {
     const config = await Config.get()
     const question =
       ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ||
-      (Flag.OPENCODE_CLIENT === "acp" && Flag.OPENCODE_ENABLE_ACP_QUESTION_TOOL)
+      (Flag.OPENCODE_CLIENT === "acp" && Flag.OPENCODE_EXPERIMENTAL_QUESTION_TOOL)
 
     return [
       InvalidTool,
