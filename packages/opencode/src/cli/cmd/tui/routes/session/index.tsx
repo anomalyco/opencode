@@ -1376,7 +1376,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={true}
+              streaming={!props.message.time.completed}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
             />
@@ -1601,7 +1601,9 @@ function BlockTool(props: {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
-  const error = createMemo(() => formatErrorDisplay(props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const error = createMemo(() =>
+    formatErrorDisplay(props.part?.state.status === "error" ? props.part.state.error : undefined),
+  )
   return (
     <box
       border={["left"]}
