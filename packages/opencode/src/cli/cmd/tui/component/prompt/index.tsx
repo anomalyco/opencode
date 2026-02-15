@@ -1,16 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
-import {
-  BoxRenderable,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
-  t,
-  dim,
-  fg,
-  type KeyBinding,
-  RGBA,
-} from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, RGBA } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
