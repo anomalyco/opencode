@@ -497,7 +497,7 @@ export function FileTabContent(props: {
       }}
       onScroll={handleScroll}
     >
-      <Show when={state()?.loaded && isMarkdown()}>
+      <Show when={state()?.loaded && isMarkdown() && !isBinary()}>
         <div class="sticky top-0 z-10 flex justify-end items-center gap-2 px-6 py-2 bg-background-base border-b border-border-weak-base">
           <div class="flex items-center gap-1 bg-background-stronger rounded-md p-1">
             <IconButton
