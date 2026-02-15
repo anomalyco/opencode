@@ -162,21 +162,78 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset ?? 1
     const start = offset - 1
-    const lines = await file.text().then((text) => text.split("\n"))
-    if (start >= lines.length) throw new Error(`Offset ${offset} is out of range for this file (${lines.length} lines)`)
+    const stream = fs.createReadStream(filepath, { encoding: "utf8" })
+    let buf = ""
 
     const raw: string[] = []
     let bytes = 0
     let truncatedByBytes = false
-    for (let i = start; i < Math.min(lines.length, start + limit); i++) {
-      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
-        break
+    let hasMoreLines = false
+    let totalLines = 0
+    let line = 0
+    let inRange = false
+    let stopped = false
+
+    for await (const chunk of stream) {
+      buf += chunk
+      const parts = buf.split("\n")
+      buf = parts.pop() ?? ""
+
+      for (const value of parts) {
+        if (line >= start) inRange = true
+        if (line < start) {
+          line++
+          continue
+        }
+
+        if (raw.length >= limit) {
+          hasMoreLines = true
+          stopped = true
+          stream.destroy()
+          break
+        }
+
+        const clipped = value.length > MAX_LINE_LENGTH ? value.substring(0, MAX_LINE_LENGTH) + "..." : value
+        const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
+        if (bytes + size > MAX_BYTES) {
+          truncatedByBytes = true
+          hasMoreLines = true
+          stopped = true
+          stream.destroy()
+          break
+        }
+
+        raw.push(clipped)
+        bytes += size
+        line++
       }
-      raw.push(line)
-      bytes += size
+
+      if (stopped) break
+    }
+
+    if (!stopped) {
+      if (line >= start) inRange = true
+
+      if (line < start) {
+        line++
+      } else if (raw.length >= limit) {
+        hasMoreLines = true
+        line++
+      } else {
+        const clipped = buf.length > MAX_LINE_LENGTH ? buf.substring(0, MAX_LINE_LENGTH) + "..." : buf
+        const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
+        if (bytes + size > MAX_BYTES) {
+          truncatedByBytes = true
+          hasMoreLines = true
+        } else {
+          raw.push(clipped)
+          bytes += size
+        }
+        line++
+      }
+
+      totalLines = line
+      if (!inRange) throw new Error(`Offset ${offset} is out of range for this file (${totalLines} lines)`)
     }
 
     const content = raw.map((line, index) => {
@@ -187,9 +244,7 @@ export const ReadTool = Tool.define("read", {
     let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
     output += content.join("\n")
 
-    const totalLines = lines.length
     const lastReadLine = offset + raw.length - 1
-    const hasMoreLines = totalLines > lastReadLine
     const truncated = hasMoreLines || truncatedByBytes
 
     if (truncatedByBytes) {
