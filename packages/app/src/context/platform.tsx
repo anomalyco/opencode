@@ -2,6 +2,12 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 
+type PickerPaths = string | string[] | null
+type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
+type OpenFilePickerOptions = { title?: string; multiple?: boolean }
+type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+type UpdateInfo = { updateAvailable: boolean; version?: string }
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -31,19 +37,19 @@ export type Platform = {
   notify(title: string, description?: string, href?: string): Promise<void>
 
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
-  openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
+  openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
 
   /** Open native file picker dialog (Tauri only) */
-  openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
+  openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
 
   /** Save file picker dialog (Tauri only) */
-  saveFilePickerDialog?(opts?: { title?: string; defaultPath?: string }): Promise<string | null>
+  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
   /** Check for updates (Tauri only) */
-  checkUpdate?(): Promise<{ updateAvailable: boolean; version?: string }>
+  checkUpdate?(): Promise<UpdateInfo>
 
   /** Install updates (Tauri only) */
   update?(): Promise<void>
