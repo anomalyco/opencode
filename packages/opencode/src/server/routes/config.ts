@@ -23,14 +23,30 @@ export const ConfigRoutes = lazy(() =>
             description: "Get config info",
             content: {
               "application/json": {
-                schema: resolver(Config.Info),
+                schema: resolver(
+                  Config.Info.extend({
+                    defaultModel: z
+                      .object({
+                        providerID: z.string(),
+                        modelID: z.string(),
+                      })
+                      .optional(),
+                  }),
+                ),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await Config.get())
+        const config = await Config.get()
+        let defaultModel: { providerID: string; modelID: string } | undefined
+        try {
+          defaultModel = await Provider.defaultModel()
+        } catch {
+          // No providers configured
+        }
+        return c.json({ ...config, defaultModel })
       },
     )
     .patch(
