@@ -361,7 +361,7 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
+        if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       case "@ai-sdk/gateway":
@@ -763,6 +763,9 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = input.sessionID
     }
 
+    if (input.model.providerID === "openrouter") {
+      result["prompt_cache_key"] = input.sessionID
+    }
     if (input.model.api.npm === "@ai-sdk/gateway") {
       result["gateway"] = {
         caching: "auto",
@@ -802,15 +805,22 @@ export namespace ProviderTransform {
     return {}
   }
 
+  // Maps model ID prefix to provider slug used in providerOptions.
+  // Example: "amazon/nova-2-lite" → "bedrock"
+  const SLUG_OVERRIDES: Record<string, string> = {
+    amazon: "bedrock",
+  }
+
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     if (model.api.npm === "@ai-sdk/gateway") {
       // Gateway providerOptions are split across two namespaces:
-      // - `gateway`: gateway-native routing/caching controls
+      // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
       // - `<upstream slug>`: provider-specific model options (anthropic/openai/...)
       // We keep `gateway` as-is and route every other top-level option under the
-      // model-derived upstream slug so variants/options can stay flat internally.
+      // model-derived upstream slug.
       const i = model.api.id.indexOf("/")
-      const slug = i > 0 ? model.api.id.slice(0, i) : undefined
+      const rawSlug = i > 0 ? model.api.id.slice(0, i) : undefined
+      const slug = rawSlug ? (SLUG_OVERRIDES[rawSlug] ?? rawSlug) : undefined
       const gateway = options.gateway
       const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
       const has = Object.keys(rest).length > 0
@@ -820,6 +830,7 @@ export namespace ProviderTransform {
 
       if (has) {
         if (slug) {
+          // Route model-specific options under the provider slug
           result[slug] = rest
         } else if (gateway && typeof gateway === "object" && !Array.isArray(gateway)) {
           result.gateway = { ...gateway, ...rest }
