@@ -513,6 +513,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "プロバイダーを接続して、Claude、GPT、Geminiなどのモデルを使用できます。",
   "sidebar.project.recentSessions": "最近のセッション",
   "sidebar.project.viewAllSessions": "すべてのセッションを表示",
+  "sidebar.project.clearNotifications": "通知をクリア",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "デスクトップ",
   "settings.section.server": "サーバー",
