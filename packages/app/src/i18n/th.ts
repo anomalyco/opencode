@@ -571,6 +571,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "เชื่อมต่อผู้ให้บริการใด ๆ เพื่อใช้โมเดล รวมถึง Claude, GPT, Gemini ฯลฯ",
   "sidebar.project.recentSessions": "เซสชันล่าสุด",
   "sidebar.project.viewAllSessions": "ดูเซสชันทั้งหมด",
+  "sidebar.project.clearNotifications": "ล้างการแจ้งเตือน",
 
   "app.name.desktop": "OpenCode Desktop",
 

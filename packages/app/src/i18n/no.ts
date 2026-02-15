@@ -579,6 +579,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Koble til en leverandør for å bruke modeller, inkl. Claude, GPT, Gemini osv.",
   "sidebar.project.recentSessions": "Nylige sesjoner",
   "sidebar.project.viewAllSessions": "Vis alle sesjoner",
+  "sidebar.project.clearNotifications": "Fjern varsler",
 
   "app.name.desktop": "OpenCode Desktop",
 
