@@ -42,7 +42,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const cost = createMemo(() => {
-	const result = costs(route.sessionID, sync.data)
+    const result = costs(props.sessionID, sync.data)
     const total = result.total
     return new Intl.NumberFormat("en-US", {
       style: "currency",
