@@ -71,6 +71,8 @@ export const dict = {
   "command.session.undo.description": "最後のメッセージを元に戻す",
   "command.session.redo": "やり直す",
   "command.session.redo.description": "元に戻したメッセージをやり直す",
+  "session.revert.active": "前の時点に戻しました",
+  "session.revert.cancel": "復元",
   "command.session.compact": "セッションを圧縮",
   "command.session.compact.description": "セッションを要約してコンテキストサイズを削減",
   "command.session.fork": "メッセージからフォーク",

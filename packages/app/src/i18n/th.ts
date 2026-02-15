@@ -77,6 +77,8 @@ export const dict = {
   "command.session.undo.description": "ยกเลิกข้อความล่าสุด",
   "command.session.redo": "ทำซ้ำ",
   "command.session.redo.description": "ทำซ้ำข้อความที่ถูกยกเลิกล่าสุด",
+  "session.revert.active": "ย้อนกลับไปยังจุดก่อนหน้าแล้ว",
+  "session.revert.cancel": "กู้คืน",
   "command.session.compact": "บีบอัดเซสชัน",
   "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
   "command.session.fork": "แตกแขนงจากข้อความ",

@@ -23,6 +23,7 @@ export const dict = {
 
   "ui.sessionTurn.steps.show": "Afficher les étapes",
   "ui.sessionTurn.steps.hide": "Masquer les étapes",
+  "ui.sessionTurn.revert": "Revenir à ce tour",
   "ui.sessionTurn.summary.response": "Réponse",
   "ui.sessionTurn.diff.showMore": "Afficher plus de modifications ({{count}})",
 

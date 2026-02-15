@@ -71,6 +71,8 @@ export const dict = {
   "command.session.undo.description": "تراجع عن الرسالة الأخيرة",
   "command.session.redo": "إعادة",
   "command.session.redo.description": "إعادة الرسالة التي تم التراجع عنها",
+  "session.revert.active": "تم الرجوع إلى نقطة سابقة",
+  "session.revert.cancel": "استعادة",
   "command.session.compact": "ضغط الجلسة",
   "command.session.compact.description": "تلخيص الجلسة لتقليل حجم السياق",
   "command.session.fork": "تشعب من الرسالة",

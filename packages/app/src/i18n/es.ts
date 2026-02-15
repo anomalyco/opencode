@@ -77,6 +77,8 @@ export const dict = {
   "command.session.undo.description": "Deshacer el último mensaje",
   "command.session.redo": "Rehacer",
   "command.session.redo.description": "Rehacer el último mensaje deshecho",
+  "session.revert.active": "Se revirtió a un punto anterior",
+  "session.revert.cancel": "Restaurar",
   "command.session.compact": "Compactar sesión",
   "command.session.compact.description": "Resumir la sesión para reducir el tamaño del contexto",
   "command.session.fork": "Bifurcar desde mensaje",

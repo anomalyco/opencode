@@ -80,6 +80,8 @@ export const dict = {
   "command.session.undo.description": "Angre siste melding",
   "command.session.redo": "Gjør om",
   "command.session.redo.description": "Gjør om siste angrede melding",
+  "session.revert.active": "Tilbakestilt til et tidligere punkt",
+  "session.revert.cancel": "Gjenopprett",
   "command.session.compact": "Komprimer sesjon",
   "command.session.compact.description": "Oppsummer sesjonen for å redusere kontekststørrelsen",
   "command.session.fork": "Forgren fra melding",

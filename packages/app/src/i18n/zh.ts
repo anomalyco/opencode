@@ -103,6 +103,8 @@ export const dict = {
   "command.session.undo.description": "撤销上一条消息",
   "command.session.redo": "重做",
   "command.session.redo.description": "重做上一条撤销的消息",
+  "session.revert.active": "已回退到较早位置",
+  "session.revert.cancel": "恢复",
   "command.session.compact": "精简会话",
   "command.session.compact.description": "总结会话以减少上下文大小",
   "command.session.fork": "从消息分叉",

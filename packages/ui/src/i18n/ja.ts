@@ -22,6 +22,7 @@ export const dict = {
   "ui.lineComment.submit": "コメント",
   "ui.sessionTurn.steps.show": "ステップを表示",
   "ui.sessionTurn.steps.hide": "ステップを隠す",
+  "ui.sessionTurn.revert": "このターンに戻す",
   "ui.sessionTurn.summary.response": "応答",
   "ui.sessionTurn.diff.showMore": "さらに変更を表示 ({{count}})",
 

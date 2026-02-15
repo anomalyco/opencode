@@ -23,6 +23,7 @@ export const dict = {
 
   "ui.sessionTurn.steps.show": "แสดงขั้นตอน",
   "ui.sessionTurn.steps.hide": "ซ่อนขั้นตอน",
+  "ui.sessionTurn.revert": "ย้อนกลับมาที่เทิร์นนี้",
   "ui.sessionTurn.summary.response": "การตอบสนอง",
   "ui.sessionTurn.diff.showMore": "แสดงการเปลี่ยนแปลงเพิ่มเติม ({{count}})",
 

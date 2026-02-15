@@ -77,6 +77,8 @@ export const dict = {
   "command.session.undo.description": "Fortryd den sidste besked",
   "command.session.redo": "Omgør",
   "command.session.redo.description": "Omgør den sidste fortrudte besked",
+  "session.revert.active": "Gendannet til et tidligere punkt",
+  "session.revert.cancel": "Gendan",
   "command.session.compact": "Komprimér session",
   "command.session.compact.description": "Opsummer sessionen for at reducere kontekststørrelsen",
   "command.session.fork": "Forgren fra besked",

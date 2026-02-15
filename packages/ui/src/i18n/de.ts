@@ -26,6 +26,7 @@ export const dict = {
   "ui.lineComment.submit": "Kommentieren",
   "ui.sessionTurn.steps.show": "Schritte anzeigen",
   "ui.sessionTurn.steps.hide": "Schritte ausblenden",
+  "ui.sessionTurn.revert": "Zu diesem Schritt zurückkehren",
   "ui.sessionTurn.summary.response": "Antwort",
   "ui.sessionTurn.diff.showMore": "Weitere Änderungen anzeigen ({{count}})",
 

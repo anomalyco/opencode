@@ -523,6 +523,12 @@
     }
   }
 
+  [data-slot="session-turn-response-trigger"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   [data-slot="session-turn-retry-message"] {
     font-weight: 500;
     color: var(--syntax-critical);

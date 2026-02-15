@@ -27,6 +27,7 @@ export const dict = {
 
   "ui.sessionTurn.steps.show": "顯示步驟",
   "ui.sessionTurn.steps.hide": "隱藏步驟",
+  "ui.sessionTurn.revert": "回退到此回合",
   "ui.sessionTurn.summary.response": "回覆",
   "ui.sessionTurn.diff.showMore": "顯示更多變更 ({{count}})",
 

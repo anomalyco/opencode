@@ -15,7 +15,9 @@ export function SessionPromptDock(props: {
   handoffPrompt?: string
   t: (key: string, vars?: Record<string, string | number | boolean>) => string
   responding: boolean
+  reverted: boolean
   onDecide: (response: "once" | "always" | "reject") => void
+  onCancelRevert: () => void
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
@@ -114,6 +116,22 @@ export function SessionPromptDock(props: {
         </Show>
 
         <Show when={!props.blocked}>
+          <Show when={props.reverted}>
+            <div data-component="tool-part-wrapper" data-revert="true" class="mb-3">
+              <BasicTool
+                icon="undo"
+                locked
+                trigger={{
+                  title: props.t("session.revert.active"),
+                  action: (
+                    <Button variant="ghost" size="small" onClick={props.onCancelRevert} disabled={props.responding}>
+                      {props.t("session.revert.cancel")}
+                    </Button>
+                  ),
+                }}
+              />
+            </div>
+          </Show>
           <Show
             when={props.promptReady}
             fallback={

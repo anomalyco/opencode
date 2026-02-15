@@ -71,6 +71,8 @@ export const dict = {
   "command.session.undo.description": "Cofnij ostatnią wiadomość",
   "command.session.redo": "Ponów",
   "command.session.redo.description": "Ponów ostatnią cofniętą wiadomość",
+  "session.revert.active": "Przywrócono do wcześniejszego punktu",
+  "session.revert.cancel": "Przywróć",
   "command.session.compact": "Kompaktuj sesję",
   "command.session.compact.description": "Podsumuj sesję, aby zmniejszyć rozmiar kontekstu",
   "command.session.fork": "Rozwidlij od wiadomości",

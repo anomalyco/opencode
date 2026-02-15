@@ -22,6 +22,7 @@ export const dict = {
   "ui.lineComment.submit": "Комментировать",
   "ui.sessionTurn.steps.show": "Показать шаги",
   "ui.sessionTurn.steps.hide": "Скрыть шаги",
+  "ui.sessionTurn.revert": "Вернуться к этому ходу",
   "ui.sessionTurn.summary.response": "Ответ",
   "ui.sessionTurn.diff.showMore": "Показать ещё изменений ({{count}})",
 

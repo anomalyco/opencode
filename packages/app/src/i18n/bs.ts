@@ -77,6 +77,8 @@ export const dict = {
   "command.session.undo.description": "Poništi posljednju poruku",
   "command.session.redo": "Vrati",
   "command.session.redo.description": "Vrati posljednju poništenu poruku",
+  "session.revert.active": "Vraćeno na raniju tačku",
+  "session.revert.cancel": "Vrati",
   "command.session.compact": "Sažmi sesiju",
   "command.session.compact.description": "Sažmi sesiju kako bi se smanjio kontekst",
   "command.session.fork": "Fork iz poruke",

@@ -75,6 +75,8 @@ export const dict = {
   "command.session.undo.description": "Letzte Nachricht rückgängig machen",
   "command.session.redo": "Wiederherstellen",
   "command.session.redo.description": "Letzte rückgängig gemachte Nachricht wiederherstellen",
+  "session.revert.active": "Zu einem früheren Punkt zurückgesetzt",
+  "session.revert.cancel": "Wiederherstellen",
   "command.session.compact": "Sitzung komprimieren",
   "command.session.compact.description": "Sitzung zusammenfassen, um die Kontextgröße zu reduzieren",
   "command.session.fork": "Von Nachricht abzweigen",

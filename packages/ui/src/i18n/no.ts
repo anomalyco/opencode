@@ -26,6 +26,7 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.steps.show": "Vis trinn",
   "ui.sessionTurn.steps.hide": "Skjul trinn",
+  "ui.sessionTurn.revert": "Tilbakestill til denne runden",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere endringer ({{count}})",
 

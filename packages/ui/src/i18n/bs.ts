@@ -27,6 +27,7 @@ export const dict = {
 
   "ui.sessionTurn.steps.show": "Prikaži korake",
   "ui.sessionTurn.steps.hide": "Sakrij korake",
+  "ui.sessionTurn.revert": "Vrati na ovaj potez",
   "ui.sessionTurn.summary.response": "Odgovor",
   "ui.sessionTurn.diff.showMore": "Prikaži još izmjena ({{count}})",
 

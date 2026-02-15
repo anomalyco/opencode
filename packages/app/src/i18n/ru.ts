@@ -77,6 +77,8 @@ export const dict = {
   "command.session.undo.description": "Отменить последнее сообщение",
   "command.session.redo": "Повторить",
   "command.session.redo.description": "Повторить отменённое сообщение",
+  "session.revert.active": "Возврат к более ранней точке",
+  "session.revert.cancel": "Восстановить",
   "command.session.compact": "Сжать сессию",
   "command.session.compact.description": "Сократить сессию для уменьшения размера контекста",
   "command.session.fork": "Создать ответвление",

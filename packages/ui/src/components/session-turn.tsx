@@ -191,6 +191,8 @@ export function SessionTurn(
     lastUserMessageID?: string
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
+    onRevert?: (messageID: string) => void
+    canRevert?: boolean
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -441,6 +443,7 @@ export function SessionTurn(
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const hasDiffs = createMemo(() => (message()?.summary?.diffs?.length ?? 0) > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
+  const canRevert = createMemo(() => !!props.onRevert && (props.canRevert ?? true) && !working())
 
   const [copied, setCopied] = createSignal(false)
 
@@ -632,7 +635,12 @@ export function SessionTurn(
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message message={msg()} parts={stickyParts()} />
+                        <Message
+                          message={msg()}
+                          parts={stickyParts()}
+                          onRevert={props.onRevert}
+                          canRevert={canRevert()}
+                        />
                       </div>
 
                       {/* Trigger (sticky) */}

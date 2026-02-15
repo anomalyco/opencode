@@ -92,6 +92,8 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  onRevert?: (messageID: string) => void
+  canRevert?: boolean
 }
 
 export interface MessagePartProps {
@@ -277,7 +279,14 @@ export function Message(props: MessageProps) {
   return (
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
+        {(userMessage) => (
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            onRevert={props.onRevert}
+            canRevert={props.canRevert}
+          />
+        )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
@@ -301,7 +310,12 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
   return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  onRevert?: (messageID: string) => void
+  canRevert?: boolean
+}) {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
@@ -417,7 +431,22 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           >
             <Icon name="chevron-down" size="small" />
           </button>
-          <div data-slot="user-message-copy-wrapper">
+          <div data-slot="user-message-actions-wrapper">
+            <Show when={props.canRevert && props.onRevert}>
+              <Tooltip value={i18n.t("ui.sessionTurn.revert")} placement="top" gutter={8}>
+                <IconButton
+                  icon="undo"
+                  size="small"
+                  variant="secondary"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    props.onRevert?.(props.message.id)
+                  }}
+                  aria-label={i18n.t("ui.sessionTurn.revert")}
+                />
+              </Tooltip>
+            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"

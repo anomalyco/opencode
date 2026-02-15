@@ -81,6 +81,8 @@ export const dict = {
   "command.session.undo.description": "復原上一則訊息",
   "command.session.redo": "重做",
   "command.session.redo.description": "重做上一則復原的訊息",
+  "session.revert.active": "已回退到較早位置",
+  "session.revert.cancel": "還原",
   "command.session.compact": "精簡工作階段",
   "command.session.compact.description": "總結工作階段以減少上下文大小",
   "command.session.fork": "從訊息分支",

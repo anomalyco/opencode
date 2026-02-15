@@ -89,15 +89,17 @@
       color: var(--syntax-type);
     }
 
-    [data-slot="user-message-copy-wrapper"] {
+    [data-slot="user-message-actions-wrapper"] {
       position: absolute;
       top: 7px;
       right: 7px;
+      display: inline-flex;
+      gap: 6px;
       opacity: 0;
       transition: opacity 0.15s ease;
     }
 
-    &:hover [data-slot="user-message-copy-wrapper"] {
+    &:hover [data-slot="user-message-actions-wrapper"] {
       opacity: 1;
     }
   }
@@ -454,7 +456,8 @@
   width: 100%;
 
   &[data-permission="true"],
-  &[data-question="true"] {
+  &[data-question="true"],
+  &[data-revert="true"] {
     position: sticky;
     top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
@@ -512,6 +515,11 @@
   }
 
   &[data-question="true"] {
+    background: var(--background-base);
+    border: 1px solid var(--border-weak-base);
+  }
+
+  &[data-revert="true"] {
     background: var(--background-base);
     border: 1px solid var(--border-weak-base);
   }

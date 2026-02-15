@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { extractPromptFromParts } from "@/utils/prompt"
 
 type HandoffSession = {
   prompt: string
@@ -614,6 +615,59 @@ export default function Page() {
 
     autoScroll.pause()
     scrollToMessage(msgs[targetIndex], "auto")
+  }
+
+  async function revertMessage(messageID: string) {
+    const sessionID = params.id
+    if (!sessionID) return
+    const msg = userMessages().find((item) => item.id === messageID)
+    if (!msg) return
+
+    if (status().type !== "idle") {
+      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    }
+
+    const reverted = await sdk.client.session.revert({ sessionID, messageID: msg.id }).catch((err) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(err),
+      })
+      return undefined
+    })
+    if (!reverted) return
+
+    const parts = sync.data.part[msg.id]
+    if (parts) {
+      const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+      prompt.set(restored)
+    }
+
+    const prior = findLast(userMessages(), (item) => item.id < msg.id)
+    setActiveMessage(prior)
+  }
+
+  async function cancelRevert() {
+    const sessionID = params.id
+    if (!sessionID) return
+    const revertMsgID = info()?.revert?.messageID
+    if (!revertMsgID) return
+
+    if (status().type !== "idle") {
+      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    }
+
+    const restored = await sdk.client.session.unrevert({ sessionID }).catch((err) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(err),
+      })
+      return undefined
+    })
+    if (!restored) return
+
+    prompt.reset()
+    const lastMsg = findLast(userMessages(), (item) => item.id >= revertMsgID)
+    setActiveMessage(lastMsg)
   }
 
   const kinds = createMemo(() => {
@@ -1656,6 +1710,9 @@ export default function Page() {
                     lastUserMessageID={lastUserMessage()?.id}
                     expanded={store.expanded}
                     onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
+                    onRevertMessage={(messageID) => {
+                      void revertMessage(messageID)
+                    }}
                   />
                 </Show>
               </Match>
@@ -1690,7 +1747,11 @@ export default function Page() {
             handoffPrompt={handoff.session.get(sessionKey())?.prompt}
             t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
             responding={ui.responding}
+            reverted={!!revertMessageID()}
             onDecide={decide}
+            onCancelRevert={() => {
+              void cancelRevert()
+            }}
             inputRef={(el) => {
               inputRef = el
             }}
