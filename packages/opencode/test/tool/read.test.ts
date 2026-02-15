@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import * as fs from "fs"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
@@ -392,6 +393,123 @@ root_type Monster;`
         expect(result.attachments).toBeUndefined()
         expect(result.output).toContain("namespace MyGame")
         expect(result.output).toContain("table Monster")
+      },
+    })
+  })
+})
+
+describe("tool.read memory regression tests", () => {
+  test("rejects binary files using a 4KB slice check", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "binary.txt"), Buffer.from([97, 98, 99, 0, 100, 101, 102]))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "binary.txt") }, ctx)).rejects.toThrow(
+          "Cannot read binary file:",
+        )
+      },
+    })
+  })
+
+  test("rejects inline images larger than 20MB", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const filepath = path.join(dir, "too-large.png")
+        await Bun.write(filepath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+        await fs.promises.truncate(filepath, 20 * 1024 * 1024 + 1)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "too-large.png") }, ctx)).rejects.toThrow(
+          "File too large for inline display",
+        )
+      },
+    })
+  })
+
+  test("caps directory listing at 10K entries", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const target = path.join(dir, "bigdir")
+        await fs.promises.mkdir(target, { recursive: true })
+        const batch = 200
+        for (let i = 0; i < 10001; i += batch) {
+          const end = Math.min(10001, i + batch)
+          await Promise.all(
+            Array.from({ length: end - i }, (_, j) => Bun.write(path.join(target, `f-${i + j}.txt`), "")),
+          )
+        }
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "bigdir") }, ctx)
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toContain("Directory too large to list")
+        expect(result.output).toContain("10001")
+      },
+    })
+  })
+
+  test("truncates a huge single-line file without reading beyond cap", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "one-line.txt"), "a".repeat(60 * 1024))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "one-line.txt") }, ctx)
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toContain("Output truncated")
+        expect(result.output).not.toContain("Output truncated at")
+      },
+    })
+  })
+
+  test("suggests similar filenames when file is missing", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "example.txt"), "ok")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const missing = path.join(tmp.path, "example.tx")
+        await expect(read.execute({ filePath: missing }, ctx)).rejects.toThrow("Did you mean one of these?")
+        await expect(read.execute({ filePath: missing }, ctx)).rejects.toThrow(path.join(tmp.path, "example.txt"))
+      },
+    })
+  })
+
+  test("early stream destroy on line limit does not throw", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const lines = Array.from({ length: 3000 }, (_, i) => `line${i}`).join("\n")
+        await Bun.write(path.join(dir, "many-lines.txt"), lines)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 100 }, ctx)
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toContain("File has more lines")
       },
     })
   })
