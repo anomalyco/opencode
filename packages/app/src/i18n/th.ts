@@ -359,10 +359,7 @@ export const dict = {
   "context.stats.cacheTokens": "โทเค็นแคช (อ่าน/เขียน)",
   "context.stats.userMessages": "ข้อความผู้ใช้",
   "context.stats.assistantMessages": "ข้อความผู้ช่วย",
-  "context.stats.ownCost": "ค่าใช้จ่ายเซสชัน",
   "context.stats.totalCost": "ต้นทุนทั้งหมด",
-  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
-  "context.stats.loaded": " (โหลดแล้ว)",
   "context.stats.sessionCreated": "สร้างเซสชันเมื่อ",
   "context.stats.lastActivity": "กิจกรรมล่าสุด",
 

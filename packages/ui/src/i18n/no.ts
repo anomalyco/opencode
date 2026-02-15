@@ -45,8 +45,6 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.diagnostic.error": "Feil",
-  "ui.messagePart.costBreakdown": "(agent {{agentCost}}; totalt {{totalCost}})",
-  "ui.messagePart.loaded": " (lastet)",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
   "ui.messagePart.option.typeOwnAnswer": "Skriv ditt eget svar",

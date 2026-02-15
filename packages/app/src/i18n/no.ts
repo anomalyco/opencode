@@ -362,10 +362,7 @@ export const dict = {
   "context.stats.cacheTokens": "Cache-tokens (les/skriv)",
   "context.stats.userMessages": "Brukermeldinger",
   "context.stats.assistantMessages": "Assistentmeldinger",
-  "context.stats.ownCost": "Sesjonskostnad",
   "context.stats.totalCost": "Total kostnad",
-  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
-  "context.stats.loaded": " (lastet)",
   "context.stats.sessionCreated": "Sesjon opprettet",
   "context.stats.lastActivity": "Siste aktivitet",
 

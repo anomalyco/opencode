@@ -359,10 +359,7 @@ export const dict = {
   "context.stats.cacheTokens": "Cache Tokens (læs/skriv)",
   "context.stats.userMessages": "Brugerbeskeder",
   "context.stats.assistantMessages": "Assistentbeskeder",
-  "context.stats.ownCost": "Sessionsomkostninger",
   "context.stats.totalCost": "Samlede omkostninger",
-  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
-  "context.stats.loaded": " (indlæst)",
   "context.stats.sessionCreated": "Session oprettet",
   "context.stats.lastActivity": "Seneste aktivitet",
 

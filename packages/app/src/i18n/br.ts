@@ -329,10 +329,7 @@ export const dict = {
   "context.stats.cacheTokens": "Tokens de Cache (leitura/escrita)",
   "context.stats.userMessages": "Mensagens de Usuário",
   "context.stats.assistantMessages": "Mensagens do Assistente",
-  "context.stats.ownCost": "Custo da sessão",
   "context.stats.totalCost": "Custo Total",
-  "context.stats.costBreakdown": "(agent {{agentCost}}; total {{totalCost}})",
-  "context.stats.loaded": " (carregado)",
   "context.stats.sessionCreated": "Sessão Criada",
   "context.stats.lastActivity": "Última Atividade",
   "context.usage.tokens": "Tokens",
@@ -340,6 +337,7 @@ export const dict = {
   "context.usage.cost": "Custo",
   "context.usage.clickToView": "Clique para ver o contexto",
   "context.usage.view": "Ver uso do contexto",
+  
   "language.en": "English",
   "language.zh": "简体中文",
   "language.zht": "繁體中文",

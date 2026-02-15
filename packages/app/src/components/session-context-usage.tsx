@@ -55,11 +55,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   })
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
-    const value = language.t("context.stats.costBreakdown", {
-      agentCost: usd().format(metrics().ownCost),
-      totalCost: usd().format(metrics().totalCost),
-    })
-    return metrics().missing.length > 0 ? `${value}${language.t("context.stats.loaded")}` : value
+    return usd().format(metrics().totalCost)
   })
 
   const openContext = () => {

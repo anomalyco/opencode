@@ -42,13 +42,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const cost = createMemo(() => {
-    const result = costs(props.sessionID, sync.data)
-    const formatter = new Intl.NumberFormat("en-US", {
+    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    })
-    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
-    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
+    }).format(total)
   })
 
   const context = createMemo(() => {

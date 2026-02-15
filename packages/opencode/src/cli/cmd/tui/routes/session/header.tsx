@@ -9,7 +9,6 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
-import { Locale } from "@/util/locale"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -25,7 +24,7 @@ const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Acces
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} {props.cost()}
+        {props.context()} ({props.cost()})
       </text>
     </Show>
   )
@@ -38,13 +37,14 @@ export function Header() {
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
   const cost = createMemo(() => {
-    const result = costs(route.sessionID, sync.data)
-    const formatter = new Intl.NumberFormat("en-US", {
+    const total = pipe(
+      messages(),
+      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
+    )
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    })
-    const formatted = Locale.costBreakdown(formatter.format(result.own), formatter.format(result.total))
-    return result.missing.length > 0 ? `${formatted} (loaded)` : formatted
+    }).format(total)
   })
 
   const context = createMemo(() => {
