@@ -13,8 +13,6 @@ import { InstructionPrompt } from "../session/instruction"
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
-const MAX_INLINE_BYTES = 20 * 1024 * 1024
-const MAX_DIR_ENTRIES = 10_000
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -70,18 +68,6 @@ export const ReadTool = Tool.define("read", {
 
     if (stat.isDirectory()) {
       const dirents = await fs.promises.readdir(filepath, { withFileTypes: true })
-      if (dirents.length > MAX_DIR_ENTRIES) {
-        const msg = `Directory too large to list (${dirents.length} entries). Use a more specific path or glob pattern.`
-        return {
-          title,
-          output: [`<path>${filepath}</path>`, `<type>directory</type>`, `<entries>`, msg, `</entries>`].join("\n"),
-          metadata: {
-            preview: msg,
-            truncated: true,
-            loaded: [] as string[],
-          },
-        }
-      }
       const entries = await Promise.all(
         dirents.map(async (dirent) => {
           if (dirent.isDirectory()) return dirent.name + "/"
@@ -129,9 +115,6 @@ export const ReadTool = Tool.define("read", {
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
-      if (stat.size > MAX_INLINE_BYTES) {
-        throw new Error(`File too large for inline display (${stat.size} bytes). Maximum supported size is 20MB.`)
-      }
       const mime = file.type
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {

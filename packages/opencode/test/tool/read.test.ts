@@ -416,51 +416,6 @@ describe("tool.read memory regression tests", () => {
     })
   })
 
-  test("rejects inline images larger than 20MB", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const filepath = path.join(dir, "too-large.png")
-        await Bun.write(filepath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-        await fs.promises.truncate(filepath, 20 * 1024 * 1024 + 1)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(tmp.path, "too-large.png") }, ctx)).rejects.toThrow(
-          "File too large for inline display",
-        )
-      },
-    })
-  })
-
-  test("caps directory listing at 10K entries", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const target = path.join(dir, "bigdir")
-        await fs.promises.mkdir(target, { recursive: true })
-        const batch = 200
-        for (let i = 0; i < 10001; i += batch) {
-          const end = Math.min(10001, i + batch)
-          await Promise.all(
-            Array.from({ length: end - i }, (_, j) => Bun.write(path.join(target, `f-${i + j}.txt`), "")),
-          )
-        }
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "bigdir") }, ctx)
-        expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Directory too large to list")
-        expect(result.output).toContain("10001")
-      },
-    })
-  })
-
   test("truncates a huge single-line file without reading beyond cap", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
