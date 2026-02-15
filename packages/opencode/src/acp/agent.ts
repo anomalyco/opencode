@@ -259,6 +259,84 @@ export namespace ACP {
           return
         }
 
+        case "question.asked": {
+          const question = event.properties
+          const session = this.sessionManager.tryGet(question.sessionID)
+          if (!session) return
+
+          const prev = this.permissionQueues.get(question.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const firstQuestion = question.questions[0]
+              if (!firstQuestion) return
+
+              const options: PermissionOption[] = firstQuestion.options.map((o: any) => ({
+                optionId: o.label.toLowerCase().replace(/\s+/g, "-"),
+                kind: "allow_once",
+                name: o.label,
+                description: o.description,
+              }))
+              options.push({ optionId: "cancel", kind: "reject_once", name: "Cancel" })
+
+              const res = await this.connection
+                .requestPermission({
+                  sessionId: question.sessionID,
+                  toolCall: {
+                    toolCallId: question.id,
+                    status: "pending",
+                    title: firstQuestion.header || firstQuestion.question,
+                    rawInput: { questions: question.questions },
+                    kind: "other",
+                  },
+                  options,
+                })
+                .catch(async (error) => {
+                  log.error("failed to request permission for question", {
+                    error,
+                    questionID: question.id,
+                    sessionID: question.sessionID,
+                  })
+                  await this.sdk.question.reject({ requestID: question.id })
+                  return undefined
+                })
+
+              if (!res) return
+              if (res.outcome.outcome !== "selected") {
+                await this.sdk.question.reject({ requestID: question.id })
+                return
+              }
+
+              const outcome = res.outcome as { outcome: "selected"; optionId: string }
+              if (outcome.optionId === "cancel") {
+                await this.sdk.question.reject({ requestID: question.id })
+                return
+              }
+
+              const selectedOption = firstQuestion.options.find(
+                (o: any) => o.label.toLowerCase().replace(/\s+/g, "-") === outcome.optionId,
+              )
+              if (!selectedOption) {
+                await this.sdk.question.reject({ requestID: question.id })
+                return
+              }
+
+              await this.sdk.question.reply({
+                requestID: question.id,
+                answers: [[selectedOption.label]],
+              })
+            })
+            .catch((error) => {
+              log.error("failed to handle question", { error, questionID: question.id })
+            })
+            .finally(() => {
+              if (this.permissionQueues.get(question.sessionID) === next) {
+                this.permissionQueues.delete(question.sessionID)
+              }
+            })
+          this.permissionQueues.set(question.sessionID, next)
+          return
+        }
+
         case "message.part.updated": {
           log.info("message part updated", { event: event.properties })
           const props = event.properties
