@@ -556,45 +556,109 @@ export const SettingsGeneral: Component = () => {
           title={language.t("settings.general.row.font.title")}
           description={language.t("settings.general.row.font.description")}
         >
-          <div class="w-full sm:w-[220px]">
-            <TextField
-              data-action="settings-code-font"
-              label={language.t("settings.general.row.font.title")}
-              hideLabel
-              type="text"
-              value={mono()}
-              onChange={(value) => settings.appearance.setFont(value)}
-              placeholder={monoDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              class="text-12-regular"
-              style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
-            />
+          <Select
+            data-action="settings-font"
+            options={fontOptionsList}
+            current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
+            value={(o) => o.value}
+            label={(o) => language.t(o.label)}
+            onSelect={(option) => option && settings.appearance.setFont(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
+          >
+            {(option) => (
+              <span style={{ "font-family": monoFontFamily(option?.value) }}>
+                {option ? language.t(option.label) : ""}
+              </span>
+            )}
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
+        >
+          <div class="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const current = settings.appearance.fontSize()
+                if (current > 10) {
+                  settings.appearance.setFontSize(current - 1)
+                }
+              }}
+              disabled={settings.appearance.fontSize() <= 10}
+              aria-label={language.t("settings.general.row.fontSize.decrease")}
+            >
+              −
+            </Button>
+            <span class="text-14-regular text-text-strong min-w-[48px] text-center">
+              {settings.appearance.fontSize()}px
+            </span>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const current = settings.appearance.fontSize()
+                if (current < 24) {
+                  settings.appearance.setFontSize(current + 1)
+                }
+              }}
+              disabled={settings.appearance.fontSize() >= 24}
+              aria-label={language.t("settings.general.row.fontSize.increase")}
+            >
+              +
+            </Button>
           </div>
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.terminalFont.title")}
-          description={language.t("settings.general.row.terminalFont.description")}
+          title={language.t("settings.general.row.contentWidth.title")}
+          description={language.t("settings.general.row.contentWidth.description")}
         >
-          <div class="w-full sm:w-[220px]">
-            <TextField
-              data-action="settings-terminal-font"
-              label={language.t("settings.general.row.terminalFont.title")}
-              hideLabel
-              type="text"
-              value={terminal()}
-              onChange={(value) => settings.appearance.setTerminalFont(value)}
-              placeholder={terminalDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              class="text-12-regular"
-              style={{ "font-family": terminalFontFamily(settings.appearance.terminalFont()) }}
-            />
+          <div class="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const current = settings.appearance.contentWidth()
+                const widths = [200, 250, 300, 350, 400]
+                const currentIndex = widths.indexOf(current)
+                if (currentIndex > 0) {
+                  settings.appearance.setContentWidth(widths[currentIndex - 1])
+                }
+              }}
+              disabled={settings.appearance.contentWidth() <= 200}
+              aria-label={language.t("settings.general.row.contentWidth.decrease")}
+            >
+              −
+            </Button>
+            <span class="text-14-regular text-text-strong min-w-[80px] text-center">
+              {settings.appearance.contentWidth() === 200 && language.t("settings.general.row.contentWidth.narrow")}
+              {settings.appearance.contentWidth() === 250 && language.t("settings.general.row.contentWidth.medium")}
+              {settings.appearance.contentWidth() === 300 && language.t("settings.general.row.contentWidth.wide")}
+              {settings.appearance.contentWidth() === 350 && language.t("settings.general.row.contentWidth.extraWide")}
+              {settings.appearance.contentWidth() === 400 && language.t("settings.general.row.contentWidth.fullWidth")}
+            </span>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const current = settings.appearance.contentWidth()
+                const widths = [200, 250, 300, 350, 400]
+                const currentIndex = widths.indexOf(current)
+                if (currentIndex >= 0 && currentIndex < widths.length - 1) {
+                  settings.appearance.setContentWidth(widths[currentIndex + 1])
+                }
+              }}
+              disabled={settings.appearance.contentWidth() >= 400}
+              aria-label={language.t("settings.general.row.contentWidth.increase")}
+            >
+              +
+            </Button>
           </div>
         </SettingsRow>
       </SettingsList>
