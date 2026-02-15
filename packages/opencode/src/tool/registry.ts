@@ -69,7 +69,7 @@ export namespace ToolRegistry {
             ...ctx,
             directory: Instance.directory,
             worktree: Instance.worktree,
-            question: (input: { questions: Question.Info[] }) =>
+            askQuestion: (input: { questions: Question.Info[] }) =>
               Question.ask({
                 sessionID: ctx.sessionID,
                 questions: input.questions,
