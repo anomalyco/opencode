@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "",
   "type": "module",
   "exports": {
