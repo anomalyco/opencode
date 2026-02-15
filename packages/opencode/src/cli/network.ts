@@ -1,5 +1,4 @@
 import type { Argv, InferredOptionTypes } from "yargs"
-import { Config } from "../config/config"
 
 const options = {
   port: {
@@ -36,18 +35,25 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 
-export async function resolveNetworkOptions(args: NetworkOptions) {
-  const config = await Config.global()
-  const portExplicitlySet = process.argv.includes("--port")
-  const hostnameExplicitlySet = process.argv.includes("--hostname")
-  const mdnsExplicitlySet = process.argv.includes("--mdns")
-  const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
-  const corsExplicitlySet = process.argv.includes("--cors")
+export function resolveFrom(
+  args: NetworkOptions,
+  config: {
+    server?: { port?: number; hostname?: string; mdns?: boolean; mdnsDomain?: string; cors?: string[] }
+  } | null,
+  argv: string[],
+) {
+  const explicit = {
+    port: argv.includes("--port"),
+    hostname: argv.includes("--hostname"),
+    mdns: argv.includes("--mdns"),
+    mdnsDomain: argv.includes("--mdns-domain"),
+    cors: argv.includes("--cors"),
+  }
 
-  const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
-  const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
-  const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
-  const hostname = hostnameExplicitlySet
+  const mdns = explicit.mdns ? args.mdns : (config?.server?.mdns ?? args.mdns)
+  const mdnsDomain = explicit.mdnsDomain ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
+  const port = explicit.port ? args.port : (config?.server?.port ?? args.port)
+  const hostname = explicit.hostname
     ? args.hostname
     : mdns && !config?.server?.hostname
       ? "0.0.0.0"
@@ -56,5 +62,11 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, explicit }
+}
+
+export async function resolveNetworkOptions(args: NetworkOptions) {
+  const { Config } = await import("../config/config")
+  const config = await Config.global()
+  return resolveFrom(args, config, process.argv)
 }
