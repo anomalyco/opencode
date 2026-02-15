@@ -23,12 +23,14 @@ cp legal-opencode.json opencode.json
 
 ```jsonc
 {
+  "$schema": "https://opencode.ai/config.json",
   "model": "deepseek/deepseek-chat",
-  "providers": {
+  "provider": {
     "deepseek": {
-      "type": "openai",
-      "baseURL": "https://api.deepseek.com",
-      "apiKey": "YOUR_API_KEY"
+      "options": {
+        "apiKey": "YOUR_API_KEY",
+        "baseURL": "https://api.deepseek.com"
+      }
     }
   },
   "experimental": {
