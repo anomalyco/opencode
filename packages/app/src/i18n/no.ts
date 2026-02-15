@@ -579,6 +579,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Koble til en leverandør for å bruke modeller, inkl. Claude, GPT, Gemini osv.",
   "sidebar.project.recentSessions": "Nylige sesjoner",
   "sidebar.project.viewAllSessions": "Vis alle sesjoner",
+  "sidebar.project.clearNotifications": "Fjern varsler",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -633,6 +634,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "Varsel 01",
   "sound.option.alert02": "Varsel 02",
   "sound.option.alert03": "Varsel 03",

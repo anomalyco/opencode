@@ -28,7 +28,7 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ---
 
-#### 基本網址
+#### 基本网址
 
 您可以通过设置 `baseURL` 选项来自定义任何提供商的基本 URL。这在使用代理服务或自定义端点时非常有用。
 
@@ -47,7 +47,7 @@ opencode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ---
 
-## opencode 一代
+## OpenCode Zen
 
 OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 经测试和验证可与opencode良好配合。 [了解更多](/docs/zen)。
@@ -85,7 +85,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 
 ## 目录
 
-讓我们詳細瞭解一些提供商。如果您想将提供商添加到
+让我们详细了解一些提供商。如果您想将提供商添加到
 列表，请随时开启PR。
 
 :::note
@@ -94,7 +94,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 
 ---
 
-### 302.艾伊
+### 302.AI
 
 1. Head over to the [302.AI console](https://302.ai/), create an account, and generate an API key.
 
@@ -121,7 +121,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 
 ---
 
-### 亞馬遜基岩
+### Amazon Bedrock
 
 相当于 Amazon Bedrock 与 opencode 结合使用：
 
@@ -156,7 +156,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    export AWS_REGION=us-east-1
    ```
 
-   #### 配置文件（推薦）
+   #### 配置文件（推荐）
 
    For project-specific or persistent configuration, use `opencode.json`:
 
@@ -174,13 +174,13 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    }
    ```
 
-   **可用選項：**
+   **可用选项：**
    - `region` - AWS 区域（例如 `us-east-1`、`eu-west-1`）
    - `profile` - 来自 `~/.aws/credentials` 的 AWS 命名配置档案
    - `endpoint` - VPC 节点节点的自定义节点 URL（通用 `baseURL` 选项的别名）
 
    :::提示
-   配置文件選項优先于环境变量。
+   配置文件选项优先于环境变量。
    :::
 
    #### 高阶：VPC 端点
@@ -206,13 +206,13 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
    `endpoint` 选项是通用 `baseURL` 选项的别名，使用 AWS 术语特定。如果同时指定了 `endpoint` 和 `baseURL`，则 `endpoint` 优先。
    :::
 
-   #### 認證方式
+   #### 认证方式
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**：创建IAM用户并在AWS控制台中生成访问金币。
    - **`AWS_PROFILE`**：使用 `~/.aws/credentials` 中的命名配置文件。首先配置 `aws configure --profile my-profile` 或 `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**：从 Amazon Bedrock 控制台生成长期 API 密钥
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**：适用于 EKS IRSA（服务账户的 IAM 角色）或具有 OIDC 联合的其他 Kubernetes 环境。使用服务账户注释时，这些环境变量由 Kubernetes 自动注入。
 
-   #### 認證优先顺序
+   #### 认证优先顺序
 
    Amazon Bedrock 使用以下身份验证优先顺序：
    1. **不记名Tokens** - `AWS_BEARER_TOKEN_BEDROCK`环境变化数据或来自`/connect`Tokens的Tokens
@@ -251,7 +251,7 @@ OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
 
 ---
 
-### 人择
+### Anthropic
 
 1. 注册后，执行`/connect`命令并选择Anthropic。
 
@@ -289,7 +289,7 @@ Using your Claude Pro/Max subscription in opencode is not officially supported b
 
 ---
 
-### 天蓝色 OpenAI
+### Azure OpenAI
 
 :::note
 如果遇到“抱歉，但我无法协助该请求”错误，请尝试将 Azure 资源中的内容筛选器从 **DefaultV2** 更改为 **Default**。
@@ -387,7 +387,7 @@ Using your Claude Pro/Max subscription in opencode is not officially supported b
 
 ---
 
-### 巴吉度獵犬
+### Baseten
 
 1. Head over to the [Baseten](https://app.baseten.co/), create an account, and generate an API key.
 
@@ -414,7 +414,7 @@ Using your Claude Pro/Max subscription in opencode is not officially supported b
 
 ---
 
-### 大腦
+### Cerebras
 
 1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
 
@@ -441,7 +441,7 @@ Using your Claude Pro/Max subscription in opencode is not officially supported b
 
 ---
 
-### Cloudflare AI闸道器
+### Cloudflare AI Gateway
 
 Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI, and more through a unified endpoint. With [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) you don't need separate API keys for each provider.
 
@@ -499,7 +499,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### 皮質
+### Cortecs
 
 1. Head over to the [Cortecs console](https://cortecs.ai/), create an account, and generate an API key.
 
@@ -526,7 +526,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### 深度搜索
+### DeepSeek
 
 1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and click **Create new API key**.
 
@@ -553,7 +553,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### 深層基礎設施
+### Deep Infra
 
 1. Head over to the [Deep Infra dashboard](https://deepinfra.com/dash), create an account, and generate an API key.
 
@@ -580,7 +580,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### 韌體
+### Firmware
 
 1. Head over to the [Firmware dashboard](https://app.firmware.ai/signup), create an account, and generate an API key.
 
@@ -607,7 +607,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### 煙花人工智慧
+### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
 
@@ -634,7 +634,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
-### GitLab 二人组
+### GitLab Duo
 
 GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的人工智慧代理聊天。
 
@@ -663,7 +663,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    2. 单击**添加新Tokens**
    3. Name: `OpenCode`, Scopes: `api`
    4. 复制Tokens（以 `glpat-` 发起人）
-   5. 在终端中輸入
+   5. 在终端中输入
 
 3. 执行 `/models` 命令查看可用模型。
 
@@ -820,7 +820,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ---
 
-### 谷歌顶点人工智能
+### Google Vertex AI
 
 Google Vertex AI 与 opencode 结合使用：
 
@@ -834,7 +834,7 @@ Google Vertex AI 与 opencode 结合使用：
 2. 设置所需的环境变量：
    - `GOOGLE_CLOUD_PROJECT`：您的Google云专案ID
    - `VERTEX_LOCATION`（可选）：Vertex AI的区域（默认为`global`）
-   - 身份验证（选择一項）：
+   - 身份验证（选择一项）：
      - `GOOGLE_APPLICATION_CREDENTIALS`：服务帐户 JSON 密钥文件的路径
      - 使用 gcloud CLI 进行身份验证：`gcloud auth application-default login`
 
@@ -864,7 +864,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
-### 格羅克
+### Groq
 
 1. Head over to the [Groq console](https://console.groq.com/), click **Create API Key**, and copy the key.
 
@@ -891,7 +891,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
-### 抱臉
+### Hugging Face
 
 [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) provides access to open models supported by 17+ providers.
 
@@ -903,7 +903,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
    /connect
    ```
 
-3. 輸入您的擁抱臉標記。
+3. 输入您的 Hugging Face API 密钥。
 
    ```txt
    ┌ API key
@@ -920,7 +920,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
-### 螺旋錐
+### Helicone
 
 [Helicone](https://helicone.ai) is an LLM observability platform that provides logging, monitoring, and analytics for your AI applications. The Helicone AI Gateway routes your requests to the appropriate provider automatically based on the model.
 
@@ -949,7 +949,7 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 For more providers and advanced features like caching and rate limiting, check the [Helicone documentation](https://docs.helicone.ai).
 
-#### 可選配置
+#### 可选配置
 
 如果您发现Helicone的某些功能或模型未通过opencode自动配置，您始终可以自行配置。
 
@@ -979,7 +979,7 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
 }
 ```
 
-#### 自定義標頭
+#### 自定义标头
 
 Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义标头。使用 `options.headers` 将它们添加到您提供的方案配置中：
 
@@ -1002,7 +1002,7 @@ Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义�
 }
 ```
 
-##### 会话跟蹤
+##### 会话跟踪
 
 Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each opencode conversation as a session in Helicone.
 
@@ -1022,7 +1022,7 @@ npm install -g opencode-helicone-session
 
 ##### 常见螺旋接头
 
-| 標題                       | 描述                                                  |
+| 标题                       | 描述                                                  |
 | -------------------------- | ----------------------------------------------------- |
 | `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)              |
 | `Helicone-User-Id`         | 点击用户跟踪指标                                      |
@@ -1033,7 +1033,7 @@ See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/he
 
 ---
 
-### 呼叫.cpp
+### llama.cpp
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
@@ -1071,7 +1071,7 @@ You can configure opencode to use local models through [llama.cpp's](https://git
 
 ---
 
-### IO网路
+### IO.NET
 
 IO.NET提供了17种针对各种例子进行优化的模型：
 
@@ -1100,7 +1100,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ---
 
-### LM工作室
+### LM Studio
 
 您可以通过使用本地模型来使用 LM Studio 配置opencode。
 
@@ -1134,7 +1134,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ---
 
-### 登月人工智慧
+### Moonshot AI
 
 要使用 Moonshot AI 中的 Kimi K2：
 
@@ -1163,7 +1163,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ---
 
-### 最小最大
+### MiniMax
 
 1. Head over to the [MiniMax API Console](https://platform.minimax.io/login), create an account, and generate an API key.
 
@@ -1190,7 +1190,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ---
 
-### Nebius 代币工厂
+### Nebius Token Factory
 
 1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
 
@@ -1217,7 +1217,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ---
 
-### 成为
+### Ollama
 
 您可以使用 Ollama 配置 opencode 本地模型。
 
@@ -1259,7 +1259,7 @@ Ollama can automatically configure itself for opencode. See the [Ollama integrat
 
 ---
 
-### 奧拉馬雲
+### Ollama Cloud
 
 相当于 Ollama Cloud 与 opencode 一起使用：
 
@@ -1298,7 +1298,7 @@ Ollama can automatically configure itself for opencode. See the [Ollama integrat
 
 ---
 
-### 开放人工智能
+### OpenAI
 
 We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
@@ -1331,7 +1331,7 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
 ---
 
-### opencode 一代
+### OpenCode Zen
 
 OpenCode Zen 是 opencode 团队提供的经过测试和验证的模型列表。 [了解更多](/docs/zen)。
 
@@ -1360,7 +1360,7 @@ OpenCode Zen 是 opencode 团队提供的经过测试和验证的模型列表。
 
 ---
 
-### 開放路由器
+### OpenRouter
 
 1. Head over to the [OpenRouter dashboard](https://openrouter.ai/settings/keys), click **Create API Key**, and copy the key.
 
@@ -1424,7 +1424,7 @@ OpenCode Zen 是 opencode 团队提供的经过测试和验证的模型列表。
 
 ---
 
-### SAP人工智慧核心
+### SAP AI Core
 
 SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta、Mistral和AI21的40多个模型的访问。
 
@@ -1479,7 +1479,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ---
 
-### OVHcloud AI 端点
+### OVHcloud AI Endpoints
 
 1. Head over to the [OVHcloud panel](https://ovh.com/manager). Navigate to the `Public Cloud` section, `AI & Machine Learning` > `AI Endpoints` and in `API Keys` tab, click **Create a new API key**.
 
@@ -1506,7 +1506,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ---
 
-### 斯卡威
+### Scaleway
 
 To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) with Opencode:
 
@@ -1535,7 +1535,7 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
-### 一起人工智慧
+### Together AI
 
 1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.
 
@@ -1562,7 +1562,7 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
-### 威尼斯人工智慧
+### Venice AI
 
 1. Head over to the [Venice AI console](https://venice.ai), create an account, and generate an API key.
 
@@ -1589,7 +1589,7 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
-### Vercel人工智慧闸道器
+### Vercel AI Gateway
 
 Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、Google、xAI 等的模型。模型按标价提供，不加价。
 
@@ -1635,9 +1635,9 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 }
 ```
 
-一些有用的路由選項：
+一些有用的路由选项：
 
-| 選項                | 描述                   |
+| 选项                | 描述                   |
 | ------------------- | ---------------------- |
 | `order`             | 提供商尝试顺序         |
 | `only`              | 限制特定提供商         |
@@ -1645,7 +1645,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ---
 
-### 人工智慧
+### xAI
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
@@ -1672,7 +1672,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ---
 
-### 扎艾
+### Z.AI
 
 1. Head over to the [Z.AI API console](https://z.ai/manage-apikey/apikey-list), create an account, and click **Create a new API key**.
 
@@ -1701,7 +1701,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ---
 
-### 多路復用器
+### ZenMux
 
 1. Head over to the [ZenMux dashboard](https://zenmux.ai/settings/keys), click **Create API Key**, and copy the key.
 
@@ -1743,7 +1743,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ---
 
-## 定製提供商
+## 自定义提供商
 
 要添加 `/connect` 命令中未列出的任何 **OpenAI 兼容**提供商：
 
@@ -1816,7 +1816,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    }
    ```
 
-   以下是配置選項：
+   以下是配置选项：
    - **npm**：要使用AI的SDK包，`@ai-sdk/openai-compatible`用于OpenAI兼容的事业
    - **名称**：UI中的显示名称。
    - **模型**：可用模型。
@@ -1824,7 +1824,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    - **options.apiKey**：如果不使用身份验证，可以选择设置API 密钥。
    - **options.headers**：可选择设置自定义标头。
 
-   有關高階選項的更多資訊，请參見下面的示例。
+   有关高阶选项的更多资讯，请参见下面的示例。
 
 5. 执行 `/models` 命令，您提供的自定义程序和模型将出现在选择列表中。
 
@@ -1875,7 +1875,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ## 故障排除
 
-如果您在配置提供商時遇到問題，请检查以下內容：
+如果您在配置提供商时遇到问题，请检查以下内容：
 
 1. **Check the auth setup**: Run `opencode auth list` to see if the credentials
    提供商的配置已添加到您的配置中。

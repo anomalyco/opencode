@@ -1,5 +1,5 @@
 ---
-title: LSP Servers
+title: LSP 服务器
 description: opencode 与您的 LSP 服务器集成。
 ---
 
@@ -7,11 +7,11 @@ opencode 与您的语言服务器协议 (LSP) 集成，以帮助 LLM 与您的�
 
 ---
 
-## Built-in
+## 内置
 
 opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
-| LSP Server         | Extensions                                                          | Requirements                                     |
+| LSP 服务器         | 扩展名                                                              | 要求                                             |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------ |
 | astro              | .astro                                                              | Astro 项目自动安装                               |
 | bash               | .sh, .bash, .zsh, .ksh                                              | 自动安装 bash-language-server                    |
@@ -63,7 +63,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-## Configure
+## 配置
 
 您可以通过 opencode 配置中的 `lsp` 部分自定义 LSP 服务器。
 
@@ -76,7 +76,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 每个 LSP 服务器支持以下功能：
 
-| Property         | Type     | Description                         |
+| 属性             | 类型     | 描述                                |
 | ---------------- | -------- | ----------------------------------- |
 | `disabled`       | boolean  | 将其设置为 `true` 以禁用 LSP 服务器 |
 | `command`        | string[] | 启动 LSP 服务器的命令               |
@@ -88,7 +88,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-### Environment Variables
+### 环境变量
 
 启动 LSP 服务器时使用 `env` 参数设置环境变量：
 
@@ -107,7 +107,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-### Initialization Options
+### 初始化选项
 
 使用 `initialization` 属性将初始化选项传递给 LSP 服务器。这些是在 LSP `initialize` 请求发送期间的服务器特定设置：
 
@@ -132,7 +132,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-### Disabling LSP servers
+### 禁用 LSP 服务器
 
 要全局禁用 **所有** LSP 服务，将 `lsp` 设置为 `false`：
 
@@ -158,7 +158,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-### Custom LSP servers
+### 自定义 LSP 服务器
 
 您可以通过指定命令和文件扩展名来添加自定义 LSP 服务器：
 
@@ -176,7 +176,7 @@ opencode 附带了多种适用于流行语言的内置 LSP 服务器：
 
 ---
 
-## Additional Information
+## 其他信息
 
 ### PHP Intelephense
 
