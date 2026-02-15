@@ -39,6 +39,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         list: [] as string[],
         currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
+        hiddenProjects: {} as Record<string, string[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
@@ -158,6 +159,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const hiddenProjectsList = createMemo(() => store.hiddenProjects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
 
     return {
@@ -183,6 +185,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           const current = store.projects[key] ?? []
           const normalized = normalizeWorktreePath(directory)
+          const hidden = store.hiddenProjects[key] ?? []
+          const hiddenIndex = hidden.findIndex((x) => normalizeWorktreePath(x) === normalized)
+          if (hiddenIndex !== -1)
+            setStore(
+              "hiddenProjects",
+              key,
+              hidden.filter((_, i) => i !== hiddenIndex),
+            )
           if (current.find((x) => normalizeWorktreePath(x.worktree) === normalized)) return
           setStore("projects", key, [{ worktree: normalized, expanded: true }, ...current])
         },
@@ -191,6 +201,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           const current = store.projects[key] ?? []
           const normalized = normalizeWorktreePath(directory)
+          const hidden = store.hiddenProjects[key] ?? []
+          if (!hidden.find((x) => normalizeWorktreePath(x) === normalized)) {
+            setStore("hiddenProjects", key, [...hidden, normalized])
+          }
           setStore(
             "projects",
             key,
@@ -237,6 +251,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const current = store.projects[key] ?? []
           const match = current.find((x) => normalizeWorktreePath(x.worktree) === normalized)
           setStore("lastProject", key, match?.worktree ?? normalized)
+        },
+        hidden(directory: string) {
+          const normalized = normalizeWorktreePath(directory)
+          return hiddenProjectsList().some((worktree) => normalizeWorktreePath(worktree) === normalized)
         },
       },
     }

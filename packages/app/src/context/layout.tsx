@@ -421,6 +421,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
           server.projects.close(project.worktree)
 
+          if (server.projects.hidden(raw.get(root) ?? root)) continue
+
           if (!seen.has(root)) {
             server.projects.open(raw.get(root) ?? root)
             seen.add(root)
@@ -431,6 +433,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         for (const worktree of known) {
           if (seen.has(worktree)) continue
+          if (server.projects.hidden(raw.get(worktree) ?? worktree)) continue
           server.projects.open(raw.get(worktree) ?? worktree)
           seen.add(worktree)
         }
