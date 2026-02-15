@@ -3,7 +3,7 @@ import { pathToFileURL } from "url"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
-import { PermissionNext } from "../permission/next"
+import { PermissionNext } from "../permission"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 

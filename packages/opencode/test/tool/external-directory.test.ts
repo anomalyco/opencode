@@ -3,7 +3,7 @@ import path from "path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
-import type { PermissionNext } from "../../src/permission/next"
+import type { PermissionNext } from "../../src/permission"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: "test",

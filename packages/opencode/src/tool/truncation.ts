@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
-import { PermissionNext } from "../permission/next"
+import { PermissionNext } from "../permission"
 import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 

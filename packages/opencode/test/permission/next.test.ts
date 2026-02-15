@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import os from "os"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 

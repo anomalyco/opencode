@@ -2,7 +2,7 @@ import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlit
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "@/snapshot"
-import type { PermissionNext } from "@/permission/next"
+import type { PermissionNext } from "@/permission"
 import { Timestamps } from "@/storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">

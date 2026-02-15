@@ -3,7 +3,7 @@ import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import type { PermissionNext } from "../../src/permission/next"
+import type { PermissionNext } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncation"
 
 const ctx = {

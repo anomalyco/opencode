@@ -13,7 +13,7 @@ import { Todo } from "../../session/todo"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 

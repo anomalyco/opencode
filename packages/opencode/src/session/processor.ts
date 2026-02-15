@@ -13,7 +13,7 @@ import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 import { Question } from "@/question"
 
 export namespace SessionProcessor {

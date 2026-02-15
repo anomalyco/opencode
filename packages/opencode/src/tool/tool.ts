@@ -1,7 +1,7 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
-import type { PermissionNext } from "../permission/next"
+import type { PermissionNext } from "../permission"
 import { Truncate } from "./truncation"
 
 export namespace Tool {

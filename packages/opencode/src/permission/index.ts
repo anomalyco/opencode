@@ -8,6 +8,7 @@ import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
+import { Pending } from "@/pending"
 import os from "os"
 import z from "zod"
 
@@ -113,14 +114,7 @@ export namespace PermissionNext {
     )
     const stored = row?.data ?? ([] as Ruleset)
 
-    const pending: Record<
-      string,
-      {
-        info: Request
-        resolve: () => void
-        reject: (e: any) => void
-      }
-    > = {}
+    const pending: Record<string, Pending.Entry<Request>> = {}
 
     return {
       pending,
@@ -257,9 +251,9 @@ export namespace PermissionNext {
   }
 
   /** User rejected without message - halts execution */
-  export class RejectedError extends Error {
+  export class RejectedError extends Pending.RejectedError {
     constructor() {
-      super(`The user rejected permission to use this specific tool call.`)
+      super("The user rejected permission to use this specific tool call.")
     }
   }
 

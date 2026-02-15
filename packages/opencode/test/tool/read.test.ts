@@ -3,7 +3,7 @@ import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")

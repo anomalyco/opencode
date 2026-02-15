@@ -20,7 +20,7 @@ import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 import { Auth } from "@/auth"
 
 export namespace LLM {
