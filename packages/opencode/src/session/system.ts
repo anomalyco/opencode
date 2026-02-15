@@ -16,10 +16,21 @@ import PROMPT_CASE_REVIEW from "./prompt/case_review.txt"
 import PROMPT_DOCUMENT_DRAFT from "./prompt/document_draft.txt"
 
 import type { Provider } from "@/provider/provider"
+import { Config } from "../config/config"
 
 export namespace SystemPrompt {
   export function instructions() {
     return PROMPT_CODEX.trim()
+  }
+
+  // 检测是否启用法律模式
+  async function isLegalMode(): Promise<boolean> {
+    try {
+      const config = await Config.get()
+      return config.experimental?.legal_mode === true
+    } catch {
+      return false
+    }
   }
 
   // 法律领域专用提示词选择
@@ -35,7 +46,12 @@ export namespace SystemPrompt {
     }
   }
 
-  export function provider(model: Provider.Model) {
+  export async function provider(model: Provider.Model) {
+    // 检查是否启用法律模式
+    if (await isLegalMode()) {
+      return legal("default")
+    }
+
     if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
     if (model.api.id.includes("gpt-") || model.api.id.includes("o1") || model.api.id.includes("o3"))
       return [PROMPT_BEAST]
