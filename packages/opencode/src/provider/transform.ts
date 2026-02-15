@@ -880,8 +880,67 @@ export namespace ProviderTransform {
           return obj.map(sanitizeGemini)
         }
 
+        // Convert anyOf/oneOf with const values to enum before processing
+        if (obj.anyOf || obj.oneOf) {
+          const variants = obj.anyOf || obj.oneOf
+          if (Array.isArray(variants)) {
+            const constValues = variants
+              .filter((v: any) => v && typeof v === "object" && "const" in v)
+              .map((v: any) => String(v.const))
+            if (constValues.length === variants.length && constValues.length > 0) {
+              const merged: any = { ...obj, type: "string", enum: constValues }
+              delete merged.anyOf
+              delete merged.oneOf
+              delete merged.const
+              return sanitizeGemini(merged)
+            }
+            // If anyOf/oneOf contains type variants, pick the first valid one
+            const typeVariants = variants.filter((v: any) => v && typeof v === "object" && v.type)
+            if (typeVariants.length > 0) {
+              const merged: any = { ...obj, ...typeVariants[0] }
+              delete merged.anyOf
+              delete merged.oneOf
+              return sanitizeGemini(merged)
+            }
+          }
+        }
+
         const result: any = {}
         for (const [key, value] of Object.entries(obj)) {
+          // Skip keywords unsupported by Gemini
+          if (
+            key === "additionalProperties" ||
+            key === "$ref" ||
+            key === "$schema" ||
+            key === "$id" ||
+            key === "$defs" ||
+            key === "definitions" ||
+            key === "default" ||
+            key === "const" ||
+            key === "minItems" ||
+            key === "maxItems" ||
+            key === "minLength" ||
+            key === "maxLength" ||
+            key === "pattern" ||
+            key === "patternProperties" ||
+            key === "propertyNames" ||
+            key === "uniqueItems" ||
+            key === "minimum" ||
+            key === "maximum" ||
+            key === "exclusiveMinimum" ||
+            key === "exclusiveMaximum" ||
+            key === "multipleOf" ||
+            key === "if" ||
+            key === "then" ||
+            key === "else" ||
+            key === "not" ||
+            key === "title" ||
+            key === "allOf" ||
+            key === "anyOf" ||
+            key === "oneOf"
+          ) {
+            continue
+          }
           if (key === "enum" && Array.isArray(value)) {
             // Convert all enum values to strings
             result[key] = value.map((v) => String(v))
@@ -894,6 +953,11 @@ export namespace ProviderTransform {
           } else {
             result[key] = value
           }
+        }
+
+        // Infer type="object" when properties exist but type is missing
+        if (!result.type && (result.properties || result.required)) {
+          result.type = "object"
         }
 
         // Filter required array to only include fields that exist in properties
