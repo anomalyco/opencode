@@ -89,5 +89,12 @@ describe("prompt-input history", () => {
     expect(canNavigateHistoryAtCursor("down", "abc", 3)).toBe(true)
     expect(canNavigateHistoryAtCursor("up", "abc", 1)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", "abc", 1)).toBe(false)
+
+    expect(canNavigateHistoryAtCursor("up", "abc", 0, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 3, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 0, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 3, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 1, true)).toBe(false)
+    expect(canNavigateHistoryAtCursor("down", "abc", 1, true)).toBe(false)
   })
 })

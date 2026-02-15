@@ -916,7 +916,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .map((part) => ("content" in part ? part.content : ""))
         .join("")
       const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition)) return
+      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
       if (navigateHistory(direction)) {
         event.preventDefault()
       }

@@ -4,8 +4,11 @@ const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 export const MAX_HISTORY = 100
 
-export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number) {
+export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number, inHistory = false) {
   const position = Math.max(0, Math.min(cursor, text.length))
+  const atStart = position === 0
+  const atEnd = position === text.length
+  if (inHistory) return atStart || atEnd
   if (direction === "up") return position === 0
   return position === text.length
 }
