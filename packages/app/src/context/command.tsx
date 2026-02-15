@@ -316,8 +316,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const isPalette = palette().has(sig)
       const option = keymap().get(sig)
       const modified = event.ctrlKey || event.metaKey || event.altKey
+      const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified) return
+      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab)
+        return
 
       if (isPalette) {
         event.preventDefault()
