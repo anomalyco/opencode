@@ -41,23 +41,29 @@ const tokenTotal = (msg: AssistantMessage) => {
   return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
 }
 
-const lastAssistantWithTokens = (messages: Message[]) =>
-  messages.findLast(
-    (msg): msg is AssistantMessage => msg.role === "assistant" && tokenTotal(msg as AssistantMessage) > 0,
-  )
+const lastAssistantWithTokens = (messages: Message[]) => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role !== "assistant") continue
+    if (tokenTotal(msg as AssistantMessage) <= 0) continue
+    return msg as AssistantMessage
+  }
+}
 
 const build = (messages: Message[] = [], providers: Provider[] = [], store?: CostStore): Metrics => {
   const id = messages[0]?.sessionID
   const result = store && id ? costs(id, store) : undefined
 
-  const totalCost = result
-    ? result.total
-    : messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
-  const ownCost = result ? result.own : totalCost
-  const missing = result ? result.missing : []
-
   const message = lastAssistantWithTokens(messages)
-  if (!message) return { totalCost, ownCost, missing, context: undefined }
+  if (!message)
+    return {
+      totalCost: result
+        ? result.total
+        : messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0),
+      ownCost: result ? result.own : 0,
+      missing: result ? result.missing : [],
+      context: undefined,
+    }
 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
@@ -65,9 +71,11 @@ const build = (messages: Message[] = [], providers: Provider[] = [], store?: Cos
   const total = tokenTotal(message)
 
   return {
-    totalCost,
-    ownCost,
-    missing,
+    totalCost: result
+      ? result.total
+      : messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0),
+    ownCost: result ? result.own : 0,
+    missing: result ? result.missing : [],
     context: {
       message,
       provider,

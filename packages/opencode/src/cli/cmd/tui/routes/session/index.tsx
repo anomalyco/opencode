@@ -1892,23 +1892,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
             <Show when={props.metadata.sessionId}>
               {(sessionId) => {
                 const result = createMemo(() => costs(sessionId(), sync.data))
-                const own = createMemo(() =>
-                  new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                  }).format(result().own),
-                )
                 const total = createMemo(() =>
                   new Intl.NumberFormat("en-US", {
                     style: "currency",
                     currency: "USD",
                   }).format(result().total),
                 )
-                return (
-                  <text style={{ fg: theme.textMuted }}>
-                    ({total})
-                  </text>
-                )
+                return <text style={{ fg: theme.textMuted }}>({total})</text>
               }}
             </Show>
             <Show when={current()}>

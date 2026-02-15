@@ -37,12 +37,11 @@ export function Header() {
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
   const cost = createMemo(() => {
-	const result = costs(route.sessionID, sync.data)
-    const total = result.total
+    const result = costs(route.sessionID, sync.data)
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(total)
+    }).format(result.total)
   })
 
   const context = createMemo(() => {

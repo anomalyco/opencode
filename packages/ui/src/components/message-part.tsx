@@ -957,7 +957,7 @@ ToolRegistry.register({
         : undefined
       const usage = limit ? Math.round((tokens / limit) * 100) : undefined
       const result = costs(sid, data.store)
-      return { tokens, usage, own: result.own, total: result.total, missing: result.missing }
+      return { tokens, usage, total: result.total, missing: result.missing }
     })
     createEffect(() => {
       const missing = stats()?.missing
