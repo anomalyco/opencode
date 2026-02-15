@@ -174,11 +174,11 @@ export const ReadTool = Tool.define("read", {
     let line = 0
     let inRange = false
     let stopped = false
+    const cap = MAX_BYTES + MAX_LINE_LENGTH
 
     for await (const chunk of stream) {
       buf += chunk
 
-      const cap = MAX_BYTES + MAX_LINE_LENGTH
       const idx = buf.lastIndexOf("\n")
       if (idx === -1) {
         if (buf.length > cap) {
@@ -188,15 +188,13 @@ export const ReadTool = Tool.define("read", {
             const size = Buffer.byteLength(clipped, "utf-8") + (raw.length > 0 ? 1 : 0)
             if (bytes + size > MAX_BYTES) {
               truncatedByBytes = true
-              hasMoreLines = true
-              stopped = true
             } else {
               raw.push(clipped)
               bytes += size
               truncatedByCap = true
-              hasMoreLines = true
-              stopped = true
             }
+            hasMoreLines = true
+            stopped = true
           } else {
             buf = ""
           }
@@ -352,7 +350,7 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
   const bufferSize = Math.min(4096, fileSize)
   const buffer = await file.slice(0, bufferSize).arrayBuffer()
   if (buffer.byteLength === 0) return false
-  const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+  const bytes = new Uint8Array(buffer)
 
   let nonPrintableCount = 0
   for (let i = 0; i < bytes.length; i++) {
