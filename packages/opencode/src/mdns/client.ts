@@ -2,7 +2,6 @@ import { Log } from "@/util/log"
 import { Bonjour, type Service } from "bonjour-service"
 
 const log = Log.create({ service: "mdns.client" })
-type Timer = ReturnType<typeof setTimeout>
 
 export interface DiscoveredServer {
   name: string
@@ -12,45 +11,67 @@ export interface DiscoveredServer {
   txt: Record<string, string>
 }
 
-export function find(timeout = 5000, quietPeriod = 1000): Promise<DiscoveredServer[]> {
-  return new Promise((resolve) => {
-    const bonjour = new Bonjour()
-    const servers: DiscoveredServer[] = []
-    let quietTimer: Timer | undefined
+export async function* find(signal?: AbortSignal): AsyncGenerator<DiscoveredServer> {
+  const bonjour = new Bonjour()
+  const list: DiscoveredServer[] = []
+  const seen = new Set<string>()
+  let done = signal?.aborted ?? false
+  let wake: (() => void) | undefined
 
-    const finish = () => {
-      if (quietTimer) clearTimeout(quietTimer)
-      quietTimer = undefined
-      browser.stop()
-      bonjour.destroy()
-      log.info("discovery complete", { count: servers.length })
-      resolve(servers)
-    }
+  const notify = () => {
+    if (!wake) return
+    wake()
+    wake = undefined
+  }
 
-    const onService = (service: Service) => {
-      if (!service.name.startsWith("opencode-")) return
+  const onService = (service: Service) => {
+    if (done) return
+    if (!service.name.startsWith("opencode-")) return
 
-      const host = service.host
-      const port = service.port
-      const txt = service.txt ?? {}
-      const fullUrl = `http://${host}:${port}`
+    const host = service.host
+    const port = service.port
+    const key = `${service.name}:${host}:${port}`
+    if (seen.has(key)) return
 
-      servers.push({
-        name: service.name,
-        host,
-        port,
-        fullUrl,
-        txt,
+    seen.add(key)
+    list.push({
+      name: service.name,
+      host,
+      port,
+      fullUrl: `http://${host}:${port}`,
+      txt: service.txt ?? {},
+    })
+
+    log.debug("discovered server", { name: service.name, host, port })
+    notify()
+  }
+
+  const browser = bonjour.find({ type: "http", protocol: "tcp" }, onService)
+  const onAbort = () => {
+    done = true
+    notify()
+  }
+  signal?.addEventListener("abort", onAbort, { once: true })
+
+  try {
+    while (true) {
+      const server = list.shift()
+      if (server) {
+        yield server
+        continue
+      }
+      if (done) return
+      await new Promise<void>((resolve) => {
+        wake = resolve
+        if (done || list.length > 0) notify()
       })
-
-      log.debug("discovered server", { name: service.name, host, port })
-
-      if (quietTimer) clearTimeout(quietTimer)
-      quietTimer = setTimeout(finish, quietPeriod)
     }
-
-    const browser = bonjour.find({ type: "http", protocol: "tcp" }, onService)
-
-    setTimeout(finish, timeout)
-  })
+  } finally {
+    signal?.removeEventListener("abort", onAbort)
+    done = true
+    notify()
+    browser.stop()
+    bonjour.destroy()
+    log.info("discovery complete", { count: seen.size })
+  }
 }

@@ -68,7 +68,10 @@ export const AttachCommand = cmd({
 
       if (args.discover) {
         prompts.intro("Discovering OpenCode servers")
-        const servers = await MDNS.find(args.timeout)
+        const servers: MDNS.DiscoveredServer[] = []
+        for await (const server of MDNS.find(AbortSignal.timeout(args.timeout))) {
+          servers.push(server)
+        }
 
         if (servers.length === 0) {
           prompts.log.error("No OpenCode servers found on the network")
