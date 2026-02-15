@@ -27,8 +27,6 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
-import path from "path"
-import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 
@@ -80,8 +78,7 @@ const cli = yargs(hideBin(process.argv))
       args: process.argv.slice(2),
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
-    if (!(await Bun.file(marker).exists())) {
+    if (await JsonMigration.shouldRun()) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36
@@ -108,6 +105,7 @@ const cli = yargs(hideBin(process.argv))
             }
           },
         })
+        await JsonMigration.markComplete()
       } finally {
         if (tty) process.stderr.write("\x1b[?25h")
         else {

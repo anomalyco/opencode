@@ -94,15 +94,36 @@ function createTestDb() {
 describe("JSON to SQLite migration", () => {
   let storageDir: string
   let sqlite: Database
+  const sqliteDbPath = path.join(Global.Path.data, "opencode.db")
+  const migrationMarkerPath = JsonMigration.markerPath()
 
   beforeEach(async () => {
     storageDir = await setupStorageDir()
+    await fs.rm(sqliteDbPath, { force: true })
+    await fs.rm(migrationMarkerPath, { force: true })
     sqlite = createTestDb()
   })
 
   afterEach(async () => {
     sqlite.close()
     await fs.rm(storageDir, { recursive: true, force: true })
+    await fs.rm(sqliteDbPath, { force: true })
+    await fs.rm(migrationMarkerPath, { force: true })
+  })
+
+  test("should run migration when storage exists and marker is missing", async () => {
+    await Bun.write(sqliteDbPath, "")
+    expect(await JsonMigration.shouldRun()).toBe(true)
+  })
+
+  test("should not run migration when completion marker exists", async () => {
+    await JsonMigration.markComplete()
+    expect(await JsonMigration.shouldRun()).toBe(false)
+  })
+
+  test("should not run migration when storage directory is missing", async () => {
+    await fs.rm(storageDir, { recursive: true, force: true })
+    expect(await JsonMigration.shouldRun()).toBe(false)
   })
 
   test("migrates project", async () => {

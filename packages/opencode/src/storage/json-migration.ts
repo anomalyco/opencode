@@ -10,6 +10,24 @@ import { existsSync } from "fs"
 
 export namespace JsonMigration {
   const log = Log.create({ service: "json-migration" })
+  const migrationMarkerPath = path.join(Global.Path.data, "json-sqlite-migration-complete")
+
+  export function markerPath() {
+    return migrationMarkerPath
+  }
+
+  export function storagePath() {
+    return path.join(Global.Path.data, "storage")
+  }
+
+  export async function shouldRun() {
+    if (!existsSync(storagePath())) return false
+    return !(await Bun.file(markerPath()).exists())
+  }
+
+  export async function markComplete() {
+    await Bun.write(markerPath(), "1")
+  }
 
   export type Progress = {
     current: number
@@ -22,7 +40,7 @@ export namespace JsonMigration {
   }
 
   export async function run(sqlite: Database, options?: Options) {
-    const storageDir = path.join(Global.Path.data, "storage")
+    const storageDir = storagePath()
 
     if (!existsSync(storageDir)) {
       log.info("storage directory does not exist, skipping migration")
