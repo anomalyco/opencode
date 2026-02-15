@@ -31,7 +31,6 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
-import { Flag } from "./flag/flag"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
