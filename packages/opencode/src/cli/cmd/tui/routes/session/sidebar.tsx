@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, ToolPart as SessionToolPart } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
@@ -62,6 +62,73 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
 
   const directory = useDirectory()
   const kv = useKV()
+  const parts = createMemo(() => messages().flatMap((message) => sync.data.part[message.id] ?? []))
+  const toolParts = createMemo(() => parts().filter((part): part is SessionToolPart => part.type === "tool"))
+  const toolMetrics = createMemo(() => {
+    const items = toolParts()
+    let pending = 0
+    let running = 0
+    let completed = 0
+    let error = 0
+    let filesRead = 0
+
+    for (const item of items) {
+      if (item.state.status === "pending") pending++
+      if (item.state.status === "running") running++
+      if (item.state.status === "completed") completed++
+      if (item.state.status === "error") error++
+
+      if (item.tool !== "read" || item.state.status !== "completed") continue
+      const loaded = (item.state.metadata as { loaded?: unknown })?.loaded
+      if (!Array.isArray(loaded)) continue
+      filesRead += loaded.filter((value): value is string => typeof value === "string").length
+    }
+
+    return {
+      pending,
+      running,
+      completed,
+      error,
+      filesRead,
+      toolCalls: items.length,
+    }
+  })
+  const filesModified = createMemo(() => new Set(diff().map((item) => item.file)).size)
+  const currentAgent = createMemo(() => {
+    const lastAssistant = messages().findLast((item): item is AssistantMessage => item.role === "assistant")
+    const fallback = sync.data.agent.find((item) => !item.hidden && item.mode !== "subagent")
+    const name = lastAssistant?.agent ?? fallback?.name ?? "unknown"
+    const info = sync.data.agent.find((item) => item.name === name)
+    return {
+      name,
+      mode: info?.mode ?? lastAssistant?.mode,
+    }
+  })
+  const sessionStatus = createMemo(() => sync.data.session_status?.[props.sessionID]?.type)
+  const statusLine = createMemo(() => {
+    const metrics = toolMetrics()
+    let label = "Waiting"
+    if (metrics.running > 0) label = "Running"
+    else if (metrics.pending > 0) label = "Waiting"
+    else if (metrics.error > 0) label = "Error"
+    else if (metrics.completed > 0) label = "Completed"
+
+    const auxiliary = sessionStatus() && sessionStatus() !== "idle" ? sessionStatus() : undefined
+    return { label, auxiliary }
+  })
+  const statusColor = createMemo(() => {
+    if (statusLine().label === "Running") return theme.warning
+    if (statusLine().label === "Error") return theme.error
+    if (statusLine().label === "Completed") return theme.success
+    return theme.textMuted
+  })
+  const messageWarning = createMemo(() => messages().length >= 40)
+  const toolPartWarning = createMemo(() => toolMetrics().toolCalls >= 80)
+  const fileReadWarning = createMemo(() => {
+    if (toolMetrics().filesRead > 60) return "critical"
+    if (toolMetrics().filesRead > 30) return "warning"
+    return "none"
+  })
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -103,7 +170,42 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
                 <text fg={theme.text}>
                   <b>Progress / Observability</b>
                 </text>
-                <text fg={theme.textMuted}>Placeholder (PR1)</text>
+                <text fg={theme.textMuted}>
+                  Agent: {currentAgent().name}
+                  <Show when={currentAgent().mode}>
+                    {(mode) => <> ({mode()})</>}
+                  </Show>
+                </text>
+                <text fg={statusColor()}>
+                  Status: {statusLine().label}
+                  <Show when={statusLine().auxiliary}>
+                    {(aux) => <> ({aux()})</>}
+                  </Show>
+                </text>
+                <text fg={theme.textMuted}>
+                  Files Read: {toolMetrics().filesRead}
+                  <Show when={fileReadWarning() !== "none"}>
+                    <span style={{ fg: fileReadWarning() === "critical" ? theme.error : theme.warning }}>
+                      {" "}
+                      {fileReadWarning() === "critical" ? "🔴" : "⚠️"}
+                    </span>
+                  </Show>
+                </text>
+                <text fg={theme.textMuted}>Files Modified: {filesModified()}</text>
+                <text fg={theme.textMuted}>Tool Calls: {toolMetrics().toolCalls}</text>
+                <text fg={theme.textMuted}>Errors: {toolMetrics().error}</text>
+                <text fg={theme.textMuted}>
+                  Messages: {messages().length}
+                  <Show when={messageWarning()}>
+                    <span style={{ fg: theme.warning }}> ⚠️</span>
+                  </Show>
+                </text>
+                <text fg={theme.textMuted}>
+                  Tool Parts: {toolMetrics().toolCalls}
+                  <Show when={toolPartWarning()}>
+                    <span style={{ fg: theme.warning }}> ⚠️</span>
+                  </Show>
+                </text>
               </box>
             </Show>
             <Show when={mcpEntries().length > 0}>
