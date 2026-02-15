@@ -137,6 +137,14 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
+    BackgroundError: BusEvent.define(
+      "session.background.error",
+      z.object({
+        sessionID: z.string(),
+        agent: z.string(),
+        message: z.string(),
+      }),
+    ),
   }
 
   export const create = fn(

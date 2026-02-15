@@ -805,6 +805,15 @@ export type EventSessionError = {
   }
 }
 
+export type EventSessionBackgroundError = {
+  type: "session.background.error"
+  properties: {
+    sessionID: string
+    agent: string
+    message: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -950,6 +959,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventSessionBackgroundError
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -1160,7 +1170,7 @@ export type KeybindsConfig = {
    */
   agent_cycle_reverse?: string
   /**
-   * Cycle FREE mode stall timeout
+   * Cycle mode (LOCKED / ARMED)
    */
   stall_timeout_cycle?: string
   /**

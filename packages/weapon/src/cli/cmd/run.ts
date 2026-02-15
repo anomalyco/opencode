@@ -501,6 +501,15 @@ export const RunCommand = cmd({
             UI.error(err)
           }
 
+          if (event.type === "session.background.error") {
+            const props = event.properties
+            if (props.sessionID !== sessionID) continue
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL + `background agent "${props.agent}" failed: ${props.message}`,
+            )
+          }
+
           if (
             event.type === "session.status" &&
             event.properties.sessionID === sessionID &&
