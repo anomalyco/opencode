@@ -1,0 +1,142 @@
+---
+title: Web
+description: 在浏览器中使用opencode。
+---
+
+opencode 可以在浏览器中作为 Web 应用程序执行，消耗终端可以提供同样强大的 AI 编码体验。
+
+![opencode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+
+## 入门
+
+绕过执行以下命令启动 Web 简介：
+
+```bash
+opencode web
+```
+
+这将在 `127.0.0.1` 上启动一个具有随机可用端口的本地服务器，并自动在默认浏览器中开启 opencode。
+
+:::caution
+如果未设置`OPENCODE_SERVER_PASSWORD`，服务器将不安全。这对于本地使用来说很好，但应该针对网路访问进行设置。
+:::
+
+:::tip[Windows 用户]
+For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
+:::
+
+---
+
+## 配置
+
+您可以使用命令行标志或在[config file](/docs/config).conf 中配置Web服务器。
+
+### 端口
+
+默认情况下，opencode 选择一个可用的端口。您可以指定一个端口：
+
+```bash
+opencode web --port 4096
+```
+
+### 主机名
+
+默认情况下，服务器绑定到`127.0.0.1`（仅限本地主机）。要使opencode在您的网路上可访问：
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+使用`0.0.0.0`时，opencode将显示本地地址和网络地址：
+
+```
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
+```
+
+### mDNS 发现
+
+启用 mDNS 使您的服务器在本地网上可以发现：
+
+```bash
+opencode web --mdns
+```
+
+This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
+
+您可以自定义 mDNS 域名以在同一网路上执行多个示例：
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
+### CORS
+
+允许CORS使用其他域（对于自定义前缀有用）：
+
+```bash
+opencode web --cors https://example.com
+```
+
+### 验证
+
+要保护访问，请使用 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+
+---
+
+## 使用web界面
+
+启动后，web界面将提供对您的 opencode 会话的访问。
+
+### 会话
+
+从主页查看和管理您的会话。您可以查看活动会话并开始新会话。
+
+![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+
+### 服务器状态
+
+单击“查看服务器”可查看连接的服务器及其状态。
+
+![opencode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+
+---
+
+## 连接终端
+
+您可以将终端 TUI 连线到正在执行的 Web 服务器：
+
+```bash
+# Start the web server
+opencode web --port 4096
+
+# In another terminal, attach the TUI
+opencode attach http://localhost:4096
+```
+
+这允许您同时使用 Web 界面和终端，共享相同的会话和状态。
+
+---
+
+## 配置文件
+
+You can also configure server settings in your `opencode.json` config file:
+
+```json
+{
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "cors": ["https://example.com"]
+  }
+}
+```
+
+命令行标志优先于配置文件设置。

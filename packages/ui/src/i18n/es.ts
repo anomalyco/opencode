@@ -5,16 +5,22 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "Dividido",
   "ui.sessionReview.expandAll": "Expandir todo",
   "ui.sessionReview.collapseAll": "Colapsar todo",
-
   "ui.sessionReview.change.added": "Añadido",
   "ui.sessionReview.change.removed": "Eliminado",
   "ui.sessionReview.change.modified": "Modificado",
+  "ui.sessionReview.image.loading": "Cargando...",
+  "ui.sessionReview.image.placeholder": "Imagen",
+  "ui.sessionReview.largeDiff.title": "Diff demasiado grande para renderizar",
+  "ui.sessionReview.largeDiff.meta": "Límite: {{lines}} líneas / {{limit}}. Actual: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Renderizar de todos modos",
+
   "ui.lineComment.label.prefix": "Comentar en ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Comentando en ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Añadir comentario",
   "ui.lineComment.submit": "Comentar",
+
   "ui.sessionTurn.steps.show": "Mostrar pasos",
   "ui.sessionTurn.steps.hide": "Ocultar pasos",
   "ui.sessionTurn.summary.response": "Respuesta",
@@ -22,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "reintentando",
   "ui.sessionTurn.retry.inSeconds": "en {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Límite de uso gratuito excedido",
+  "ui.sessionTurn.error.addCredits": "Añadir créditos",
 
   "ui.sessionTurn.status.delegating": "Delegando trabajo",
   "ui.sessionTurn.status.planning": "Planificando siguientes pasos",

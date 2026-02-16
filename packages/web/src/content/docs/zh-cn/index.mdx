@@ -1,0 +1,353 @@
+---
+title: 介绍
+description: 开始使用 opencode。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**opencode**](/) 是一个开源人工智能编码代理。它可用于基于终端的界面、桌面应用程序或 IDE 扩展。
+
+![具有 opencode 主题的 opencode TUI](../../../assets/lander/screenshot.png)
+
+让我们开始吧。
+
+---
+
+#### 先决条件
+
+要在终端中使用 opencode，您需要：
+
+1. 现代终端模拟器，例如：
+   - [WezTerm](https://wezterm.org)，跨平台
+   - [Alacritty](https://alacritty.org)，跨平台
+   - [Ghostty](https://ghostty.org)，Linux 和 macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/)，Linux 和 macOS
+
+2. 你要使用的 LLM 提供商 API 密钥。
+
+---
+
+## 安装
+
+安装 opencode 最简单的方法是通过安装脚本。
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+您还可以使用以下命令安装它：
+
+- **使用 Node.js**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **在 macOS 和 Linux 上使用 Homebrew**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > 我们使用 opencode Tap 来获取最新版本。官方 `brew install opencode` 公式由 Homebrew 团队建议，维护频率较低。
+
+- **在 Arch Linux 上使用 Paru**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  ```
+
+#### Windows
+
+:::tip[推荐：使用 WSL]
+为了在 Windows 上获得最佳体验，我们建议使用 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl)。它提供了更好的性能并与 opencode 的功能完全兼容。
+:::
+
+- **使用 Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **使用 Scoop**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **使用 npm**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **使用 Mise**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **使用 Docker**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+目前正在支持在 Windows 上安装 opencode 时使用 Bun。
+
+您还可以从 [Releases](https://github.com/anomalyco/opencode/releases) 获取二进制文件。
+
+---
+
+## 配置
+
+借助 opencode，你可以通过配置 API 使用任意 LLM 提供商。
+
+如果你刚开始使用 LLM 提供商，我们建议使用 [OpenCode Zen](/docs/zen)。
+这是经过 opencode 团队测试和验证的精选模型列表。
+
+1. 在 TUI 中运行 `/connect` 命令，选择 opencode，然后前往 [opencode.ai/auth](https://opencode.ai/auth)。
+
+   ```txt
+   /connect
+   ```
+
+2. 登录，添加您的账单信息，然后复制您的详细 API 密钥。
+
+3. 粘贴您的 API 密钥。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+或者，你也可以选择其他提供商之一。[了解更多](/docs/providers#directory)。
+
+---
+
+## 初始化
+
+现在您已经配置了提供商，您可以导航到一个项目
+你想继续工作。
+
+```bash
+cd /path/to/project
+```
+
+并运行 opencode。
+
+```bash
+opencode
+```
+
+接下来，通过运行以下命令来初始化项目的 opencode。
+
+```bash frame="none"
+/init
+```
+
+这涉及 opencode 分析您的项目并在以下位置创建 `AGENTS.md` 文件
+项目根。
+
+:::tip
+您应该将项目的 `AGENTS.md` 文件提交到 Git。
+:::
+
+这有助于 opencode 理解项目结构和使用的编码模式。
+
+---
+
+## 用法
+
+您现在已准备好使用 opencode 来处理您的项目。请轻松询问任何事物！
+
+如果您不熟悉使用 AI 编码代理，以下是一些可能会有所帮助的示例。
+
+---
+
+### 提问
+
+您可以要求 opencode 向您解释代码库。
+
+:::tip
+使用 `@` 键模糊搜索工程中的文件。
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+如果您没有处理代码库的一部分，这会很有帮助。
+
+---
+
+### 添加功能
+
+您可以要求 opencode 向您的项目添加新功能。但是我们首先建议要求它制定一个计划。
+
+1. **创建计划**
+
+   opencode 有一个 _计划模式_，该模式禁止其进行更改和
+   相反，建议 _如何_ 实现该功能。
+
+   使用 **Tab** 键切换到它。您会在右下角有一个指示符。
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   现在让我们描述一下我们想要它做什么。
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   您需要为 opencode 提供足够的详细信息才能了解您想要的内容。它有帮助
+   就像与团队中的初级开发人员交谈一样与它交谈。
+
+   :::tip
+   为 opencode 提供大量上下文和示例，以帮助其理解您的内容
+   想。
+   :::
+
+2. **迭代计划**
+
+   一旦它为您提供了计划，您就可以提供反馈或添加更多详细信息。
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   将图像拖放到终端中以将其添加到提示中。
+   :::
+
+   opencode 可以扫描您提供的任何图像并将其添加到提示中。您可以
+   通过将图像拖放到终端中来完成此操作。
+
+3. **构建功能**
+
+   一旦您对计划感到满意，请切换回 _构建模式_
+   再次按 **Tab** 键。
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   并要求它做出改变。
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### 进行更改
+
+对于更直接的更改，您可以要求 opencode 直接构建它
+无需先审查计划。
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+您需要确保提供大量详细信息，以便 opencode 做出正确的决定变化。
+
+---
+
+### 撤消更改
+
+假设您要求 opencode 进行一些更改。
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+但你意识到这不是你想要的。您 **可以撤消** 更改
+使用 `/undo` 命令。
+
+```bash frame="none"
+/undo
+```
+
+opencode 现在将恢复您所做的更改并再次显示您的原始消息。
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+您可以从这里调整提示并要求 opencode 重试。
+
+:::tip
+您可以多次运行 `/undo` 以撤销多次更改。
+:::
+
+或者您 **可以使用 `/redo` 命令重做** 更改。
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## 分享
+
+您与 opencode 的对话可以 [与您的团队分享](/docs/share)。
+
+```bash frame="none"
+/share
+```
+
+这会创建当前对话的链接并复制到剪贴板。
+
+:::note
+默认情况下不共享对话。
+:::
+
+这是带有 opencode 的 [示例对话](https://opencode.ai/s/4XP1fce5)。
+
+---
+
+## 定制
+
+就是这样！你现在已经是 opencode 高手了。
+
+要让您成为自己的，我们建议 [选择一个主题](/docs/themes)、[自定义交互绑定](/docs/keybinds)、[配置代码整理程序](/docs/formatters)、[创建自定义命令](/docs/commands) 或使用 [opencode 配置](/docs/config)。
