@@ -136,7 +136,7 @@ export async function POST(input: APIEvent) {
       const couponID = await (async () => {
         if (!promoCode) return
         const coupon = await Billing.stripe().promotionCodes.retrieve(promoCode)
-        const couponID = coupon.coupon.id
+        const couponID = coupon.promotion.coupon as string
         if (!couponID) throw new Error("Coupon not found for promotion code")
         return couponID
       })()
@@ -422,14 +422,8 @@ export async function POST(input: APIEvent) {
         if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
 
-        // get coupon id from subscription
-        const subscriptionData = await Billing.stripe().subscriptions.retrieve(subscriptionID, {
-          expand: ["discounts"],
-        })
-        const couponID =
-          typeof subscriptionData.discounts[0] === "string"
-            ? subscriptionData.discounts[0]
-            : subscriptionData.discounts[0]?.coupon?.id
+        const subscriptionData = await Billing.stripe().subscriptions.retrieve(subscriptionID)
+        const couponID = subscriptionData.discounts[0] as string
 
         // get payment id from invoice
         const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
