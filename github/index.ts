@@ -1075,7 +1075,7 @@ async function revokeAppToken() {
   if (!accessToken) return
   console.log("Revoking app token...")
 
-  await fetch("https://api.github.com/installation/token", {
+  await fetch(`${ghUrls.apiUrl}/installation/token`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${accessToken}`,
