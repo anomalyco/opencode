@@ -762,6 +762,7 @@
 
     &[data-active="true"] {
       width: 16px;
+      background-color: var(--icon-strong-base);
     }
 
     &[data-answered="true"] {
