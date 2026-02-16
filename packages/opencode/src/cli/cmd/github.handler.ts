@@ -31,9 +31,8 @@ import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
-import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError, getGitHubURLs, getNoreplyEmail } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError, getGitHubURLs, getNoreplyEmail, parseGitRemote } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -214,16 +213,16 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           throw new UI.CancelledError()
         }
 
-        // Get repo info
+        // Get repo info - use parseGitRemote to support any host (GHES)
         const info = await Effect.runPromise(gitSvc.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })).then(
           (x) => x.text().trim(),
         )
-        const parsed = parseGitHubRemote(info)
+        const parsed = parseGitRemote(info)
         if (!parsed) {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
-        return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
+        return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree, isGHES: parsed.host !== "github.com" }
       }
 
       async function promptProvider() {
@@ -278,6 +277,13 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
       }
 
       async function installGitHubApp() {
+        if (app.isGHES) {
+          prompts.log.info(
+            "GitHub Enterprise Server detected. The opencode GitHub App is only available on github.com. The workflow will use `use_github_token: true`.",
+          )
+          return
+        }
+
         const s = prompts.spinner()
         s.start("Installing GitHub app")
 
@@ -334,6 +340,18 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
             ? ""
             : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
+        const permissions = app.isGHES
+          ? `    permissions:
+      contents: write
+      pull-requests: write
+      issues: write`
+          : `    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read`
+        const useGithubTokenStr = app.isGHES ? `\n          use_github_token: "true"` : ""
+
         await Filesystem.write(
           path.join(app.root, WORKFLOW_FILE),
           `name: opencode
@@ -352,11 +370,7 @@ jobs:
       contains(github.event.comment.body, ' /opencode') ||
       startsWith(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-      issues: read
+${permissions}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -366,7 +380,7 @@ jobs:
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}
         with:
-          model: ${provider}/${model}`,
+          model: ${provider}/${model}${useGithubTokenStr}`,
         )
 
         prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
