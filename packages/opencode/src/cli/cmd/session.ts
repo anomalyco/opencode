@@ -61,7 +61,7 @@ export const SessionDeleteCommand = cmd({
         process.exit(1)
       }
       await Session.remove(args.sessionID)
-      console.log(`Session ${args.sessionID} deleted`)
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
     })
   },
 })
