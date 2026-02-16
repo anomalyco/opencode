@@ -445,6 +445,12 @@ export namespace SessionPrompt {
           log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
           return undefined
         })
+        const attachments = result?.attachments?.map((attachment) => ({
+          ...attachment,
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: assistantMessage.id,
+        }))
         await Plugin.trigger(
           "tool.execute.after",
           {
@@ -467,7 +473,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments: result.attachments,
+              attachments,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -797,6 +803,15 @@ export namespace SessionPrompt {
             },
           )
           const result = await item.execute(args, ctx)
+          const output = {
+            ...result,
+            attachments: result.attachments?.map((attachment) => ({
+              ...attachment,
+              id: Identifier.ascending("part"),
+              sessionID: ctx.sessionID,
+              messageID: input.processor.message.id,
+            })),
+          }
           await Plugin.trigger(
             "tool.execute.after",
             {
@@ -805,9 +820,9 @@ export namespace SessionPrompt {
               callID: ctx.callID,
               args,
             },
-            result,
+            output,
           )
-          return result
+          return output
         },
       })
     }
@@ -855,16 +870,13 @@ export namespace SessionPrompt {
         )
 
         const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
+        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
 
         for (const contentItem of result.content) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
             attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
@@ -876,9 +888,6 @@ export namespace SessionPrompt {
             }
             if (resource.blob) {
               attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
                 type: "file",
                 mime: resource.mimeType ?? "application/octet-stream",
                 url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
@@ -1157,6 +1166,7 @@ export namespace SessionPrompt {
                       pieces.push(
                         ...result.attachments.map((attachment) => ({
                           ...attachment,
+                          id: Identifier.ascending("part"),
                           synthetic: true,
                           filename: attachment.filename ?? part.filename,
                           messageID: info.id,
