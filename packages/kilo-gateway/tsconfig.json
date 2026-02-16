@@ -1,12 +1,17 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig.json",
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
+    "module": "preserve",
+    "declaration": true,
+    "moduleResolution": "bundler",
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "lib": ["es2022", "dom", "dom.iterable"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "../plugin", "../sdk"]

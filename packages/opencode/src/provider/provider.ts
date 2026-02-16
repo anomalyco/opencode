@@ -41,6 +41,7 @@ import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { createKilo } from "@opencode-ai/kilo-gateway"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -104,6 +105,7 @@ export namespace Provider {
     "@gitlab/gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@opencode-ai/kilo-gateway": createKilo,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -137,7 +139,7 @@ export namespace Provider {
 
       if (!hasKey) {
         for (const [key, value] of Object.entries(input.models)) {
-          if (value.cost.input === 0) continue
+          if (value.cost?.input === 0) continue
           delete input.models[key]
         }
       }
@@ -576,6 +578,22 @@ export namespace Provider {
             "X-Cerebras-3rd-Party-Integration": "opencode",
           },
         },
+      }
+    },
+    kilo: async (input) => {
+      const env = Env.all()
+      const hasKey = input.env.some((item) => env[item]) || !!(await Auth.get(input.id))
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost?.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
+      return {
+        autoload: Object.keys(input.models).length > 0,
+        options: hasKey ? {} : { apiKey: "anonymous" },
       }
     },
   }

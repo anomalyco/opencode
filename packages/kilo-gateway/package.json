@@ -1,13 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@kilocode/kilo-gateway",
+  "name": "@opencode-ai/kilo-gateway",
   "version": "1.0.21",
   "type": "module",
   "license": "MIT",
-  "description": "Unified Kilo Gateway package for OpenCode - authentication, provider, and API integration",
+  "description": "Kilo Gateway package for OpenCode - authentication, provider, and API integration",
   "keywords": [
     "kilo",
-    "kilocode",
     "opencode",
     "auth",
     "plugin",
@@ -27,8 +26,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@kilocode/plugin": "workspace:*",
-    "@kilocode/sdk": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
     "@openrouter/ai-sdk-provider": "1.5.2",
     "@clack/prompts": "1.0.0-alpha.1",
     "ai": "catalog:",

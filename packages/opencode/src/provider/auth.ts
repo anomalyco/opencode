@@ -6,6 +6,7 @@ import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
+import { clearKiloModelsCache } from "./models"
 
 export namespace ProviderAuth {
   const state = Instance.state(async () => {
@@ -110,6 +111,7 @@ export namespace ProviderAuth {
           }
           await Auth.set(input.providerID, info)
         }
+        if (input.providerID === "kilo") clearKiloModelsCache()
         return
       }
 
@@ -127,6 +129,7 @@ export namespace ProviderAuth {
         type: "api",
         key: input.key,
       })
+      if (input.providerID === "kilo") clearKiloModelsCache()
     },
   )
 

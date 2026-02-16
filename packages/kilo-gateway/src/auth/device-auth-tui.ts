@@ -3,7 +3,7 @@ import type { DeviceAuthInitiateResponse, DeviceAuthPollResponse } from "../type
 import { poll } from "./polling.js"
 import { getKiloProfile, getKiloDefaultModel } from "../api/profile.js"
 import { KILO_API_BASE, POLL_INTERVAL_MS } from "../api/constants.js"
-import type { AuthOuathResult } from "@kilocode/plugin"
+import type { AuthOuathResult } from "@opencode-ai/plugin"
 
 /**
  * Initiate device authorization flow

@@ -5,6 +5,40 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
+import { Config } from "../config/config"
+import { Auth } from "../auth"
+import { Env } from "../env"
+import {
+  fetchKiloModelsCached,
+  setKiloAuthGetter,
+  clearKiloModelsCache,
+  KILO_OPENROUTER_BASE,
+} from "@opencode-ai/kilo-gateway"
+
+setKiloAuthGetter(async () => {
+  const config = await Config.get()
+  const auth = await Auth.get("kilo")
+  const env = Env.all()
+
+  const options: { kilocodeToken?: string; kilocodeOrganizationId?: string } = {}
+
+  if (config.provider?.kilo?.options?.apiKey) options.kilocodeToken = config.provider.kilo.options.apiKey
+  if (config.provider?.kilo?.options?.kilocodeOrganizationId)
+    options.kilocodeOrganizationId = config.provider.kilo.options.kilocodeOrganizationId
+
+  if (auth?.type === "api") options.kilocodeToken = auth.key
+  if (auth?.type === "oauth") {
+    options.kilocodeToken = auth.access
+    if (auth.accountId) options.kilocodeOrganizationId = auth.accountId
+  }
+
+  if (env.KILO_API_KEY) options.kilocodeToken = env.KILO_API_KEY
+  if (env.KILO_ORG_ID) options.kilocodeOrganizationId = env.KILO_ORG_ID
+
+  return options
+})
+
+export { clearKiloModelsCache }
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -100,7 +134,40 @@ export namespace ModelsDev {
 
   export async function get() {
     const result = await Data()
-    return result as Record<string, Provider>
+    const providers = result as Record<string, Provider>
+
+    if (!providers["kilo"]) {
+      const kiloModels: Record<string, any> = await fetchKiloModelsCached().catch(() => ({}))
+
+      kiloModels["kilo/auto"] = {
+        id: "kilo/auto",
+        name: "Auto",
+        family: "kilo",
+        release_date: "2020-01-01",
+        attachment: false,
+        reasoning: true,
+        temperature: true,
+        tool_call: true,
+        limit: {
+          context: 200000,
+          output: 64000,
+        },
+        options: {
+          description: "Automatically selects an optimal model",
+        },
+      }
+
+      providers["kilo"] = {
+        id: "kilo",
+        name: "Kilo Gateway",
+        env: ["KILO_API_KEY"],
+        api: KILO_OPENROUTER_BASE,
+        npm: "@opencode-ai/kilo-gateway",
+        models: kiloModels,
+      }
+    }
+
+    return providers
   }
 
   export async function refresh() {

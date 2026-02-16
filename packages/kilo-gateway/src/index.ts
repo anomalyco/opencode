@@ -34,6 +34,7 @@ export {
   promptOrganizationSelection,
 } from "./api/profile.js"
 export { fetchKiloModels } from "./api/models.js"
+export { fetchKiloModelsCached, setKiloAuthGetter, clearKiloModelsCache } from "./model-cache.js"
 export { fetchKilocodeNotifications, type KilocodeNotification } from "./api/notifications.js"
 
 // ============================================================================
@@ -44,8 +45,13 @@ export { createKiloRoutes } from "./server/routes.js"
 // ============================================================================
 // Note: TUI exports moved to separate entry point
 // ============================================================================
-// For TUI components and commands, import from "@kilocode/kilo-gateway/tui"
+// For TUI components and commands, import from "@opencode-ai/kilo-gateway/tui"
 // This avoids circular dependencies with opencode TUI infrastructure
+
+// ============================================================================
+// URL Utilities
+// ============================================================================
+export { normalizeKiloOpenRouterURL } from "./url.js"
 
 // ============================================================================
 // Types

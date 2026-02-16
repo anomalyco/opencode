@@ -6,6 +6,15 @@ import type { LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 // Authentication Types
 // ============================================================================
 
+export interface AuthInfo {
+  type: "api" | "oauth"
+  key?: string
+  access?: string
+  refresh?: string
+  expires?: number
+  accountId?: string
+}
+
 export interface DeviceAuthInitiateResponse {
   code: string
   verificationUrl: string
