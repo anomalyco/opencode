@@ -559,7 +559,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
+                    class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border"
                     onClick={() => view().terminal.toggle()}
                     aria-label={language.t("command.terminal.toggle")}
                     aria-expanded={view().terminal.opened()}
@@ -568,7 +568,7 @@ export function SessionHeader() {
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                        name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
                         class="group-hover/terminal-toggle:hidden"
                       />
                       <Icon
@@ -578,7 +578,7 @@ export function SessionHeader() {
                       />
                       <Icon
                         size="small"
-                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
                         class="hidden group-active/terminal-toggle:inline-block"
                       />
                     </div>
@@ -589,7 +589,7 @@ export function SessionHeader() {
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
-                    class="group/review-toggle size-6 p-0"
+                    class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
                     onClick={() => view().reviewPanel.toggle()}
                     aria-label={language.t("command.review.toggle")}
                     aria-expanded={view().reviewPanel.opened()}
@@ -598,7 +598,7 @@ export function SessionHeader() {
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
+                        name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-right"}
                         class="group-hover/review-toggle:hidden"
                       />
                       <Icon
@@ -608,7 +608,7 @@ export function SessionHeader() {
                       />
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
+                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-partial"}
                         class="hidden group-active/review-toggle:inline-block"
                       />
                     </div>
@@ -622,7 +622,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/file-tree-toggle size-6 p-0"
+                    class="titlebar-icon w-8 h-6 p-0 box-border"
                     onClick={() => layout.fileTree.toggle()}
                     aria-label={language.t("command.fileTree.toggle")}
                     aria-expanded={layout.fileTree.opened()}

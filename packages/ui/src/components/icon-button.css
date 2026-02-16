@@ -153,3 +153,11 @@
 [data-component="icon-button"].titlebar-icon[data-variant="ghost"]:hover:not(:disabled) {
   background-color: var(--surface-raised-base-active);
 }
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] {
+  background-color: var(--surface-base-active);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
+  background-color: var(--surface-base-active);
+}

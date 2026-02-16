@@ -173,9 +173,9 @@ export function Titlebar() {
               icon="menu"
               variant="ghost"
               class="titlebar-icon rounded-md"
-              style={layout.mobileSidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
+              aria-expanded={layout.mobileSidebar.opened()}
             />
           </div>
         </Show>
@@ -185,9 +185,9 @@ export function Titlebar() {
               icon="menu"
               variant="ghost"
               class="titlebar-icon rounded-md"
-              style={layout.mobileSidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
+              aria-expanded={layout.mobileSidebar.opened()}
             />
           </div>
         </Show>
@@ -201,7 +201,6 @@ export function Titlebar() {
             <Button
               variant="ghost"
               class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
-              style={layout.sidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.sidebar.toggle}
               aria-label={language.t("command.sidebar.toggle")}
               aria-expanded={layout.sidebar.opened()}
