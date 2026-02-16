@@ -3,34 +3,43 @@
 -- | Bus module - STM-based pub/sub event system
 -- Mirrors the TypeScript Bus namespace
 module Bus.Bus
-  ( Bus
-  , newBus
-  , publish
-  , subscribe
-  , subscribeAll
-  , BusEvent(..)
-  ) where
+  ( Bus,
+    newBus,
+    publish,
+    subscribe,
+    subscribeAll,
+    BusEvent (..),
+  )
+where
 
+import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Monad (forever, void)
-import Control.Concurrent (forkIO)
-import Data.Aeson (ToJSON(..), Value, object, (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, (.:), (.=))
 import Data.Text (Text)
 
 -- | A bus event with type and properties
 data BusEvent = BusEvent
-  { beType :: Text
-  , beProperties :: Value
-  } deriving (Show, Eq)
+  { beType :: Text,
+    beProperties :: Value
+  }
+  deriving (Show, Eq)
 
 instance ToJSON BusEvent where
-  toJSON e = object
-    [ "type" .= beType e
-    , "properties" .= beProperties e
-    ]
+  toJSON e =
+    object
+      [ "type" .= beType e,
+        "properties" .= beProperties e
+      ]
+
+instance FromJSON BusEvent where
+  parseJSON = withObject "BusEvent" $ \v ->
+    BusEvent
+      <$> v .: "type"
+      <*> v .: "properties"
 
 -- | The event bus - a broadcast channel
-newtype Bus = Bus { unBus :: TChan BusEvent }
+newtype Bus = Bus {unBus :: TChan BusEvent}
 
 -- | Create a new event bus
 newBus :: IO Bus

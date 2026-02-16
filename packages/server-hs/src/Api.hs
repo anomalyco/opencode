@@ -1,55 +1,77 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Api where
 
 import Data.Aeson
+import Data.Text (Text)
 import GHC.Generics
 import Servant
-import Data.Text (Text)
 
 -- 1. Data Models
 data Health = Health
-  { healthy :: Bool
-  , version :: Text
-  } deriving (Eq, Show, Generic)
+  { healthy :: Bool,
+    version :: Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON Health
 
+instance FromJSON Health
+
 data PathInfo = PathInfo
-  { home :: Text
-  , state :: Text
-  , config :: Text
-  , worktree :: Text
-  , directory :: Text
-  } deriving (Eq, Show, Generic)
+  { home :: Text,
+    state :: Text,
+    config :: Text,
+    worktree :: Text,
+    directory :: Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON PathInfo
 
+instance FromJSON PathInfo
+
 data Project = Project
-  { id :: Text
-  , worktree :: Text
-  , name :: Maybe Text
-  } deriving (Eq, Show, Generic)
+  { id :: Text,
+    worktree :: Text,
+    name :: Maybe Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON Project
 
+instance FromJSON Project
+
 data ProviderList = ProviderList
-  { providers :: [Value]
-  , default_ :: Value -- "default" is a keyword
-  } deriving (Eq, Show, Generic)
+  { providers :: [Value],
+    default_ :: Value -- "default" is a keyword
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON ProviderList where
   toJSON (ProviderList p d) = object ["providers" .= p, "default" .= d]
 
+instance FromJSON ProviderList where
+  parseJSON = withObject "ProviderList" $ \v ->
+    ProviderList
+      <$> v .: "providers"
+      <*> v .: "default"
+
 data VcsInfo = VcsInfo
   { branch :: Maybe Text
-  } deriving (Eq, Show, Generic)
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON VcsInfo
+
+instance FromJSON VcsInfo where
+  parseJSON = withObject "VcsInfo" $ \v ->
+    VcsInfo
+      <$> v .:? "branch"
 
 -- File Models
 
@@ -60,22 +82,39 @@ instance ToJSON FileType where
   toJSON FileTypeFile = String "file"
   toJSON FileTypeDirectory = String "directory"
 
+instance FromJSON FileType where
+  parseJSON = withText "FileType" $ \case
+    "file" -> pure FileTypeFile
+    "directory" -> pure FileTypeDirectory
+    _ -> fail "Invalid file type"
+
 data FileNode = FileNode
-  { fnName :: Text
-  , fnPath :: Text
-  , fnAbsolute :: Text
-  , fnType :: FileType
-  , fnIgnored :: Bool
-  } deriving (Eq, Show, Generic)
+  { fnName :: Text,
+    fnPath :: Text,
+    fnAbsolute :: Text,
+    fnType :: FileType,
+    fnIgnored :: Bool
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON FileNode where
-  toJSON fn = object
-    [ "name" .= fnName fn
-    , "path" .= fnPath fn
-    , "absolute" .= fnAbsolute fn
-    , "type" .= fnType fn
-    , "ignored" .= fnIgnored fn
-    ]
+  toJSON fn =
+    object
+      [ "name" .= fnName fn,
+        "path" .= fnPath fn,
+        "absolute" .= fnAbsolute fn,
+        "type" .= fnType fn,
+        "ignored" .= fnIgnored fn
+      ]
+
+instance FromJSON FileNode where
+  parseJSON = withObject "FileNode" $ \v ->
+    FileNode
+      <$> v .: "name"
+      <*> v .: "path"
+      <*> v .: "absolute"
+      <*> v .: "type"
+      <*> v .: "ignored"
 
 data ContentType = ContentTypeText | ContentTypeBinary
   deriving (Eq, Show, Generic)
@@ -84,120 +123,168 @@ instance ToJSON ContentType where
   toJSON ContentTypeText = String "text"
   toJSON ContentTypeBinary = String "binary"
 
+instance FromJSON ContentType where
+  parseJSON = withText "ContentType" $ \case
+    "text" -> pure ContentTypeText
+    "binary" -> pure ContentTypeBinary
+    _ -> fail "Invalid content type"
+
 data FileContent = FileContent
-  { fcType :: ContentType
-  , fcContent :: Text
-  } deriving (Eq, Show, Generic)
+  { fcType :: ContentType,
+    fcContent :: Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON FileContent where
-  toJSON fc = object
-    [ "type" .= fcType fc
-    , "content" .= fcContent fc
-    ]
+  toJSON fc =
+    object
+      [ "type" .= fcType fc,
+        "content" .= fcContent fc
+      ]
+
+instance FromJSON FileContent where
+  parseJSON = withObject "FileContent" $ \v ->
+    FileContent
+      <$> v .: "type"
+      <*> v .: "content"
 
 -- Session Models
 
 data SessionTime = SessionTime
-  { stCreated :: Double
-  , stUpdated :: Double
-  , stArchived :: Maybe Double
-  } deriving (Eq, Show, Generic)
+  { stCreated :: Double,
+    stUpdated :: Double,
+    stArchived :: Maybe Double
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON SessionTime where
-  toJSON st = object
-    [ "created" .= stCreated st
-    , "updated" .= stUpdated st
-    , "archived" .= stArchived st
-    ]
+  toJSON st =
+    object
+      [ "created" .= stCreated st,
+        "updated" .= stUpdated st,
+        "archived" .= stArchived st
+      ]
 
 instance FromJSON SessionTime where
-  parseJSON = withObject "SessionTime" $ \v -> SessionTime
-    <$> v .: "created"
-    <*> v .: "updated"
-    <*> v .:? "archived"
+  parseJSON = withObject "SessionTime" $ \v ->
+    SessionTime
+      <$> v .: "created"
+      <*> v .: "updated"
+      <*> v .:? "archived"
 
 data Session = Session
-  { sesId :: Text
-  , sesSlug :: Text
-  , sesProjectId :: Text
-  , sesDirectory :: Text
-  , sesTitle :: Text
-  , sesVersion :: Text
-  , sesTime :: SessionTime
-  , sesParentId :: Maybe Text
-  } deriving (Eq, Show, Generic)
+  { sesId :: Text,
+    sesSlug :: Text,
+    sesProjectId :: Text,
+    sesDirectory :: Text,
+    sesTitle :: Text,
+    sesVersion :: Text,
+    sesTime :: SessionTime,
+    sesParentId :: Maybe Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON Session where
-  toJSON s = object
-    [ "id" .= sesId s
-    , "slug" .= sesSlug s
-    , "projectID" .= sesProjectId s
-    , "directory" .= sesDirectory s
-    , "title" .= sesTitle s
-    , "version" .= sesVersion s
-    , "time" .= sesTime s
-    , "parentID" .= sesParentId s
-    ]
+  toJSON s =
+    object
+      [ "id" .= sesId s,
+        "slug" .= sesSlug s,
+        "projectID" .= sesProjectId s,
+        "directory" .= sesDirectory s,
+        "title" .= sesTitle s,
+        "version" .= sesVersion s,
+        "time" .= sesTime s,
+        "parentID" .= sesParentId s
+      ]
+
+instance FromJSON Session where
+  parseJSON = withObject "Session" $ \v ->
+    Session
+      <$> v .: "id"
+      <*> v .: "slug"
+      <*> v .: "projectID"
+      <*> v .: "directory"
+      <*> v .: "title"
+      <*> v .: "version"
+      <*> v .: "time"
+      <*> v .:? "parentID"
 
 data CreateSessionInput = CreateSessionInput
-  { csiTitle :: Maybe Text
-  , csiParentId :: Maybe Text
-  } deriving (Eq, Show, Generic)
+  { csiTitle :: Maybe Text,
+    csiParentId :: Maybe Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance FromJSON CreateSessionInput where
-  parseJSON = withObject "CreateSessionInput" $ \v -> CreateSessionInput
-    <$> v .:? "title"
-    <*> v .:? "parentID"
+  parseJSON = withObject "CreateSessionInput" $ \v ->
+    CreateSessionInput
+      <$> v .:? "title"
+      <*> v .:? "parentID"
+
+instance ToJSON CreateSessionInput where
+  toJSON csi =
+    object
+      [ "title" .= csiTitle csi,
+        "parentID" .= csiParentId csi
+      ]
 
 -- Message Models
 
 data MessageInfo = MessageInfo
-  { msgId :: Text
-  , msgSessionId :: Text
-  , msgRole :: Text -- "user" or "assistant"
-  , msgTime :: SessionTime -- Reusing SessionTime for convenience, or just create a MessageTime
-  } deriving (Eq, Show, Generic)
+  { msgId :: Text,
+    msgSessionId :: Text,
+    msgRole :: Text, -- "user" or "assistant"
+    msgTime :: SessionTime -- Reusing SessionTime for convenience, or just create a MessageTime
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON MessageInfo where
-  toJSON m = object
-    [ "id" .= msgId m
-    , "sessionID" .= msgSessionId m
-    , "role" .= msgRole m
-    , "time" .= msgTime m
-    ]
+  toJSON m =
+    object
+      [ "id" .= msgId m,
+        "sessionID" .= msgSessionId m,
+        "role" .= msgRole m,
+        "time" .= msgTime m
+      ]
 
 instance FromJSON MessageInfo where
-  parseJSON = withObject "MessageInfo" $ \v -> MessageInfo
-    <$> v .: "id"
-    <*> v .: "sessionID"
-    <*> v .: "role"
-    <*> v .: "time"
+  parseJSON = withObject "MessageInfo" $ \v ->
+    MessageInfo
+      <$> v .: "id"
+      <*> v .: "sessionID"
+      <*> v .: "role"
+      <*> v .: "time"
 
 data Message = Message
-  { msgInfo :: MessageInfo
-  , msgParts :: [Value]
-  } deriving (Eq, Show, Generic)
+  { msgInfo :: MessageInfo,
+    msgParts :: [Value]
+  }
+  deriving (Eq, Show, Generic)
 
 instance ToJSON Message where
-  toJSON m = object
-    [ "info" .= msgInfo m
-    , "parts" .= msgParts m
-    ]
+  toJSON m =
+    object
+      [ "info" .= msgInfo m,
+        "parts" .= msgParts m
+      ]
 
 instance FromJSON Message where
-  parseJSON = withObject "Message" $ \v -> Message
-    <$> v .: "info"
-    <*> v .: "parts"
+  parseJSON = withObject "Message" $ \v ->
+    Message
+      <$> v .: "info"
+      <*> v .: "parts"
 
 data CreateMessageInput = CreateMessageInput
-  { cmiMessageId :: Maybe Text
-  , cmiParts :: [Value]
-  } deriving (Eq, Show, Generic)
+  { cmiMessageId :: Maybe Text,
+    cmiParts :: [Value]
+  }
+  deriving (Eq, Show, Generic)
 
 instance FromJSON CreateMessageInput where
-  parseJSON = withObject "CreateMessageInput" $ \v -> CreateMessageInput
-    <$> v .:? "messageID"
-    <*> v .: "parts"
+  parseJSON = withObject "CreateMessageInput" $ \v ->
+    CreateMessageInput
+      <$> v .:? "messageID"
+      <*> v .: "parts"
 
 -- 2. API Definition
 
@@ -298,50 +385,52 @@ type ChatAPI = "chat" :> ReqBody '[JSON] ChatInput :> Post '[JSON] Value
 
 -- Chat input
 data ChatInput = ChatInput
-  { ciMessage :: Text
-  , ciModel   :: Maybe Text
-  } deriving (Eq, Show, Generic)
+  { ciMessage :: Text,
+    ciModel :: Maybe Text
+  }
+  deriving (Eq, Show, Generic)
 
 instance FromJSON ChatInput where
-  parseJSON = withObject "ChatInput" $ \v -> ChatInput
-    <$> v .: "message"
-    <*> v .:? "model"
+  parseJSON = withObject "ChatInput" $ \v ->
+    ChatInput
+      <$> v .: "message"
+      <*> v .:? "model"
 
 -- Combined API
-type OpencodeAPI = 
-       HealthAPI
-  :<|> PathAPI
-  :<|> GlobalConfigAPI
-  :<|> ProjectListAPI
-  :<|> ProjectCurrentAPI
-  :<|> ProviderListAPI
-  :<|> ProviderAuthAPI
-  :<|> AgentAPI
-  :<|> ConfigAPI
-  :<|> CommandAPI
-  :<|> SessionStatusAPI
-  :<|> SessionListAPI
-  :<|> SessionCreateAPI
-  :<|> SessionMessageListAPI
-  :<|> SessionMessageCreateAPI
-  :<|> LspAPI
-  :<|> VcsAPI
-  :<|> PermissionAPI
-  :<|> QuestionAPI
-  :<|> FileListAPI
-  :<|> FileReadAPI
-  :<|> GlobalEventAPI
-  -- PTY routes
-  :<|> PtyListAPI
-  :<|> PtyCreateAPI
-  :<|> PtyGetAPI
-  :<|> PtyUpdateAPI
-  :<|> PtyDeleteAPI
-  :<|> PtyConnectAPI
-  :<|> PtyCommitAPI
-  :<|> PtyChangesAPI
-  -- LLM
-  :<|> ChatAPI
+type OpencodeAPI =
+  HealthAPI
+    :<|> PathAPI
+    :<|> GlobalConfigAPI
+    :<|> ProjectListAPI
+    :<|> ProjectCurrentAPI
+    :<|> ProviderListAPI
+    :<|> ProviderAuthAPI
+    :<|> AgentAPI
+    :<|> ConfigAPI
+    :<|> CommandAPI
+    :<|> SessionStatusAPI
+    :<|> SessionListAPI
+    :<|> SessionCreateAPI
+    :<|> SessionMessageListAPI
+    :<|> SessionMessageCreateAPI
+    :<|> LspAPI
+    :<|> VcsAPI
+    :<|> PermissionAPI
+    :<|> QuestionAPI
+    :<|> FileListAPI
+    :<|> FileReadAPI
+    :<|> GlobalEventAPI
+    -- PTY routes
+    :<|> PtyListAPI
+    :<|> PtyCreateAPI
+    :<|> PtyGetAPI
+    :<|> PtyUpdateAPI
+    :<|> PtyDeleteAPI
+    :<|> PtyConnectAPI
+    :<|> PtyCommitAPI
+    :<|> PtyChangesAPI
+    -- LLM
+    :<|> ChatAPI
 
 api :: Proxy OpencodeAPI
 api = Proxy

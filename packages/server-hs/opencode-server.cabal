@@ -5,9 +5,8 @@ synopsis:      OpenCode Haskell Server
 license:       MIT
 build-type:    Simple
 
-executable opencode-server
-  main-is:          Main.hs
-  other-modules:
+library
+  exposed-modules:
     Api
     Handlers
     State
@@ -39,7 +38,7 @@ executable opencode-server
     Tool.Tool
   hs-source-dirs:   src
   default-language: GHC2021
-  ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N -Werror
+  ghc-options:      -Wall -O2
   build-depends:
     base >= 4.17 && < 5,
     aeson >= 2.0,
@@ -50,8 +49,9 @@ executable opencode-server
     wai-websockets >= 3.0,
     websockets >= 0.12,
     http-types >= 0.12,
-    http-client >= 0.7,
-    http-client-tls >= 0.3,
+    http-client,
+    http-client-tls,
+    process,
     case-insensitive >= 1.2,
     text >= 2.0,
     bytestring >= 0.11,
@@ -77,3 +77,73 @@ executable opencode-server
     DeriveGeneric
     OverloadedStrings
     LambdaCase
+
+executable opencode-server
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N -Werror
+  build-depends:
+    base >= 4.17 && < 5,
+    opencode-server,
+    aeson,
+    servant-server,
+    warp,
+    wai,
+    wai-websockets,
+    websockets,
+    http-types,
+    stm,
+    bytestring,
+    text,
+    directory,
+    filepath,
+    time,
+    process,
+    containers,
+    katip
+
+test-suite opencode-server-test
+  type:             exitcode-stdio-1.0
+  main-is:          Spec.hs
+  other-modules:
+    Property.StorageProps
+    Property.BusProps
+    Property.ConfigProps
+    Property.SessionProps
+    Property.ToolProps
+    Property.MessageProps
+    Property.LLMProps
+    Property.ProviderProps
+    Unit.ApiSpec
+  hs-source-dirs:   test
+  default-language: GHC2021
+  ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    base >= 4.17 && < 5,
+    opencode-server,
+    hspec >= 2.11,
+    hspec-core >= 2.11,
+    hedgehog >= 1.4,
+    tasty >= 1.5,
+    tasty-hedgehog >= 1.4,
+    tasty-hspec >= 1.2,
+    aeson >= 2.0,
+    text >= 2.0,
+    bytestring >= 0.11,
+    containers >= 0.6,
+    stm >= 2.5,
+    directory >= 1.3,
+    filepath >= 1.4,
+    temporary >= 1.3,
+    http-client,
+    http-client-tls,
+    http-types,
+    process
+  default-extensions:
+    DataKinds
+    TypeOperators
+    DeriveGeneric
+    OverloadedStrings
+    LambdaCase
+    RecordWildCards
