@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -271,6 +272,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return results.map((absolute) => toRow(absolute, home()))
   }
 
+  const descend = (absolute: string) => {
+    const value = displayPath(absolute, filter(), home())
+    list?.setFilter(value.endsWith("/") ? value : value + "/")
+  }
+
   function resolve(absolute: string) {
     props.onSelect(props.multiple ? [absolute] : absolute)
     dialog.close()
@@ -288,15 +294,13 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         ref={(r) => (list = r)}
         onFilter={(value) => setFilter(cleanInput(value))}
         onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
+          if (e.key !== "Tab" && e.key !== "ArrowRight") return
           if (e.shiftKey) return
           if (!item) return
 
           e.preventDefault()
           e.stopPropagation()
-
-          const value = displayPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
+          descend(item.absolute)
         }}
         onSelect={(path) => {
           if (!path) return
@@ -315,6 +319,29 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                     <span class="text-text-weak whitespace-nowrap">/</span>
                   </div>
                 </div>
+                <span
+                  role="button"
+                  tabindex={0}
+                  class="ml-2 rounded-sm p-1 text-icon-weak hover:text-icon-base hover:bg-surface-secondary cursor-pointer"
+                  onPointerDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    descend(item.absolute)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    descend(item.absolute)
+                  }}
+                  aria-label="Open subfolder"
+                >
+                  <Icon name="chevron-right" size="small" />
+                </span>
               </div>
             )
           }
@@ -330,6 +357,29 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                   <span class="text-text-weak whitespace-nowrap">/</span>
                 </div>
               </div>
+              <span
+                role="button"
+                tabindex={0}
+                class="ml-2 rounded-sm p-1 text-icon-weak hover:text-icon-base hover:bg-surface-secondary cursor-pointer"
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  descend(item.absolute)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  descend(item.absolute)
+                }}
+                aria-label="Open subfolder"
+              >
+                <Icon name="chevron-right" size="small" />
+              </span>
             </div>
           )
         }}
