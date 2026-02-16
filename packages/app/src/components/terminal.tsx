@@ -1,5 +1,5 @@
 import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
@@ -393,15 +393,19 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       let lastFrameTime = 0
-      const minFrameInterval = 1000 / 15
+      const minFrameInterval = createMemo(() => {
+        const fps = settings.appearance.terminalFps()
+        return fps === 0 ? 0 : 1000 / fps
+      })
 
       termImpl.startRenderLoop = function () {
         const throttledLoop = () => {
           if (termImpl.isDisposed || !termImpl.isOpen) return
 
           const now = performance.now()
-          if (now - lastFrameTime >= minFrameInterval) {
-            lastFrameTime = now
+          const interval = minFrameInterval()
+          if (interval === 0 || now - lastFrameTime >= interval) {
+            if (interval > 0) lastFrameTime = now
             termImpl.renderer.render(termImpl.wasmTerm, false, termImpl.viewportY, termImpl, termImpl.scrollbarOpacity)
             const cursor = termImpl.wasmTerm.getCursor()
             if (cursor.y !== termImpl.lastCursorY) {

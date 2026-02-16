@@ -29,6 +29,7 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
+    terminalFps: number
   }
   keybinds: Record<string, string>
   permissions: {
@@ -49,6 +50,7 @@ const defaultSettings: Settings = {
   appearance: {
     fontSize: 14,
     font: "ibm-plex-mono",
+    terminalFps: 15,
   },
   keybinds: {},
   permissions: {
@@ -135,6 +137,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
+        },
+        terminalFps: createMemo(() => store.appearance?.terminalFps ?? defaultSettings.appearance.terminalFps),
+        setTerminalFps(value: number) {
+          setStore("appearance", "terminalFps", value)
         },
       },
       keybinds: {

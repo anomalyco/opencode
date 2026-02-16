@@ -2,6 +2,7 @@ import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -249,6 +250,30 @@ export const SettingsGeneral: Component = () => {
               </span>
             )}
           </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.terminalFps.title")}
+          description={language.t("settings.general.row.terminalFps.description")}
+        >
+          <InlineInput
+            data-action="settings-terminal-fps"
+            type="number"
+            min={0}
+            max={240}
+            value={settings.appearance.terminalFps()}
+            onBlur={(e) => {
+              const value = Math.min(240, Math.max(0, parseInt(e.currentTarget.value, 10) || 0))
+              settings.appearance.setTerminalFps(value)
+            }}
+            onInput={(e) => {
+              const value = parseInt(e.currentTarget.value, 10)
+              if (!isNaN(value) && value >= 0 && value <= 240) {
+                settings.appearance.setTerminalFps(value)
+              }
+            }}
+            class="w-20 text-right"
+          />
         </SettingsRow>
       </div>
     </div>
