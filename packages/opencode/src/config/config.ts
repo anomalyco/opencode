@@ -683,6 +683,7 @@ export namespace Config {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
+      title: z.string().optional().describe("Short title for display in agent lists (recommended: 2-5 words)"),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
       hidden: z
