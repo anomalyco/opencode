@@ -5,6 +5,7 @@ import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
+import { rollCallHandler } from "./roll-call"
 
 export const ModelsCommand = cmd({
   command: "models [provider]",
@@ -24,8 +25,26 @@ export const ModelsCommand = cmd({
         describe: "refresh the models cache from models.dev",
         type: "boolean",
       })
+      .option("test", {
+        describe: "test all models for connectivity (alias for roll-call)",
+        type: "boolean",
+      })
   },
   handler: async (args) => {
+    if (args.test) {
+      await rollCallHandler({
+        prompt: "Hello",
+        timeout: 25000,
+        filter: args.provider || undefined,
+        parallel: 5,
+        retries: 0,
+        verbose: false,
+        quiet: false,
+        output: "table",
+      })
+      return
+    }
+
     if (args.refresh) {
       await ModelsDev.refresh()
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)

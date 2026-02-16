@@ -8,6 +8,7 @@ import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
+import { RollCallCommand } from "./cli/cmd/roll-call"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
@@ -135,6 +136,7 @@ let cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
+  .command(RollCallCommand)
   .command(StatsCommand)
   .command(ExportCommand)
   .command(ImportCommand)
