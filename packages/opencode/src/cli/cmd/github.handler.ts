@@ -139,6 +139,83 @@ type IssueQueryResponse = {
   }
 }
 
+type GHESAuthStrategy = "oidc" | "in-workflow"
+
+type AppManifestResult = {
+  id: number
+  slug: string
+  pem: string
+  webhook_secret: string
+  client_id: string
+  client_secret: string
+}
+
+function buildManifestFormHTML(ghesUrl: string, manifestJson: string) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - Create GitHub App</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #60a5fa; margin-bottom: 1rem; }
+    p { color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Creating GitHub App...</h1>
+    <p>Redirecting to ${ghesUrl}...</p>
+  </div>
+  <form id="form" method="post" action="${ghesUrl}/settings/apps/new">
+    <input type="hidden" name="manifest" value='${manifestJson.replace(/'/g, "&#39;")}' />
+  </form>
+  <script>document.getElementById('form').submit();</script>
+</body>
+</html>`
+}
+
+const HTML_MANIFEST_SUCCESS = `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - GitHub App Created</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #4ade80; margin-bottom: 1rem; }
+    p { color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GitHub App Created Successfully</h1>
+    <p>You can close this window and return to the terminal.</p>
+  </div>
+  <script>setTimeout(() => window.close(), 2000);</script>
+</body>
+</html>`
+
+const HTML_MANIFEST_ERROR = (error: string) => `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - GitHub App Creation Failed</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #f87171; margin-bottom: 1rem; }
+    p { color: #aaa; }
+    .error { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GitHub App Creation Failed</h1>
+    <p>An error occurred.</p>
+    <div class="error">${error}</div>
+  </div>
+</body>
+</html>`
+
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
