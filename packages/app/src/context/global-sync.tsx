@@ -47,6 +47,20 @@ type GlobalStore = {
   reload: undefined | "pending" | "complete"
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error) return error
+  return "Unknown error"
+}
+
+function setDevStats(value: {
+  activeDirectoryStores: number
+  evictions: number
+  loadSessionsFullFetchFallback: number
+}) {
+  ;(globalThis as { __OPENCODE_GLOBAL_SYNC_STATS?: typeof value }).__OPENCODE_GLOBAL_SYNC_STATS = value
+}
+
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
@@ -81,19 +95,11 @@ function createGlobalSync() {
 
   const updateStats = (activeDirectoryStores: number) => {
     if (!import.meta.env.DEV) return
-    ;(
-      globalThis as {
-        __OPENCODE_GLOBAL_SYNC_STATS?: {
-          activeDirectoryStores: number
-          evictions: number
-          loadSessionsFullFetchFallback: number
-        }
-      }
-    ).__OPENCODE_GLOBAL_SYNC_STATS = {
+    setDevStats({
       activeDirectoryStores,
       evictions: stats.evictions,
       loadSessionsFullFetchFallback: stats.loadSessionsFallback,
-    }
+    })
   }
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
@@ -204,7 +210,10 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
-        showToast({ title: language.t("toast.session.listFailed.title", { project }), description: err.message })
+        showToast({
+          title: language.t("toast.session.listFailed.title", { project }),
+          description: errorMessage(err),
+        })
       })
 
     sessionLoads.set(directory, promise)
@@ -307,12 +316,28 @@ function createGlobalSync() {
     void bootstrap()
   })
 
-  function projectMeta(directory: string, patch: ProjectMeta) {
-    children.projectMeta(directory, patch)
+  const projectApi = {
+    loadSessions,
+    meta(directory: string, patch: ProjectMeta) {
+      children.projectMeta(directory, patch)
+    },
+    icon(directory: string, value: string | undefined) {
+      children.projectIcon(directory, value)
+    },
   }
 
-  function projectIcon(directory: string, value: string | undefined) {
-    children.projectIcon(directory, value)
+  const updateConfig = async (config: Config) => {
+    setGlobalStore("reload", "pending")
+    return globalSDK.client.global.config
+      .update({ config })
+      .then(bootstrap)
+      .then(() => {
+        setGlobalStore("reload", "complete")
+      })
+      .catch((error) => {
+        setGlobalStore("reload", undefined)
+        throw error
+      })
   }
 
   return {
@@ -326,19 +351,8 @@ function createGlobalSync() {
     },
     child: children.child,
     bootstrap,
-    updateConfig: (config: Config) => {
-      setGlobalStore("reload", "pending")
-      return globalSDK.client.global.config.update({ config }).finally(() => {
-        setTimeout(() => {
-          setGlobalStore("reload", "complete")
-        }, 1000)
-      })
-    },
-    project: {
-      loadSessions,
-      meta: projectMeta,
-      icon: projectIcon,
-    },
+    updateConfig,
+    project: projectApi,
   }
 }
 
