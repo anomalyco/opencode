@@ -128,6 +128,28 @@ export const TuiThreadCommand = cmd({
         await client.call("reload", undefined)
       })
 
+      // Ensure the process exits when receiving termination signals.
+      // Without this, @opentui/core's exitHandler swallows SIGTERM/SIGINT/etc.
+      // (it calls destroy() but never process.exit()), and SIGHUP has no handler
+      // at all. When a terminal tab is closed the bun binary survives as an
+      // orphan (PPID=1) with revoked file descriptors, leaking memory forever.
+      let exiting = false
+      for (const signal of ["SIGHUP", "SIGTERM", "SIGINT"] as const) {
+        process.on(signal, () => {
+          if (exiting) return
+          exiting = true
+          const code = signal === "SIGHUP" ? 129 : signal === "SIGINT" ? 130 : 143
+          const timeout = setTimeout(() => process.exit(code), 5000)
+          client
+            .call("shutdown", undefined)
+            .catch(() => {})
+            .finally(() => {
+              clearTimeout(timeout)
+              process.exit(code)
+            })
+        })
+      }
+
       const prompt = await iife(async () => {
         const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
         if (!args.prompt) return piped
