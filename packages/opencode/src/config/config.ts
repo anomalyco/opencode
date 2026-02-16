@@ -24,7 +24,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
+import { constants, existsSync, readFileSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -247,13 +247,99 @@ export namespace Config {
   })
 
   export async function waitForDependencies() {
-    const deps = await state().then((x) => x.deps)
+    const { deps, directories } = await state()
     await Promise.all(deps)
+    const paths = unique([...directories, Global.Path.cache])
+    for (const dir of paths) {
+      const nm = path.join(dir, "node_modules")
+      if (existsSync(nm)) {
+        const toolDir = path.join(dir, "tools")
+        if (existsSync(toolDir)) {
+          const target = path.join(toolDir, "node_modules")
+          if (!existsSync(target)) {
+            fs.symlink(nm, target, "dir").catch(/* ignore */);
+          }
+        }
+
+        process.env.NODE_PATH = unique([nm, ...(process.env.NODE_PATH?.split(path.delimiter) ?? [])])
+          .filter(Boolean)
+          .join(path.delimiter)
+      }
+    }
+  }
+
+  // Build a tool/plugin file using Bun.build() to bundle all dependencies.
+  // This is needed because compiled Bun binaries can't resolve transitive
+  // dependencies (e.g. zod from @opencode-ai/plugin) at runtime.
+  export async function build(file: string) {
+    const outdir = path.join(Global.Path.cache, "tool-builds")
+    const { directories } = await state()
+    const nmPaths = unique([...directories, Global.Path.cache])
+      .map((dir) => path.join(dir, "node_modules"))
+      .filter(existsSync)
+    const result = await Bun.build({
+      entrypoints: [file],
+      outdir,
+      target: "bun",
+      naming: "[name]-[hash].[ext]",
+      plugins: nmPaths.length
+        ? [
+            {
+              name: "opencode-resolve",
+              setup(builder) {
+                builder.onResolve({ filter: /.*/ }, (args) => {
+                  if (args.path.startsWith(".") || args.path.startsWith("/")) return
+                  for (const nm of nmPaths) {
+                    const parts = args.path.startsWith("@")
+                      ? args.path.split("/").slice(0, 2)
+                      : [args.path.split("/")[0]]
+                    const pkgDir = path.join(nm, ...parts)
+                    if (!existsSync(pkgDir)) continue
+                    const subpath = args.path.startsWith("@")
+                      ? args.path.split("/").slice(2).join("/")
+                      : args.path.split("/").slice(1).join("/")
+                    const pkgJson = path.join(pkgDir, "package.json")
+                    if (!existsSync(pkgJson)) continue
+                    const pkg = JSON.parse(readFileSync(pkgJson, "utf8"))
+                    if (subpath) {
+                      const entry = pkg.exports?.["./" + subpath]
+                      const resolved = entry
+                        ? typeof entry === "string"
+                          ? entry
+                          : entry.import || entry.default || entry.require
+                        : null
+                      if (resolved) return { path: path.join(pkgDir, resolved) }
+                      const direct = path.join(pkgDir, subpath)
+                      for (const ext of ["", ".js", ".mjs", ".ts"]) {
+                        if (existsSync(direct + ext)) return { path: direct + ext }
+                      }
+                      continue
+                    }
+                    const mainExport = pkg.exports?.["."]
+                    const resolved = mainExport
+                      ? typeof mainExport === "string"
+                        ? mainExport
+                        : mainExport.import || mainExport.default || mainExport.require
+                      : pkg.module || pkg.main || "index.js"
+                    if (resolved) return { path: path.join(pkgDir, resolved) }
+                  }
+                })
+              },
+            },
+          ]
+        : [],
+    })
+    if (!result.success) {
+      throw new Error(`Failed to build ${file}: ${result.logs.map(String).join("\n")}`)
+    }
+    return result.outputs[0].path
   }
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+    const isDev =
+      Installation.VERSION.includes("-dev") || Installation.VERSION.startsWith("0.0.0") || Installation.isLocal()
+    const targetVersion = isDev ? "latest" : Installation.VERSION
 
     const json = await Bun.file(pkg)
       .json()
@@ -263,7 +349,6 @@ export namespace Config {
       "@opencode-ai/plugin": targetVersion,
     }
     await Bun.write(pkg, JSON.stringify(json, null, 2))
-    await new Promise((resolve) => setTimeout(resolve, 3000))
 
     const gitignore = path.join(dir, ".gitignore")
     const hasGitIgnore = await Bun.file(gitignore).exists()
@@ -312,8 +397,11 @@ export namespace Config {
     const depVersion = dependencies["@opencode-ai/plugin"]
     if (!depVersion) return true
 
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
+    const isDev =
+      Installation.VERSION.includes("-dev") || Installation.VERSION.startsWith("0.0.0") || Installation.isLocal()
+    const targetVersion = isDev ? "latest" : Installation.VERSION
     if (targetVersion === "latest") {
+      if (depVersion === "latest") return true
       const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
       if (!isOutdated) return false
       log.info("Cached version is outdated, proceeding with install", {
