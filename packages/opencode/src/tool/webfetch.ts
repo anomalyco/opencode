@@ -4,10 +4,82 @@ import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
 import { Identifier } from "../id/id"
+import { lookup } from "node:dns/promises"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+
+const BLOCKED_HOSTNAMES = new Set([
+  "localhost",
+  "metadata.google.internal",
+])
+
+function isPrivateIP(ip: string): boolean {
+  if (ip === "0.0.0.0" || ip === "::") return true
+
+  const parts = ip.split(".")
+  if (parts.length === 4) {
+    const [a, b, c] = parts.map(Number)
+    if (a === 127) return true // 127.0.0.0/8
+    if (a === 10) return true // 10.0.0.0/8
+    if (a === 172 && b! >= 16 && b! <= 31) return true // 172.16.0.0/12
+    if (a === 192 && b === 168) return true // 192.168.0.0/16
+    if (a === 169 && b === 254) return true // 169.254.0.0/16 (link-local, cloud metadata)
+    if (a === 100 && b! >= 64 && b! <= 127) return true // 100.64.0.0/10 (CGNAT)
+    if (a === 0) return true // 0.0.0.0/8
+    if (a === 192 && b === 0 && c === 0) return true // 192.0.0.0/24
+    if (a === 192 && b === 0 && c === 2) return true // 192.0.2.0/24 (documentation)
+    if (a === 198 && b! >= 18 && b! <= 19) return true // 198.18.0.0/15 (benchmarking)
+    if (a === 198 && b === 51 && c === 100) return true // 198.51.100.0/24 (documentation)
+    if (a === 203 && b === 0 && c === 113) return true // 203.0.113.0/24 (documentation)
+    if (a! >= 224) return true // 224.0.0.0+ (multicast & reserved)
+    return false
+  }
+
+  const lower = ip.toLowerCase()
+  if (lower === "::1") return true
+  if (lower.startsWith("fe80:")) return true // link-local
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true // unique local
+  if (lower.startsWith("::ffff:")) {
+    const mapped = lower.slice(7)
+    if (mapped.includes(".")) return isPrivateIP(mapped)
+  }
+
+  return false
+}
+
+async function validateURLNotInternal(url: string) {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error("Invalid URL")
+  }
+
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
+
+  if (BLOCKED_HOSTNAMES.has(hostname.toLowerCase())) {
+    throw new Error("Requests to internal hosts are not allowed")
+  }
+
+  if (isPrivateIP(hostname)) {
+    throw new Error("Requests to private or internal network addresses are not allowed")
+  }
+
+  try {
+    const results = await lookup(hostname, { all: true })
+    for (const result of Array.isArray(results) ? results : [results]) {
+      if (isPrivateIP(result.address)) {
+        throw new Error("URL resolved to a private or internal network address")
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("private or internal")) throw err
+    if (err instanceof Error && err.message.includes("internal hosts")) throw err
+    throw new Error(`DNS resolution failed for ${hostname}`)
+  }
+}
 
 export const WebFetchTool = Tool.define("webfetch", {
   description: DESCRIPTION,
@@ -24,6 +96,8 @@ export const WebFetchTool = Tool.define("webfetch", {
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
+
+    await validateURLNotInternal(params.url)
 
     await ctx.ask({
       permission: "webfetch",
