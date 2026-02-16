@@ -791,14 +791,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               const cleaned = error().replace("Error: ", "")
               if (part.tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
-                  <BasicTool
-                    icon="bubble-5"
-                    trigger={{
-                      title: i18n.t("ui.tool.questions"),
-                      subtitle: "Dismissed",
-                    }}
-                    hideDetails
-                  />
+                  <div style="width: 100%; display: flex; justify-content: flex-end;">
+                    <span class="text-13-regular text-text-weak cursor-default">
+                      {i18n.t("ui.tool.questions")} dismissed
+                    </span>
+                  </div>
                 )
               }
               const [title, ...rest] = cleaned.split(": ")
