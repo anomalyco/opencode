@@ -1,0 +1,39 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebase on upstream
+        id: rebase
+        continue-on-error: true
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git || true
+          git fetch upstream
+          git checkout dev
+          git rebase upstream/dev
+          git push origin dev --force-with-lease
+
+      - name: Create PR on conflict
+        if: steps.rebase.outcome == 'failure'
+        run: |
+          git rebase --abort
+          git checkout -b sync/conflict-$(date +%Y-%m-%d) upstream/dev
+          git merge origin/dev --no-edit || true
+          git add -A && git commit -m "sync: conflicts $(date +%Y-%m-%d)" --no-verify
+          git push origin sync/conflict-$(date +%Y-%m-%d)
+          gh pr create --base dev --head sync/conflict-$(date +%Y-%m-%d) \
+            --title "Sync upstream - conflicts $(date +%Y-%m-%d)" \
+            --body "Rebase failed due to conflicts. Please resolve manually."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
