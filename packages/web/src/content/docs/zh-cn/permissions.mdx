@@ -1,6 +1,6 @@
 ---
 title: 权限
-description: 控制哪些操作需要批准才能運行。
+description: 控制哪些操作需要批准才能运行。
 ---
 
 opencode 使用`permission` 配置来决定给定的操作是否应自动运行、提示您或被阻止。
@@ -47,7 +47,7 @@ opencode 使用`permission` 配置来决定给定的操作是否应自动运行�
 
 ## 粒度规则（对象语法）
 
-对于大多數权限，您可以使用对像根據工具輸入应用不同的操作。
+对于大多数权限，您可以使用对象根据工具输入应用不同的操作。
 
 ```json title="opencode.json"
 {
@@ -68,11 +68,11 @@ opencode 使用`permission` 配置来决定给定的操作是否应自动运行�
 }
 ```
 
-规则通过模式匹配進行評估，**最后匹配的规则獲勝**。常見的模式是将包羅万象的 `"*"` 规则放在前面，然後再放置更具體的规则。
+规则通过模式匹配进行评估，**最后匹配的规则获胜**。常见的模式是将包罗万象的 `"*"` 规则放在前面，然后再放置更具体的规则。
 
 ### 通配符
 
-权限模式使用簡單的通配符匹配：
+权限模式使用简单的通配符匹配：
 
 - `*` 匹配零个或多个任意字符
 - `?` 恰好匹配一个字符
@@ -80,7 +80,7 @@ opencode 使用`permission` 配置来决定给定的操作是否应自动运行�
 
 ### 主目录扩展
 
-您可以在模式目录中使用 `~` 或 `$HOME` 来引用您的主目录。这对于 [`external_directory`](#external-directories) 规则特别有用。
+您可以在模式目录中使用 `~` 或 `$HOME` 来引用您的主目录。这对于 [`外部目录`](#external_directory) 规则特别有用。
 
 - `~/projects/*` -> `/Users/username/projects/*`
 - `$HOME/projects/*` -> `/Users/username/projects/*`
@@ -133,14 +133,14 @@ opencode权限由工具名称和一些安全防护措施决定：
 - `edit` — 所有文件修改（头部`edit`、`write`、`patch`、`multiedit`）
 - `glob` — 文件通配符（匹配通配符模式）
 - `grep` — 内容搜索（匹配正则表达式模式）
-- `list` — 上市目录中的文件（与目录路径匹配）
+- `list` — 列出目录中的文件（与目录路径匹配）
 - `bash` — 运行 shell 命令（匹配 `git status --porcelain` 等解析命令）
 - `task` — 启动子代理（与子代理类型匹配）
 - `skill` — 加载技能（与技能名称匹配）
 - `lsp` — 运行 LSP 查询（当前非粒度）
-- `todoread`、`todowrite` — 讀取/更新待辦事項列表
+- `todoread`、`todowrite` — 读取/更新待办事项列表
 - `webfetch` — 获取 URL（与 URL 匹配）
-- `websearch`、`codesearch` — 網頁/代碼搜索（与查询匹配）
+- `websearch`、`codesearch` — 网页/代码搜索（与查询匹配）
 - `external_directory` — 当工具访问项目工作目录外部的路径时触发
 - `doom_loop` — 当相同的工具调用相同的输入重复 3 次时触发
 
@@ -148,7 +148,7 @@ opencode权限由工具名称和一些安全防护措施决定：
 
 ## 默认值
 
-如果您未指定任何内容，opencode分散许可的默认值开始：
+如果您未指定任何内容，opencode将从宽松的默认值开始：
 
 - 大部分权限默认为`"allow"`。
 - `doom_loop`和`external_directory`默认为`"ask"`。
@@ -171,7 +171,7 @@ opencode权限由工具名称和一些安全防护措施决定：
 
 ## “询问”的作用是什么
 
-当 opencode 提示批准时，UI 会提供清晰的结果：
+当 opencode 提示批准时，UI 会提供三种结果：
 
 - `once` — 仅批准此请求
 - `always` — 批准与建议模式匹配的未来请求（对于当前 opencode 会话的其余部分）
