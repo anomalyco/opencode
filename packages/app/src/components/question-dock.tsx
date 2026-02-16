@@ -33,7 +33,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
-    return `${n}/${total()}`
+    return `${n} of ${total()} questions`
   })
 
   const last = createMemo(() => store.tab >= total() - 1)
