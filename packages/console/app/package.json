@@ -20,7 +20,7 @@
     "@opencode-ai/console-mail": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@smithy/eventstream-codec": "4.2.7",
+    "@smithy/eventstream-codec": "4.2.8",
     "@smithy/util-utf8": "4.2.0",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
