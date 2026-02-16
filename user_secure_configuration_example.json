@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "concrete-security/secure-gpt-oss-120b",
+  "provider": {
+    "opencode": { "options": {} },
+    "concrete-security": {
+      "npm": "file:///Users/kcelia/Concrete-Security/ratls/ai-provider/dist/index.js",
+      "api": "https://vllm.concrete-security.com/v1",
+      "options": { "sdk": "@ai-sdk/anthropic", "apiKey": "dummy-key" },
+      "models": {
+        "secure-gpt-oss-120b": {
+          "id": "openai/gpt-oss-120b",
+          "name": "Secure gpt-oss-120b"
+        }
+      }
+    }
+  },
+  "mcp": {},
+  "tools": { "github-triage": false, "github-pr-search": false }
+}
