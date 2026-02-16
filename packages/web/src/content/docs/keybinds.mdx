@@ -1,6 +1,6 @@
 ---
 title: Keybinds
-description: Customize your keybinds.
+description: Configure shortcuts for every app action.
 ---
 
 OpenCode has a list of keybinds that you can customize through the OpenCode config.
@@ -102,6 +102,105 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
   }
 }
 ```
+
+---
+
+## Review actions
+
+Use this as a quick reference for what each keybind controls.
+
+| Keybind                         | Default                                      | Action                                               |
+| ------------------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| `leader`                        | `ctrl+x`                                     | Prefix key used before leader-based shortcuts        |
+| `app_exit`                      | `ctrl+c,ctrl+d,<leader>q`                    | Exit OpenCode, or close active dialog flows          |
+| `command_list`                  | `ctrl+p`                                     | Open the command palette                             |
+| `status_view`                   | `<leader>s`                                  | Open the status dialog with runtime details          |
+| `theme_list`                    | `<leader>t`                                  | Open the theme picker to switch appearance           |
+| `terminal_suspend`              | `ctrl+z`                                     | Suspend OpenCode with SIGTSTP, then resume with `fg` |
+| `terminal_title_toggle`         | `none`                                       | Enable or disable terminal title updates             |
+| `tips_toggle`                   | `<leader>h`                                  | Show or hide tips on the home screen                 |
+| `sidebar_toggle`                | `<leader>b`                                  | Show or hide the session sidebar panel               |
+| `scrollbar_toggle`              | `none`                                       | Show or hide the messages scrollbar                  |
+| `username_toggle`               | `none`                                       | Show or hide usernames in message headers            |
+| `tool_details`                  | `none`                                       | Show or hide expanded tool execution details         |
+| `display_thinking`              | `none`                                       | Show or hide assistant thinking blocks               |
+| `session_new`                   | `<leader>n`                                  | Start a fresh session from the home view             |
+| `session_list`                  | `<leader>l`                                  | Open the session switcher for existing sessions      |
+| `session_timeline`              | `<leader>g`                                  | Open timeline and jump to a specific message         |
+| `session_fork`                  | `none`                                       | Create a branched session from a chosen message      |
+| `session_rename`                | `none`                                       | Rename the current session title                     |
+| `session_share`                 | `none`                                       | Create or copy the current session share link        |
+| `session_unshare`               | `none`                                       | Disable sharing for the current session link         |
+| `session_export`                | `<leader>x`                                  | Export the current session transcript to a file      |
+| `session_compact`               | `<leader>c`                                  | Summarize session history into compact context       |
+| `session_interrupt`             | `escape`                                     | Stop shell mode or abort an active response          |
+| `session_child_cycle`           | `<leader>right`                              | Switch to the next child branch session              |
+| `session_child_cycle_reverse`   | `<leader>left`                               | Switch to the previous child branch session          |
+| `session_parent`                | `<leader>up`                                 | Jump to this session's parent branch                 |
+| `messages_first`                | `ctrl+g,home`                                | Jump to the first message in the transcript          |
+| `messages_last`                 | `ctrl+alt+g,end`                             | Jump to the latest message in the transcript         |
+| `messages_next`                 | `none`                                       | Jump to the next message from current position       |
+| `messages_previous`             | `none`                                       | Jump to the previous message from current position   |
+| `messages_last_user`            | `none`                                       | Jump to the latest non-empty user message            |
+| `messages_page_up`              | `pageup,ctrl+alt+b`                          | Scroll the transcript up by half a screen            |
+| `messages_page_down`            | `pagedown,ctrl+alt+f`                        | Scroll the transcript down by half a screen          |
+| `messages_half_page_up`         | `ctrl+alt+u`                                 | Scroll the transcript up by a quarter screen         |
+| `messages_half_page_down`       | `ctrl+alt+d`                                 | Scroll the transcript down by a quarter screen       |
+| `messages_line_up`              | `ctrl+alt+y`                                 | Scroll the transcript up by one line                 |
+| `messages_line_down`            | `ctrl+alt+e`                                 | Scroll the transcript down by one line               |
+| `messages_copy`                 | `<leader>y`                                  | Copy text from the latest assistant reply            |
+| `messages_undo`                 | `<leader>u`                                  | Revert the previous user turn and restore input      |
+| `messages_redo`                 | `<leader>r`                                  | Reapply an undone user turn after revert             |
+| `messages_toggle_conceal`       | `<leader>h`                                  | Toggle compact rendering for long code blocks        |
+| `agent_list`                    | `<leader>a`                                  | Open the agent picker                                |
+| `agent_cycle`                   | `tab`                                        | Switch to the next configured agent                  |
+| `agent_cycle_reverse`           | `shift+tab`                                  | Switch to the previous configured agent              |
+| `model_list`                    | `<leader>m`                                  | Open the model picker for provider/model selection   |
+| `model_cycle_recent`            | `f2`                                         | Switch to the next recently used model               |
+| `model_cycle_recent_reverse`    | `shift+f2`                                   | Switch to the previous recently used model           |
+| `model_cycle_favorite`          | `none`                                       | Switch to the next favorited model                   |
+| `model_cycle_favorite_reverse`  | `none`                                       | Switch to the previous favorited model               |
+| `variant_cycle`                 | `ctrl+t`                                     | Cycle through variants of the current model          |
+| `editor_open`                   | `<leader>e`                                  | Open the current prompt in your external editor      |
+| `input_submit`                  | `return`                                     | Send the current prompt                              |
+| `input_newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j` | Insert a newline instead of sending                  |
+| `input_paste`                   | `ctrl+v`                                     | Paste clipboard content, including image attachments |
+| `input_clear`                   | `ctrl+c`                                     | Clear all text and parts from the prompt             |
+| `history_previous`              | `up`                                         | Load the previous prompt from input history          |
+| `history_next`                  | `down`                                       | Load the next prompt from input history              |
+| `input_move_left`               | `left,ctrl+b`                                | Move the cursor left in the prompt                   |
+| `input_move_right`              | `right,ctrl+f`                               | Move the cursor right in the prompt                  |
+| `input_move_up`                 | `up`                                         | Move the cursor up one visual line                   |
+| `input_move_down`               | `down`                                       | Move the cursor down one visual line                 |
+| `input_line_home`               | `ctrl+a`                                     | Move to the start of the current line                |
+| `input_line_end`                | `ctrl+e`                                     | Move to the end of the current line                  |
+| `input_visual_line_home`        | `alt+a`                                      | Move to the start of the wrapped visual line         |
+| `input_visual_line_end`         | `alt+e`                                      | Move to the end of the wrapped visual line           |
+| `input_buffer_home`             | `home`                                       | Move to the start of the full prompt buffer          |
+| `input_buffer_end`              | `end`                                        | Move to the end of the full prompt buffer            |
+| `input_word_forward`            | `alt+f,alt+right,ctrl+right`                 | Move the cursor forward by one word                  |
+| `input_word_backward`           | `alt+b,alt+left,ctrl+left`                   | Move the cursor backward by one word                 |
+| `input_select_left`             | `shift+left`                                 | Extend selection one character to the left           |
+| `input_select_right`            | `shift+right`                                | Extend selection one character to the right          |
+| `input_select_up`               | `shift+up`                                   | Extend selection one visual line up                  |
+| `input_select_down`             | `shift+down`                                 | Extend selection one visual line down                |
+| `input_select_line_home`        | `ctrl+shift+a`                               | Select from cursor to start of current line          |
+| `input_select_line_end`         | `ctrl+shift+e`                               | Select from cursor to end of current line            |
+| `input_select_visual_line_home` | `alt+shift+a`                                | Select from cursor to visual-line start              |
+| `input_select_visual_line_end`  | `alt+shift+e`                                | Select from cursor to visual-line end                |
+| `input_select_buffer_home`      | `shift+home`                                 | Select from cursor to buffer start                   |
+| `input_select_buffer_end`       | `shift+end`                                  | Select from cursor to buffer end                     |
+| `input_select_word_forward`     | `alt+shift+f,alt+shift+right`                | Extend selection forward by one word                 |
+| `input_select_word_backward`    | `alt+shift+b,alt+shift+left`                 | Extend selection backward by one word                |
+| `input_backspace`               | `backspace,shift+backspace`                  | Delete the character before the cursor               |
+| `input_delete`                  | `ctrl+d,delete,shift+delete`                 | Delete the character at the cursor                   |
+| `input_delete_word_backward`    | `ctrl+w,ctrl+backspace,alt+backspace`        | Delete the previous word before the cursor           |
+| `input_delete_word_forward`     | `alt+d,alt+delete,ctrl+delete`               | Delete the next word from the cursor                 |
+| `input_delete_to_line_start`    | `ctrl+u`                                     | Delete from cursor to start of line                  |
+| `input_delete_to_line_end`      | `ctrl+k`                                     | Delete from cursor to end of line                    |
+| `input_delete_line`             | `ctrl+shift+d`                               | Delete the entire current line                       |
+| `input_undo`                    | `ctrl+-,super+z`                             | Undo the last prompt edit                            |
+| `input_redo`                    | `ctrl+.,super+shift+z`                       | Redo the last undone prompt edit                     |
 
 ---
 
