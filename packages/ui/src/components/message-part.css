@@ -822,7 +822,7 @@
     flex-direction: column;
     gap: 6px;
     margin-top: 12px;
-    padding-bottom: 8px;
+    padding: 1px 1px 8px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
