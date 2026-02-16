@@ -32,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
+  "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",

@@ -27,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponawianie",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Przekroczono limit darmowego użytkowania",
+  "ui.sessionTurn.error.addCredits": "Dodaj kredyty",
 
   "ui.sessionTurn.status.delegating": "Delegowanie pracy",
   "ui.sessionTurn.status.planning": "Planowanie kolejnych kroków",

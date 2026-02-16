@@ -27,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "再試行中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
+  "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",

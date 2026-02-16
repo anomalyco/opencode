@@ -31,6 +31,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "erneuter Versuch",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
+  "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
 
   "ui.sessionTurn.status.delegating": "Arbeit delegieren",
   "ui.sessionTurn.status.planning": "Nächste Schritte planen",

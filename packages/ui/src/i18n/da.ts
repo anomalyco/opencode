@@ -27,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "prøver igen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
+  "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",

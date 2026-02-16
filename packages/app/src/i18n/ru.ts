@@ -578,6 +578,7 @@ export const dict = {
     "Подключите любого провайдера для использования моделей, включая Claude, GPT, Gemini и др.",
   "sidebar.project.recentSessions": "Недавние сессии",
   "sidebar.project.viewAllSessions": "Посмотреть все сессии",
+  "sidebar.project.clearNotifications": "Очистить уведомления",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Приложение",
@@ -631,6 +632,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",
   "sound.option.alert03": "Alert 03",

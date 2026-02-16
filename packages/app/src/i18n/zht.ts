@@ -567,6 +567,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "連線任意提供者即可使用更多模型，如 Claude、GPT、Gemini 等。",
   "sidebar.project.recentSessions": "最近工作階段",
   "sidebar.project.viewAllSessions": "查看全部工作階段",
+  "sidebar.project.clearNotifications": "清除通知",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",
@@ -620,6 +621,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "警報 01",
   "sound.option.alert02": "警報 02",
   "sound.option.alert03": "警報 03",
