@@ -247,6 +247,32 @@
   }
 }
 
+[data-component="tool-dismissed"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  [data-slot="tool-dismissed-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-strong);
+  }
+
+  [data-slot="tool-dismissed-status"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-base);
+  }
+}
+
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;

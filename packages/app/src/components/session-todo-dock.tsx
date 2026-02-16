@@ -1,7 +1,6 @@
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
@@ -76,11 +75,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         <Show when={store.collapsed}>
           <div class="ml-1 flex-1 min-w-0">
             <Show when={preview()}>
-              <div class="text-14-regular text-text-base truncate cursor-default">
-                <Show when={active()?.status === "in_progress"} fallback={preview()}>
-                  <TextShimmer text={preview()} />
-                </Show>
-              </div>
+              <div class="text-14-regular text-text-base truncate cursor-default">{preview()}</div>
             </Show>
           </div>
         </Show>
@@ -193,9 +188,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                     todo.status === "completed" || todo.status === "cancelled" ? "line-through" : undefined,
                 }}
               >
-                <Show when={todo.status === "in_progress"} fallback={todo.content}>
-                  <TextShimmer text={todo.content} />
-                </Show>
+                {todo.content}
               </span>
             </Checkbox>
           )}

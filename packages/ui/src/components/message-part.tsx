@@ -789,6 +789,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           <Match when={part.state.status === "error" && part.state.error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
+              if (part.tool === "question" && cleaned.includes("dismissed this question")) {
+                return (
+                  <Card>
+                    <div data-component="tool-dismissed">
+                      <div data-slot="tool-dismissed-title">{i18n.t("ui.tool.questions")}</div>
+                      <div data-slot="tool-dismissed-status">Dismissed</div>
+                    </div>
+                  </Card>
+                )
+              }
               const [title, ...rest] = cleaned.split(": ")
               return (
                 <Card variant="error">
