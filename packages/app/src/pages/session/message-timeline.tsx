@@ -165,7 +165,7 @@ export function MessageTimeline(props: {
                 "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                 "w-full": true,
                 "pb-4": true,
-                "px-4 md:px-6": true,
+                "pl-2 pr-4 md:pl-4 md:pr-6": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}
             >
@@ -185,7 +185,7 @@ export function MessageTimeline(props: {
                       when={props.titleState.editing}
                       fallback={
                         <h1
-                          class="text-14-medium text-text-strong truncate min-w-0 pl-2"
+                          class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
                           onDblClick={props.openTitleEditor}
                         >
                           {props.title}
