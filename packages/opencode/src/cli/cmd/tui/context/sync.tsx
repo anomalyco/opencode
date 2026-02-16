@@ -286,7 +286,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            if (parts[result.index] === event.properties.part) break
+            setStore("part", event.properties.part.messageID, result.index, event.properties.part)
             break
           }
           setStore(

@@ -31,14 +31,16 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     let queue: Event[] = []
     let timer: Timer | undefined
-    let last = 0
+
+    const STREAM_BATCH_MS = 32
+    const EVENT_BATCH_MS = 12
+    const MAX_QUEUE_BEFORE_FLUSH = 100
 
     const flush = () => {
       if (queue.length === 0) return
       const events = queue
       queue = []
       timer = undefined
-      last = Date.now()
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
@@ -49,16 +51,16 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     const handleEvent = (event: Event) => {
       queue.push(event)
-      const elapsed = Date.now() - last
 
-      if (timer) return
-      // If we just flushed recently (within 16ms), batch this with future events
-      // Otherwise, process immediately to avoid latency
-      if (elapsed < 16) {
-        timer = setTimeout(flush, 16)
+      if (queue.length >= MAX_QUEUE_BEFORE_FLUSH) {
+        if (timer) clearTimeout(timer)
+        flush()
         return
       }
-      flush()
+
+      if (timer) return
+      const wait = event.type === "message.part.updated" ? STREAM_BATCH_MS : EVENT_BATCH_MS
+      timer = setTimeout(flush, wait)
     }
 
     onMount(async () => {
@@ -70,17 +72,29 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       }
 
       // Fall back to SSE
+      let retry = 250
       while (true) {
         if (abort.signal.aborted) break
-        const events = await sdk.event.subscribe(
-          {},
-          {
-            signal: abort.signal,
-          },
-        )
+        try {
+          const events = await sdk.event.subscribe(
+            {},
+            {
+              signal: abort.signal,
+            },
+          )
 
-        for await (const event of events.stream) {
-          handleEvent(event)
+          retry = 250
+          for await (const event of events.stream) {
+            handleEvent(event)
+          }
+
+          if (!abort.signal.aborted) {
+            await Bun.sleep(100)
+          }
+        } catch {
+          if (abort.signal.aborted) break
+          await Bun.sleep(retry)
+          retry = Math.min(retry * 2, 2_000)
         }
 
         // Flush any remaining events
