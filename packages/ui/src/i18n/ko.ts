@@ -5,16 +5,22 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
-
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
   "ui.sessionReview.change.modified": "수정됨",
+  "ui.sessionReview.image.loading": "로딩 중...",
+  "ui.sessionReview.image.placeholder": "이미지",
+  "ui.sessionReview.largeDiff.title": "차이가 너무 커서 렌더링할 수 없습니다",
+  "ui.sessionReview.largeDiff.meta": "제한: {{lines}}줄 / {{limit}}. 현재: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "그래도 렌더링",
+
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.submit": "댓글",
+
   "ui.sessionTurn.steps.show": "단계 표시",
   "ui.sessionTurn.steps.hide": "단계 숨기기",
   "ui.sessionTurn.summary.response": "응답",
@@ -22,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "재시도 중",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}초 후",
+  "ui.sessionTurn.error.freeUsageExceeded": "무료 사용량 초과",
+  "ui.sessionTurn.error.addCredits": "크레딧 추가",
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",

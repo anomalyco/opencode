@@ -9,16 +9,22 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "拆分",
   "ui.sessionReview.expandAll": "全部展開",
   "ui.sessionReview.collapseAll": "全部收合",
-
   "ui.sessionReview.change.added": "已新增",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.image.loading": "載入中...",
+  "ui.sessionReview.image.placeholder": "圖片",
+  "ui.sessionReview.largeDiff.title": "差異過大，無法渲染",
+  "ui.sessionReview.largeDiff.meta": "限制：{{lines}} 行 / {{limit}}。目前：{{current}}。",
+  "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
+
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在評論 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "新增評論",
   "ui.lineComment.submit": "評論",
+
   "ui.sessionTurn.steps.show": "顯示步驟",
   "ui.sessionTurn.steps.hide": "隱藏步驟",
   "ui.sessionTurn.summary.response": "回覆",
@@ -26,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
+  "ui.sessionTurn.error.addCredits": "新增點數",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
@@ -92,7 +100,7 @@ export const dict = {
   "ui.message.expand": "展開訊息",
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
-  "ui.message.copied": "已複製",
+  "ui.message.copied": "已複製！",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
