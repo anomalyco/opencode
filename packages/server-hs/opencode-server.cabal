@@ -39,7 +39,7 @@ executable opencode-server
     Tool.Tool
   hs-source-dirs:   src
   default-language: GHC2021
-  ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N -Werror
   build-depends:
     base >= 4.17 && < 5,
     aeson >= 2.0,
