@@ -767,11 +767,14 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       const args = ["commit", "-m", summary]
       if (actor) args.push("-m", `Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>`)
       await gitRun(args)
-    }
+      }
 
-    try {
-      if (useGithubToken) {
-        const githubToken = process.env["GITHUB_TOKEN"]
+      try {
+        const ghesAppToken = process.env["GHES_APP_TOKEN"]
+        if (ghesAppToken) {
+          appToken = ghesAppToken
+        } else if (useGithubToken) {
+          const githubToken = process.env["GITHUB_TOKEN"]
         if (!githubToken) {
           throw new Error(
             "GITHUB_TOKEN environment variable is not set. When using use_github_token, you must provide GITHUB_TOKEN.",
