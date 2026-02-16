@@ -1171,27 +1171,37 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
-      experimental: z
-        .object({
-          disable_paste_summary: z.boolean().optional(),
-          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-          openTelemetry: z
-            .boolean()
-            .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
-          primary_tools: z
-            .array(z.string())
-            .optional()
-            .describe("Tools that should only be available to primary agents."),
-          continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
-          mcp_timeout: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
-        })
-        .optional(),
+       experimental: z
+         .object({
+           disable_paste_summary: z.boolean().optional(),
+           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+           openTelemetry: z
+             .boolean()
+             .optional()
+             .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+           task_metrics: z
+             .boolean()
+             .optional()
+             .describe("Persist task metrics to the database (default: true; set false to disable)"),
+           task_metrics_retention_days: z
+             .number()
+             .int()
+             .positive()
+             .optional()
+             .describe("Retention window for task_metrics cleanup (default: 30 days)"),
+           primary_tools: z
+             .array(z.string())
+             .optional()
+             .describe("Tools that should only be available to primary agents."),
+           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+           mcp_timeout: z
+             .number()
+             .int()
+             .positive()
+             .optional()
+             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+         })
+         .optional(),
     })
     .strict()
     .meta({
