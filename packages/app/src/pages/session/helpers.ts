@@ -25,13 +25,16 @@ export const createOpenReviewFile = (input: {
   tabForPath: (path: string) => string
   openTab: (tab: string) => void
   loadFile: (path: string) => void
+  setActive: (tab: string) => void
 }) => {
   return (path: string) => {
+    const tab = input.tabForPath(path)
     batch(() => {
       input.showAllFiles()
-      input.openTab(input.tabForPath(path))
+      input.openTab(tab)
       input.loadFile(path)
     })
+    input.setActive(tab)
   }
 }
 

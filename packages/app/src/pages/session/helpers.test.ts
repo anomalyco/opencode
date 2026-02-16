@@ -12,11 +12,12 @@ describe("createOpenReviewFile", () => {
       },
       openTab: (tab) => calls.push(`open:${tab}`),
       loadFile: (path) => calls.push(`load:${path}`),
+      setActive: (tab) => calls.push(`active:${tab}`),
     })
 
     openReviewFile("src/a.ts")
 
-    expect(calls).toEqual(["show", "tab:src/a.ts", "open:file://src/a.ts", "load:src/a.ts"])
+    expect(calls).toEqual(["tab:src/a.ts", "show", "open:file://src/a.ts", "load:src/a.ts", "active:file://src/a.ts"])
   })
 })
 
