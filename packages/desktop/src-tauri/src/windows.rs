@@ -38,6 +38,8 @@ impl MainWindow {
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
         if let Some(window) = app.get_webview_window(Self::LABEL) {
+            let _ = window.set_focus();
+            let _ = window.unminimize();
             return Ok(Self(window));
         }
 
@@ -65,6 +67,9 @@ impl MainWindow {
         ));
 
         let window = window_builder.build()?;
+
+        // Ensure window is focused after creation (e.g., after update/relaunch)
+        let _ = window.set_focus();
 
         setup_window_state_listener(app, &window);
 
