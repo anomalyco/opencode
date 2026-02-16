@@ -1,0 +1,603 @@
+---
+title: 命令列介面
+description: opencode CLI 選項和指令。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+預設情況下，OpenCode CLI 在不帶任何參數執行時啟動 [TUI](/docs/tui)。
+
+```bash
+opencode
+```
+
+但它也接受本頁記錄的指令。這允許您以程式化方式與 OpenCode 互動。
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+啟動 OpenCode TUI。
+
+```bash
+opencode [project]
+```
+
+#### 旗標 (Flags)
+
+| 旗標         | 簡寫 | 說明                                                          |
+| ------------ | ---- | ------------------------------------------------------------- |
+| `--continue` | `-c` | 繼續上一個工作階段                                            |
+| `--session`  | `-s` | 繼續指定的工作階段 ID                                         |
+| `--fork`     |      | 繼續時分岔工作階段（與 `--continue` 或 `--session` 一起使用） |
+| `--prompt`   |      | 使用的提示                                                    |
+| `--model`    | `-m` | 使用的模型 (provider/model)                                   |
+| `--agent`    |      | 使用的代理                                                    |
+| `--port`     |      | 監聽連接埠                                                    |
+| `--hostname` |      | 監聽的主機名稱                                                |
+
+---
+
+## 指令
+
+OpenCode CLI 還具有以下指令。
+
+---
+
+### agent
+
+管理 OpenCode 代理。
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+將終端機連接到透過 `serve` 或 `web` 指令啟動的已執行的 OpenCode 後端伺服器。
+
+```bash
+opencode attach [url]
+```
+
+這允許將 TUI 與遠端 OpenCode 後端一起使用。例如：
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### 旗標
+
+| 旗標        | 簡寫 | 說明                  |
+| ----------- | ---- | --------------------- |
+| `--dir`     |      | 啟動 TUI 的工作目錄   |
+| `--session` | `-s` | 繼續指定的工作階段 ID |
+
+---
+
+#### create
+
+使用自定義設定建立新代理。
+
+```bash
+opencode agent create
+```
+
+此指令將指導您使用自定義系統提示和工具設定建立新代理。
+
+---
+
+#### list
+
+列出所有可用的代理。
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+用於管理供應商的憑證和登入的指令。
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+OpenCode 由 [Models.dev](https://models.dev) 上的供應商列表提供支援，因此您可以使用 `opencode auth login` 為您想要使用的任何供應商設定 API 金鑰。它儲存在 `~/.local/share/opencode/auth.json` 中。
+
+```bash
+opencode auth login
+```
+
+當 OpenCode 啟動時，它會從憑證檔案載入供應商。如果您的環境中定義了任何金鑰或專案中的 `.env` 檔案。
+
+---
+
+#### list
+
+列出憑證檔案中儲存的所有經過身分驗證的供應商。
+
+```bash
+opencode auth list
+```
+
+或者簡短的版本。
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+透過從憑證檔案中清除供應商，將您從供應商中登出。
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+管理 GitHub 代理以實現儲存庫自動化。
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+在您的儲存庫中安裝 GitHub 代理。
+
+```bash
+opencode github install
+```
+
+這將設定必要的 GitHub Actions 工作流程並指導您完成設定過程。 [了解更多](/docs/github)。
+
+---
+
+#### run
+
+執行 GitHub 代理。這通常用在 GitHub Actions 中。
+
+```bash
+opencode github run
+```
+
+##### 旗標
+
+| 旗標      | 說明                           |
+| --------- | ------------------------------ |
+| `--event` | 用於執行代理的 GitHub 模擬事件 |
+| `--token` | GitHub 個人存取權杖            |
+
+---
+
+### mcp
+
+管理模型上下文協議 (MCP) 伺服器。
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+將 MCP 伺服器新增到您的設定中。
+
+```bash
+opencode mcp add
+```
+
+此指令將指導您新增本地或遠端 MCP 伺服器。
+
+---
+
+#### list
+
+列出所有已設定的 MCP 伺服器及其連線狀態。
+
+```bash
+opencode mcp list
+```
+
+或者使用簡短版本。
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+使用啟用 OAuth 的 MCP 伺服器進行身分驗證。
+
+```bash
+opencode mcp auth [name]
+```
+
+如果您不提供伺服器名稱，系統將提示您從可用的支援 OAuth 的伺服器中進行選擇。
+
+您還可以列出支援 OAuth 的伺服器及其身分驗證狀態。
+
+```bash
+opencode mcp auth list
+```
+
+或者使用簡短版本。
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+刪除 MCP 伺服器的 OAuth 憑證。
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+除錯 MCP 伺服器的 OAuth 連線問題。
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+列出已設定供應商的所有可用模型。
+
+```bash
+opencode models [provider]
+```
+
+此指令以 `provider/model` 格式顯示您設定的供應商中可用的所有模型。
+
+這對於確定 [你的設定](/docs/config/) 中使用的確切模型名稱很有用。
+
+您可以選擇傳遞供應商 ID 以按該供應商篩選模型。
+
+```bash
+opencode models anthropic
+```
+
+#### 旗標
+
+| 旗標        | 說明                                     |
+| ----------- | ---------------------------------------- |
+| `--refresh` | 從 models.dev 刷新模型快取               |
+| `--verbose` | 使用更詳細的模型輸出（包括成本等元資料） |
+
+使用 `--refresh` 旗標來更新快取的模型列表。當新模型已新增到供應商並且您希望在 OpenCode 中查看它們時，這非常有用。
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+透過直接傳遞提示以非互動模式執行 opencode。
+
+```bash
+opencode run [message..]
+```
+
+這對於撰寫指令碼、自動化，或者當您想要快速得到答案而不啟動完整的 TUI 時非常有用。例如：
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+您還可以附加到正在執行的 `opencode serve` 實例，以避免每次執行時 MCP 伺服器冷啟動時間：
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### 旗標
+
+| 旗標         | 短   | 說明                                                            |
+| ------------ | ---- | --------------------------------------------------------------- |
+| `--command`  |      | 要執行的指令，使用訊息作為參數                                  |
+| `--continue` | `-c` | 繼續上一個工作階段                                              |
+| `--session`  | `-s` | 繼續指定的工作階段 ID                                           |
+| `--fork`     |      | 繼續時分岔工作階段（與 `--continue` 或 `--session` 一起使用）   |
+| `--share`    |      | 分享工作階段                                                    |
+| `--model`    | `-m` | 使用的模型 (provider/model)                                     |
+| `--agent`    |      | 使用的代理                                                      |
+| `--file`     | `-f` | 要附加到訊息的檔案                                              |
+| `--format`   |      | 格式：預設 (formatted) 或 json (原始 JSON 事件)                 |
+| `--title`    |      | 工作階段標題（如果未提供值，則使用截斷的提示）                  |
+| `--attach`   |      | 連接到正在執行的 opencode 伺服器（例如，http://localhost:4096） |
+| `--port`     |      | 本地伺服器的連接埠（預設為隨機連接埠）                          |
+
+---
+
+### serve
+
+啟動無介面 opencode 伺服器以進行 API 存取。查看 [伺服器文件](/docs/server) 以獲取完整的 HTTP 介面。
+
+```bash
+opencode serve
+```
+
+這將啟動一個 HTTP 伺服器，該伺服器提供對 opencode 功能的 API 存取，而無需 TUI 介面。設定 `OPENCODE_SERVER_PASSWORD` 以啟用 HTTP 基本身分驗證（使用者名稱預設為 `opencode`）。
+
+#### 旗標
+
+| 旗標         | 說明                       |
+| ------------ | -------------------------- |
+| `--port`     | 監聽連接埠                 |
+| `--hostname` | 監聽的主機名稱             |
+| `--mdns`     | 啟用 mDNS 探索             |
+| `--cors`     | 允許 CORS 的其他瀏覽器來源 |
+
+---
+
+### session
+
+管理 opencode 工作階段。
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+列出所有 opencode 工作階段。
+
+```bash
+opencode session list
+```
+
+##### 旗標
+
+| 旗標          | 短   | 說明                           |
+| ------------- | ---- | ------------------------------ |
+| `--max-count` | `-n` | 限制為最近 N 個工作階段        |
+| `--format`    |      | 輸出格式：table 或 json(table) |
+
+---
+
+### stats
+
+顯示 opencode 工作階段的 Tokens 使用情況和成本統計資訊。
+
+```bash
+opencode stats
+```
+
+#### 旗標
+
+| 旗標        | 說明                                                     |
+| ----------- | -------------------------------------------------------- |
+| `--days`    | 顯示過去 N 天（所有時間）的統計數據                      |
+| `--tools`   | 顯示的工具數量（全部）                                   |
+| `--models`  | 顯示模型使用情況細分（預設隱藏）。傳遞一個數字來顯示前 N |
+| `--project` | 按專案過濾（所有專案，空字串：當前專案）                 |
+
+---
+
+### export
+
+將工作階段數據導出為 JSON。
+
+```bash
+opencode export [sessionID]
+```
+
+如果您不提供工作階段 ID，系統將提示您從可用工作階段中進行選擇。
+
+---
+
+### import
+
+從 JSON 檔案或 opencode 分享 URL 匯入工作階段數據。
+
+```bash
+opencode import <file>
+```
+
+您以從本地檔案或 opencode 分享 URL 匯入。
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+使用 Web 介面啟動無介面 opencode 伺服器。
+
+```bash
+opencode web
+```
+
+這將啟動 HTTP 伺服器並打開網頁瀏覽器以透過 Web 介面存取 opencode。設定 `OPENCODE_SERVER_PASSWORD` 以啟用 HTTP 基本身分驗證（使用者名稱預設為 `opencode`）。
+
+#### 旗標
+
+| 旗標         | 說明                       |
+| ------------ | -------------------------- |
+| `--port`     | 監聽連接埠                 |
+| `--hostname` | 監聽的主機名稱             |
+| `--mdns`     | 啟用 mDNS 探索             |
+| `--cors`     | 允許 CORS 的其他瀏覽器來源 |
+
+---
+
+### acp
+
+啟動 ACP (Agent Client Protocol) 伺服器。
+
+```bash
+opencode acp
+```
+
+此指令啟動一個 ACP 伺服器，該伺服器使用 nd-JSON 透過 stdin/stdout 進行通訊。
+
+#### 旗標
+
+| 旗標         | 說明           |
+| ------------ | -------------- |
+| `--cwd`      | 工作目錄       |
+| `--port`     | 監聽連接埠     |
+| `--hostname` | 監聽的主機名稱 |
+
+---
+
+### uninstall
+
+解除安裝 opencode 並刪除所有相關檔案。
+
+```bash
+opencode uninstall
+```
+
+#### 旗標
+
+| 旗標            | 短   | 說明                             |
+| --------------- | ---- | -------------------------------- |
+| `--keep-config` | `-c` | 保留設定檔                       |
+| `--keep-data`   | `-d` | 保留工作階段數據和快照           |
+| `--dry-run`     |      | 顯示在不刪除的情況下將刪除的內容 |
+| `--force`       | `-f` | 跳過確認提示                     |
+
+---
+
+### upgrade
+
+將 opencode 更新到最新版本或特定版本。
+
+```bash
+opencode upgrade [target]
+```
+
+升級到最新版本。
+
+```bash
+opencode upgrade
+```
+
+升級到特定版本。
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### 旗標
+
+| 旗標       | 簡寫 | 說明                                       |
+| ---------- | ---- | ------------------------------------------ |
+| `--method` | `-m` | 使用的安裝方法；curl、npm、pnpm、bun、brew |
+
+---
+
+## 全域旗標
+
+opencode CLI 採用以下全域旗標。
+
+| 旗標           | 短   | 說明                                 |
+| -------------- | ---- | ------------------------------------ |
+| `--help`       | `-h` | 顯示說明                             |
+| `--version`    | `-v` | 列印版本號                           |
+| `--print-logs` |      | 將記錄列印到 stderr                  |
+| `--log-level`  |      | 記錄等級（debug, info, warn, error） |
+
+---
+
+## 環境變數
+
+可以使用環境變數設定 opencode。
+
+| 變數                                  | 類型    | 說明                                          |
+| ------------------------------------- | ------- | --------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | 自動分享工作階段                              |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可執行檔案的路徑          |
+| `OPENCODE_CONFIG`                     | string  | 設定檔路徑                                    |
+| `OPENCODE_CONFIG_DIR`                 | string  | 設定目錄的路徑                                |
+| `OPENCODE_CONFIG_CONTENT`             | string  | 內聯 json 設定內容                            |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自動更新檢查                              |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | 禁用舊數據的修剪                              |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自動終端機標題更新                        |
+| `OPENCODE_PERMISSION`                 | string  | 內聯 json 權限設定                            |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用預設外掛                                  |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用自動 LSP 伺服器下載                       |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 啟用實驗模型                                  |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 禁用自動上下文壓縮                            |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | 禁止從 `.claude` 讀取（提示+技巧）            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用讀取 `~/.claude/CLAUDE.md`                |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用載入 `.claude/skills`                     |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 禁用從遠端來源獲取模型                        |
+| `OPENCODE_FAKE_VCS`                   | string  | 用於測試目的的假 VCS 供應商                   |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 禁用檔案時間檢查以進行最佳化                  |
+| `OPENCODE_CLIENT`                     | string  | 客戶端標識符（預設為 `cli`）                  |
+| `OPENCODE_ENABLE_EXA`                 | boolean | 啟用 Exa 網路搜尋工具                         |
+| `OPENCODE_SERVER_PASSWORD`            | string  | 為 `serve`/`web` 啟用基本身分驗證             |
+| `OPENCODE_SERVER_USERNAME`            | string  | 覆蓋基本身分驗證使用者名稱（預設 `opencode`） |
+| `OPENCODE_MODELS_URL`                 | string  | 用於獲取模型設定的自定義 URL                  |
+
+---
+
+### 實驗性的
+
+這些環境變數啟用可能會更改或刪除的實驗性功能。
+
+| 變數                                            | 類型    | 說明                                |
+| ----------------------------------------------- | ------- | ----------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | 啟用所有實驗性功能                  |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 啟用圖示探索                        |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 在 TUI 中禁用選擇時複製             |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 指令的預設超時（以毫秒為單位） |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 回應的最大輸出 tokens           |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 為整個目錄啟用檔案觀察器            |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | 啟用 oxfmt 格式化程式               |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 啟用實驗性 LSP 工具                 |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用檔案觀察器                      |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 啟用實驗性 Exa 功能                 |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 啟用實驗性 LSP 類型檢查             |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 啟用實驗性 Markdown 功能            |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 啟用計畫模式                        |

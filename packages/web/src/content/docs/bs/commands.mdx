@@ -1,0 +1,316 @@
+---
+title: Komande
+description: Kreirajte prilagođene komande za zadatke koji se ponavljaju.
+---
+
+Prilagođene komande vam omogućavaju da odredite prompt koji želite da pokrenete kada se ta naredba izvrši u TUI-ju.
+
+```bash frame="none"
+/my-command
+```
+
+Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saznajte više](/docs/tui#commands).
+
+---
+
+## Kreiranje datoteka naredbi
+
+Kreirajte markdown fajlove u direktorijumu `commands/` da definišete prilagođene komande.
+Kreiraj `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Frontmatter definira svojstva komande. Sadržaj postaje predložak.
+Koristite komandu tako što ćete upisati `/` nakon čega slijedi naziv komande.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Konfiguracija
+
+Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
+
+---
+
+### JSON
+
+Koristite opciju `command` u svom OpenCode [config](/docs/config):
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Sada možete pokrenuti ovu naredbu u TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Također možete definirati komande koristeći markdown datoteke. Stavite ih u:
+
+- Globalno: `~/.config/opencode/commands/`
+- Po projektu: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Ime markdown datoteke postaje ime naredbe. Na primjer, `test.md` vam omogućava da pokrenete:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Konfiguracija upita
+
+Promptovi za prilagođene komande podržavaju nekoliko posebnih čuvara mjesta i sintakse.
+
+---
+
+### Argumenti
+
+Proslijedite argumente naredbama koristeći čuvar mjesta `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Pokrenite naredbu s argumentima:
+
+```bash frame="none"
+/component Button
+```
+
+I `$ARGUMENTS` će biti zamijenjen sa `Button`.
+Također možete pristupiti pojedinačnim argumentima koristeći pozicione parametre:
+
+- `$1` - Prvi argument
+- `$2` - Drugi argument
+- `$3` - Treći argument
+- I tako dalje...
+
+Na primjer:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Pokrenite naredbu:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Ovo zamjenjuje:
+
+- `$1` do `config.json`
+- `$2` do `src`
+- `$3` do `{ "key": "value" }`
+
+---
+
+### Shell izlaz
+
+Koristite _!`command`_ da ubacite izlaz [bash command](/docs/tui#bash-commands) u svoj prompt.
+Na primjer, da kreirate prilagođenu naredbu koja analizira pokrivenost testom:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Ili da vidite nedavne promjene:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Naredbe se pokreću u korijenskom direktoriju vašeg projekta i njihov izlaz postaje dio prompta.
+
+---
+
+### Reference datoteka
+
+Uključite datoteke u svoju naredbu koristeći `@` nakon čega slijedi naziv datoteke.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Sadržaj datoteke se automatski uključuje u prompt.
+
+---
+
+## Opcije
+
+Pogledajmo detaljno opcije konfiguracije.
+
+---
+
+### Šablon
+
+Opcija `template` definira prompt koji će biti poslan LLM-u kada se naredba izvrši.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Ovo je **obavezna** opcija konfiguracije.
+
+---
+
+### Opis
+
+Koristite opciju `description` da pružite kratak opis onoga što naredba radi.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Ovo se prikazuje kao opis u TUI-u kada unesete naredbu.
+
+---
+
+### Agent
+
+Koristite `agent` konfiguraciju da opciono odredite koji [agent](/docs/agents) treba da izvrši ovu naredbu.
+Ako je ovo [subagent](/docs/agents/#subagents) naredba će po defaultu pokrenuti pozivanje subagenta.
+Da onemogućite ovo ponašanje, postavite `subtask` na `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Ovo je **opciona** opcija konfiguracije. Ako nije navedeno, podrazumevano je vaš trenutni agent.
+
+---
+
+### Podzadatak
+
+Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](/docs/agents/#subagents) pozivanje.
+Ovo je korisno ako želite da naredba ne zagađuje vaš primarni kontekst i da će **primorati** agenta da djeluje kao subagent,
+čak i ako je `mode` postavljeno na `primary` u konfiguraciji [agent](/docs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Ovo je **opciona** opcija konfiguracije.
+
+---
+
+### Model
+
+Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Ovo je **opciona** opcija konfiguracije.
+
+---
+
+## Ugrađene naredbe
+
+OpenCode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
+:::note
+Prilagođene komande mogu nadjačati ugrađene komande.
+:::
+Ako definirate prilagođenu naredbu s istim imenom, ona će nadjačati ugrađenu naredbu.

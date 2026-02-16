@@ -1,0 +1,223 @@
+---
+title: Modeller
+description: LLM sağlayıcılarını ve model seçimlerini yapılandırın.
+---
+
+opencode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
+
+---
+
+## Sağlayıcılar
+
+Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar opencode'u başlattığınızda kullanılabilir olacaktır.
+
+[Sağlayıcılar](/docs/providers) hakkında daha fazla bilgi edinin.
+
+---
+
+## Model seçimi
+
+Sağlayıcınızı yapılandırdıktan sonra aşağıdaki komutu yazarak istediğiniz modeli seçebilirsiniz:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## Önerilen modeller
+
+Piyasada pek çok model var ve her hafta yeni modeller çıkıyor.
+
+:::tip
+Önerdiğimiz modellerden birini kullanmayı düşünün.
+:::
+
+Ancak, hem kod oluşturmada hem de araç çağırmada iyi olan yalnızca birkaçı var.
+
+Burada, opencode ile belirli bir sıraya göre iyi çalışan birkaç model yer almaktadır. (Bu kapsamlı bir liste değildir ve mutlaka güncel olması da gerekmez):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## Varsayılan ayarlama
+
+Bunlardan birini varsayılan model olarak ayarlamak için `model` anahtarınızı telefonunuzudan ayarlayabilirsiniz.
+opencode yapılandırması
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+
+Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_id`, performansınızın `provider` bölümünden gelen anahtardır ve `model_id`, `provider.models`'den gelen anahtardır.
+
+---
+
+## Model yapılandırma
+
+Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılandırabilirsiniz.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `gpt-5` sağlayıcısı aracılığıyla erişildiğinde `openai` ve `claude-sonnet-4-20250514` sağlayıcısı aracılığıyla erişildiğinde `anthropic`.
+Yerleşik sağlayıcı ve model adları [Models.dev](https://models.dev) adresinde bulunabilir.
+
+Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Daha fazla bilgi](/docs/agents/#additional).
+
+Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsiniz. Varyantlar, yinelenen girişler oluşturmadan aynı model için farklı ayarları yapılandırmanıza olanak tanır:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Varyantlar
+
+Birçok model, farklı konfigürasyonlara sahip birden fazla kapasiteye sahip. opencode, popüler sağlayıcılar için sunulan değişkenlerle birlikte gelir.
+
+### Yerleşik çeşitler
+
+opencode birçok sağlayıcı için varsayılan değişkenlerle birlikte gelir:
+
+**Antropik**:
+
+- `high` - Yüksek düşünme bütçesi (varsayılan)
+- `max` - Maksimum düşünme bütçesi
+
+**OpenAI**:
+
+Modele göre değişir ancak kabaca:
+
+- `none` - Gerekçe yok
+- `minimal` - Minimum akıl yürütme çabası
+- `low` - Düşük muhakeme çabası
+- `medium` - Orta düzey muhakeme çabası
+- `high` - Yüksek akıl yürütme çabası
+- `xhigh` - Ekstra yüksek muhakeme çabası
+
+**Google**:
+
+- `low` - Daha düşük effort/token bütçesi
+- `high` - Daha yüksek effort/token bütçesi
+
+:::tip
+Bu liste kapsamlı değildir. Diğer birçok sağlayıcının da yerleşik varsayılanları vardır.
+:::
+
+### Özel çeşitler
+
+Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### Döngü çeşitleri
+
+Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Daha fazla bilgi](/docs/keybinds).
+
+---
+
+## Modelleri yükleme
+
+opencode başlatıldığında modelleri aşağıdaki öncelik sırasına göre kontrol eder:
+
+1. `--model` veya `-m` komut satırı bayrağı. Biçim, yapılandırma dosyasındakiyle aynıdır: `provider_id/model_id`.
+
+2. opencode yapılandırmasındaki model listesi.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   Buradaki format `provider/model`'dır.
+
+3. En son kullanılan model.
+
+4. Dahili öncelik kullanan ilk model.

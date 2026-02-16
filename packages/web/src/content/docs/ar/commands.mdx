@@ -1,0 +1,322 @@
+---
+title: الأوامر
+description: أنشئ أوامر مخصصة للمهام المتكررة.
+---
+
+تتيح لك الأوامر المخصصة تحديد مُطالبة (prompt) تريد تشغيلها عند تنفيذ ذلك الأمر في واجهة TUI.
+
+```bash frame="none"
+/my-command
+```
+
+تُعدّ الأوامر المخصصة إضافةً إلى الأوامر المضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`. [اعرف المزيد](/docs/tui#commands).
+
+---
+
+## إنشاء ملفات الأوامر
+
+أنشئ ملفات Markdown داخل الدليل `commands/` لتعريف أوامر مخصصة.
+
+أنشئ الملف `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+تُعرِّف ترويسة Frontmatter خصائص الأمر، بينما يصبح المحتوى هو القالب.
+
+استخدم الأمر بكتابة `/` ثم اسم الأمر.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## الإعداد
+
+يمكنك إضافة أوامر مخصصة عبر إعدادات OpenCode أو بإنشاء ملفات Markdown داخل الدليل `commands/`.
+
+---
+
+### JSON
+
+استخدم خيار `command` في [config](/docs/config) الخاص بـ OpenCode:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // يصبح هذا اسم الأمر
+    "test": {
+      // هذه هي المطالبة التي ستُرسل إلى LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // يظهر هذا كوصف في TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+يمكنك الآن تشغيل هذا الأمر في واجهة TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+يمكنك أيضًا تعريف الأوامر باستخدام ملفات Markdown. ضعها في:
+
+- على مستوى النظام: `~/.config/opencode/commands/`
+- لكل مشروع: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+يصبح اسم ملف Markdown هو اسم الأمر. على سبيل المثال، يتيح لك `test.md` تشغيل:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## إعداد المُطالبة
+
+تدعم مُطالبات الأوامر المخصصة عدة عناصر نائبة (placeholders) وبنى خاصة.
+
+---
+
+### الوسائط
+
+مرِّر وسائط إلى الأوامر باستخدام العنصر النائب `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+شغِّل الأمر مع وسائط:
+
+```bash frame="none"
+/component Button
+```
+
+وسيُستبدل `$ARGUMENTS` بالقيمة `Button`.
+
+يمكنك أيضًا الوصول إلى كل وسيط على حدة باستخدام المعاملات الموضعية:
+
+- `$1` - الوسيط الأول
+- `$2` - الوسيط الثاني
+- `$3` - الوسيط الثالث
+- وهكذا...
+
+على سبيل المثال:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+شغِّل الأمر:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+سيؤدي ذلك إلى استبدال:
+
+- `$1` بـ `config.json`
+- `$2` بـ `src`
+- `$3` بـ `{ "key": "value" }`
+
+---
+
+### خرج shell
+
+استخدم _!`command`_ لحقن خرج [أمر bash](/docs/tui#bash-commands) داخل مُطالبتك.
+
+على سبيل المثال، لإنشاء أمر مخصص يُحلل تغطية الاختبارات:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+أو لمراجعة التغييرات الأخيرة:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+تُشغَّل الأوامر في دليل جذر مشروعك ويصبح خرجها جزءًا من المُطالبة.
+
+---
+
+### مراجع الملفات
+
+ضمِّن الملفات في أمرك باستخدام `@` ثم اسم الملف.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+يُدرج محتوى الملف في المُطالبة تلقائيًا.
+
+---
+
+## الخيارات
+
+لنلقِ نظرةً على خيارات الإعداد بالتفصيل.
+
+---
+
+### القالب (`template`)
+
+يُعرِّف خيار `template` المُطالبة التي ستُرسل إلى نموذج اللغة (LLM) عند تنفيذ الأمر.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+هذا خيار إعداد **إلزامي**.
+
+---
+
+### الوصف (`description`)
+
+استخدم خيار `description` لتقديم وصف موجز لما يفعله الأمر.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+يظهر هذا الوصف في واجهة TUI عند كتابة الأمر.
+
+---
+
+### الوكيل (`agent`)
+
+استخدم إعداد `agent` لتحديد أي [agent](/docs/agents) ينبغي أن ينفّذ هذا الأمر (اختياريًا).
+إذا كان هذا [subagent](/docs/agents/#subagents)، فسيؤدي الأمر افتراضيًا إلى تشغيل استدعاء subagent.
+لإيقاف هذا السلوك، عيِّن `subtask` إلى `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+هذا خيار إعداد **اختياري**. إن لم تُحدده، فسيُستخدم agent الحالي افتراضيًا.
+
+---
+
+### مهمة فرعية (`subtask`)
+
+استخدم القيمة المنطقية `subtask` لفرض أن يُشغِّل الأمر استدعاء [subagent](/docs/agents/#subagents).
+يفيد هذا إذا أردت ألا يلوّث الأمر السياق الأساسي لديك، إذ سيُجبر (**force**) الـ agent على العمل كـ subagent،
+حتى لو كان `mode` مضبوطًا على `primary` في إعدادات [agent](/docs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+هذا خيار إعداد **اختياري**.
+
+---
+
+### النموذج (`model`)
+
+استخدم إعداد `model` لتجاوز النموذج الافتراضي لهذا الأمر.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+هذا خيار إعداد **اختياري**.
+
+---
+
+## الأوامر المضمنة
+
+يتضمن opencode عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
+
+:::note
+يمكن للأوامر المخصصة تجاوز الأوامر المضمنة.
+:::
+
+إذا عرّفت أمرًا مخصصًا بالاسم نفسه، فسيستبدل الأمر المضمن.

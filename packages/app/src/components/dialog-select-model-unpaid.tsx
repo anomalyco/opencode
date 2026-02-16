@@ -6,7 +6,7 @@ import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Component, onCleanup, onMount, Show } from "solid-js"
+import { type Component, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
@@ -21,24 +21,20 @@ export const DialogSelectModelUnpaid: Component = () => {
   const language = useLanguage()
 
   let listRef: ListRef | undefined
-  const handleKey = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") return
     listRef?.onKeyDown(e)
   }
 
-  onMount(() => {
-    document.addEventListener("keydown", handleKey)
-    onCleanup(() => {
-      document.removeEventListener("keydown", handleKey)
-    })
-  })
-
   return (
-    <Dialog title={language.t("dialog.model.select.title")}>
-      <div class="flex flex-col gap-3 px-2.5 flex-1 min-h-0 overflow-hidden">
+    <Dialog
+      title={language.t("dialog.model.select.title")}
+      class="overflow-y-auto [&_[data-slot=dialog-body]]:overflow-visible [&_[data-slot=dialog-body]]:flex-none"
+    >
+      <div class="flex flex-col gap-3 px-2.5" onKeyDown={handleKeyDown}>
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
-          class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
+          class="[&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
           items={local.model.list}
           current={local.model.current()}
@@ -77,7 +73,7 @@ export const DialogSelectModelUnpaid: Component = () => {
           )}
         </List>
       </div>
-      <div class="shrink-0 px-1.5 pb-1.5">
+      <div class="px-1.5 pb-1.5">
         <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
           <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>

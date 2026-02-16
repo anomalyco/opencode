@@ -21,7 +21,7 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Check for duplicate issues
+      - name: Check duplicates and compliance
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,30 +34,84 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:'
+          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:
 
-          Issue number:
-          ${{ github.event.issue.number }}
+          Issue number: ${{ github.event.issue.number }}
 
-          Lookup this issue and search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
+          Lookup this issue with gh issue view ${{ github.event.issue.number }}.
+
+          You have TWO tasks. Perform both, then post a SINGLE comment (if needed).
+
+          ---
+
+          TASK 1: CONTRIBUTING GUIDELINES COMPLIANCE CHECK
+
+          Check whether the issue follows our contributing guidelines and issue templates.
+
+          This project has three issue templates that every issue MUST use one of:
+
+          1. Bug Report - requires a Description field with real content
+          2. Feature Request - requires a verification checkbox and description, title should start with [FEATURE]:
+          3. Question - requires the Question field with real content
+
+          Additionally check:
+          - No AI-generated walls of text (long, AI-generated descriptions are not acceptable)
+          - The issue has real content, not just template placeholder text left unchanged
+          - Bug reports should include some context about how to reproduce
+          - Feature requests should explain the problem or need
+          - We want to push for having the user provide system description & information
+
+          Do NOT be nitpicky about optional fields. Only flag real problems like: no template used, required fields empty or placeholder text only, obviously AI-generated walls of text, or completely empty/nonsensical content.
+
+          ---
+
+          TASK 2: DUPLICATE CHECK
+
+          Search through existing issues (excluding #${{ github.event.issue.number }}) to find potential duplicates.
           Consider:
           1. Similar titles or descriptions
           2. Same error messages or symptoms
           3. Related functionality or components
           4. Similar feature requests
 
-          If you find any potential duplicates, please comment on the new issue with:
-          - A brief explanation of why it might be a duplicate
-          - Links to the potentially duplicate issues
-          - A suggestion to check those issues first
+          Additionally, if the issue mentions keybinds, keyboard shortcuts, or key bindings, note the pinned keybinds issue #4997.
+
+          ---
+
+          POSTING YOUR COMMENT:
+
+          Based on your findings, post a SINGLE comment on issue #${{ github.event.issue.number }}. Build the comment as follows:
+
+          If the issue is NOT compliant, start the comment with:
+          <!-- issue-compliance -->
+          Then explain what needs to be fixed and that they have 2 hours to edit the issue before it is automatically closed. Also add the label needs:compliance to the issue using: gh issue edit ${{ github.event.issue.number }} --add-label needs:compliance
+
+          If duplicates were found, include a section about potential duplicates with links.
+
+          If the issue mentions keybinds/keyboard shortcuts, include a note about #4997.
+
+          If the issue IS compliant AND no duplicates were found AND no keybind reference, do NOT comment at all.
 
           Use this format for the comment:
-          'This issue might be a duplicate of existing issues. Please check:
+
+          [If not compliant:]
+          <!-- issue-compliance -->
+          This issue doesn't fully meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md).
+
+          **What needs to be fixed:**
+          - [specific reasons]
+
+          Please edit this issue to address the above within **2 hours**, or it will be automatically closed.
+
+          [If duplicates found, add:]
+          ---
+          This issue might be a duplicate of existing issues. Please check:
           - #[issue_number]: [brief description of similarity]
 
-          Feel free to ignore if none of these address your specific case.'
+          [If keybind-related, add:]
+          For keybind-related issues, please also check our pinned keybinds documentation: #4997
 
-          Additionally, if the issue mentions keybinds, keyboard shortcuts, or key bindings, please add a comment mentioning the pinned keybinds issue #4997:
-          'For keybind-related issues, please also check our pinned keybinds documentation: #4997'
+          [End with if not compliant:]
+          If you believe this was flagged incorrectly, please let a maintainer know.
 
-          If no clear duplicates are found, do not comment."
+          Remember: post at most ONE comment combining all findings. If everything is fine, post nothing."

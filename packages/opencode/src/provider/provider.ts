@@ -1,4 +1,5 @@
 import z from "zod"
+import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -13,6 +14,8 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { Global } from "../global"
+import path from "path"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -24,7 +27,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -35,8 +38,9 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab } from "@gitlab/gitlab-ai-provider"
+import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { Installation } from "../installation"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -51,6 +55,30 @@ export namespace Provider {
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
+  }
+
+  function googleVertexVars(options: Record<string, any>) {
+    const project =
+      options["project"] ?? Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+    const location =
+      options["location"] ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
+    const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+
+    return {
+      GOOGLE_VERTEX_PROJECT: project,
+      GOOGLE_VERTEX_LOCATION: location,
+      GOOGLE_VERTEX_ENDPOINT: endpoint,
+    }
+  }
+
+  function loadBaseURL(model: Model, options: Record<string, any>) {
+    const raw = options["baseURL"] ?? model.api.url
+    if (typeof raw !== "string") return raw
+    const vars = model.providerID === "google-vertex" ? googleVertexVars(options) : undefined
+    return raw.replace(/\$\{([^}]+)\}/g, (match, key) => {
+      const val = Env.get(String(key)) ?? vars?.[String(key) as keyof typeof vars]
+      return val ?? match
+    })
   }
 
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
@@ -195,11 +223,13 @@ export namespace Provider {
 
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
 
+      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
+      // until the scope of the Env API is clarified (test only or runtime?)
       const awsBearerToken = iife(() => {
-        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
         if (auth?.type === "api") {
-          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
           return auth.key
         }
         return undefined
@@ -207,7 +237,12 @@ export namespace Provider {
 
       const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
+      const containerCreds = Boolean(
+        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+      )
+
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+        return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
@@ -235,7 +270,9 @@ export namespace Provider {
         options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has a cross-region inference profile prefix
-          if (modelID.startsWith("global.") || modelID.startsWith("jp.")) {
+          // Models from models.dev may already include prefixes like us., eu., global., etc.
+          const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+          if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
             return sdk.languageModel(modelID)
           }
 
@@ -340,9 +377,16 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
+    "google-vertex": async (provider) => {
+      const project =
+        provider.options?.project ??
+        Env.get("GOOGLE_CLOUD_PROJECT") ??
+        Env.get("GCP_PROJECT") ??
+        Env.get("GCLOUD_PROJECT")
+
+      const location =
+        provider.options?.location ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
+
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -350,6 +394,18 @@ export namespace Provider {
         options: {
           project,
           location,
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const { GoogleAuth } = await import(await BunProc.install("google-auth-library"))
+            const auth = new GoogleAuth()
+            const client = await auth.getApplicationDefault()
+            const credentials = await client.credential
+            const token = await credentials.getAccessToken()
+
+            const headers = new Headers(init?.headers)
+            headers.set("Authorization", `Bearer ${token.token}`)
+
+            return fetch(input, { ...init, headers })
+          },
         },
         async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
@@ -376,17 +432,19 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
+      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
+      // until the scope of the Env API is clarified (test only or runtime?)
       const envServiceKey = iife(() => {
-        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+        const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
         if (envAICoreServiceKey) return envAICoreServiceKey
         if (auth?.type === "api") {
-          Env.set("AICORE_SERVICE_KEY", auth.key)
+          process.env.AICORE_SERVICE_KEY = auth.key
           return auth.key
         }
         return undefined
       })
-      const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
-      const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
+      const deploymentId = process.env.AICORE_DEPLOYMENT_ID
+      const resourceGroup = process.env.AICORE_RESOURCE_GROUP
 
       return {
         autoload: !!envServiceKey,
@@ -420,11 +478,17 @@ export namespace Provider {
       const config = await Config.get()
       const providerConfig = config.provider?.["gitlab"]
 
+      const aiGatewayHeaders = {
+        "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+        ...(providerConfig?.options?.aiGatewayHeaders || {}),
+      }
+
       return {
         autoload: !!apiKey,
         options: {
           instanceUrl,
           apiKey,
+          aiGatewayHeaders,
           featureFlags: {
             duo_agent_platform_agentic_chat: true,
             duo_agent_platform: true,
@@ -433,6 +497,7 @@ export namespace Provider {
         },
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
+            aiGatewayHeaders,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
               duo_agent_platform: true,
@@ -442,58 +507,65 @@ export namespace Provider {
         },
       }
     },
+    "cloudflare-workers-ai": async (input) => {
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      if (!accountId) return { autoload: false }
+
+      const apiKey = await iife(async () => {
+        const envToken = Env.get("CLOUDFLARE_API_KEY")
+        if (envToken) return envToken
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })
+
+      return {
+        autoload: !!apiKey,
+        options: {
+          apiKey,
+          baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+        },
+        async getModel(sdk: any, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+      }
+    },
     "cloudflare-ai-gateway": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
 
       if (!accountId || !gateway) return { autoload: false }
 
-      // Get API token from env or auth prompt
+      // Get API token from env or auth - required for authenticated gateways
       const apiToken = await (async () => {
-        const envToken = Env.get("CLOUDFLARE_API_TOKEN")
+        const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
         if (envToken) return envToken
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
         return undefined
       })()
 
+      if (!apiToken) {
+        throw new Error(
+          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
+            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+        )
+      }
+
+      // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
+      const { createAiGateway } = await import("ai-gateway-provider")
+      const { createUnified } = await import("ai-gateway-provider/providers/unified")
+
+      const aigateway = createAiGateway({ accountId, gateway, apiKey: apiToken })
+      const unified = createUnified()
+
       return {
         autoload: true,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.languageModel(modelID)
+        async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Model IDs use Unified API format: provider/model (e.g., "anthropic/claude-sonnet-4-5")
+          return aigateway(unified(modelID))
         },
-        options: {
-          baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
-          headers: {
-            // Cloudflare AI Gateway uses cf-aig-authorization for authenticated gateways
-            // This enables Unified Billing where Cloudflare handles upstream provider auth
-            ...(apiToken ? { "cf-aig-authorization": `Bearer ${apiToken}` } : {}),
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
-          },
-          // Custom fetch to handle parameter transformation and auth
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const headers = new Headers(init?.headers)
-            // Strip Authorization header - AI Gateway uses cf-aig-authorization instead
-            headers.delete("Authorization")
-
-            // Transform max_tokens to max_completion_tokens for newer models
-            if (init?.body && init.method === "POST") {
-              try {
-                const body = JSON.parse(init.body as string)
-                if (body.max_tokens !== undefined && !body.max_completion_tokens) {
-                  body.max_completion_tokens = body.max_tokens
-                  delete body.max_tokens
-                  init = { ...init, body: JSON.stringify(body) }
-                }
-              } catch (e) {
-                // If body parsing fails, continue with original request
-              }
-            }
-
-            return fetch(input, { ...init, headers })
-          },
-        },
+        options: {},
       }
     },
     cerebras: async () => {
@@ -602,7 +674,7 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: provider.api!,
+        url: model.provider?.api ?? provider.api!,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -754,7 +826,7 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -965,11 +1037,16 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
+      if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
+        delete options.fetch
+      }
+
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      const baseURL = loadBaseURL(model, options)
+      if (baseURL !== undefined) options["baseURL"] = baseURL
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
@@ -1023,12 +1100,9 @@ export namespace Provider {
         })
       }
 
-      // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
-      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
+        log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
         const loaded = bundledFn({
           name: model.providerID,
           ...options,
@@ -1152,8 +1226,32 @@ export namespace Provider {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
-        for (const model of Object.keys(provider.models)) {
-          if (model.includes(item)) return getModel(providerID, model)
+        if (providerID === "amazon-bedrock") {
+          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
+
+          // Model selection priority:
+          // 1. global. prefix (works everywhere)
+          // 2. User's region prefix (us., eu.)
+          // 3. Unprefixed model
+          const globalMatch = candidates.find((m) => m.startsWith("global."))
+          if (globalMatch) return getModel(providerID, globalMatch)
+
+          const region = provider.options?.region
+          if (region) {
+            const regionPrefix = region.split("-")[0]
+            if (regionPrefix === "us" || regionPrefix === "eu") {
+              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return getModel(providerID, regionalMatch)
+            }
+          }
+
+          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
+          if (unprefixed) return getModel(providerID, unprefixed)
+        } else {
+          for (const model of Object.keys(provider.models)) {
+            if (model.includes(item)) return getModel(providerID, model)
+          }
         }
       }
     }
@@ -1181,9 +1279,19 @@ export namespace Provider {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
 
-    const provider = await list()
-      .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
+    const providers = await list()
+    const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
+      .json()
+      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
+      .catch(() => [])) as { providerID: string; modelID: string }[]
+    for (const entry of recent) {
+      const provider = providers[entry.providerID]
+      if (!provider) continue
+      if (!provider.models[entry.modelID]) continue
+      return { providerID: entry.providerID, modelID: entry.modelID }
+    }
+
+    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")

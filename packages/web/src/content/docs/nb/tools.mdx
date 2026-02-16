@@ -1,0 +1,379 @@
+---
+title: Verktøy
+description: Administrer verktøyene en LLM kan bruke.
+---
+
+Verktøy lar LLM utføre handlinger i kodebasen din. OpenCode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
+
+Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for å kjøre. Du kan kontrollere verktøyets oppførsel gjennom [tillatelser](/docs/permissions).
+
+---
+
+## Konfigurasjon
+
+Bruk feltet `permission` for å kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Du kan også bruke jokertegn for å kontrollere flere verktøy samtidig. For eksempel, for å kreve godkjenning for alle verktøy fra en MCP-server:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Finn ut mer](/docs/permissions) om konfigurering av tillatelser.
+
+---
+
+## Innebygd
+
+Her er alle de innebygde verktøyene som er tilgjengelige i OpenCode.
+
+---
+
+### bash
+
+Utfør skallkommandoer i prosjektmiljøet ditt.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen skallkommando.
+
+---
+
+### edit
+
+Endre eksisterende filer ved å bruke eksakte strengerstatninger.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Dette verktøyet utfører nøyaktige redigeringer av filer ved å erstatte eksakte teksttreff. Det er den primære måten LLM endrer kode på.
+
+---
+
+### write
+
+Opprett nye filer eller overskriv eksisterende.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Bruk denne for å la LLM lage nye filer. Den vil overskrive eksisterende filer hvis de allerede eksisterer.
+
+:::note
+`write`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Les filinnholdet fra kodebasen din.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Dette verktøyet leser filer og returnerer innholdet. Den støtter lesing av spesifikke linjeområder for store filer.
+
+---
+
+### grep
+
+Søk i filinnhold ved hjelp av regulære uttrykk.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Rask innholdssøk på tvers av kodebasen din. Støtter full regex-syntaks og filmønsterfiltrering.
+
+---
+
+### glob
+
+Finn filer etter mønstermatching.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+Søk etter filer ved å bruke glob-mønstre som `**/*.js` eller `src/**/*.ts`. Returnerer samsvarende filbaner sortert etter endringstid.
+
+---
+
+### list
+
+List filer og kataloger i en gitt bane.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for å filtrere resultater.
+
+---
+
+### lsp (eksperimentell)
+
+Samhandle med dine konfigurerte LSP-servere for å få kodeintelligens-funksjoner som definisjoner, referanser, hover-informasjon og kallhierarki.
+
+:::note
+Dette verktøyet er bare tilgjengelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Støttede operasjoner inkluderer `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` og `outgoingCalls`.
+
+For å konfigurere hvilke LSP-servere som er tilgjengelige for prosjektet ditt, se [LSP-servere](/docs/lsp).
+
+---
+
+### patch
+
+Bruk patcher på filer.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påføre diffs og patcher fra forskjellige kilder.
+
+:::note
+`patch`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet i samtalen.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Administrer gjøremålslister under kodingsøkter.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Oppretter og oppdaterer oppgavelister for å spore fremdrift under komplekse operasjoner. LLM bruker dette til å organisere flertrinnsoppgaver.
+
+:::note
+Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere det manuelt. [Finn ut mer](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Les eksisterende gjøremålslister.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Leser gjeldende gjøremålslistestatus. Brukes av LLM for å spore hvilke oppgaver som venter eller er fullført.
+
+:::note
+Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere det manuelt. [Finn ut mer](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Hent nettinnhold.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+Lar LLM hente og lese nettsider. Nyttig for å slå opp dokumentasjon eller forske på nettressurser.
+
+---
+
+### websearch
+
+Søk på nettet for informasjon.
+
+:::note
+Dette verktøyet er bare tilgjengelig når du bruker OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sann verdi (f.eks. `true` eller `1`).
+
+Slik aktiverer du når du starter OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Utfører nettsøk med Exa AI for å finne relevant informasjon på nettet. Nyttig for å undersøke emner, finne aktuelle hendelser eller samle informasjon utover treningsdataavbruddet.
+
+Ingen API-nøkkel kreves — verktøyet kobles direkte til Exa AIs vertsbaserte MCP-tjeneste uten autentisering.
+
+:::tip
+Bruk `websearch` når du trenger å finne informasjon (oppdagelse), og `webfetch` når du trenger å hente innhold fra en bestemt URL (henting).
+:::
+
+---
+
+### question
+
+Still brukeren spørsmål under utførelse.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Dette verktøyet lar LLM stille spørsmål til brukeren under en oppgave. Det er nyttig for:
+
+- Samle brukerpreferanser eller krav
+- Avklarende tvetydige instruksjoner
+- Få beslutninger om gjennomføringsvalg
+- Tilbyr valg om hvilken retning du skal ta
+
+Hvert spørsmål inkluderer en overskrift, spørsmålsteksten og en liste over alternativer. Brukere kan velge fra de angitte alternativene eller skrive inn et tilpasset svar. Når det er flere spørsmål, kan brukerne navigere mellom dem før de sender inn alle svarene.
+
+---
+
+## Egendefinerte verktøy
+
+Egendefinerte verktøy lar deg definere dine egne funksjoner som LLM kan kalle. Disse er definert i konfigurasjonsfilen din og kan kjøre vilkårlig kode.
+
+[Finn ut mer](/docs/custom-tools) om å lage tilpassede verktøy.
+
+---
+
+## MCP servere
+
+MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjenester. Dette inkluderer databasetilgang, API-integrasjoner og tredjepartstjenester.
+
+[Les mer](/docs/mcp-servers) om konfigurering av MCP-servere.
+
+---
+
+## Internaler
+
+Internt bruker verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) i bakgrunnen. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og oppføringer.
+
+---
+
+### Ignorer mønstre
+
+For å inkludere filer som normalt vil bli ignorert, lag en `.ignore`-fil i prosjektroten. Denne filen kan eksplisitt tillate visse stier.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+For eksempel lar denne `.ignore` filen ripgrep søke i `node_modules/`, `dist/` og `build/` kataloger selv om de er oppført i `.gitignore`.
