@@ -1,21 +1,47 @@
 import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 
 import { DataProvider } from "@opencode-ai/ui/context"
-import { iife } from "@opencode-ai/util/iife"
 import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 
+function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+  const params = useParams()
+  const navigate = useNavigate()
+  const sync = useSync()
+  const sdk = useSDK()
+
+  return (
+    <DataProvider
+      data={sync.data}
+      directory={props.directory}
+      onPermissionRespond={(input: {
+        sessionID: string
+        permissionID: string
+        response: "once" | "always" | "reject"
+      }) => sdk.client.permission.respond(input)}
+      onQuestionReply={(input: { requestID: string; answers: QuestionAnswer[] }) => sdk.client.question.reply(input)}
+      onQuestionReject={(input: { requestID: string }) => sdk.client.question.reject(input)}
+      onNavigateToSession={(sessionID: string) => navigate(`/${params.dir}/session/${sessionID}`)}
+      onSessionHref={(sessionID: string) => `/${params.dir}/session/${sessionID}`}
+      onSyncSession={(sessionID: string) => sync.session.sync(sessionID)}
+    >
+      <LocalProvider>{props.children}</LocalProvider>
+    </DataProvider>
+  )
+}
+
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
   const language = useLanguage()
-  let invalid = ""
+  const [store, setStore] = createStore({ invalid: "" })
   const directory = createMemo(() => {
     return decode64(params.dir) ?? ""
   })
@@ -23,8 +49,8 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     if (!params.dir) return
     if (directory()) return
-    if (invalid === params.dir) return
-    invalid = params.dir
+    if (store.invalid === params.dir) return
+    setStore("invalid", params.dir)
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -36,37 +62,7 @@ export default function Layout(props: ParentProps) {
     <Show when={directory()}>
       <SDKProvider directory={directory}>
         <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
-
-            const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
-              sdk.client.question.reply(input)
-
-            const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
-
-            const navigateToSession = (sessionID: string) => {
-              navigate(`/${params.dir}/session/${sessionID}`)
-            }
-
-            return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={respond}
-                onQuestionReply={replyToQuestion}
-                onQuestionReject={rejectQuestion}
-                onNavigateToSession={navigateToSession}
-              >
-                <LocalProvider>{props.children}</LocalProvider>
-              </DataProvider>
-            )
-          })}
+          <DirectoryDataProvider directory={directory()}>{props.children}</DirectoryDataProvider>
         </SyncProvider>
       </SDKProvider>
     </Show>

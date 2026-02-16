@@ -1,0 +1,300 @@
+---
+title: 故障排除
+description: 常见问题以及如何解决它们。
+---
+
+要排除 opencode 的问题，请首先检查其存储在磁盘上的日志和本地数据。
+
+---
+
+## 日志
+
+日志文件写入：
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+
+日志档案以时间命名（例如`2025-01-09T123456.log`），并保留最近10个日志档案。
+
+You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+
+---
+
+## 存储
+
+opencode程序将会话数据和其他应用程序数据存储在磁碟上：
+
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+
+该目录包含：
+
+- `auth.json` - 身份验证凭据，例如 API 密钥、OAuth Tokens
+- `log/` - 应用日志
+- `project/` - 项目特定数据，例如会话和消息数据
+  - 如果项目位于 Git 仓库中，则存储在 `./<project-slug>/storage/` 中
+  - 如果不是 Git 存储库，则存储在 `./global/storage/` 中
+
+---
+
+## 桌面应用程序
+
+opencode Desktop runs a local opencode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
+
+### 快速检查
+
+- 完全退出并重新启动应用程序。
+- 如果应用程序显示错误界面，请单击“**重新启动**”并复制错误详细信息。
+- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+
+---
+
+### 禁用插件
+
+如果桌面应用程序在启动时崩溃、挂起或行为异常，请首先禁用插件。
+
+#### 检查全域性配置
+
+开启全域性文件并查询`plugin`键。
+
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+如果您配置了插件，请通过删除密钥或将其设置为空数组来暂时禁用它们：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [],
+}
+```
+
+#### 检查插件目录
+
+opencode 还可以从磁碟加载本地外挂。暂时将它们移开（或重新命名资料夹）并重新启动桌面应用程序：
+
+- **全域性插件**
+  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
+- **项目插件**（仅当您使用每个项目配置时）
+  - `<your-project>/.opencode/plugins/`
+
+如果应用程序再次开始工作，请一次重新启用一个插件，以找出导致问题的插件。
+
+---
+
+### 清除缓存
+
+如果取消外挂没有帮助（或者外挂安装被卡住），请清除缓存，方便opencode可以重建它。
+
+1. 完全退出 opencode 桌面。
+2. 删除缓存目录：
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
+- **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+
+3. 重新启动 opencode 桌面。
+
+---
+
+### 修复服务器连接问题
+
+opencode Desktop 可以启动自己的本地服务器（默认配置）或连线到您的服务器 URL。
+
+如果您看到**“连线失败”**对话中断（或者应用程序永远无法穿透启动萤幕），请检查自定义服务器URL。
+
+#### 清除桌面桌面服务器 URL
+
+在主屏幕中，单击服务器名称（带有状态点）以打开服务器选择器。在“**默认服务器**”部分中，单击“**清除**”。
+
+#### 从配置中删除 `server.port` / `server.hostname`
+
+If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
+
+#### 检查环境变量
+
+如果您在环境中设置了 `OPENCODE_PORT`，桌面应用程序将尝试将交换机用于本地服务器。
+
+- 取消设置`OPENCODE_PORT`（或选择一个休闲摊）并重新启动。
+
+---
+
+### Linux：Wayland / X11 问题
+
+在 Linux 上，某些 Wayland 设置可能会导致空白视窗或合成器错误。
+
+- 如果您在 Wayland 程序上并且应用的是 blank/crashing，请尝试使用 `OC_ALLOW_WAYLAND=1` 启动。
+- 如果这让事情变得更糟糕，请完成其删除并尝试在 X11 会话下启动。
+
+---
+
+### Windows：WebView2执行时
+
+在 Windows 上，opencode 桌面需要 Microsoft Edge **WebView2 执行时**。如果应用程序打开为空白视窗或无法启动，请 install/update WebView2 并重试。
+
+---
+
+### Windows：一般问题
+
+If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL provides a Linux environment that works more seamlessly with opencode's features.
+
+---
+
+### 通知不显示
+
+opencode 桌面仅在以下情况下显示系统通知：
+
+- 在您的作业系统中设置为 opencode 启用了通知，并且
+- 应用程序视窗未聚焦。
+
+---
+
+### 重置桌面应用程序储存（最后的手段）
+
+如果应用程序无法并且启动您无法从 UI 内部清除设置，请重置桌面应用程序的存储状态。
+
+1. 退出 opencode 桌面。
+2. 查询并删除这些文件（它们位于 opencode 桌面应用程序数据目录中）：
+
+- `opencode.settings.dat` (desktop default server URL)
+- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
+
+快速找到目录：
+
+- **macOS**：Finder -> `Cmd+Shift+G` -> `~/Library/Application Support`（然后搜索上面的档名）
+- **Linux**：在`~/.local/share`下搜索上述档名
+- **Windows**：按 `WIN+R` -> `%APPDATA%` （然后搜索上面的档名）
+
+---
+
+## 寻求帮助
+
+如果您遇到 opencode 问题：
+
+1. **报告 GitHub** 上的问题
+
+   报告错误或请求功能的最佳方式是利用我们的 GitHub 存储库：
+
+   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+
+   在建立新问题之前，请搜索现有问题以查看您的问题是否已被报告。
+
+2. **加入我们的不和谐**
+
+   获得实时帮助和社群讨论，请加入我们的Discord服务器：
+
+   [**opencode.ai/discord**](https://opencode.ai/discord)
+
+---
+
+## 常见问题
+
+以下是一些常见问题以及解决方法。
+
+---
+
+### opencode 无法启动
+
+1. 检查日志中是否有错误消息
+2. 尝试使用 `--print-logs` 执行以查看终端中的输出
+3. Ensure you have the latest version with `opencode upgrade`
+
+---
+
+### 身份验证问题
+
+1. 尝试使用 TUI 中的 `/connect` 命令重新进行身份验证
+2. 检查您的API 密钥是否有效
+3. 保证您的网路允许连线到达辉煌的API
+
+---
+
+### 模型不可用
+
+1. 检查您是否已通过提供商的身份验证
+2. 验证配置中的模型名称是否正确
+3. 某些模型可能需要特定的访问权限或订阅
+
+如果您遇到 `ProviderModelNotFoundError` 您很可能是错误的
+在某处引用模型。
+模型应该像这样引用：`<providerId>/<modelId>`
+
+示例：
+
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+To figure out what models you have access to, run `opencode models`
+
+---
+
+### 提供商初始化错误
+
+如果遇到 ProviderInitError，您的配置可能无效或损坏。
+
+要解决这个问题：
+
+1. 首先，按照[提供商指南](/docs/providers) 验证您的事业是否已正确设置
+2. 如果问题仍然存在，请尝试清除储存的配置：
+
+   ```bash
+   rm -rf ~/.local/share/opencode
+   ```
+
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\opencode`
+
+3. 使用 TUI 中的 `/connect` 命令指示您的企业重新进行身份验证。
+
+---
+
+### AI_API_CallError 和提供包问题
+
+如果您遇到 API 呼叫错误，这可能是由于过去提供包造成的。 opencode 根据需要动态安装提供包（OpenAI、Anthropic、Google 等）将其缓存放在本地。
+
+要解决provider 包问题：
+
+1. 清除provider 包缓存：
+
+   ```bash
+   rm -rf ~/.cache/opencode
+   ```
+
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
+
+2. 重新启动 opencode 以重新安装最新的提供包
+
+这将需要 opencode 下载最新版本的提供包，这通常可以解决模型参数和 API 更改的兼容性问题。
+
+---
+
+### 复制/粘贴在 Linux 上不可用
+
+Linux 用户需要安装以下剪贴簿实用程序之一才能使 copy/paste 功能正常工作：
+
+**对于X11系统：**
+
+```bash
+apt install -y xclip
+# or
+apt install -y xsel
+```
+
+** 对于 Wayland 系统：**
+
+```bash
+apt install -y wl-clipboard
+```
+
+**对于无头环境：**
+
+```bash
+apt install -y xvfb
+# and run:
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99.0
+```
+
+opencode 将检测您是否正在使用 Wayland 并更喜欢 `wl-clipboard`，否则将尝试按以下顺序剪贴簿工具：`xclip` 和 `xsel`。
