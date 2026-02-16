@@ -2,6 +2,12 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
+export function parseGitRemote(url: string): { host: string; owner: string; repo: string } | null {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?([^/:]+)[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) return null
+  return { host: match[1], owner: match[2], repo: match[3] }
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).
