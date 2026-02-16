@@ -417,6 +417,115 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         }
       }
 
+      async function createGHESApp(): Promise<AppManifestResult> {
+        const ghesUrl = `https://${app.host}`
+        const manifest = {
+          name: `opencode-agent-${app.owner}`,
+          url: "https://opencode.ai",
+          hook_attributes: { url: "https://example.com/placeholder" },
+          redirect_url: "",
+          public: false,
+          default_permissions: {
+            contents: "write",
+            pull_requests: "write",
+            issues: "write",
+            metadata: "read",
+          },
+          default_events: ["issue_comment", "pull_request_review_comment"],
+        }
+
+        const s = prompts.spinner()
+        s.start("Creating GitHub App on your GHES instance")
+
+        const result = await new Promise<AppManifestResult>((resolve, reject) => {
+          let server: ReturnType<typeof Bun.serve>
+
+          const timeout = setTimeout(() => {
+            server.stop()
+            reject(new Error("Timed out waiting for GitHub App creation (5 minutes)"))
+          }, 5 * 60 * 1000)
+
+          server = Bun.serve({
+            port: 0,
+            fetch(req): Response | Promise<Response> {
+              const url = new URL(req.url)
+
+              if (url.pathname === "/callback") {
+                const code = url.searchParams.get("code")
+                if (!code) {
+                  return new Response(HTML_MANIFEST_ERROR("No code parameter received"), {
+                    headers: { "Content-Type": "text/html" },
+                  })
+                }
+
+                ;(async () => {
+                  try {
+                    const response = await globalThis.fetch(`${ghesUrl}/api/v3/app-manifests/${code}/conversions`, {
+                      method: "POST",
+                      headers: { Accept: "application/vnd.github+json" },
+                    })
+
+                    if (!response.ok) {
+                      const body = await response.text()
+                      throw new Error(`Failed to create app: ${response.status} ${body}`)
+                    }
+
+                    const data = (await response.json()) as AppManifestResult
+                    clearTimeout(timeout)
+                    server.stop()
+                    resolve(data)
+                  } catch (err) {
+                    clearTimeout(timeout)
+                    server.stop()
+                    reject(err)
+                  }
+                })()
+
+                return new Response(HTML_MANIFEST_SUCCESS, {
+                  headers: { "Content-Type": "text/html" },
+                })
+              }
+
+              const callbackUrl = `http://localhost:${server.port}/callback`
+              const manifestWithRedirect = { ...manifest, redirect_url: callbackUrl }
+              const manifestJson = JSON.stringify(manifestWithRedirect)
+              return new Response(buildManifestFormHTML(ghesUrl, manifestJson), {
+                headers: { "Content-Type": "text/html" },
+              })
+            },
+          })
+
+          const localUrl = `http://localhost:${server.port}/`
+          const openCmd =
+            process.platform === "darwin"
+              ? `open "${localUrl}"`
+              : process.platform === "win32"
+                ? `start "" "${localUrl}"`
+                : `xdg-open "${localUrl}"`
+
+          exec(openCmd, (error) => {
+            if (error) prompts.log.warn(`Could not open browser. Please visit: ${localUrl}`)
+          })
+        })
+
+        s.stop("GitHub App created")
+
+        prompts.log.info(
+          [
+            "Save the following credentials as GitHub Actions secrets:",
+            "",
+            `  App ID:         ${result.id}`,
+            `  App Slug:       ${result.slug}`,
+            `  Client ID:      ${result.client_id}`,
+            "",
+            "  Private Key and Client Secret have been generated.",
+            "  Store them securely - they cannot be retrieved again.",
+          ].join("\n"),
+        )
+
+        return result
+      }
+
       async function addWorkflowFiles() {
         const envStr =
           provider === "amazon-bedrock"
