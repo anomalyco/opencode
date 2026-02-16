@@ -580,8 +580,8 @@ export const GithubRunCommand = cmd({
             await createComment(`${response}${footer({ image: !hasShared })}`)
             await removeReaction(commentType)
           }
-          // Fork PR
-          else {
+          // Fork PR - handle missing headRepository gracefully
+          else if (prData.headRepository && prData.baseRepository) {
             await checkoutForkBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
@@ -594,6 +594,10 @@ export const GithubRunCommand = cmd({
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
             await removeReaction(commentType)
+          }
+          // Missing repository data - cannot process
+          else {
+            throw new Error("PR repository information is missing - unable to process PR")
           }
         }
         // Issue
@@ -1045,11 +1049,8 @@ export const GithubRunCommand = cmd({
         const localBranch = generateBranchName("pr")
         const depth = Math.max(pr.commits.totalCount, 20)
 
-        if (!pr.headRepository) {
-          throw new Error("PR headRepository is null - unable to checkout fork branch")
-        }
-
-        await $`git remote add fork https://github.com/${pr.headRepository.nameWithOwner}.git`
+        // headRepository is guaranteed to exist here since we check before calling
+        await $`git remote add fork https://github.com/${pr.headRepository!.nameWithOwner}.git`
         await $`git fetch fork --depth=${depth} ${remoteBranch}`
         await $`git checkout -b ${localBranch} fork/${remoteBranch}`
       }
