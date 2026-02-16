@@ -238,10 +238,10 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
   const gitSvc = yield* Git.Service
   yield* Effect.promise(async () => {
     {
-      UI.empty()
-      prompts.intro("Install GitHub agent")
-      const app = await getAppInfo()
-      await installGitHubApp()
+        UI.empty()
+        prompts.intro("Install GitHub agent")
+        const app = await getAppInfo()
+        const ghesStrategy = await installGitHubApp()
 
       const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
         // TODO: add guide for copilot, for now just hide it
@@ -359,12 +359,28 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         return model
       }
 
-      async function installGitHubApp() {
+      async function installGitHubApp(): Promise<GHESAuthStrategy | undefined> {
         if (app.isGHES) {
-          prompts.log.info(
-            "GitHub Enterprise Server detected. The opencode GitHub App is only available on github.com. The workflow will use `use_github_token: true`.",
-          )
-          return
+          const strategy = await prompts.select({
+            message: "Select authentication strategy for GHES",
+            options: [
+              {
+                label: "In-workflow token generation",
+                value: "in-workflow" as const,
+                hint: "recommended - simpler setup",
+              },
+              {
+                label: "Self-hosted OIDC exchange server",
+                value: "oidc" as const,
+                hint: "requires deploying an exchange service",
+              },
+            ],
+          })
+
+          if (prompts.isCancel(strategy)) throw new UI.CancelledError()
+
+          await createGHESApp()
+          return strategy
         }
 
         const s = prompts.spinner()
@@ -372,7 +388,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
 
         // Get installation
         const installation = await getInstallation()
-        if (installation) return s.stop("GitHub app already installed")
+        if (installation) return s.stop("GitHub app already installed") as undefined
 
         // Open browser
         const url = "https://github.com/apps/opencode-agent"
@@ -409,6 +425,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         } while (true) // oxlint-disable-line no-constant-condition
 
         s.stop("Installed GitHub app")
+        return undefined
 
         async function getInstallation() {
           return await fetch(`https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
