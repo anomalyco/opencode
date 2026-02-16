@@ -371,6 +371,49 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
+      const termImpl = t as unknown as {
+        startRenderLoop: () => void
+        isDisposed: boolean
+        isOpen: boolean
+        renderer: {
+          render: (
+            wasmTerm: unknown,
+            force: boolean,
+            viewportY: number,
+            term: unknown,
+            scrollbarOpacity: number,
+          ) => void
+        }
+        wasmTerm: { getCursor: () => { x: number; y: number } }
+        lastCursorY: number
+        cursorMoveEmitter: { fire: () => void }
+        animationFrameId: number | undefined
+        viewportY: number
+        scrollbarOpacity: number
+      }
+
+      let lastFrameTime = 0
+      const minFrameInterval = 1000 / 15
+
+      termImpl.startRenderLoop = function () {
+        const throttledLoop = () => {
+          if (termImpl.isDisposed || !termImpl.isOpen) return
+
+          const now = performance.now()
+          if (now - lastFrameTime >= minFrameInterval) {
+            lastFrameTime = now
+            termImpl.renderer.render(termImpl.wasmTerm, false, termImpl.viewportY, termImpl, termImpl.scrollbarOpacity)
+            const cursor = termImpl.wasmTerm.getCursor()
+            if (cursor.y !== termImpl.lastCursorY) {
+              termImpl.lastCursorY = cursor.y
+              termImpl.cursorMoveEmitter.fire()
+            }
+          }
+          termImpl.animationFrameId = requestAnimationFrame(throttledLoop)
+        }
+        throttledLoop()
+      }
+
       t.open(container)
       useTerminalUiBindings({ container, term: t, cleanups, handlePointerDown, handleLinkClick })
 
