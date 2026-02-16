@@ -12,6 +12,7 @@
     "@line/bot-sdk": "^9.6.0"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"

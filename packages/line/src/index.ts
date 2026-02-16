@@ -226,14 +226,12 @@ async function handleTextMessage(
 
   const response = result.data
 
-  // Build response text
+  // Build response text from parts
   const responseText =
-    response.info?.content ||
     response.parts
-      ?.filter((p: any) => p.type === "text")
-      .map((p: any) => p.text)
-      .join("\n") ||
-    "I received your message but didn't have a response."
+      ?.filter((p) => p.type === "text")
+      .map((p) => (p as { type: "text"; text: string }).text)
+      .join("\n") || "I received your message but didn't have a response."
 
   console.log(`Response length: ${responseText.length} chars`)
   await sendMessage(userId, responseText)
