@@ -1183,13 +1183,13 @@ To use Kimi K2 from Moonshot AI:
    └ enter
    ```
 
-4. Run the `/models` command to select a model like _GLM 4.6_, _Kimi K2 Thinking_, or _Qwen3 Coder 480B_.
+4. Run the `/models` command to select a model like _GLM 4.7_, _Kimi K2.5_, or _Qwen3 Coder 480B_.
 
    ```txt
    /models
    ```
 
- You can also configure Morpheus AI with additional models through your opencode config with full model specifications:
+  You can also configure Morpheus AI with additional models through your opencode config with full model specifications:
 
 ```json title="opencode.json"
 {
@@ -1197,7 +1197,7 @@ To use Kimi K2 from Moonshot AI:
   "provider": {
     "morpheus-ai": {
       "models": {
-        "glm-4.6": {
+        "kimi-k2.5": {
           "reasoning": false,
           "tool_call": true,
           "attachment": false,
@@ -1207,12 +1207,12 @@ To use Kimi K2 from Moonshot AI:
             "output": ["text"]
           },
           "limit": {
-            "context": 200000,
+            "context": 256000,
             "output": 128000
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.6,
+            "output": 3.0
           }
         },
         "kimi-k2-thinking": {
@@ -1225,15 +1225,15 @@ To use Kimi K2 from Moonshot AI:
             "output": ["text"]
           },
           "limit": {
-            "context": 262144,
+            "context": 256000,
             "output": 65536
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.6,
+            "output": 3.0
           }
         },
-        "qwen3-coder-480b-a35b-instruct": {
+        "glm-4.7": {
           "reasoning": false,
           "tool_call": true,
           "attachment": false,
@@ -1243,15 +1243,15 @@ To use Kimi K2 from Moonshot AI:
             "output": ["text"]
           },
           "limit": {
-            "context": 262144,
-            "output": 65536
+            "context": 198000,
+            "output": 128000
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.5,
+            "output": 2.25
           }
         },
-        "qwen3-235b-a22b": {
+        "glm-4.7-thinking": {
           "reasoning": true,
           "tool_call": true,
           "attachment": false,
@@ -1261,33 +1261,15 @@ To use Kimi K2 from Moonshot AI:
             "output": ["text"]
           },
           "limit": {
-            "context": 131072,
-            "output": 131072
+            "context": 198000,
+            "output": 128000
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.5,
+            "output": 2.25
           }
         },
-        "qwen3-next-80b-a3b-instruct": {
-          "reasoning": false,
-          "tool_call": true,
-          "attachment": false,
-          "temperature": true,
-          "modalities": {
-            "input": ["text"],
-            "output": ["text"]
-          },
-          "limit": {
-            "context": 262144,
-            "output": 65536
-          },
-          "cost": {
-            "input": 0.0,
-            "output": 0.0
-          }
-        },
-        "llama-3.3-70b-instruct": {
+        "glm-4.7-flash": {
           "reasoning": false,
           "tool_call": true,
           "attachment": false,
@@ -1301,38 +1283,11 @@ To use Kimi K2 from Moonshot AI:
             "output": 128000
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.13,
+            "output": 0.5
           }
         },
-        "mistral-small-24b-instruct": {
-          "reasoning": false,
-          "tool_call": true,
-          "attachment": true,
-          "temperature": true,
-          "modalities": {
-            "input": ["text", "image"],
-            "output": ["text"]
-          },
-          "limit": {
-            "context": 128000,
-            "output": 8192
-          },
-          "cost": {
-            "input": 0.0,
-            "output": 0.0
-          }
-        },
-          "limit": {
-            "context": 128000,
-            "output": 8192
-          },
-          "cost": {
-            "input": 0.35,
-            "output": 0.56
-          }
-        },
-        "hermes-3-llama-3.1-405b-instruct": {
+        "qwen3-coder-480b-a35b-instruct": {
           "reasoning": false,
           "tool_call": true,
           "attachment": false,
@@ -1342,14 +1297,193 @@ To use Kimi K2 from Moonshot AI:
             "output": ["text"]
           },
           "limit": {
-            "context": 32000,
-            "output": 32000
+            "context": 256000,
+            "output": 8192
           },
           "cost": {
-            "input": 0.0,
-            "output": 0.0
+            "input": 0.7,
+            "output": 2.8
           }
-        }
+        },
+        "qwen3-235b": {
+          "reasoning": true,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.4,
+            "output": 3.0
+          }
+        },
+        "qwen3-next-80b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 256000,
+            "output": 8192
+          },
+          "cost": {
+            "input": 0.25,
+            "output": 1.75
+          }
+        },
+        "qwen3-4b": {
+          "reasoning": true,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 32000,
+            "output": 8192
+          },
+          "cost": {
+            "input": 0.05,
+            "output": 0.15
+          }
+        },
+        "gpt-oss-120b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.07,
+            "output": 0.28
+          }
+        },
+        "llama-3.3-70b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.7,
+            "output": 2.5
+          }
+        },
+        "llama-3.2-3b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.1,
+            "output": 0.35
+          }
+        },
+        "mistral-31-24b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.5,
+            "output": 2.0
+          }
+        },
+        "hermes-3-llama-3.1-405b": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 1.0,
+            "output": 2.75
+          }
+        },
+        "venice-uncensored": {
+          "reasoning": false,
+          "tool_call": false,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 32000,
+            "output": 8192
+          },
+          "cost": {
+            "input": 0.2,
+            "output": 0.9
+          }
+        },
+        "text-embedding-bge-m3": {
+          "reasoning": false,
+          "tool_call": false,
+          "attachment": false,
+          "temperature": false,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          },
+          "cost": {
+            "input": 0.1,
+            "output": 0.5
+          }
         }
       }
     }
@@ -1357,7 +1491,7 @@ To use Kimi K2 from Moonshot AI:
 }
 ```
 
-> **Note**: All Morpheus AI models are free to use. Specifications sourced from official model providers (Z.AI, Moonshot AI, Alibaba Qwen, Meta, Mistral AI, Nous Research). Context limits and capabilities reflect base models.
+> **Note**: Pricing is per 1 million tokens in USD. Specifications sourced from official model providers (Z.AI, Moonshot AI, Alibaba Qwen, Meta, Mistral AI, Nous Research, Venice AI). Context limits and capabilities reflect base models.
 
 ---
 
