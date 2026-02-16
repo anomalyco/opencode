@@ -856,6 +856,47 @@ export namespace ProviderTransform {
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
+    // Universal schema sanitization for strict JSON Schema validators (Codex, Vertex AI, SGLang, etc.)
+    // 1. Remove Zod .meta() injected fields ($schema, ref) that are invalid in function parameter schemas
+    // 2. When additionalProperties is false, ensure all property keys are in required array
+    const sanitizeStrict = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map(sanitizeStrict)
+
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        // Strip Zod meta fields that break strict validators
+        if (key === "$schema" || key === "ref") continue
+        if (typeof value === "object" && value !== null) {
+          result[key] = sanitizeStrict(value)
+        } else {
+          result[key] = value
+        }
+      }
+
+      // Strict mode: additionalProperties=false requires all properties in required
+      if (
+        result.type === "object" &&
+        result.properties &&
+        result.additionalProperties === false
+      ) {
+        const allKeys = Object.keys(result.properties)
+        const existing = new Set(Array.isArray(result.required) ? result.required : [])
+        result.required = allKeys.filter((k) => existing.has(k))
+        // Wrap optional properties with anyOf [..., {type: "null"}] so they can be omitted
+        for (const k of allKeys) {
+          if (!existing.has(k) && result.properties[k]) {
+            result.properties[k] = {
+              anyOf: [result.properties[k], { type: "null" }],
+            }
+            result.required.push(k)
+          }
+        }
+      }
+
+      return result
+    }
+    schema = sanitizeStrict(schema)
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
