@@ -93,7 +93,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
-  const commentCount = createMemo(() => prompt.context.items().filter((item) => !!item.comment?.trim()).length)
   const layout = useLayout()
   const comments = useComments()
   const params = useParams()
@@ -221,6 +220,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+  })
+
+  const commentCount = createMemo(() => {
+    if (store.mode === "shell") return 0
+    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+  })
+
+  const contextItems = createMemo(() => {
+    const items = prompt.context.items()
+    if (store.mode !== "shell") return items
+    return items.filter((item) => !item.comment?.trim())
   })
 
   const hasUserPrompt = createMemo(() => {
@@ -1027,7 +1037,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
         />
         <PromptContextItems
-          items={prompt.context.items()}
+          items={contextItems()}
           active={(item) => {
             const active = comments.active()
             return !!item.commentID && item.commentID === active?.id && item.path === active?.file
