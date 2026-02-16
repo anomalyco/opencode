@@ -714,6 +714,7 @@ export namespace Config {
         "model",
         "variant",
         "prompt",
+        "title",
         "description",
         "temperature",
         "top_p",
