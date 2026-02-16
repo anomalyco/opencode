@@ -32,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重试中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒后",
+  "ui.sessionTurn.error.freeUsageExceeded": "免费使用额度已用完",
+  "ui.sessionTurn.error.addCredits": "添加积分",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在规划下一步",
