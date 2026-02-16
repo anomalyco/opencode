@@ -56,6 +56,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     input: "keyboard" as "keyboard" | "mouse",
   })
 
+  let ignoreNextEffect = false
+
   createEffect(
     on(
       () => props.current,
@@ -137,6 +139,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
       setTimeout(() => {
+        if (ignoreNextEffect) {
+          ignoreNextEffect = false
+          return
+        }
         if (filter.length > 0) {
           moveTo(0, true)
         } else if (current) {
@@ -159,6 +165,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   function moveTo(next: number, center = false) {
     setStore("selected", next)
+    ignoreNextEffect = true
     const option = selected()
     if (option) props.onMove?.(option)
     if (!scroll) return
