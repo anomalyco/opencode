@@ -10,6 +10,8 @@ import { SessionRevert } from "../../session/revert"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { TaskGraph } from "../../graph/store"
+import { TaskMetrics } from "../../graph/metrics"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
@@ -180,6 +182,73 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await Todo.get(sessionID)
         return c.json(todos)
+      },
+    )
+    .get(
+      "/:sessionID/graph",
+      describeRoute({
+        summary: "Get session task graph",
+        description: "Retrieve the task graph associated with a session (nodes and dependencies).",
+        operationId: "session.graph",
+        responses: {
+          200: {
+            description: "Task graph",
+            content: {
+              "application/json": {
+                schema: resolver(TaskGraph.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const graph = TaskGraph.get(sessionID)
+        return c.json(graph)
+      },
+    )
+    .get(
+      "/:sessionID/metrics",
+      describeRoute({
+        summary: "Get session metrics",
+        description: "Retrieve metrics emitted during session processing (LLM steps and tool calls).",
+        operationId: "session.metrics",
+        responses: {
+          200: {
+            description: "Metrics list",
+            content: {
+              "application/json": {
+                schema: resolver(TaskMetrics.Row.array()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      validator(
+        "query",
+        z.object({
+          limit: z.coerce.number().int().positive().optional().meta({ description: "Max rows (default: 1000)" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const query = c.req.valid("query")
+        const metrics = TaskMetrics.list(sessionID, { limit: query.limit })
+        return c.json(metrics)
       },
     )
     .post(
