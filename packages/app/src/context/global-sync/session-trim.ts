@@ -36,21 +36,36 @@ export function trimSessions(
 ) {
   const limit = Math.max(0, options.limit)
   const cutoff = (options.now ?? Date.now()) - SESSION_RECENT_WINDOW
-  const all = input
-    .filter((s) => !!s?.id)
-    .filter((s) => !s.time?.archived)
-    .sort((a, b) => cmp(a.id, b.id))
-  const roots = all.filter((s) => !s.parentID)
-  const children = all.filter((s) => !!s.parentID)
-  const base = roots.slice(0, limit)
-  const recent = takeRecentSessions(roots.slice(limit), SESSION_RECENT_LIMIT, cutoff)
-  const keepRoots = [...base, ...recent]
-  const keepRootIds = new Set(keepRoots.map((s) => s.id))
-  const keepChildren = children.filter((s) => {
-    if (s.parentID && keepRootIds.has(s.parentID)) return true
-    const perms = options.permission[s.id] ?? []
-    if (perms.length > 0) return true
-    return sessionUpdatedAt(s) > cutoff
+  const deduped = new Map<string, Session>()
+
+  for (const session of input) {
+    if (!session?.id) continue
+    if (session.time?.archived) continue
+    const existing = deduped.get(session.id)
+    if (!existing) {
+      deduped.set(session.id, session)
+      continue
+    }
+    if (compareSessionRecent(session, existing) < 0) {
+      deduped.set(session.id, session)
+    }
+  }
+
+  const sortedByRecent = [...deduped.values()].sort(compareSessionRecent)
+  const base = sortedByRecent.slice(0, limit)
+  const recent = takeRecentSessions(sortedByRecent.slice(limit), SESSION_RECENT_LIMIT, cutoff)
+  const keep = [...base, ...recent]
+  const keepIds = new Set(keep.map((session) => session.id))
+  const keepPermission = sortedByRecent.filter((session) => {
+    if (keepIds.has(session.id)) return false
+    const perms = options.permission[session.id] ?? []
+    return perms.length > 0
   })
-  return [...keepRoots, ...keepChildren].sort((a, b) => cmp(a.id, b.id))
+
+  const merged = new Map<string, Session>()
+  for (const session of [...keep, ...keepPermission]) {
+    merged.set(session.id, session)
+  }
+
+  return [...merged.values()].sort((a, b) => cmp(a.id, b.id))
 }

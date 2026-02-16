@@ -14,46 +14,49 @@ const session = (input: { id: string; parentID?: string; created: number; update
   }) as Session
 
 describe("trimSessions", () => {
-  test("keeps base roots and recent roots beyond the limit", () => {
-    const now = 1_000_000
+  test("keeps the most recently updated sessions regardless of parent", () => {
+    const now = 50_000_000
     const list = [
-      session({ id: "a", created: now - 100_000 }),
-      session({ id: "b", created: now - 90_000 }),
-      session({ id: "c", created: now - 80_000 }),
-      session({ id: "d", created: now - 70_000, updated: now - 1_000 }),
-      session({ id: "e", created: now - 60_000, archived: now - 10 }),
+      session({ id: "a-root-old", created: now - 30_000_000 }),
+      session({ id: "b-child-new", parentID: "a-root-old", created: now - 1_000 }),
+      session({ id: "c-root-new", created: now - 2_000 }),
+      session({ id: "d-child-old", parentID: "a-root-old", created: now - 20_000_000 }),
+      session({ id: "e-archived", created: now - 500, archived: now - 10 }),
     ]
 
     const result = trimSessions(list, { limit: 2, permission: {}, now })
-    expect(result.map((x) => x.id)).toEqual(["a", "b", "c", "d"])
+    expect(result.map((x) => x.id)).toEqual(["b-child-new", "c-root-new"])
   })
 
-  test("keeps children when root is kept, permission exists, or child is recent", () => {
-    const now = 1_000_000
+  test("keeps permission-request sessions even when they are outside the recency limit", () => {
+    const now = 50_000_000
     const list = [
-      session({ id: "root-1", created: now - 1000 }),
-      session({ id: "root-2", created: now - 2000 }),
-      session({ id: "z-root", created: now - 30_000_000 }),
-      session({ id: "child-kept-by-root", parentID: "root-1", created: now - 20_000_000 }),
-      session({ id: "child-kept-by-permission", parentID: "z-root", created: now - 20_000_000 }),
-      session({ id: "child-kept-by-recency", parentID: "z-root", created: now - 500 }),
-      session({ id: "child-trimmed", parentID: "z-root", created: now - 20_000_000 }),
+      session({ id: "a-new", created: now - 1_000 }),
+      session({ id: "b-new", created: now - 2_000 }),
+      session({ id: "c-old-permission", created: now - 25_000_000 }),
+      session({ id: "d-old-trimmed", created: now - 26_000_000 }),
     ]
 
     const result = trimSessions(list, {
       limit: 2,
       permission: {
-        "child-kept-by-permission": [{ id: "perm-1" } as PermissionRequest],
+        "c-old-permission": [{ id: "perm-1" } as PermissionRequest],
       },
       now,
     })
 
-    expect(result.map((x) => x.id)).toEqual([
-      "child-kept-by-permission",
-      "child-kept-by-recency",
-      "child-kept-by-root",
-      "root-1",
-      "root-2",
-    ])
+    expect(result.map((x) => x.id)).toEqual(["a-new", "b-new", "c-old-permission"])
+  })
+
+  test("deduplicates sessions by id using the newest copy", () => {
+    const now = 50_000_000
+    const list = [
+      session({ id: "a", created: now - 30_000_000 }),
+      session({ id: "a", created: now - 30_000_000, updated: now - 500 }),
+      session({ id: "b", created: now - 1_000 }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((x) => x.id)).toEqual(["a", "b"])
   })
 })

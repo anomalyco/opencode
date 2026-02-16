@@ -196,10 +196,8 @@ function createGlobalSync() {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
-          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         const limit = store.limit
-        const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], { limit, permission: store.permission })
+        const sessions = trimSessions([...nonArchived, ...store.session], { limit, permission: store.permission })
         setStore(
           "sessionTotal",
           estimateRootSessionTotal({ count: nonArchived.length, limit: x.limit, limited: x.limited }),
