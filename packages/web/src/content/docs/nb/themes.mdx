@@ -1,0 +1,369 @@
+---
+title: Temaer
+description: Velg et innebygd tema eller definer ditt eget.
+---
+
+Med opencode kan du velge fra ett av flere innebygde temaer, bruke et tema som tilpasser seg terminaltemaet ditt, eller definere ditt eget tilpassede tema.
+
+Som standard bruker opencode vårt eget `opencode`-tema.
+
+---
+
+## Terminalkrav
+
+For at temaer skal vises riktig med fullfargepalett, må terminalen din støtte **truecolor** (24-biters farger). De fleste moderne terminaler støtter dette som standard, men du må kanskje aktivere det:
+
+- **Sjekk støtte**: Kjør `echo $COLORTERM` - den skal gi ut `truecolor` eller `24bit`
+- **Aktiver truecolor**: Sett miljøvariabelen `COLORTERM=truecolor` i shell-profilen din
+- **Terminalkompatibilitet**: Sørg for at terminalemulatoren din støtter 24-bits farger (de fleste moderne terminaler som iTerm2, Alacritty, Kitty, Windows Terminal og nyere versjoner av GNOME Terminal gjør det)
+
+Uten truecolor-støtte kan temaer vises med redusert fargenøyaktighet eller falle tilbake til nærmeste 256-fargers tilnærming.
+
+---
+
+## Innebygde temaer
+
+opencode kommer med flere innebygde temaer.
+
+| Navn                   | Beskrivelse                                                               |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `system`               | Tilpasser seg terminalens bakgrunnsfarge                                  |
+| `tokyonight`           | Basert på [tokyonight](https://github.com/folke/tokyonight.nvim)-temaet   |
+| `everforest`           | Basert på [Everforest](https://github.com/sainnhe/everforest)-temaet      |
+| `ayu`                  | Basert på [Ayu](https://github.com/ayu-theme) mørke tema                  |
+| `catppuccin`           | Basert på [Catppuccin](https://github.com/catppuccin)-temaet              |
+| `catppuccin-macchiato` | Basert på [Catppuccin](https://github.com/catppuccin)-temaet              |
+| `gruvbox`              | Basert på [Gruvbox](https://github.com/morhetz/gruvbox)-temaet            |
+| `kanagawa`             | Basert på [Kanagawa](https://github.com/rebelot/kanagawa.nvim)-temaet     |
+| `nord`                 | Basert på [Nord](https://github.com/nordtheme/nord)-temaet                |
+| `matrix`               | Hacker-stil grønt på svart tema                                           |
+| `one-dark`             | Basert på [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Mørkt tema |
+
+Og mer, vi legger stadig til nye temaer.
+
+---
+
+## Systemtema
+
+`system`-temaet er designet for å automatisk tilpasse seg terminalens fargeskjema. I motsetning til tradisjonelle temaer som bruker faste farger, er _system_-temaet:
+
+- **Genererer gråtone**: Oppretter en tilpasset gråskala basert på terminalens bakgrunnsfarge, og sikrer optimal kontrast.
+- **Bruker ANSI-farger**: Bruker standard ANSI farger (0-15) for syntaksutheving og UI elementer, som respekterer terminalens fargepalett.
+- **Bevarer terminalens standardinnstillinger**: Bruker `none` for tekst- og bakgrunnsfarger for å opprettholde terminalens opprinnelige utseende.
+
+Systemtemaet er for brukere som:
+
+- Vil at opencode skal matche terminalens utseende
+- Bruker tilpassede terminalfargeskjemaer
+- Foretrekker et konsistent utseende på tvers av alle terminalapplikasjoner
+
+---
+
+## Bruke et tema
+
+Du kan velge et tema ved å åpne temavelgeren med kommandoen `/theme`. Eller du kan spesifisere det i [config](/docs/config).
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## Egendefinerte temaer
+
+opencode støtter et fleksibelt JSON-basert temasystem som lar brukere enkelt lage og tilpasse temaer.
+
+---
+
+### Hierarki
+
+Temaer lastes inn fra flere kataloger i følgende rekkefølge der senere kataloger overstyrer tidligere:
+
+1. **Innebygde temaer** - Disse er innebygd i binæren
+2. **Brukerkonfigurasjonskatalog** - Definert i `~/.config/opencode/themes/*.json` eller `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Prosjektrotkatalog** - Definert i `<project-root>/.opencode/themes/*.json`
+4. **Gjeldende arbeidskatalog** - Definert i `./.opencode/themes/*.json`
+
+Hvis flere kataloger inneholder et tema med samme navn, vil temaet fra katalogen med høyere prioritet bli brukt.
+
+---
+
+### Opprette et tema
+
+For å lage et tilpasset tema, lag en JSON-fil i en av temakatalogene.
+
+For brukerspesifikke temaer:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+Og for prosjektspesifikke temaer.
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### JSON-format
+
+Temaer bruker et fleksibelt JSON-format med støtte for:
+
+- **Hex-farger**: `"#ffffff"`
+- **ANSI-farger**: `3` (0-255)
+- **Fargereferanser**: `"primary"` eller egendefinerte definisjoner
+- **Mørke/lyse varianter**: `{"dark": "#000", "light": "#fff"}`
+- **Ingen farge**: `"none"` - Bruker terminalens standardfarge eller transparent
+
+---
+
+### Fargedefinisjoner
+
+`defs`-delen er valgfri, og den lar deg definere gjenbrukbare farger som kan refereres til i temaet.
+
+---
+
+### Terminalstandarder
+
+Spesialverdien `"none"` kan brukes for hvilken som helst farge for å arve terminalens standardfarge. Dette er spesielt nyttig for å lage temaer som passer sømløst med terminalens fargeskjema:
+
+- `"text": "none"` - Bruker terminalens standard forgrunnsfarge
+- `"background": "none"` - Bruker terminalens standard bakgrunnsfarge
+
+---
+
+### Eksempel
+
+Her er et eksempel på et tilpasset tema:
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

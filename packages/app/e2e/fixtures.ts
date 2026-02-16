@@ -1,9 +1,21 @@
-import { test as base, expect } from "@playwright/test"
-import { createSdk, dirSlug, getWorktree, promptSelector, serverUrl, sessionPath } from "./utils"
+import { test as base, expect, type Page } from "@playwright/test"
+import { cleanupTestProject, createTestProject, seedProjects } from "./actions"
+import { promptSelector } from "./selectors"
+import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
+
+export const settingsKey = "settings.v3"
 
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
   gotoSession: (sessionID?: string) => Promise<void>
+  withProject: <T>(
+    callback: (project: {
+      directory: string
+      slug: string
+      gotoSession: (sessionID?: string) => Promise<void>
+    }) => Promise<T>,
+    options?: { extra?: string[] },
+  ) => Promise<T>
 }
 
 type WorkerFixtures = {
@@ -29,54 +41,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(createSdk(directory))
   },
   gotoSession: async ({ page, directory }, use) => {
-    await page.addInitScript(
-      (input: { directory: string; serverUrl: string }) => {
-        const key = "opencode.global.dat:server"
-        const raw = localStorage.getItem(key)
-        const parsed = (() => {
-          if (!raw) return undefined
-          try {
-            return JSON.parse(raw) as unknown
-          } catch {
-            return undefined
-          }
-        })()
-
-        const store = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {}
-        const list = Array.isArray(store.list) ? store.list : []
-        const lastProject = store.lastProject && typeof store.lastProject === "object" ? store.lastProject : {}
-        const projects = store.projects && typeof store.projects === "object" ? store.projects : {}
-        const nextProjects = { ...(projects as Record<string, unknown>) }
-
-        const add = (origin: string) => {
-          const current = nextProjects[origin]
-          const items = Array.isArray(current) ? current : []
-          const existing = items.filter(
-            (p): p is { worktree: string; expanded?: boolean } =>
-              !!p &&
-              typeof p === "object" &&
-              "worktree" in p &&
-              typeof (p as { worktree?: unknown }).worktree === "string",
-          )
-
-          if (existing.some((p) => p.worktree === input.directory)) return
-          nextProjects[origin] = [{ worktree: input.directory, expanded: true }, ...existing]
-        }
-
-        add("local")
-        add(input.serverUrl)
-
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            list,
-            projects: nextProjects,
-            lastProject,
-          }),
-        )
-      },
-      { directory, serverUrl },
-    )
+    await seedStorage(page, { directory })
 
     const gotoSession = async (sessionID?: string) => {
       await page.goto(sessionPath(directory, sessionID))
@@ -84,6 +49,39 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     }
     await use(gotoSession)
   },
+  withProject: async ({ page }, use) => {
+    await use(async (callback, options) => {
+      const directory = await createTestProject()
+      const slug = dirSlug(directory)
+      await seedStorage(page, { directory, extra: options?.extra })
+
+      const gotoSession = async (sessionID?: string) => {
+        await page.goto(sessionPath(directory, sessionID))
+        await expect(page.locator(promptSelector)).toBeVisible()
+      }
+
+      try {
+        await gotoSession()
+        return await callback({ directory, slug, gotoSession })
+      } finally {
+        await cleanupTestProject(directory)
+      }
+    })
+  },
 })
+
+async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
+  await seedProjects(page, input)
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "opencode.global.dat:model",
+      JSON.stringify({
+        recent: [{ providerID: "opencode", modelID: "big-pickle" }],
+        user: [],
+        variant: {},
+      }),
+    )
+  })
+}
 
 export { expect }
