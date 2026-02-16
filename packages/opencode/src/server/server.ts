@@ -502,12 +502,10 @@ export namespace Server {
           async (c) => {
             log.info("event connected")
             return streamSSE(c, async (stream) => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.connected",
-                  properties: {},
-                }),
-              })
+              // Subscribe to bus events BEFORE sending server.connected to prevent
+              // race condition where client sends a message immediately upon receiving
+              // server.connected, but the bus subscription isn't active yet to capture
+              // the response events.
               const unsub = Bus.subscribeAll(async (event) => {
                 await stream.writeSSE({
                   data: JSON.stringify(event),
@@ -515,6 +513,13 @@ export namespace Server {
                 if (event.type === Bus.InstanceDisposed.type) {
                   stream.close()
                 }
+              })
+
+              stream.writeSSE({
+                data: JSON.stringify({
+                  type: "server.connected",
+                  properties: {},
+                }),
               })
 
               // Send heartbeat every 30s to prevent WKWebView timeout (60s default)

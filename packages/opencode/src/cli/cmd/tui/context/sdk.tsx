@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   on: (handler: (event: Event) => void) => () => void
@@ -16,6 +16,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     headers?: RequestInit["headers"]
     events?: EventSource
   }) => {
+    const [connected, setConnected] = createSignal(false)
     const abort = new AbortController()
     const sdk = createOpencodeClient({
       baseUrl: props.url,
@@ -48,6 +49,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     const handleEvent = (event: Event) => {
+      if (event.type === "server.connected") {
+        setConnected(true)
+      }
       queue.push(event)
       const elapsed = Date.now() - last
 
@@ -96,6 +100,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    return { client: sdk, event: emitter, url: props.url, connected }
   },
 })
