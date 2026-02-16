@@ -170,3 +170,7 @@
     outline: none;
   }
 }
+
+[data-component="button"].titlebar-icon[data-variant="ghost"]:hover:not(:disabled) {
+  background-color: var(--surface-raised-base-active);
+}

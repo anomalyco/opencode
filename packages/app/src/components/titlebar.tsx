@@ -191,7 +191,7 @@ export function Titlebar() {
             />
           </div>
         </Show>
-        <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
           <TooltipKeybind
             class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
             placement="bottom"
@@ -200,7 +200,7 @@ export function Titlebar() {
           >
             <Button
               variant="ghost"
-              class="group/sidebar-toggle w-8 h-6 p-0 box-border"
+              class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
               style={layout.sidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.sidebar.toggle}
               aria-label={language.t("command.sidebar.toggle")}
@@ -209,13 +209,13 @@ export function Titlebar() {
               <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                 <Icon
                   size="small"
-                  name={layout.sidebar.opened() ? "layout-left-full" : "layout-left"}
+                  name={layout.sidebar.opened() ? "layout-left-partial" : "layout-left"}
                   class="group-hover/sidebar-toggle:hidden"
                 />
                 <Icon size="small" name="layout-left-partial" class="hidden group-hover/sidebar-toggle:inline-block" />
                 <Icon
                   size="small"
-                  name={layout.sidebar.opened() ? "layout-left" : "layout-left-full"}
+                  name={layout.sidebar.opened() ? "layout-left" : "layout-left-partial"}
                   class="hidden group-active/sidebar-toggle:inline-block"
                 />
               </div>
@@ -232,7 +232,7 @@ export function Titlebar() {
                 <Button
                   variant="ghost"
                   icon="new-session"
-                  class="w-8 h-6 p-0 box-border"
+                  class="titlebar-icon w-8 h-6 p-0 box-border"
                   onClick={() => {
                     if (!params.dir) return
                     navigate(`/${params.dir}/session`)
@@ -241,12 +241,12 @@ export function Titlebar() {
                 />
               </TooltipKeybind>
             </Show>
-            <div class="flex items-center gap-1" classList={{ "ml-3": !!params.dir }}>
+            <div class="flex items-center gap-0" classList={{ "ml-1": !!params.dir }}>
               <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
                 <Button
                   variant="ghost"
                   icon="chevron-left"
-                  class="w-8 h-6 p-0 box-border"
+                  class="titlebar-icon w-6 h-6 p-0 box-border"
                   disabled={!canBack()}
                   onClick={back}
                   aria-label={language.t("common.goBack")}
@@ -256,7 +256,7 @@ export function Titlebar() {
                 <Button
                   variant="ghost"
                   icon="chevron-right"
-                  class="w-8 h-6 p-0 box-border"
+                  class="titlebar-icon w-6 h-6 p-0 box-border"
                   disabled={!canForward()}
                   onClick={forward}
                   aria-label={language.t("common.goForward")}

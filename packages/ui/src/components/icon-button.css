@@ -149,3 +149,7 @@
   height: 24px;
   aspect-ratio: auto;
 }
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"]:hover:not(:disabled) {
+  background-color: var(--surface-raised-base-active);
+}
