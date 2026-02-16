@@ -176,7 +176,8 @@ export function tui(input: {
         )
       },
       {
-        targetFps: 60,
+        targetFps: Flag.OPENCODE_EXPERIMENTAL_FPS ?? 60,
+        maxFps: Flag.OPENCODE_EXPERIMENTAL_FPS,
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},

@@ -930,6 +930,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    fps: z.number().int().min(1).max(120).optional().describe("TUI target FPS (1-120)"),
   })
 
   export const Server = z
