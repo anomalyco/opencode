@@ -2,12 +2,12 @@ use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
-use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
 use crate::{
     cli,
+    cli::CommandChild,
     constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
