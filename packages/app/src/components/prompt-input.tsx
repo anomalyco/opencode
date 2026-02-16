@@ -1311,11 +1311,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="shrink-0">
               <div
                 data-component="prompt-mode-toggle"
-                class="relative h-8 w-16 rounded-[4px] bg-surface-inset-base shadow-[var(--shadow-xs-border-base)] p-0 flex items-center overflow-visible"
+                class="relative h-8 w-16 rounded-[4px] bg-surface-inset-base shadow-[var(--shadow-xs-border-base)] p-0 flex items-center gap-1 overflow-visible"
               >
                 <div
-                  class="absolute inset-y-0 left-0 w-1/2 rounded-[4px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-xs-border)] transition-transform duration-200 ease-out will-change-transform"
-                  style={{ transform: store.mode === "shell" ? "translateX(0%)" : "translateX(100%)" }}
+                  class="absolute inset-y-0 left-0 w-[calc((100%-4px)/2)] rounded-[4px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-xs-border)] transition-transform duration-200 ease-out will-change-transform"
+                  style={{
+                    transform: store.mode === "shell" ? "translateX(0px)" : "translateX(calc(100% + 4px))",
+                  }}
                 />
                 <button
                   type="button"
