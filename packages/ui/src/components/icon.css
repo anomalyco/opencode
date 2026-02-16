@@ -17,6 +17,11 @@
     height: 20px;
   }
 
+  &[data-size="medium"] {
+    width: 24px;
+    height: 24px;
+  }
+
   &[data-size="large"] {
     width: 24px;
     height: 24px;

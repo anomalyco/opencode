@@ -5,22 +5,33 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type Role,
+  type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
   type ToolKind,
+  type Usage,
 } from "@agentclientprotocol/sdk"
+
 import { Log } from "../util/log"
+import { pathToFileURL } from "bun"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig, ACPSessionState } from "./types"
+import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
@@ -29,11 +40,84 @@ import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+
+type ModeOption = { id: string; name: string; description?: string }
+type ModelOption = { modelId: string; name: string }
+
+const DEFAULT_VARIANT_VALUE = "default"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
+
+  async function getContextLimit(
+    sdk: OpencodeClient,
+    providerID: string,
+    modelID: string,
+    directory: string,
+  ): Promise<number | null> {
+    const providers = await sdk.config
+      .providers({ directory })
+      .then((x) => x.data?.providers ?? [])
+      .catch((error) => {
+        log.error("failed to get providers for context limit", { error })
+        return []
+      })
+
+    const provider = providers.find((p) => p.id === providerID)
+    const model = provider?.models[modelID]
+    return model?.limit.context ?? null
+  }
+
+  async function sendUsageUpdate(
+    connection: AgentSideConnection,
+    sdk: OpencodeClient,
+    sessionID: string,
+    directory: string,
+  ): Promise<void> {
+    const messages = await sdk.session
+      .messages({ sessionID, directory }, { throwOnError: true })
+      .then((x) => x.data)
+      .catch((error) => {
+        log.error("failed to fetch messages for usage update", { error })
+        return undefined
+      })
+
+    if (!messages) return
+
+    const assistantMessages = messages.filter(
+      (m): m is { info: AssistantMessage; parts: SessionMessageResponse["parts"] } => m.info.role === "assistant",
+    )
+
+    const lastAssistant = assistantMessages[assistantMessages.length - 1]
+    if (!lastAssistant) return
+
+    const msg = lastAssistant.info
+    const size = await getContextLimit(sdk, msg.providerID, msg.modelID, directory)
+
+    if (!size) {
+      // Cannot calculate usage without known context size
+      return
+    }
+
+    const used = msg.tokens.input + (msg.tokens.cache?.read ?? 0)
+    const totalCost = assistantMessages.reduce((sum, m) => sum + m.info.cost, 0)
+
+    await connection
+      .sessionUpdate({
+        sessionId: sessionID,
+        update: {
+          sessionUpdate: "usage_update",
+          used,
+          size,
+          cost: { amount: totalCost, currency: "USD" },
+        },
+      })
+      .catch((error) => {
+        log.error("failed to send usage update", { error })
+      })
+  }
 
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
@@ -47,304 +131,376 @@ export namespace ACP {
     private connection: AgentSideConnection
     private config: ACPConfig
     private sdk: OpencodeClient
-    private sessionManager
+    private sessionManager: ACPSessionManager
+    private eventAbort = new AbortController()
+    private eventStarted = false
+    private permissionQueues = new Map<string, Promise<void>>()
+    private permissionOptions: PermissionOption[] = [
+      { optionId: "once", kind: "allow_once", name: "Allow once" },
+      { optionId: "always", kind: "allow_always", name: "Always allow" },
+      { optionId: "reject", kind: "reject_once", name: "Reject" },
+    ]
 
     constructor(connection: AgentSideConnection, config: ACPConfig) {
       this.connection = connection
       this.config = config
       this.sdk = config.sdk
       this.sessionManager = new ACPSessionManager(this.sdk)
+      this.startEventSubscription()
     }
 
-    private setupEventSubscriptions(session: ACPSessionState) {
-      const sessionId = session.id
-      const directory = session.cwd
+    private startEventSubscription() {
+      if (this.eventStarted) return
+      this.eventStarted = true
+      this.runEventSubscription().catch((error) => {
+        if (this.eventAbort.signal.aborted) return
+        log.error("event subscription failed", { error })
+      })
+    }
 
-      const options: PermissionOption[] = [
-        { optionId: "once", kind: "allow_once", name: "Allow once" },
-        { optionId: "always", kind: "allow_always", name: "Always allow" },
-        { optionId: "reject", kind: "reject_once", name: "Reject" },
-      ]
-      this.config.sdk.event.subscribe({ directory }).then(async (events) => {
+    private async runEventSubscription() {
+      while (true) {
+        if (this.eventAbort.signal.aborted) return
+        const events = await this.sdk.global.event({
+          signal: this.eventAbort.signal,
+        })
         for await (const event of events.stream) {
-          switch (event.type) {
-            case "permission.asked":
-              try {
-                const permission = event.properties
-                const res = await this.connection
-                  .requestPermission({
-                    sessionId,
-                    toolCall: {
-                      toolCallId: permission.tool?.callID ?? permission.id,
-                      status: "pending",
-                      title: permission.permission,
-                      rawInput: permission.metadata,
-                      kind: toToolKind(permission.permission),
-                      locations: toLocations(permission.permission, permission.metadata),
-                    },
-                    options,
+          if (this.eventAbort.signal.aborted) return
+          const payload = (event as any)?.payload
+          if (!payload) continue
+          await this.handleEvent(payload as Event).catch((error) => {
+            log.error("failed to handle event", { error, type: payload.type })
+          })
+        }
+      }
+    }
+
+    private async handleEvent(event: Event) {
+      switch (event.type) {
+        case "permission.asked": {
+          const permission = event.properties
+          const session = this.sessionManager.tryGet(permission.sessionID)
+          if (!session) return
+
+          const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const directory = session.cwd
+
+              const res = await this.connection
+                .requestPermission({
+                  sessionId: permission.sessionID,
+                  toolCall: {
+                    toolCallId: permission.tool?.callID ?? permission.id,
+                    status: "pending",
+                    title: permission.permission,
+                    rawInput: permission.metadata,
+                    kind: toToolKind(permission.permission),
+                    locations: toLocations(permission.permission, permission.metadata),
+                  },
+                  options: this.permissionOptions,
+                })
+                .catch(async (error) => {
+                  log.error("failed to request permission from ACP", {
+                    error,
+                    permissionID: permission.id,
+                    sessionID: permission.sessionID,
                   })
-                  .catch(async (error) => {
-                    log.error("failed to request permission from ACP", {
-                      error,
-                      permissionID: permission.id,
-                      sessionID: permission.sessionID,
-                    })
-                    await this.config.sdk.permission.reply({
-                      requestID: permission.id,
-                      reply: "reject",
-                      directory,
-                    })
-                    return
-                  })
-                if (!res) return
-                if (res.outcome.outcome !== "selected") {
-                  await this.config.sdk.permission.reply({
+                  await this.sdk.permission.reply({
                     requestID: permission.id,
                     reply: "reject",
                     directory,
                   })
-                  return
-                }
-                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
-                  const metadata = permission.metadata || {}
-                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
-                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+                  return undefined
+                })
 
-                  const content = await Bun.file(filepath).text()
-                  const newContent = getNewContent(content, diff)
-
-                  if (newContent) {
-                    this.connection.writeTextFile({
-                      sessionId: sessionId,
-                      path: filepath,
-                      content: newContent,
-                    })
-                  }
-                }
-                await this.config.sdk.permission.reply({
+              if (!res) return
+              if (res.outcome.outcome !== "selected") {
+                await this.sdk.permission.reply({
                   requestID: permission.id,
-                  reply: res.outcome.optionId as "once" | "always" | "reject",
+                  reply: "reject",
                   directory,
                 })
-              } catch (err) {
-                log.error("unexpected error when handling permission", { error: err })
-              } finally {
-                break
+                return
               }
 
-            case "message.part.updated":
-              log.info("message part updated", { event: event.properties })
-              try {
-                const props = event.properties
-                const { part } = props
+              if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                const metadata = permission.metadata || {}
+                const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+                const file = Bun.file(filepath)
+                const content = (await file.exists()) ? await file.text() : ""
+                const newContent = getNewContent(content, diff)
 
-                const message = await this.config.sdk.session
-                  .message(
-                    {
-                      sessionID: part.sessionID,
-                      messageID: part.messageID,
-                      directory,
-                    },
-                    { throwOnError: true },
-                  )
-                  .then((x) => x.data)
-                  .catch((err) => {
-                    log.error("unexpected error when fetching message", { error: err })
-                    return undefined
+                if (newContent) {
+                  this.connection.writeTextFile({
+                    sessionId: session.id,
+                    path: filepath,
+                    content: newContent,
                   })
+                }
+              }
 
-                if (!message || message.info.role !== "assistant") return
+              await this.sdk.permission.reply({
+                requestID: permission.id,
+                reply: res.outcome.optionId as "once" | "always" | "reject",
+                directory,
+              })
+            })
+            .catch((error) => {
+              log.error("failed to handle permission", { error, permissionID: permission.id })
+            })
+            .finally(() => {
+              if (this.permissionQueues.get(permission.sessionID) === next) {
+                this.permissionQueues.delete(permission.sessionID)
+              }
+            })
+          this.permissionQueues.set(permission.sessionID, next)
+          return
+        }
 
-                if (part.type === "tool") {
-                  switch (part.state.status) {
-                    case "pending":
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call",
-                            toolCallId: part.callID,
-                            title: part.tool,
-                            kind: toToolKind(part.tool),
-                            status: "pending",
-                            locations: [],
-                            rawInput: {},
-                          },
-                        })
-                        .catch((err) => {
-                          log.error("failed to send tool pending to ACP", { error: err })
-                        })
-                      break
-                    case "running":
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call_update",
-                            toolCallId: part.callID,
-                            status: "in_progress",
-                            kind: toToolKind(part.tool),
-                            title: part.tool,
-                            locations: toLocations(part.tool, part.state.input),
-                            rawInput: part.state.input,
-                          },
-                        })
-                        .catch((err) => {
-                          log.error("failed to send tool in_progress to ACP", { error: err })
-                        })
-                      break
-                    case "completed":
-                      const kind = toToolKind(part.tool)
-                      const content: ToolCallContent[] = [
+        case "message.part.updated": {
+          log.info("message part updated", { event: event.properties })
+          const props = event.properties
+          const part = props.part
+          const session = this.sessionManager.tryGet(part.sessionID)
+          if (!session) return
+          const sessionId = session.id
+          const directory = session.cwd
+
+          const message = await this.sdk.session
+            .message(
+              {
+                sessionID: part.sessionID,
+                messageID: part.messageID,
+                directory,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((error) => {
+              log.error("unexpected error when fetching message", { error })
+              return undefined
+            })
+
+          if (!message || message.info.role !== "assistant") return
+
+          if (part.type === "tool") {
+            switch (part.state.status) {
+              case "pending":
+                await this.connection
+                  .sessionUpdate({
+                    sessionId,
+                    update: {
+                      sessionUpdate: "tool_call",
+                      toolCallId: part.callID,
+                      title: part.tool,
+                      kind: toToolKind(part.tool),
+                      status: "pending",
+                      locations: [],
+                      rawInput: {},
+                    },
+                  })
+                  .catch((error) => {
+                    log.error("failed to send tool pending to ACP", { error })
+                  })
+                return
+
+              case "running":
+                await this.connection
+                  .sessionUpdate({
+                    sessionId,
+                    update: {
+                      sessionUpdate: "tool_call_update",
+                      toolCallId: part.callID,
+                      status: "in_progress",
+                      kind: toToolKind(part.tool),
+                      title: part.tool,
+                      locations: toLocations(part.tool, part.state.input),
+                      rawInput: part.state.input,
+                    },
+                  })
+                  .catch((error) => {
+                    log.error("failed to send tool in_progress to ACP", { error })
+                  })
+                return
+
+              case "completed": {
+                const kind = toToolKind(part.tool)
+                const content: ToolCallContent[] = [
+                  {
+                    type: "content",
+                    content: {
+                      type: "text",
+                      text: part.state.output,
+                    },
+                  },
+                ]
+
+                if (kind === "edit") {
+                  const input = part.state.input
+                  const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+                  const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+                  const newText =
+                    typeof input["newString"] === "string"
+                      ? input["newString"]
+                      : typeof input["content"] === "string"
+                        ? input["content"]
+                        : ""
+                  content.push({
+                    type: "diff",
+                    path: filePath,
+                    oldText,
+                    newText,
+                  })
+                }
+
+                if (part.tool === "todowrite") {
+                  const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+                  if (parsedTodos.success) {
+                    await this.connection
+                      .sessionUpdate({
+                        sessionId,
+                        update: {
+                          sessionUpdate: "plan",
+                          entries: parsedTodos.data.map((todo) => {
+                            const status: PlanEntry["status"] =
+                              todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
+                            return {
+                              priority: "medium",
+                              status,
+                              content: todo.content,
+                            }
+                          }),
+                        },
+                      })
+                      .catch((error) => {
+                        log.error("failed to send session update for todo", { error })
+                      })
+                  } else {
+                    log.error("failed to parse todo output", { error: parsedTodos.error })
+                  }
+                }
+
+                await this.connection
+                  .sessionUpdate({
+                    sessionId,
+                    update: {
+                      sessionUpdate: "tool_call_update",
+                      toolCallId: part.callID,
+                      status: "completed",
+                      kind,
+                      content,
+                      title: part.state.title,
+                      rawInput: part.state.input,
+                      rawOutput: {
+                        output: part.state.output,
+                        metadata: part.state.metadata,
+                      },
+                    },
+                  })
+                  .catch((error) => {
+                    log.error("failed to send tool completed to ACP", { error })
+                  })
+                return
+              }
+              case "error":
+                await this.connection
+                  .sessionUpdate({
+                    sessionId,
+                    update: {
+                      sessionUpdate: "tool_call_update",
+                      toolCallId: part.callID,
+                      status: "failed",
+                      kind: toToolKind(part.tool),
+                      title: part.tool,
+                      rawInput: part.state.input,
+                      content: [
                         {
                           type: "content",
                           content: {
                             type: "text",
-                            text: part.state.output,
+                            text: part.state.error,
                           },
                         },
-                      ]
-
-                      if (kind === "edit") {
-                        const input = part.state.input
-                        const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-                        const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-                        const newText =
-                          typeof input["newString"] === "string"
-                            ? input["newString"]
-                            : typeof input["content"] === "string"
-                              ? input["content"]
-                              : ""
-                        content.push({
-                          type: "diff",
-                          path: filePath,
-                          oldText,
-                          newText,
-                        })
-                      }
-
-                      if (part.tool === "todowrite") {
-                        const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-                        if (parsedTodos.success) {
-                          await this.connection
-                            .sessionUpdate({
-                              sessionId,
-                              update: {
-                                sessionUpdate: "plan",
-                                entries: parsedTodos.data.map((todo) => {
-                                  const status: PlanEntry["status"] =
-                                    todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
-                                  return {
-                                    priority: "medium",
-                                    status,
-                                    content: todo.content,
-                                  }
-                                }),
-                              },
-                            })
-                            .catch((err) => {
-                              log.error("failed to send session update for todo", { error: err })
-                            })
-                        } else {
-                          log.error("failed to parse todo output", { error: parsedTodos.error })
-                        }
-                      }
-
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call_update",
-                            toolCallId: part.callID,
-                            status: "completed",
-                            kind,
-                            content,
-                            title: part.state.title,
-                            rawInput: part.state.input,
-                            rawOutput: {
-                              output: part.state.output,
-                              metadata: part.state.metadata,
-                            },
-                          },
-                        })
-                        .catch((err) => {
-                          log.error("failed to send tool completed to ACP", { error: err })
-                        })
-                      break
-                    case "error":
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call_update",
-                            toolCallId: part.callID,
-                            status: "failed",
-                            kind: toToolKind(part.tool),
-                            title: part.tool,
-                            rawInput: part.state.input,
-                            content: [
-                              {
-                                type: "content",
-                                content: {
-                                  type: "text",
-                                  text: part.state.error,
-                                },
-                              },
-                            ],
-                            rawOutput: {
-                              error: part.state.error,
-                            },
-                          },
-                        })
-                        .catch((err) => {
-                          log.error("failed to send tool error to ACP", { error: err })
-                        })
-                      break
-                  }
-                } else if (part.type === "text") {
-                  const delta = props.delta
-                  if (delta && part.synthetic !== true) {
-                    await this.connection
-                      .sessionUpdate({
-                        sessionId,
-                        update: {
-                          sessionUpdate: "agent_message_chunk",
-                          content: {
-                            type: "text",
-                            text: delta,
-                          },
-                        },
-                      })
-                      .catch((err) => {
-                        log.error("failed to send text to ACP", { error: err })
-                      })
-                  }
-                } else if (part.type === "reasoning") {
-                  const delta = props.delta
-                  if (delta) {
-                    await this.connection
-                      .sessionUpdate({
-                        sessionId,
-                        update: {
-                          sessionUpdate: "agent_thought_chunk",
-                          content: {
-                            type: "text",
-                            text: delta,
-                          },
-                        },
-                      })
-                      .catch((err) => {
-                        log.error("failed to send reasoning to ACP", { error: err })
-                      })
-                  }
-                }
-              } finally {
-                break
-              }
+                      ],
+                      rawOutput: {
+                        error: part.state.error,
+                      },
+                    },
+                  })
+                  .catch((error) => {
+                    log.error("failed to send tool error to ACP", { error })
+                  })
+                return
+            }
           }
+          return
         }
-      })
+
+        case "message.part.delta": {
+          const props = event.properties
+          const session = this.sessionManager.tryGet(props.sessionID)
+          if (!session) return
+          const sessionId = session.id
+
+          const message = await this.sdk.session
+            .message(
+              {
+                sessionID: props.sessionID,
+                messageID: props.messageID,
+                directory: session.cwd,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((error) => {
+              log.error("unexpected error when fetching message", { error })
+              return undefined
+            })
+
+          if (!message || message.info.role !== "assistant") return
+
+          const part = message.parts.find((p) => p.id === props.partID)
+          if (!part) return
+
+          if (part.type === "text" && props.field === "text" && part.ignored !== true) {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: {
+                    type: "text",
+                    text: props.delta,
+                  },
+                },
+              })
+              .catch((error) => {
+                log.error("failed to send text delta to ACP", { error })
+              })
+            return
+          }
+
+          if (part.type === "reasoning" && props.field === "text") {
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_thought_chunk",
+                  content: {
+                    type: "text",
+                    text: props.delta,
+                  },
+                },
+              })
+              .catch((error) => {
+                log.error("failed to send reasoning delta to ACP", { error })
+              })
+          }
+          return
+        }
+      }
     }
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
@@ -379,6 +535,11 @@ export namespace ACP {
             embeddedContext: true,
             image: true,
           },
+          sessionCapabilities: {
+            fork: {},
+            list: {},
+            resume: {},
+          },
         },
         authMethods: [authMethod],
         agentInfo: {
@@ -409,13 +570,11 @@ export namespace ACP {
           sessionId,
         })
 
-        this.setupEventSubscriptions(state)
-
         return {
           sessionId,
           models: load.models,
           modes: load.modes,
-          _meta: {},
+          _meta: load._meta,
         }
       } catch (e) {
         const error = MessageV2.fromError(e, {
@@ -436,19 +595,140 @@ export namespace ACP {
         const model = await defaultModel(this.config, directory)
 
         // Store ACP session state
-        const state = await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
+        await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
 
         log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
 
-        const mode = await this.loadSessionMode({
+        const result = await this.loadSessionMode({
           cwd: directory,
           mcpServers: params.mcpServers,
           sessionId,
         })
 
-        this.setupEventSubscriptions(state)
-
         // Replay session history
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
+        if (lastUser?.role === "user") {
+          result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
+          this.sessionManager.setModel(sessionId, {
+            providerID: lastUser.model.providerID,
+            modelID: lastUser.model.modelID,
+          })
+          if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
+            result.modes.currentModeId = lastUser.agent
+            this.sessionManager.setMode(sessionId, lastUser.agent)
+          }
+        }
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
+        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
+        return result
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+      try {
+        const cursor = params.cursor ? Number(params.cursor) : undefined
+        const limit = 100
+
+        const sessions = await this.sdk.session
+          .list(
+            {
+              directory: params.cwd ?? undefined,
+              roots: true,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data ?? [])
+
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
+        const page = filtered.slice(0, limit)
+
+        const entries: SessionInfo[] = page.map((session) => ({
+          sessionId: session.id,
+          cwd: session.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        }))
+
+        const last = page[page.length - 1]
+        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+
+        const response: ListSessionsResponse = {
+          sessions: entries,
+        }
+        if (next) response.nextCursor = next
+        return response
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      const directory = params.cwd
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        const forked = await this.sdk.session
+          .fork(
+            {
+              sessionID: params.sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+
+        if (!forked) {
+          throw new Error("Fork session returned no data")
+        }
+
+        const sessionId = forked.id
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
         const messages = await this.sdk.session
           .messages(
             {
@@ -468,7 +748,40 @@ export namespace ACP {
           await this.processMessage(msg)
         }
 
+        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
         return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      const directory = params.cwd
+      const sessionId = params.sessionId
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
+
+        const result = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
+        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
+        return result
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
@@ -634,6 +947,7 @@ export namespace ACP {
           }
         } else if (part.type === "text") {
           if (part.text) {
+            const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -642,6 +956,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(audience && { annotations: { audience } }),
                   },
                 },
               })
@@ -649,6 +964,84 @@ export namespace ACP {
                 log.error("failed to send text to ACP", { error: err })
               })
           }
+        } else if (part.type === "file") {
+          // Replay file attachments as appropriate ACP content blocks.
+          // OpenCode stores files internally as { type: "file", url, filename, mime }.
+          // We convert these back to ACP blocks based on the URL scheme and MIME type:
+          // - file:// URLs → resource_link
+          // - data: URLs with image/* → image block
+          // - data: URLs with text/* or application/json → resource with text
+          // - data: URLs with other types → resource with blob
+          const url = part.url
+          const filename = part.filename ?? "file"
+          const mime = part.mime || "application/octet-stream"
+          const messageChunk = message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk"
+
+          if (url.startsWith("file://")) {
+            // Local file reference - send as resource_link
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: messageChunk,
+                  content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send resource_link to ACP", { error: err })
+              })
+          } else if (url.startsWith("data:")) {
+            // Embedded content - parse data URL and send as appropriate block type
+            const base64Match = url.match(/^data:([^;]+);base64,(.*)$/)
+            const dataMime = base64Match?.[1]
+            const base64Data = base64Match?.[2] ?? ""
+
+            const effectiveMime = dataMime || mime
+
+            if (effectiveMime.startsWith("image/")) {
+              // Image - send as image block
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: {
+                      type: "image",
+                      mimeType: effectiveMime,
+                      data: base64Data,
+                      uri: pathToFileURL(filename).href,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send image to ACP", { error: err })
+                })
+            } else {
+              // Non-image: text types get decoded, binary types stay as blob
+              const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const fileUri = pathToFileURL(filename).href
+              const resource = isText
+                ? {
+                    uri: fileUri,
+                    mimeType: effectiveMime,
+                    text: Buffer.from(base64Data, "base64").toString("utf-8"),
+                  }
+                : { uri: fileUri, mimeType: effectiveMime, blob: base64Data }
+
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: { type: "resource", resource },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send resource to ACP", { error: err })
+                })
+            }
+          }
+          // URLs that don't match file:// or data: are skipped (unsupported)
         } else if (part.type === "reasoning") {
           if (part.text) {
             await this.connection
@@ -670,27 +1063,7 @@ export namespace ACP {
       }
     }
 
-    private async loadSessionMode(params: LoadSessionRequest) {
-      const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
-      const sessionId = params.sessionId
-
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-      const entries = providers.sort((a, b) => {
-        const nameA = a.name.toLowerCase()
-        const nameB = b.name.toLowerCase()
-        if (nameA < nameB) return -1
-        if (nameA > nameB) return 1
-        return 0
-      })
-      const availableModels = entries.flatMap((provider) => {
-        const models = Provider.sort(Object.values(provider.models))
-        return models.map((model) => ({
-          modelId: `${provider.id}/${model.id}`,
-          name: `${provider.name}/${model.name}`,
-        }))
-      })
-
+    private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
       const agents = await this.config.sdk.app
         .agents(
           {
@@ -699,6 +1072,56 @@ export namespace ACP {
           { throwOnError: true },
         )
         .then((resp) => resp.data!)
+
+      return agents
+        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+        .map((agent) => ({
+          id: agent.name,
+          name: agent.name,
+          description: agent.description,
+        }))
+    }
+
+    private async resolveModeState(
+      directory: string,
+      sessionId: string,
+    ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
+      const availableModes = await this.loadAvailableModes(directory)
+      const currentModeId =
+        this.sessionManager.get(sessionId).modeId ||
+        (await (async () => {
+          if (!availableModes.length) return undefined
+          const defaultAgentName = await AgentModule.defaultAgent()
+          const resolvedModeId =
+            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+          this.sessionManager.setMode(sessionId, resolvedModeId)
+          return resolvedModeId
+        })())
+
+      return { availableModes, currentModeId }
+    }
+
+    private async loadSessionMode(params: LoadSessionRequest) {
+      const directory = params.cwd
+      const model = await defaultModel(this.config, directory)
+      const sessionId = params.sessionId
+
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      const currentVariant = this.sessionManager.getVariant(sessionId)
+      if (currentVariant && !availableVariants.includes(currentVariant)) {
+        this.sessionManager.setVariant(sessionId, undefined)
+      }
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(directory, sessionId)
+      const currentModeId = modeState.currentModeId
+      const modes = currentModeId
+        ? {
+            availableModes: modeState.availableModes,
+            currentModeId,
+          }
+        : undefined
 
       const commands = await this.config.sdk.command
         .list(
@@ -719,17 +1142,6 @@ export namespace ACP {
           name: "compact",
           description: "compact the session",
         })
-
-      const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-        .map((agent) => ({
-          id: agent.name,
-          name: agent.name,
-          description: agent.description,
-        }))
-
-      const defaultAgentName = await AgentModule.defaultAgent()
-      const currentModeId = availableModes.find((m) => m.name === defaultAgentName)?.id ?? availableModes[0].id
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
@@ -784,40 +1196,46 @@ export namespace ACP {
       return {
         sessionId,
         models: {
-          currentModelId: `${model.providerID}/${model.modelID}`,
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
           availableModels,
         },
-        modes: {
-          availableModes,
-          currentModeId,
-        },
-        _meta: {},
+        modes,
+        _meta: buildVariantMeta({
+          model,
+          variant: this.sessionManager.getVariant(sessionId),
+          availableVariants,
+        }),
       }
     }
 
-    async setSessionModel(params: SetSessionModelRequest) {
+    async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
 
-      const model = Provider.parseModel(params.modelId)
+      const selection = parseModelSelection(params.modelId, providers)
+      this.sessionManager.setModel(session.id, selection.model)
+      this.sessionManager.setVariant(session.id, selection.variant)
 
-      this.sessionManager.setModel(session.id, {
-        providerID: model.providerID,
-        modelID: model.modelID,
-      })
+      const entries = sortProvidersByName(providers)
+      const availableVariants = modelVariantsFromProviders(entries, selection.model)
 
       return {
-        _meta: {},
+        _meta: buildVariantMeta({
+          model: selection.model,
+          variant: selection.variant,
+          availableVariants,
+        }),
       }
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
-      this.sessionManager.get(params.sessionId)
-      await this.config.sdk.app
-        .agents({}, { throwOnError: true })
-        .then((x) => x.data)
-        .then((agent) => {
-          if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
-        })
+      const session = this.sessionManager.get(params.sessionId)
+      const availableModes = await this.loadAvailableModes(session.cwd)
+      if (!availableModes.some((mode) => mode.id === params.modeId)) {
+        throw new Error(`Agent not found: ${params.modeId}`)
+      }
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
@@ -834,49 +1252,73 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
+        | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const audience = part.annotations?.audience
+            const forAssistant = audience?.length === 1 && audience[0] === "assistant"
+            const forUser = audience?.length === 1 && audience[0] === "user"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(forAssistant && { synthetic: true }),
+              ...(forUser && { ignored: true }),
             })
             break
-          case "image":
+          case "image": {
+            const parsed = parseUri(part.uri ?? "")
+            const filename = parsed.type === "file" ? parsed.filename : "image"
             if (part.data) {
               parts.push({
                 type: "file",
                 url: `data:${part.mimeType};base64,${part.data}`,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             } else if (part.uri && part.uri.startsWith("http:")) {
               parts.push({
                 type: "file",
                 url: part.uri,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             }
             break
+          }
 
           case "resource_link":
             const parsed = parseUri(part.uri)
+            // Use the name from resource_link if available
+            if (part.name && parsed.type === "file") {
+              parsed.filename = part.name
+            }
             parts.push(parsed)
 
             break
 
-          case "resource":
+          case "resource": {
             const resource = part.resource
-            if ("text" in resource) {
+            if ("text" in resource && resource.text) {
               parts.push({
                 type: "text",
                 text: resource.text,
               })
+            } else if ("blob" in resource && resource.blob && resource.mimeType) {
+              // Binary resource (PDFs, etc.): store as file part with data URL
+              const parsed = parseUri(resource.uri ?? "")
+              const filename = parsed.type === "file" ? parsed.filename : "file"
+              parts.push({
+                type: "file",
+                url: `data:${resource.mimeType};base64,${resource.blob}`,
+                filename,
+                mime: resource.mimeType,
+              })
             }
             break
+          }
 
           default:
             break
@@ -898,30 +1340,48 @@ export namespace ACP {
         return { name, args: rest.join(" ").trim() }
       })()
 
-      const done = {
-        stopReason: "end_turn" as const,
-        _meta: {},
-      }
+      const buildUsage = (msg: AssistantMessage): Usage => ({
+        totalTokens:
+          msg.tokens.input +
+          msg.tokens.output +
+          msg.tokens.reasoning +
+          (msg.tokens.cache?.read ?? 0) +
+          (msg.tokens.cache?.write ?? 0),
+        inputTokens: msg.tokens.input,
+        outputTokens: msg.tokens.output,
+        thoughtTokens: msg.tokens.reasoning || undefined,
+        cachedReadTokens: msg.tokens.cache?.read || undefined,
+        cachedWriteTokens: msg.tokens.cache?.write || undefined,
+      })
 
       if (!cmd) {
-        await this.sdk.session.prompt({
+        const response = await this.sdk.session.prompt({
           sessionID,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
           },
+          variant: this.sessionManager.getVariant(sessionID),
           parts,
           agent,
           directory,
         })
-        return done
+        const msg = response.data?.info
+
+        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
+        return {
+          stopReason: "end_turn" as const,
+          usage: msg ? buildUsage(msg) : undefined,
+          _meta: {},
+        }
       }
 
       const command = await this.config.sdk.command
         .list({ directory }, { throwOnError: true })
         .then((x) => x.data!.find((c) => c.name === cmd.name))
       if (command) {
-        await this.sdk.session.command({
+        const response = await this.sdk.session.command({
           sessionID,
           command: command.name,
           arguments: cmd.args,
@@ -929,7 +1389,15 @@ export namespace ACP {
           agent,
           directory,
         })
-        return done
+        const msg = response.data?.info
+
+        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
+        return {
+          stopReason: "end_turn" as const,
+          usage: msg ? buildUsage(msg) : undefined,
+          _meta: {},
+        }
       }
 
       switch (cmd.name) {
@@ -946,7 +1414,12 @@ export namespace ACP {
           break
       }
 
-      return done
+      await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
+      return {
+        stopReason: "end_turn" as const,
+        _meta: {},
+      }
     }
 
     async cancel(params: CancelNotification) {
@@ -1095,7 +1568,7 @@ export namespace ACP {
           const name = path.split("/").pop() || path
           return {
             type: "file",
-            url: `file://${path}`,
+            url: pathToFileURL(path).href,
             filename: name,
             mime: "text/plain",
           }
@@ -1120,5 +1593,106 @@ export namespace ACP {
       return undefined
     }
     return result
+  }
+
+  function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
+    return [...providers].sort((a, b) => {
+      const nameA = a.name.toLowerCase()
+      const nameB = b.name.toLowerCase()
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+      return 0
+    })
+  }
+
+  function modelVariantsFromProviders(
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+    model: { providerID: string; modelID: string },
+  ): string[] {
+    const provider = providers.find((entry) => entry.id === model.providerID)
+    if (!provider) return []
+    const modelInfo = provider.models[model.modelID]
+    if (!modelInfo?.variants) return []
+    return Object.keys(modelInfo.variants)
+  }
+
+  function buildAvailableModels(
+    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
+    options: { includeVariants?: boolean } = {},
+  ): ModelOption[] {
+    const includeVariants = options.includeVariants ?? false
+    return providers.flatMap((provider) => {
+      const models = Provider.sort(Object.values(provider.models) as any)
+      return models.flatMap((model) => {
+        const base: ModelOption = {
+          modelId: `${provider.id}/${model.id}`,
+          name: `${provider.name}/${model.name}`,
+        }
+        if (!includeVariants || !model.variants) return [base]
+        const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
+        const variantOptions = variants.map((variant) => ({
+          modelId: `${provider.id}/${model.id}/${variant}`,
+          name: `${provider.name}/${model.name} (${variant})`,
+        }))
+        return [base, ...variantOptions]
+      })
+    })
+  }
+
+  function formatModelIdWithVariant(
+    model: { providerID: string; modelID: string },
+    variant: string | undefined,
+    availableVariants: string[],
+    includeVariant: boolean,
+  ) {
+    const base = `${model.providerID}/${model.modelID}`
+    if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
+    return `${base}/${variant}`
+  }
+
+  function buildVariantMeta(input: {
+    model: { providerID: string; modelID: string }
+    variant?: string
+    availableVariants: string[]
+  }) {
+    return {
+      opencode: {
+        modelId: `${input.model.providerID}/${input.model.modelID}`,
+        variant: input.variant ?? null,
+        availableVariants: input.availableVariants,
+      },
+    }
+  }
+
+  function parseModelSelection(
+    modelId: string,
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+  ): { model: { providerID: string; modelID: string }; variant?: string } {
+    const parsed = Provider.parseModel(modelId)
+    const provider = providers.find((p) => p.id === parsed.providerID)
+    if (!provider) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Check if modelID exists directly
+    if (provider.models[parsed.modelID]) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Try to extract variant from end of modelID (e.g., "claude-sonnet-4/high" -> model: "claude-sonnet-4", variant: "high")
+    const segments = parsed.modelID.split("/")
+    if (segments.length > 1) {
+      const candidateVariant = segments[segments.length - 1]
+      const baseModelId = segments.slice(0, -1).join("/")
+      const baseModelInfo = provider.models[baseModelId]
+      if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
+        return {
+          model: { providerID: parsed.providerID, modelID: baseModelId },
+          variant: candidateVariant,
+        }
+      }
+    }
+
+    return { model: parsed, variant: undefined }
   }
 }

@@ -5,10 +5,8 @@
   &::after {
     content: "";
     position: absolute;
-    background-color: var(--color-border-strong-base);
     opacity: 0;
     transition: opacity 0.15s ease-in-out;
-    border-radius: 2px;
   }
 
   &:hover::after,
@@ -21,7 +19,13 @@
     inset-inline-end: 0;
     width: 8px;
     transform: translateX(50%);
-    cursor: ew-resize;
+    cursor: col-resize;
+
+    &[data-edge="start"] {
+      inset-inline-start: 0;
+      inset-inline-end: auto;
+      transform: translateX(-50%);
+    }
 
     &::after {
       width: 3px;
@@ -36,7 +40,13 @@
     inset-block-start: 0;
     height: 8px;
     transform: translateY(-50%);
-    cursor: ns-resize;
+    cursor: row-resize;
+
+    &[data-edge="end"] {
+      inset-block-start: auto;
+      inset-block-end: 0;
+      transform: translateY(50%);
+    }
 
     &::after {
       height: 3px;

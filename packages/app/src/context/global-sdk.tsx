@@ -9,19 +9,47 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
   name: "GlobalSDK",
   init: () => {
     const server = useServer()
+    const platform = usePlatform()
     const abort = new AbortController()
+
+    const password = typeof window === "undefined" ? undefined : window.__OPENCODE__?.serverPassword
+
+    const auth = (() => {
+      if (!password) return
+      if (!server.isLocal()) return
+      return {
+        Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+      }
+    })()
+
+    const eventFetch = (() => {
+      if (!platform.fetch) return
+      try {
+        const url = new URL(server.url)
+        const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+        if (url.protocol === "http:" && !loopback) return platform.fetch
+      } catch {
+        return
+      }
+    })()
 
     const eventSdk = createOpencodeClient({
       baseUrl: server.url,
       signal: abort.signal,
+      fetch: eventFetch,
+      headers: eventFetch ? undefined : auth,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
     }>()
 
     type Queued = { directory: string; payload: Event }
+    const FLUSH_FRAME_MS = 16
+    const STREAM_YIELD_MS = 8
+    const RECONNECT_DELAY_MS = 250
 
-    let queue: Array<Queued | undefined> = []
+    let queue: Queued[] = []
+    let buffer: Queued[] = []
     const coalesced = new Map<string, number>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
@@ -39,61 +67,89 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (timer) clearTimeout(timer)
       timer = undefined
 
+      if (queue.length === 0) return
+
       const events = queue
-      queue = []
+      queue = buffer
+      buffer = events
+      queue.length = 0
       coalesced.clear()
-      if (events.length === 0) return
 
       last = Date.now()
       batch(() => {
         for (const event of events) {
-          if (!event) continue
           emitter.emit(event.directory, event.payload)
         }
       })
+
+      buffer.length = 0
     }
 
     const schedule = () => {
       if (timer) return
       const elapsed = Date.now() - last
-      timer = setTimeout(flush, Math.max(0, 16 - elapsed))
+      timer = setTimeout(flush, Math.max(0, FLUSH_FRAME_MS - elapsed))
     }
 
-    const stop = () => {
-      flush()
-    }
+    let streamErrorLogged = false
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
     void (async () => {
-      const events = await eventSdk.global.event()
-      let yielded = Date.now()
-      for await (const event of events.stream) {
-        const directory = event.directory ?? "global"
-        const payload = event.payload
-        const k = key(directory, payload)
-        if (k) {
-          const i = coalesced.get(k)
-          if (i !== undefined) {
-            queue[i] = undefined
-          }
-          coalesced.set(k, queue.length)
-        }
-        queue.push({ directory, payload })
-        schedule()
+      while (!abort.signal.aborted) {
+        try {
+          const events = await eventSdk.global.event({
+            onSseError: (error) => {
+              if (streamErrorLogged) return
+              streamErrorLogged = true
+              console.error("[global-sdk] event stream error", {
+                url: server.url,
+                fetch: eventFetch ? "platform" : "webview",
+                error,
+              })
+            },
+          })
+          let yielded = Date.now()
+          for await (const event of events.stream) {
+            streamErrorLogged = false
+            const directory = event.directory ?? "global"
+            const payload = event.payload
+            const k = key(directory, payload)
+            if (k) {
+              const i = coalesced.get(k)
+              if (i !== undefined) {
+                queue[i] = { directory, payload }
+                continue
+              }
+              coalesced.set(k, queue.length)
+            }
+            queue.push({ directory, payload })
+            schedule()
 
-        if (Date.now() - yielded < 8) continue
-        yielded = Date.now()
-        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+            if (Date.now() - yielded < STREAM_YIELD_MS) continue
+            yielded = Date.now()
+            await wait(0)
+          }
+        } catch (error) {
+          if (!streamErrorLogged) {
+            streamErrorLogged = true
+            console.error("[global-sdk] event stream failed", {
+              url: server.url,
+              fetch: eventFetch ? "platform" : "webview",
+              error,
+            })
+          }
+        }
+
+        if (abort.signal.aborted) return
+        await wait(RECONNECT_DELAY_MS)
       }
-    })()
-      .finally(stop)
-      .catch(() => undefined)
+    })().finally(flush)
 
     onCleanup(() => {
       abort.abort()
-      stop()
+      flush()
     })
 
-    const platform = usePlatform()
     const sdk = createOpencodeClient({
       baseUrl: server.url,
       fetch: platform.fetch,

@@ -1,7 +1,8 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
+import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -85,6 +86,7 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
+    input: "keyboard" as "keyboard" | "mouse",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -128,6 +130,24 @@ export function Autocomplete(props: {
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
+  // filter() reads reactive props.value plus non-reactive cursor/text state.
+  // On keypress those can be briefly out of sync, so filter() may return an empty/partial string.
+  // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
+  // so the input has settled and all consumers read the same stable value.
+  const [search, setSearch] = createSignal("")
+  createEffect(() => {
+    const next = filter()
+    setSearch(next ? next : "")
+  })
+
+  // When the filter changes due to how TUI works, the mousemove might still be triggered
+  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
+  // that the mouseover event doesn't trigger when filtering.
+  createEffect(() => {
+    filter()
+    setStore("input", "keyboard")
+  })
+
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
@@ -159,6 +179,26 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
+      if (part.type === "file") {
+        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
+        if (existingIndex !== -1) {
+          const existing = draft.parts[existingIndex]
+          if (
+            part.source?.text &&
+            existing &&
+            "source" in existing &&
+            existing.source &&
+            "text" in existing.source &&
+            existing.source.text
+          ) {
+            existing.source.text.start = extmarkStart
+            existing.source.text.end = extmarkEnd
+            existing.source.text.value = virtualText
+          }
+          return
+        }
+      }
+
       if (part.type === "file" && part.source?.text) {
         part.source.text.start = extmarkStart
         part.source.text.end = extmarkEnd
@@ -179,7 +219,7 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => filter(),
+    () => search(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
@@ -207,17 +247,17 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            let url = `file://${process.cwd()}/${item}`
+            const fullPath = `${process.cwd()}/${item}`
+            const urlObj = pathToFileURL(fullPath)
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-              const urlObj = new URL(url)
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
               }
-              url = urlObj.toString()
             }
+            const url = urlObj.href
 
             const isDir = item.endsWith("/")
             return {
@@ -312,16 +352,17 @@ export function Autocomplete(props: {
       )
   })
 
-  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = []
-    const s = session()
-    for (const command of sync.data.command) {
+    const results: AutocompleteOption[] = [...command.slashes()]
+
+    for (const serverCommand of sync.data.command) {
+      if (serverCommand.source === "skill") continue
+      const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
-        display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
-        description: command.description,
+        display: "/" + serverCommand.name + label,
+        description: serverCommand.description,
         onSelect: () => {
-          const newText = "/" + command.name + " "
+          const newText = "/" + serverCommand.name + " "
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
@@ -329,138 +370,9 @@ export function Autocomplete(props: {
         },
       })
     }
-    if (s) {
-      results.push(
-        {
-          display: "/undo",
-          description: "undo the last message",
-          onSelect: () => {
-            command.trigger("session.undo")
-          },
-        },
-        {
-          display: "/redo",
-          description: "redo the last message",
-          onSelect: () => command.trigger("session.redo"),
-        },
-        {
-          display: "/compact",
-          aliases: ["/summarize"],
-          description: "compact the session",
-          onSelect: () => command.trigger("session.compact"),
-        },
-        {
-          display: "/unshare",
-          disabled: !s.share,
-          description: "unshare a session",
-          onSelect: () => command.trigger("session.unshare"),
-        },
-        {
-          display: "/rename",
-          description: "rename session",
-          onSelect: () => command.trigger("session.rename"),
-        },
-        {
-          display: "/copy",
-          description: "copy session transcript to clipboard",
-          onSelect: () => command.trigger("session.copy"),
-        },
-        {
-          display: "/export",
-          description: "export session transcript to file",
-          onSelect: () => command.trigger("session.export"),
-        },
-        {
-          display: "/timeline",
-          description: "jump to message",
-          onSelect: () => command.trigger("session.timeline"),
-        },
-        {
-          display: "/fork",
-          description: "fork from message",
-          onSelect: () => command.trigger("session.fork"),
-        },
-        {
-          display: "/thinking",
-          description: "toggle thinking visibility",
-          onSelect: () => command.trigger("session.toggle.thinking"),
-        },
-      )
-      if (sync.data.config.share !== "disabled") {
-        results.push({
-          display: "/share",
-          disabled: !!s.share?.url,
-          description: "share a session",
-          onSelect: () => command.trigger("session.share"),
-        })
-      }
-    }
 
-    results.push(
-      {
-        display: "/new",
-        aliases: ["/clear"],
-        description: "create a new session",
-        onSelect: () => command.trigger("session.new"),
-      },
-      {
-        display: "/models",
-        description: "list models",
-        onSelect: () => command.trigger("model.list"),
-      },
-      {
-        display: "/agents",
-        description: "list agents",
-        onSelect: () => command.trigger("agent.list"),
-      },
-      {
-        display: "/session",
-        aliases: ["/resume", "/continue"],
-        description: "list sessions",
-        onSelect: () => command.trigger("session.list"),
-      },
-      {
-        display: "/status",
-        description: "show status",
-        onSelect: () => command.trigger("opencode.status"),
-      },
-      {
-        display: "/mcp",
-        description: "toggle MCPs",
-        onSelect: () => command.trigger("mcp.list"),
-      },
-      {
-        display: "/theme",
-        description: "toggle theme",
-        onSelect: () => command.trigger("theme.switch"),
-      },
-      {
-        display: "/editor",
-        description: "open editor",
-        onSelect: () => command.trigger("prompt.editor", "prompt"),
-      },
-      {
-        display: "/connect",
-        description: "connect to a provider",
-        onSelect: () => command.trigger("provider.connect"),
-      },
-      {
-        display: "/help",
-        description: "show help",
-        onSelect: () => command.trigger("help.show"),
-      },
-      {
-        display: "/commands",
-        description: "show all commands",
-        onSelect: () => command.show(),
-      },
-      {
-        display: "/exit",
-        aliases: ["/quit", "/q"],
-        description: "exit the app",
-        onSelect: () => command.trigger("app.exit"),
-      },
-    )
+    results.sort((a, b) => a.display.localeCompare(b.display))
+
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
     return results.map((item) => ({
@@ -474,13 +386,12 @@ export function Autocomplete(props: {
     const agentsValue = agents()
     const commandsValue = commands()
 
-    const mixed: AutocompleteOption[] = (
+    const mixed: AutocompleteOption[] =
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
-    ).filter((x) => x.disabled !== true)
 
-    const currentFilter = filter()
+    const searchValue = search()
 
-    if (!currentFilter) {
+    if (!searchValue) {
       return mixed
     }
 
@@ -488,7 +399,7 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
       keys: [
         (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
         "description",
@@ -498,7 +409,7 @@ export function Autocomplete(props: {
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
           score *= 2
         }
         const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
@@ -601,8 +512,31 @@ export function Autocomplete(props: {
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
-            return
           }
+          return
+        }
+
+        // Check if autocomplete should reopen (e.g., after backspace deleted a space)
+        const offset = props.input().cursorOffset
+        if (offset === 0) return
+
+        // Check for "/" at position 0 - reopen slash commands
+        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+          show("/")
+          setStore("index", 0)
+          return
+        }
+
+        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
+        const text = value.slice(0, offset)
+        const idx = text.lastIndexOf("@")
+        if (idx === -1) return
+
+        const between = text.slice(idx)
+        const before = idx === 0 ? undefined : value[idx - 1]
+        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+          show("@")
+          setStore("index", idx)
         }
       },
       onKeyDown(e: KeyEvent) {
@@ -613,11 +547,13 @@ export function Autocomplete(props: {
           const isNavDown = name === "down" || (ctrlOnly && name === "n")
 
           if (isNavUp) {
+            setStore("input", "keyboard")
             move(-1)
             e.preventDefault()
             return
           }
           if (isNavDown) {
+            setStore("input", "keyboard")
             move(1)
             e.preventDefault()
             return
@@ -686,7 +622,7 @@ export function Autocomplete(props: {
         height={height()}
         scrollbarOptions={{ visible: false }}
       >
-        <For
+        <Index
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
@@ -698,20 +634,32 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? theme.primary : undefined}
+              backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
+              onMouseMove={() => {
+                setStore("input", "mouse")
+              }}
+              onMouseOver={() => {
+                if (store.input !== "mouse") return
+                moveTo(index)
+              }}
+              onMouseDown={() => {
+                setStore("input", "mouse")
+                moveTo(index)
+              }}
+              onMouseUp={() => select()}
             >
-              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option.display}
+              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+                {option().display}
               </text>
-              <Show when={option.description}>
-                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option.description}
+              <Show when={option().description}>
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                  {option().description}
                 </text>
               </Show>
             </box>
           )}
-        </For>
+        </Index>
       </scrollbox>
     </box>
   )

@@ -134,7 +134,7 @@ const AgentCreateCommand = cmd({
           selectedTools = cliTools ? cliTools.split(",").map((t) => t.trim()) : AVAILABLE_TOOLS
         } else {
           const result = await prompts.multiselect({
-            message: "Select tools to enable",
+            message: "Select tools to enable (Space to toggle)",
             options: AVAILABLE_TOOLS.map((tool) => ({
               label: tool,
               value: tool,

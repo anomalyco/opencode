@@ -112,8 +112,7 @@ function AutoMethod(props: AutoMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code =
-        props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.instructions
+      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
@@ -140,7 +139,9 @@ function AutoMethod(props: AutoMethodProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
       <box gap={1}>
         <Link href={props.authorization.url} fg={theme.primary} />
@@ -226,7 +227,7 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
-        sdk.client.auth.set({
+        await sdk.client.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",

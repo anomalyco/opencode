@@ -1,6 +1,6 @@
 import { Stripe } from "stripe"
 import { Database, eq, sql } from "./drizzle"
-import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
+import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -8,6 +8,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
+import { BlackData } from "./black"
 
 export namespace Billing {
   export const ITEM_CREDIT_NAME = "opencode credits"
@@ -25,22 +26,7 @@ export namespace Billing {
   export const get = async () => {
     return Database.use(async (tx) =>
       tx
-        .select({
-          customerID: BillingTable.customerID,
-          subscriptionID: BillingTable.subscriptionID,
-          paymentMethodID: BillingTable.paymentMethodID,
-          paymentMethodType: BillingTable.paymentMethodType,
-          paymentMethodLast4: BillingTable.paymentMethodLast4,
-          balance: BillingTable.balance,
-          reload: BillingTable.reload,
-          reloadAmount: BillingTable.reloadAmount,
-          reloadTrigger: BillingTable.reloadTrigger,
-          monthlyLimit: BillingTable.monthlyLimit,
-          monthlyUsage: BillingTable.monthlyUsage,
-          timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
-          reloadError: BillingTable.reloadError,
-          timeReloadError: BillingTable.timeReloadError,
-        })
+        .select()
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
         .then((r) => r[0]),
@@ -92,8 +78,6 @@ export namespace Billing {
     const customerID = billing.customerID
     const paymentMethodID = billing.paymentMethodID
     const amountInCents = (billing.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
-    const paymentID = Identifier.create("payment")
-    let invoice
     try {
       const draft = await Billing.stripe().invoices.create({
         customer: customerID!,
@@ -101,6 +85,10 @@ export namespace Billing {
         default_payment_method: paymentMethodID!,
         collection_method: "charge_automatically",
         currency: "usd",
+        metadata: {
+          workspaceID: Actor.workspace(),
+          amount: amountInCents.toString(),
+        },
       })
       await Billing.stripe().invoiceItems.create({
         amount: amountInCents,
@@ -117,19 +105,17 @@ export namespace Billing {
         description: ITEM_FEE_NAME,
       })
       await Billing.stripe().invoices.finalizeInvoice(draft.id!)
-      invoice = await Billing.stripe().invoices.pay(draft.id!, {
+      await Billing.stripe().invoices.pay(draft.id!, {
         off_session: true,
         payment_method: paymentMethodID!,
-        expand: ["payments"],
       })
-      if (invoice.status !== "paid" || invoice.payments?.data.length !== 1)
-        throw new Error(invoice.last_finalization_error?.message)
     } catch (e: any) {
       console.error(e)
       await Database.use((tx) =>
         tx
           .update(BillingTable)
           .set({
+            reload: false,
             reloadError: e.message ?? "Payment failed.",
             timeReloadError: sql`now()`,
           })
@@ -137,25 +123,6 @@ export namespace Billing {
       )
       return
     }
-
-    await Database.transaction(async (tx) => {
-      await tx
-        .update(BillingTable)
-        .set({
-          balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
-          reloadError: null,
-          timeReloadError: null,
-        })
-        .where(eq(BillingTable.workspaceID, Actor.workspace()))
-      await tx.insert(PaymentTable).values({
-        workspaceID: Actor.workspace(),
-        id: paymentID,
-        amount: centsToMicroCents(amountInCents),
-        invoiceID: invoice.id!,
-        paymentID: invoice.payments?.data[0].payment.payment_intent as string,
-        customerID,
-      })
-    })
   }
 
   export const grantCredit = async (workspaceID: string, dollarAmount: number) => {
@@ -233,6 +200,7 @@ export namespace Billing {
               customer: customer.customerID,
               customer_update: {
                 name: "auto",
+                address: "auto",
               },
             }
           : {
@@ -300,6 +268,96 @@ export namespace Billing {
       if (!charge.receipt_url) throw new Error("No receipt URL found")
 
       return charge.receipt_url
+    },
+  )
+
+  export const subscribe = fn(
+    z.object({
+      seats: z.number(),
+      coupon: z.string().optional(),
+    }),
+    async ({ seats, coupon }) => {
+      const user = Actor.assert("user")
+      const billing = await Database.use((tx) =>
+        tx
+          .select({
+            customerID: BillingTable.customerID,
+            paymentMethodID: BillingTable.paymentMethodID,
+            subscriptionID: BillingTable.subscriptionID,
+            subscriptionPlan: BillingTable.subscriptionPlan,
+            timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
+          })
+          .from(BillingTable)
+          .where(eq(BillingTable.workspaceID, Actor.workspace()))
+          .then((rows) => rows[0]),
+      )
+
+      if (!billing) throw new Error("Billing record not found")
+      if (!billing.timeSubscriptionSelected) throw new Error("Not selected for subscription")
+      if (billing.subscriptionID) throw new Error("Already subscribed")
+      if (!billing.customerID) throw new Error("No customer ID")
+      if (!billing.paymentMethodID) throw new Error("No payment method")
+      if (!billing.subscriptionPlan) throw new Error("No subscription plan")
+
+      const subscription = await Billing.stripe().subscriptions.create({
+        customer: billing.customerID,
+        default_payment_method: billing.paymentMethodID,
+        items: [{ price: BlackData.planToPriceID({ plan: billing.subscriptionPlan }) }],
+        metadata: {
+          workspaceID: Actor.workspace(),
+        },
+      })
+
+      await Database.transaction(async (tx) => {
+        await tx
+          .update(BillingTable)
+          .set({
+            subscriptionID: subscription.id,
+            subscription: {
+              status: "subscribed",
+              coupon,
+              seats,
+              plan: billing.subscriptionPlan!,
+            },
+            subscriptionPlan: null,
+            timeSubscriptionBooked: null,
+            timeSubscriptionSelected: null,
+          })
+          .where(eq(BillingTable.workspaceID, Actor.workspace()))
+
+        await tx.insert(SubscriptionTable).values({
+          workspaceID: Actor.workspace(),
+          id: Identifier.create("subscription"),
+          userID: user.properties.userID,
+        })
+      })
+
+      return subscription.id
+    },
+  )
+
+  export const unsubscribe = fn(
+    z.object({
+      subscriptionID: z.string(),
+    }),
+    async ({ subscriptionID }) => {
+      const workspaceID = await Database.use((tx) =>
+        tx
+          .select({ workspaceID: BillingTable.workspaceID })
+          .from(BillingTable)
+          .where(eq(BillingTable.subscriptionID, subscriptionID))
+          .then((rows) => rows[0]?.workspaceID),
+      )
+      if (!workspaceID) throw new Error("Workspace ID not found for subscription")
+
+      await Database.transaction(async (tx) => {
+        await tx
+          .update(BillingTable)
+          .set({ subscriptionID: null, subscription: null })
+          .where(eq(BillingTable.workspaceID, workspaceID))
+
+        await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
+      })
     },
   )
 }

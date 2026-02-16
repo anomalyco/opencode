@@ -16,7 +16,7 @@ import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
-import { type ToolDefinition } from "@opencode-ai/plugin"
+import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
@@ -25,26 +25,25 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
+import { PlanExitTool, PlanEnterTool } from "./plan"
+import { ApplyPatchTool } from "./apply_patch"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
-    const glob = new Bun.Glob("tool/*.{js,ts}")
+    const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
-    for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({
-        cwd: dir,
-        absolute: true,
-        followSymlinks: true,
-        dot: true,
-      })) {
-        const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
-        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-        }
+    const matches = await Config.directories().then((dirs) =>
+      dirs.flatMap((dir) => [...glob.scanSync({ cwd: dir, absolute: true, followSymlinks: true, dot: true })]),
+    )
+    if (matches.length) await Config.waitForDependencies()
+    for (const match of matches) {
+      const namespace = path.basename(match, path.extname(match))
+      const mod = await import(match)
+      for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
       }
     }
 
@@ -65,7 +64,12 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
+          const pluginCtx = {
+            ...ctx,
+            directory: Instance.directory,
+            worktree: Instance.worktree,
+          } as unknown as PluginToolContext
+          const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
@@ -93,7 +97,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(Flag.OPENCODE_CLIENT === "cli" ? [QuestionTool] : []),
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
@@ -103,12 +107,14 @@ export namespace ToolRegistry {
       TaskTool,
       WebFetchTool,
       TodoWriteTool,
-      TodoReadTool,
+      // TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
+      ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       ...custom,
     ]
   }
@@ -117,22 +123,43 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string, agent?: Agent.Info) {
+  export async function tools(
+    model: {
+      providerID: string
+      modelID: string
+    },
+    agent?: Agent.Info,
+  ) {
     const tools = await all()
     const result = await Promise.all(
       tools
         .filter((t) => {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
-            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+            return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
           }
+
+          // use apply tool in same format as codex
+          const usePatch =
+            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+          if (t.id === "apply_patch") return usePatch
+          if (t.id === "edit" || t.id === "write") return !usePatch
+
           return true
         })
         .map(async (t) => {
           using _ = log.time(t.id)
+          const tool = await t.init({ agent })
+          const output = {
+            description: tool.description,
+            parameters: tool.parameters,
+          }
+          await Plugin.trigger("tool.definition", { toolID: t.id }, output)
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...tool,
+            description: output.description,
+            parameters: output.parameters,
           }
         }),
     )

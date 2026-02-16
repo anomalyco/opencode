@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import path from "path"
+
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
@@ -24,9 +25,10 @@ test("provider loaded from env variable", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      // Note: source becomes "custom" because CUSTOM_LOADERS run after env loading
-      // and anthropic has a custom loader that merges additional options
-      expect(providers["anthropic"].source).toBe("custom")
+      // Provider should retain its connection source even if custom loaders
+      // merge additional options.
+      expect(providers["anthropic"].source).toBe("env")
+      expect(providers["anthropic"].options.headers["anthropic-beta"]).toBeDefined()
     },
   })
 })

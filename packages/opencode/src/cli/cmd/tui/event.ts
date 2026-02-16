@@ -16,6 +16,8 @@ export const TuiEvent = {
           "session.compact",
           "session.page.up",
           "session.page.down",
+          "session.line.up",
+          "session.line.down",
           "session.half.page.up",
           "session.half.page.down",
           "session.first",
