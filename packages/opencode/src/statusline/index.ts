@@ -103,9 +103,19 @@ export namespace StatusLine {
           env: process.env,
         })
         const timer = setTimeout(() => proc.kill(), timeout)
-        const raw = await new Response(proc.stdout).text()
+        const reader = proc.stdout.getReader()
+        const chunks: Uint8Array[] = []
+        let bytes = 0
+        const maxBytes = 1024
+        while (bytes < maxBytes) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          bytes += value.length
+        }
+        reader.cancel()
         clearTimeout(timer)
-        const output = raw.length > 1024 ? raw.slice(0, 1024) : raw
+        const output = new TextDecoder().decode(Buffer.concat(chunks)).slice(0, maxBytes)
         return { name, output: output.trimEnd() }
       }),
     )
