@@ -241,10 +241,36 @@ export namespace Provider {
         providerOptions.baseURL = endpoint
       }
 
+      // Cache for bedrock-mantle OpenAI-compatible SDK instances (keyed by region)
+      const mantleSDKCache = new Map<string, any>()
+
       return {
         autoload: true,
         options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          // Route Kimi/Moonshot models through Bedrock's OpenAI-compatible endpoint
+          // (bedrock-mantle) instead of the Converse API. The Converse API has known
+          // tool call parsing bugs for these models (see vercel/ai#11409) that cause
+          // premature end_turn and lost tool calls in multi-step agentic workflows.
+          const isMoonshotModel = ["kimi", "moonshot"].some((m) => modelID.toLowerCase().includes(m))
+          if (isMoonshotModel) {
+            const region = options?.region ?? defaultRegion
+            const cacheKey = region
+            if (!mantleSDKCache.has(cacheKey)) {
+              const mantleOptions: Record<string, any> = {
+                baseURL: `https://bedrock-mantle.${region}.api.aws/v1`,
+                name: "amazon-bedrock",
+              }
+              if (awsBearerToken) {
+                mantleOptions.apiKey = awsBearerToken
+              }
+              mantleSDKCache.set(cacheKey, createOpenAICompatible(mantleOptions))
+            }
+            const mantleSDK = mantleSDKCache.get(cacheKey)!
+            log.info("routing moonshot model via bedrock-mantle", { modelID, region })
+            return mantleSDK.languageModel(modelID)
+          }
+
           // Skip region prefixing if model already has a cross-region inference profile prefix
           // Models from models.dev may already include prefixes like us., eu., global., etc.
           const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
