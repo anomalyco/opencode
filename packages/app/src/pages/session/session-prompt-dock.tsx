@@ -98,6 +98,7 @@ export function SessionPromptDock(props: {
   return (
     <div
       ref={props.setPromptDockRef}
+      data-component="session-prompt-dock"
       class="shrink-0 w-full pb-4 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
     >
       <div

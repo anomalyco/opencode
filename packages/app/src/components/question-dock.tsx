@@ -1,4 +1,4 @@
-import { For, Show, createMemo, type Component } from "solid-js"
+import { For, Show, createMemo, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -22,6 +22,8 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     sending: false,
   })
 
+  let root: HTMLDivElement | undefined
+
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
@@ -41,6 +43,54 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   })
 
   const last = createMemo(() => store.tab >= total() - 1)
+
+  const measure = () => {
+    if (!root) return
+
+    const scroller = document.querySelector(".session-scroller")
+    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const top =
+      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+    if (!top) {
+      root.style.removeProperty("--question-prompt-max-height")
+      return
+    }
+
+    const dock = root.closest('[data-component="session-prompt-dock"]')
+    if (!(dock instanceof HTMLElement)) return
+
+    const dockBottom = dock.getBoundingClientRect().bottom
+    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+    const gap = 8
+    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
+    root.style.setProperty("--question-prompt-max-height", `${max}px`)
+  }
+
+  onMount(() => {
+    let raf: number | undefined
+    const update = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        measure()
+      })
+    }
+
+    update()
+    window.addEventListener("resize", update)
+
+    const dock = root?.closest('[data-component="session-prompt-dock"]')
+    const scroller = document.querySelector(".session-scroller")
+    const observer = new ResizeObserver(update)
+    if (dock instanceof HTMLElement) observer.observe(dock)
+    if (scroller instanceof HTMLElement) observer.observe(scroller)
+
+    onCleanup(() => {
+      window.removeEventListener("resize", update)
+      observer.disconnect()
+      if (raf !== undefined) cancelAnimationFrame(raf)
+    })
+  })
 
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
@@ -151,7 +201,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   return (
-    <div data-component="question-prompt">
+    <div data-component="question-prompt" ref={(el) => (root = el)}>
       <div data-slot="question-body">
         <div data-slot="question-header">
           <div data-slot="question-header-title">{summary()}</div>
