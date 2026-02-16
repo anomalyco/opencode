@@ -90,7 +90,7 @@ type GitHubPullRequest = {
   }
   headRepository: {
     nameWithOwner: string
-  }
+  } | null
   commits: {
     totalCount: number
     nodes: Array<{
@@ -562,7 +562,7 @@ export const GithubRunCommand = cmd({
         ) {
           const prData = await fetchPR()
           // Local PR
-          if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
+          if (prData.headRepository?.nameWithOwner === prData.baseRepository.nameWithOwner) {
             await checkoutLocalBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
@@ -1036,6 +1036,10 @@ export const GithubRunCommand = cmd({
 
       async function checkoutForkBranch(pr: GitHubPullRequest) {
         console.log("Checking out fork branch...")
+
+        if (!pr.headRepository) {
+          throw new Error("Cannot checkout fork branch: the source repository has been deleted or is inaccessible")
+        }
 
         const remoteBranch = pr.headRefName
         const localBranch = generateBranchName("pr")
