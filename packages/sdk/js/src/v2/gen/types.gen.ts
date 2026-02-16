@@ -4966,6 +4966,30 @@ export type TuiSelectSessionResponses = {
 
 export type TuiSelectSessionResponse = TuiSelectSessionResponses[keyof TuiSelectSessionResponses]
 
+export type TuiStatuslineData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    sessionID?: string
+  }
+  url: "/tui/statusline"
+}
+
+export type TuiStatuslineResponses = {
+  /**
+   * Resolved status line templates
+   */
+  200: {
+    templates: {
+      [key: string]: string
+    }
+    interval: number
+  } | null
+}
+
+export type TuiStatuslineResponse = TuiStatuslineResponses[keyof TuiStatuslineResponses]
+
 export type TuiControlNextData = {
   body?: never
   path?: never

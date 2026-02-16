@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Bus } from "../../bus"
 import { Session } from "../../session"
+import { StatusLine } from "../../statusline"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { AsyncQueue } from "../../util/queue"
 import { errors } from "../error"
@@ -373,6 +374,36 @@ export const TuiRoutes = lazy(() =>
         await Session.get(sessionID)
         await Bus.publish(TuiEvent.SessionSelect, { sessionID })
         return c.json(true)
+      },
+    )
+    .get(
+      "/statusline",
+      describeRoute({
+        summary: "Get resolved status line",
+        description: "Resolve status line templates for each display target with current variables.",
+        operationId: "tui.statusline",
+        responses: {
+          200: {
+            description: "Resolved status line templates",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      templates: z.record(z.string(), z.string()),
+                      interval: z.number(),
+                    })
+                    .nullable(),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator("query", z.object({ sessionID: z.string().optional() })),
+      async (c) => {
+        const result = await StatusLine.get(c.req.valid("query").sessionID)
+        return c.json(result ?? null)
       },
     )
     .route("/control", TuiControlRoutes),

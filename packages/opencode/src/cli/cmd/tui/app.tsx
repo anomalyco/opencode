@@ -55,6 +55,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { StatusLineProvider, useStatusLine } from "./context/statusline"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
@@ -214,6 +215,7 @@ export function tui(input: {
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
+                              <StatusLineProvider>
                               <KeybindProvider>
                                 <PromptStashProvider>
                                   <DialogProvider>
@@ -229,7 +231,8 @@ export function tui(input: {
                                   </DialogProvider>
                                 </PromptStashProvider>
                               </KeybindProvider>
-                            </LocalProvider>
+                            </StatusLineProvider>
+                          </LocalProvider>
                           </ThemeProvider>
                         </SyncProvider>
                       </SDKProvider>
@@ -263,6 +266,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const statusline = useStatusLine()
   const routes: RouteMap = new Map()
   const [routeRev, setRouteRev] = createSignal(0)
   const routeView = (name: string) => {
@@ -341,6 +345,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
+    const custom = statusline.templates().terminal_title
+    if (custom) {
+      renderer.setTerminalTitle(custom)
+      return
+    }
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")

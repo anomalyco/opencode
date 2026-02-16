@@ -174,6 +174,7 @@ import type {
   TuiSelectSessionErrors,
   TuiSelectSessionResponses,
   TuiShowToastResponses,
+  TuiStatuslineResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
@@ -3743,6 +3744,36 @@ export class Tui extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get resolved status line
+   *
+   * Resolve status line templates for each display target with current variables.
+   */
+  public statusline<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TuiStatuslineResponses, unknown, ThrowOnError>({
+      url: "/tui/statusline",
+      ...options,
+      ...params,
     })
   }
 
