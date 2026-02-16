@@ -15,7 +15,8 @@ import qualified Bus.Bus as Bus
 import qualified Storage.Storage as Storage
 import qualified Pty.Pty as Pty
 import qualified Proxy.Proxy as Proxy
-import Proxy.Types (ProxyConfig, defaultProxyConfig)
+import Proxy.Types (defaultProxyConfig)
+import qualified Log
 
 -- | Global Application State
 data AppState = AppState
@@ -27,11 +28,12 @@ data AppState = AppState
   , stEventChan :: TChan Value  -- Raw SSE channel for backwards compat
   , stPtyManager :: Pty.PtyManager  -- PTY session manager
   , stProxy :: Maybe Proxy.ProxyServer  -- MITM proxy for LLM traffic
+  , stLogger :: Log.Logger  -- Structured logger
   }
 
 -- | Initialize a new state
-initialState :: FilePath -> Text -> Text -> IO AppState
-initialState storageDir projectID directory = do
+initialState :: FilePath -> Text -> Text -> Log.Logger -> IO AppState
+initialState storageDir projectID directory logger = do
   bus <- Bus.newBus
   eventChan <- newBroadcastTChanIO
   ptyManager <- Pty.newManager (Text.unpack directory)
@@ -53,4 +55,5 @@ initialState storageDir projectID directory = do
     , stEventChan = eventChan
     , stPtyManager = ptyManager
     , stProxy = Just proxy
+    , stLogger = logger
     }

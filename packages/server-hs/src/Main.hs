@@ -28,6 +28,8 @@ import State
 import Handlers
 import qualified Bus.Bus as Bus
 import qualified Pty.Pty as Pty
+import qualified Log
+import qualified Katip
 
 -- | CORS Middleware
 enableCors :: Middleware
@@ -154,16 +156,18 @@ server st =
 
 -- | Entry Point
 main :: IO ()
-main = do
+main = Log.withLogger "opencode" $ \logger -> do
   hSetBuffering stdout LineBuffering
-  putStrLn "Initializing OpenCode Haskell Server..."
+  
+  let lg = Log.withNS logger "server"
+  Log.logMsg lg Katip.InfoS "initializing opencode server"
   
   -- Get working directory for project context
   cwd <- getCurrentDirectory
   let storageDir = cwd </> ".opencode" </> "storage"
   let projectID = "proj_default"
   
-  state <- initialState storageDir (T.pack projectID) (T.pack cwd)
+  state <- initialState storageDir (T.pack projectID) (T.pack cwd) logger
   
   -- Heartbeat
   _ <- forkIO $ do
@@ -173,8 +177,8 @@ main = do
           loop
     loop
 
-  putStrLn $ "Storage directory: " <> storageDir
-  putStrLn "Listening on port 4096..."
+  Log.logMsg lg Katip.InfoS $ "storage: " <> T.pack storageDir
+  Log.logMsg lg Katip.InfoS "listening on port 4096"
   
   -- Wrap the Servant app with WebSocket support
   let servantApp = enableCors (serve api (server state))

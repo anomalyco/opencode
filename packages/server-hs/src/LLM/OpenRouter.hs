@@ -27,10 +27,11 @@ import Control.Monad (when)
 import Data.Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
-import Data.IORef
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import GHC.Generics (Generic)
+import System.IO (hGetLine, hIsEOF)
+import System.Process (createProcess, proc, std_out, std_err, StdStream(..), waitForProcess)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
@@ -147,16 +148,20 @@ data Client = Client
   }
 
 -- | Create a new OpenRouter client
+-- Uses standard hostname - will work if IPv6 is functional or system prefers IPv4
 newClient :: Text -> IO Client
 newClient apiKey = do
+  let baseUrl = "https://openrouter.ai/api/v1"
+  
+  -- Configure TLS manager with extended timeout for streaming
   let settings = HCT.tlsManagerSettings
-        { HC.managerResponseTimeout = HC.responseTimeoutMicro (60 * 1000000)  -- 60s timeout
+        { HC.managerResponseTimeout = HC.responseTimeoutMicro (120 * 1000000)  -- 120s timeout
         }
   manager <- HC.newManager settings
   pure Client
     { clApiKey = apiKey
     , clManager = manager
-    , clBaseUrl = "https://openrouter.ai/api/v1"
+    , clBaseUrl = baseUrl
     }
 
 -- | Non-streaming chat completion
@@ -172,48 +177,53 @@ chat client req = do
       Left parseErr -> pure $ Left $ "Parse error: " <> T.pack parseErr <> " body: " <> decodeUtf8 (LBS.toStrict body)
       Right resp -> pure $ Right resp
 
--- | Streaming chat completion
+-- | Streaming chat completion using curl (workaround for IPv6 issues)
 -- Calls handler for each content delta
 chatStream :: Client -> ChatRequest -> (Text -> IO ()) -> IO (Either Text ())
 chatStream client req onDelta = do
-  let reqBody = encode req { crStream = True }
+  let reqBody = LBS.toStrict $ encode req { crStream = True }
   
-  initReq <- HC.parseRequest $ T.unpack (clBaseUrl client) <> "/chat/completions"
-  let httpReq = initReq
-        { HC.method = "POST"
-        , HC.requestHeaders = 
-            [ ("Content-Type", "application/json")
-            , ("Authorization", "Bearer " <> encodeUtf8 (clApiKey client))
-            , ("HTTP-Referer", "https://opencode.ai")
-            , ("X-Title", "opencode")
-            ]
-        , HC.requestBody = HC.RequestBodyLBS reqBody
-        }
+  -- Use curl with IPv4 flag to avoid IPv6 timeout issues
+  let curlArgs = 
+        [ "-4"  -- Force IPv4
+        , "-s"  -- Silent
+        , "-N"  -- No buffering
+        , "-X", "POST"
+        , T.unpack (clBaseUrl client) <> "/chat/completions"
+        , "-H", "Content-Type: application/json"
+        , "-H", "Authorization: Bearer " <> T.unpack (clApiKey client)
+        , "-H", "HTTP-Referer: https://opencode.ai"
+        , "-H", "X-Title: opencode"
+        , "-d", C8.unpack reqBody
+        ]
   
-  result <- try @SomeException $ HC.withResponse httpReq (clManager client) $ \resp -> do
-    let status = HC.responseStatus resp
-    when (HT.statusCode status /= 200) $ do
-      body <- HC.brConsume $ HC.responseBody resp
-      error $ "API error: " <> show status <> " " <> show body
+  result <- try @SomeException $ do
+    (_, Just hOut, _, ph) <- createProcess (proc "curl" curlArgs)
+      { std_out = CreatePipe
+      , std_err = CreatePipe
+      }
     
-    -- Parse SSE stream
-    bufferRef <- newIORef ""
-    let loop = do
-          chunk <- HC.brRead $ HC.responseBody resp
-          if BS.null chunk
+    -- Read lines from curl output
+    let readLoop = do
+          eof <- hIsEOF hOut
+          if eof
             then pure ()
             else do
-              buffer <- readIORef bufferRef
-              let fullBuffer = buffer <> chunk
-              -- Process complete lines
-              let (remaining, deltas) = parseSSEChunk fullBuffer
-              writeIORef bufferRef remaining
-              mapM_ onDelta deltas
-              -- Check for [DONE]
-              if "[DONE]" `BS.isInfixOf` chunk
+              line <- hGetLine hOut
+              -- Parse SSE line
+              when (": OPENROUTER" `C8.isPrefixOf` C8.pack line) $ pure ()  -- Skip processing comments
+              when ("data: " `C8.isPrefixOf` C8.pack line) $ do
+                let jsonPart = C8.drop 6 (C8.pack line)
+                case extractDelta jsonPart of
+                  Just delta -> onDelta delta
+                  Nothing -> pure ()
+              if "data: [DONE]" `C8.isPrefixOf` C8.pack line
                 then pure ()
-                else loop
-    loop
+                else readLoop
+    
+    readLoop
+    _ <- waitForProcess ph
+    pure ()
   
   case result of
     Left e -> pure $ Left $ T.pack $ show e
@@ -226,7 +236,8 @@ makeRequest Client{..} path body = do
   let req = initReq
         { HC.method = "POST"
         , HC.requestHeaders = 
-            [ ("Content-Type", "application/json")
+            [ ("Host", "openrouter.ai")  -- Required when using IP address
+            , ("Content-Type", "application/json")
             , ("Authorization", "Bearer " <> encodeUtf8 clApiKey)
             , ("HTTP-Referer", "https://opencode.ai")
             , ("X-Title", "opencode")
@@ -262,6 +273,7 @@ parseSSEChunk buffer = go (C8.lines buffer) [] ""
       | otherwise = go ls deltas l   -- Incomplete line
 
 -- | Extract delta content from SSE JSON
+-- Returns Nothing for empty or missing content (skip empty deltas)
 extractDelta :: ByteString -> Maybe Text
 extractDelta bs = do
   json <- decode (LBS.fromStrict bs)
@@ -271,6 +283,9 @@ extractDelta bs = do
       case choices of
         (choice:_) -> do
           delta <- choice .: "delta"
-          delta .:? "content" >>= maybe (fail "no content") pure
+          content <- delta .:? "content"
+          case content of
+            Just txt | not (T.null txt) -> pure txt
+            _ -> fail "empty or no content"
         [] -> fail "no choices"
     _ -> fail "not object"

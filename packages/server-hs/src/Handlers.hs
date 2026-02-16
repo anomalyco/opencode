@@ -16,14 +16,13 @@ import Data.Time.Clock (getCurrentTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.Directory (listDirectory, doesDirectoryExist, makeAbsolute, getCurrentDirectory)
 import System.FilePath ((</>))
-import Control.Monad (forM, forM_)
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Monad (forM)
+import Control.Concurrent (forkIO)
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Map.Strict as Map
-import Control.Exception (catch, SomeException, try)
-import System.IO (hFlush, stdout)
+import Control.Exception (catch, SomeException)
 
 import Api
 import State
@@ -36,11 +35,12 @@ import qualified Provider.Types as PT
 import qualified Agent.Agent as Agent
 import qualified Agent.Types as AT
 import qualified Config.Config as Config
-import qualified Config.Types as CT
 import qualified Pty.Pty as Pty
 import qualified Pty.Types as PtyT
 import qualified LLM.OpenRouter as LLM
 import System.Environment (lookupEnv)
+import qualified Log
+import qualified Katip
 
 -- Helper to resolve paths
 resolvePath :: Maybe Text -> Text -> IO FilePath
@@ -181,9 +181,15 @@ sessionMessageListHandler st sid _mLimit = liftIO $ do
 
 sessionMessageCreateHandler :: AppState -> Text -> CreateMessageInput -> Handler Message
 sessionMessageCreateHandler st sid input = liftIO $ do
+  let lg = Log.withNS (stLogger st) "message"
+  
   now <- getCurrentTime
   let t = realToFrac (utcTimeToPOSIXSeconds now) * 1000
   let msgTime = SessionTime t t Nothing
+  
+  -- Extract user text for logging
+  let userText = extractUserText (cmiParts input)
+  Log.logMsg lg Katip.InfoS $ "create session=" <> sid <> " text=" <> T.take 50 userText
   
   -- 1. User Message
   let uMsgId = fromMaybe (pack ("msg_" ++ show (round t :: Integer))) (cmiMessageId input)
@@ -221,7 +227,7 @@ sessionMessageCreateHandler st sid input = liftIO $ do
         , "role" .= ("assistant" :: Text)
         , "time" .= object ["created" .= t]
         , "parentID" .= uMsgId
-        , "modelID" .= ("anthropic/claude-sonnet-4" :: Text)
+        , "modelID" .= ("anthropic/claude-opus-4.5" :: Text)
         , "providerID" .= ("openrouter" :: Text)
         , "mode" .= ("build" :: Text)
         , "agent" .= ("build" :: Text)
@@ -253,31 +259,21 @@ sessionMessageCreateHandler st sid input = liftIO $ do
               , "text" .= ("Error: OPENROUTER_API_KEY not set" :: Text)
               ]
         Bus.publish (stBus st) "message.part.updated" (object ["part" .= errPart])
-        putStrLn "[LLM] Published error part"
         completeMessage st sid aMsgId t
-        putStrLn "[LLM] Completed message"
         
       Just key -> do
-        putStrLn "[LLM] Creating client..."
-        hFlush stdout
         client <- LLM.newClient (pack key)
-        putStrLn "[LLM] Starting stream..."
-        hFlush stdout
         textRef <- newTVarIO ("" :: Text)
         
         let req = LLM.ChatRequest
-              { LLM.crModel = "anthropic/claude-sonnet-4"
+              { LLM.crModel = "anthropic/claude-opus-4.5"
               , LLM.crMessages = [LLM.Message LLM.User userText]
               , LLM.crMaxTokens = Just 4096
               , LLM.crTemperature = Nothing
               , LLM.crStream = True
               }
         
-        putStrLn $ "[LLM] Calling chatStream with user text: " ++ take 50 (T.unpack userText)
-        hFlush stdout
         result <- LLM.chatStream client req $ \delta -> do
-          putStrLn $ "[LLM] Got delta: " ++ take 30 (T.unpack delta)
-          hFlush stdout
           -- Accumulate text
           atomically $ modifyTVar' textRef (<> delta)
           fullText <- readTVarIO textRef
@@ -292,13 +288,9 @@ sessionMessageCreateHandler st sid input = liftIO $ do
                 ]
           Bus.publish (stBus st) "message.part.updated" (object ["part" .= textPart, "delta" .= delta])
         
-        putStrLn $ "[LLM] chatStream returned: " ++ either T.unpack (const "Right ()") result
-        hFlush stdout
         case result of
           Left err -> do
-            -- Publish error
-            putStrLn $ "[LLM] Error: " ++ T.unpack err
-            hFlush stdout
+            -- Publish error as final part
             fullText <- readTVarIO textRef
             let errText = fullText <> "\n\n[Error: " <> err <> "]"
             let textPart = object
@@ -312,9 +304,7 @@ sessionMessageCreateHandler st sid input = liftIO $ do
           Right () -> pure ()
         
         completeMessage st sid aMsgId t
-    ) `catch` \(e :: SomeException) -> do
-      putStrLn $ "[LLM] Exception in background task: " ++ show e
-      hFlush stdout
+    ) `catch` \(_e :: SomeException) -> pure ()
         
   return aMsg
 
@@ -332,8 +322,13 @@ extractUserText parts = T.intercalate "\n" $ concatMap extractText parts
 -- | Mark message as complete and publish idle event
 completeMessage :: AppState -> Text -> Text -> Double -> IO ()
 completeMessage st sid msgId startTime = do
+  let lg = Log.withNS (stLogger st) "message"
+  
   now <- getCurrentTime
   let endTime = realToFrac (utcTimeToPOSIXSeconds now) * 1000 :: Double
+  let duration = (endTime - startTime) / 1000  -- seconds
+  
+  Log.logMsg lg Katip.InfoS $ "complete session=" <> sid <> " msg=" <> msgId <> " duration=" <> T.pack (show duration) <> "s"
   
   -- Publish completed message info
   let completedInfo = object
@@ -342,7 +337,7 @@ completeMessage st sid msgId startTime = do
         , "role" .= ("assistant" :: Text)
         , "time" .= object ["created" .= startTime, "completed" .= endTime]
         , "parentID" .= (msgId :: Text)  -- TODO: actual parent
-        , "modelID" .= ("anthropic/claude-sonnet-4" :: Text)
+        , "modelID" .= ("anthropic/claude-opus-4.5" :: Text)
         , "providerID" .= ("openrouter" :: Text)
         , "mode" .= ("build" :: Text)
         , "agent" .= ("build" :: Text)

@@ -32,6 +32,7 @@ executable opencode-server
     LLM.Types
     LLM.Anthropic
     LLM.OpenRouter
+    Log
   hs-source-dirs:   src
   default-language: GHC2021
   ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -58,7 +59,14 @@ executable opencode-server
     random >= 1.2,
     process >= 1.6,
     unix >= 2.8,
-    posix-pty >= 0.2
+    posix-pty >= 0.2,
+    network >= 3.1,
+    crypton-connection >= 0.4,
+    data-default-class >= 0.1,
+    tls >= 2.0,
+    katip >= 0.8,
+    mtl >= 2.2,
+    unliftio-core >= 0.2
   default-extensions:
     DataKinds
     TypeOperators
