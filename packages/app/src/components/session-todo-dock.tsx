@@ -176,6 +176,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
               indeterminate={todo.status === "in_progress"}
               data-in-progress={todo.status === "in_progress" ? "" : undefined}
               icon={dot(todo.status)}
+              style={{ "--checkbox-align": "flex-start", "--checkbox-offset": "1px" }}
             >
               <span
                 class="text-14-regular min-w-0 break-words"
@@ -184,6 +185,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                   "text-text-strong": todo.status !== "completed" && todo.status !== "cancelled",
                 }}
                 style={{
+                  "line-height": "var(--line-height-normal)",
                   "text-decoration":
                     todo.status === "completed" || todo.status === "cancelled" ? "line-through" : undefined,
                 }}

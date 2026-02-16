@@ -495,7 +495,14 @@
   flex-direction: column;
   gap: 8px;
 
+  [data-component="checkbox"] {
+    --checkbox-align: flex-start;
+    --checkbox-offset: 0.5px;
+  }
+
   [data-slot="message-part-todo-content"] {
+    line-height: var(--line-height-normal);
+
     &[data-completed="completed"] {
       text-decoration: line-through;
       color: var(--text-weaker);

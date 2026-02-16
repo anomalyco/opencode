@@ -1479,9 +1479,12 @@ ToolRegistry.register({
             <For each={todos()}>
               {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
-                  <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
+                  <span
+                    data-slot="message-part-todo-content"
+                    data-completed={todo.status === "completed" ? "completed" : undefined}
+                  >
                     {todo.content}
-                  </div>
+                  </span>
                 </Checkbox>
               )}
             </For>
