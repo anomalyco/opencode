@@ -616,32 +616,49 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden lg:block shrink-0">
-                <Show when={view().reviewPanel.opened()}>
-                  <TooltipKeybind
-                    title={language.t("command.fileTree.toggle")}
-                    keybind={command.keybind("fileTree.toggle")}
+                <div
+                  aria-hidden={!view().reviewPanel.opened()}
+                  class="overflow-hidden transition-[width,margin-left] duration-200 ease-out motion-reduce:transition-none"
+                  classList={{
+                    "w-8 ml-0": view().reviewPanel.opened(),
+                    "w-0 -ml-1": !view().reviewPanel.opened(),
+                  }}
+                >
+                  <div
+                    class="transition-[opacity,transform] duration-200 ease-out origin-center motion-reduce:transition-none"
+                    classList={{
+                      "opacity-100 scale-100": view().reviewPanel.opened(),
+                      "opacity-0 scale-90": !view().reviewPanel.opened(),
+                    }}
                   >
-                    <Button
-                      variant="ghost"
-                      class="titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => layout.fileTree.toggle()}
-                      aria-label={language.t("command.fileTree.toggle")}
-                      aria-expanded={layout.fileTree.opened()}
-                      aria-controls="file-tree-panel"
+                    <TooltipKeybind
+                      title={language.t("command.fileTree.toggle")}
+                      keybind={command.keybind("fileTree.toggle")}
                     >
-                      <div class="relative flex items-center justify-center size-4">
-                        <Icon
-                          size="small"
-                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                          classList={{
-                            "text-icon-strong": layout.fileTree.opened(),
-                            "text-icon-weak": !layout.fileTree.opened(),
-                          }}
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
-                </Show>
+                      <Button
+                        variant="ghost"
+                        class="titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => layout.fileTree.toggle()}
+                        disabled={!view().reviewPanel.opened()}
+                        aria-label={language.t("command.fileTree.toggle")}
+                        aria-expanded={layout.fileTree.opened()}
+                        aria-controls="file-tree-panel"
+                        tabIndex={view().reviewPanel.opened() ? undefined : -1}
+                      >
+                        <div class="relative flex items-center justify-center size-4">
+                          <Icon
+                            size="small"
+                            name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                            classList={{
+                              "text-icon-strong": layout.fileTree.opened(),
+                              "text-icon-weak": !layout.fileTree.opened(),
+                            }}
+                          />
+                        </div>
+                      </Button>
+                    </TooltipKeybind>
+                  </div>
+                </div>
               </div>
             </div>
           </Portal>
