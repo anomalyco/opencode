@@ -1,6 +1,6 @@
 import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useNavigate } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -43,6 +43,7 @@ export function Titlebar() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const params = useParams()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -217,27 +218,48 @@ export function Titlebar() {
               </div>
             </Button>
           </TooltipKeybind>
-          <div class="hidden xl:flex items-center gap-1 shrink-0">
-            <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
-              <Button
-                variant="ghost"
-                icon="arrow-left"
-                class="size-6 p-0"
-                disabled={!canBack()}
-                onClick={back}
-                aria-label={language.t("common.goBack")}
-              />
-            </Tooltip>
-            <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
-              <Button
-                variant="ghost"
-                icon="arrow-right"
-                class="size-6 p-0"
-                disabled={!canForward()}
-                onClick={forward}
-                aria-label={language.t("common.goForward")}
-              />
-            </Tooltip>
+          <div class="hidden xl:flex items-center shrink-0">
+            <Show when={params.dir}>
+              <TooltipKeybind
+                placement="bottom"
+                title={language.t("command.session.new")}
+                keybind={command.keybind("session.new")}
+                openDelay={2000}
+              >
+                <Button
+                  variant="ghost"
+                  icon="pencil-line"
+                  class="size-6 p-0"
+                  onClick={() => {
+                    if (!params.dir) return
+                    navigate(`/${params.dir}/session`)
+                  }}
+                  aria-label={language.t("command.session.new")}
+                />
+              </TooltipKeybind>
+            </Show>
+            <div class="flex items-center gap-1" classList={{ "ml-3": !!params.dir }}>
+              <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                <Button
+                  variant="ghost"
+                  icon="chevron-left"
+                  class="size-6 p-0"
+                  disabled={!canBack()}
+                  onClick={back}
+                  aria-label={language.t("common.goBack")}
+                />
+              </Tooltip>
+              <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                <Button
+                  variant="ghost"
+                  icon="chevron-right"
+                  class="size-6 p-0"
+                  disabled={!canForward()}
+                  onClick={forward}
+                  aria-label={language.t("common.goForward")}
+                />
+              </Tooltip>
+            </div>
           </div>
         </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
