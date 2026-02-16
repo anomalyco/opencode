@@ -785,8 +785,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
       // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
       // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-      const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
-      const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
+      const hostPattern = ghUrls.host.replace(/\./g, "\\.")
+      const mdMatches = prompt.matchAll(new RegExp(`!?\\[.*?\\]\\((https:\\/\\/${hostPattern}\\/user-attachments\\/[^)]+)\\)`, "gi"))
+      const tagMatches = prompt.matchAll(new RegExp(`<img .*?src="(https:\\/\\/${hostPattern}\\/user-attachments\\/[^"]+)" \\/>`, "gi"))
       const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
       console.log("Images", JSON.stringify(matches, null, 2))
 

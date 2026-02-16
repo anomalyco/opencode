@@ -460,8 +460,9 @@ async function getUserPrompt() {
   // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
   // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
   // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-  const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
-  const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
+  const hostPattern = ghUrls.host.replace(/\./g, "\\.")
+  const mdMatches = prompt.matchAll(new RegExp(`!?\\[.*?\\]\\((https:\\/\\/${hostPattern}\\/user-attachments\\/[^)]+)\\)`, "gi"))
+  const tagMatches = prompt.matchAll(new RegExp(`<img .*?src="(https:\\/\\/${hostPattern}\\/user-attachments\\/[^"]+)" \\/>`, "gi"))
   const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
   console.log("Images", JSON.stringify(matches, null, 2))
 
@@ -718,7 +719,7 @@ async function checkoutForkBranch(pr: GitHubPullRequest) {
   const localBranch = generateBranchName("pr")
   const depth = Math.max(pr.commits.totalCount, 20)
 
-  await $`git remote add fork https://github.com/${pr.headRepository.nameWithOwner}.git`
+  await $`git remote add fork ${ghUrls.serverUrl}/${pr.headRepository.nameWithOwner}.git`
   await $`git fetch fork --depth=${depth} ${remoteBranch}`
   await $`git checkout -b ${localBranch} fork/${remoteBranch}`
 }
