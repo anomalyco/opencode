@@ -44,12 +44,12 @@ opencode acp
 opencode acp --cwd /path/to/project
 ```
 
-### Experimental Question Tool Opt-In
+### Question Tool Opt-In
 
 ACP excludes `QuestionTool` by default.
 
 ```bash
-OPENCODE_EXPERIMENTAL_QUESTION_TOOL=1 opencode acp
+OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
 ```
 
 Enable this only for ACP clients that support interactive question prompts.

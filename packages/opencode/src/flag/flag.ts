@@ -30,6 +30,7 @@ export namespace Flag {
   export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+  export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
@@ -51,7 +52,6 @@ export namespace Flag {
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("OPENCODE_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("OPENCODE_EXPERIMENTAL_MARKDOWN")
-  export declare const OPENCODE_EXPERIMENTAL_QUESTION_TOOL: boolean
   export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
 
@@ -91,17 +91,6 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
-  },
-  enumerable: true,
-  configurable: false,
-})
-
-// Dynamic getter for OPENCODE_EXPERIMENTAL_QUESTION_TOOL
-// This must be evaluated at access time, not module load time,
-// because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_QUESTION_TOOL", {
-  get() {
-    return truthy("OPENCODE_EXPERIMENTAL_QUESTION_TOOL")
   },
   enumerable: true,
   configurable: false,

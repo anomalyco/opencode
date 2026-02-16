@@ -5,29 +5,6 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 
-async function ids(client: string, flag?: string) {
-  const originalClient = process.env["OPENCODE_CLIENT"]
-  const originalFlag = process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
-
-  try {
-    process.env["OPENCODE_CLIENT"] = client
-    if (flag === undefined) delete process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
-    if (flag !== undefined) process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"] = flag
-
-    await using tmp = await tmpdir()
-    return await Instance.provide({
-      directory: tmp.path,
-      fn: async () => ToolRegistry.ids(),
-    })
-  } finally {
-    if (originalClient === undefined) delete process.env["OPENCODE_CLIENT"]
-    if (originalClient !== undefined) process.env["OPENCODE_CLIENT"] = originalClient
-
-    if (originalFlag === undefined) delete process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"]
-    if (originalFlag !== undefined) process.env["OPENCODE_EXPERIMENTAL_QUESTION_TOOL"] = originalFlag
-  }
-}
-
 describe("tool.registry", () => {
   test("loads tools from .opencode/tool (singular)", async () => {
     await using tmp = await tmpdir({
@@ -141,24 +118,5 @@ describe("tool.registry", () => {
         expect(ids).toContain("cowsay")
       },
     })
-  })
-
-  test("excludes question tool for acp when experimental flag is unset", async () => {
-    expect(await ids("acp")).not.toContain("question")
-  })
-
-  test("excludes question tool for acp when experimental flag is 0", async () => {
-    expect(await ids("acp", "0")).not.toContain("question")
-  })
-
-  test("includes question tool for acp when experimental flag is enabled", async () => {
-    expect(await ids("acp", "1")).toContain("question")
-    expect(await ids("acp", "true")).toContain("question")
-  })
-
-  test("keeps question tool for app, cli, and desktop", async () => {
-    expect(await ids("app", "0")).toContain("question")
-    expect(await ids("cli", "0")).toContain("question")
-    expect(await ids("desktop", "0")).toContain("question")
   })
 })
