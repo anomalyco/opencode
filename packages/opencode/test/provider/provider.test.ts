@@ -2218,4 +2218,3 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
     },
   })
 })
-
