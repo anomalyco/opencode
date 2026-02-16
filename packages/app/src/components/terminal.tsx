@@ -42,6 +42,20 @@ type TerminalColors = {
   selectionBackground: string
 }
 
+interface GhosttyTerminalImpl {
+  startRenderLoop: () => void
+  isDisposed: boolean
+  isOpen: boolean
+  renderer: {
+    render: (wasmTerm: unknown, force: boolean, viewportY: number, term: unknown, scrollbarOpacity: number) => void
+  }
+  wasmTerm: { getCursor: () => { x: number; y: number } }
+  lastCursorY: number
+  cursorMoveEmitter: { fire: () => void }
+  viewportY: number
+  scrollbarOpacity: number
+}
+
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   light: {
     background: "#fcfcfc",
@@ -371,28 +385,13 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
-      const termImpl = t as unknown as {
-        startRenderLoop: () => void
-        isDisposed: boolean
-        isOpen: boolean
-        renderer: {
-          render: (
-            wasmTerm: unknown,
-            force: boolean,
-            viewportY: number,
-            term: unknown,
-            scrollbarOpacity: number,
-          ) => void
-        }
-        wasmTerm: { getCursor: () => { x: number; y: number } }
-        lastCursorY: number
-        cursorMoveEmitter: { fire: () => void }
-        animationFrameId: number | undefined
-        viewportY: number
-        scrollbarOpacity: number
-      }
+      // Monkey-patch the terminal's render loop to throttle FPS for CPU usage
+      // IMPORTANT: This must happen BEFORE t.open(container) so the patched function is used
+      // when the render loop starts
+      const termImpl = t as unknown as GhosttyTerminalImpl
 
       let lastFrameTime = 0
+      let animationFrameId: number | undefined
       const minFrameInterval = createMemo(() => {
         const fps = settings.appearance.terminalFps()
         return fps === 0 ? 0 : 1000 / fps
@@ -413,7 +412,7 @@ export const Terminal = (props: TerminalProps) => {
               termImpl.cursorMoveEmitter.fire()
             }
           }
-          termImpl.animationFrameId = requestAnimationFrame(throttledLoop)
+          animationFrameId = requestAnimationFrame(throttledLoop)
         }
         throttledLoop()
       }
@@ -441,6 +440,13 @@ export const Terminal = (props: TerminalProps) => {
         }
       })
       cleanups.push(() => disposeIfDisposable(onKey))
+
+      cleanups.push(() => {
+        if (animationFrameId !== undefined) {
+          cancelAnimationFrame(animationFrameId)
+        }
+      })
+
 
       const startResize = () => {
         fit.observeResize()
