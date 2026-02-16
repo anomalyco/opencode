@@ -33,6 +33,10 @@ executable opencode-server
     LLM.Anthropic
     LLM.OpenRouter
     Log
+    Tool.Types
+    Tool.Defs
+    Tool.Exec
+    Tool.Tool
   hs-source-dirs:   src
   default-language: GHC2021
   ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
