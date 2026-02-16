@@ -125,9 +125,17 @@ export namespace Ripgrep {
   const state = lazy(async () => {
     const system = Bun.which("rg")
     if (system) {
-      const stat = await fs.stat(system).catch(() => undefined)
-      if (stat?.isFile()) return { filepath: system }
-      log.warn("bun.which returned invalid rg path", { filepath: system })
+      if (process.platform === "win32" && system.startsWith("/")) {
+        log.warn("ignoring POSIX rg path on Windows", { filepath: system })
+      } else {
+        const stat = await fs.stat(system).catch(() => undefined)
+        if (stat?.isFile()) {
+          const probe = await $`${system} --version`.quiet().nothrow()
+          if (probe.exitCode === 0) return { filepath: system }
+          log.warn("bun.which returned unusable rg path", { filepath: system, exitCode: probe.exitCode })
+        }
+        log.warn("bun.which returned invalid rg path", { filepath: system })
+      }
     }
     const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
