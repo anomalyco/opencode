@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError, getGitHubURLs } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError, getGitHubURLs, getNoreplyEmail } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -466,7 +466,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     const gitStatus = (args: string[]) => Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
     const commitChanges = async (summary: string, actor?: string) => {
       const args = ["commit", "-m", summary]
-      if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
+      if (actor) args.push("-m", `Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>`)
       await gitRun(args)
     }
 
@@ -1026,7 +1026,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       if (isMock) return
 
       console.log("Configuring git...")
-      const config = "http.https://github.com/.extraheader"
+      const config = `http.${ghUrls.serverUrl}/.extraheader`
       // actions/checkout@v6 no longer stores credentials in .git/config,
       // so this may not exist - use nothrow() to handle gracefully
       const ret = await gitStatus(["config", "--local", "--get", config])
@@ -1039,12 +1039,12 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
       await gitRun(["config", "--local", config, `AUTHORIZATION: basic ${newCredentials}`])
       await gitRun(["config", "--global", "user.name", AGENT_USERNAME])
-      await gitRun(["config", "--global", "user.email", `${AGENT_USERNAME}@users.noreply.github.com`])
+      await gitRun(["config", "--global", "user.email", getNoreplyEmail(AGENT_USERNAME, ghUrls.host)])
     }
 
     async function restoreGitConfig() {
       if (gitConfig === undefined) return
-      const config = "http.https://github.com/.extraheader"
+      const config = `http.${ghUrls.serverUrl}/.extraheader`
       await gitRun(["config", "--local", config, gitConfig])
     }
 
@@ -1072,7 +1072,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       const localBranch = generateBranchName("pr")
       const depth = Math.max(pr.commits.totalCount, 20)
 
-      await gitRun(["remote", "add", "fork", `https://github.com/${pr.headRepository.nameWithOwner}.git`])
+      await gitRun(["remote", "add", "fork", `${ghUrls.serverUrl}/${pr.headRepository.nameWithOwner}.git`])
       await gitRun(["fetch", "fork", `--depth=${depth}`, remoteBranch])
       await gitRun(["checkout", "-b", localBranch, `fork/${remoteBranch}`])
       return localBranch

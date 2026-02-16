@@ -668,7 +668,7 @@ async function configureGit(appToken: string) {
   if (isMock()) return
 
   console.log("Configuring git...")
-  const config = "http.https://github.com/.extraheader"
+  const config = `http.${ghUrls.serverUrl}/.extraheader`
   const ret = await $`git config --local --get ${config}`
   gitConfig = ret.stdout.toString().trim()
 
@@ -690,7 +690,7 @@ async function assertGitIdentityConfigured() {
 async function restoreGitConfig() {
   if (gitConfig === undefined) return
   console.log("Restoring git config...")
-  const config = "http.https://github.com/.extraheader"
+  const config = `http.${ghUrls.serverUrl}/.extraheader`
   await $`git config --local ${config} "${gitConfig}"`
 }
 
@@ -741,7 +741,7 @@ async function pushToNewBranch(summary: string, branch: string) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push -u origin ${branch}`
 }
 
@@ -753,7 +753,7 @@ async function pushToLocalBranch(summary: string) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push`
 }
 
@@ -767,7 +767,7 @@ async function pushToForkBranch(summary: string, pr: GitHubPullRequest) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push fork HEAD:${remoteBranch}`
 }
 
