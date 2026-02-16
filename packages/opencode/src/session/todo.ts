@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
+import { TaskGraph } from "../graph/store"
 import { Database, eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
 
@@ -27,6 +28,12 @@ export namespace Todo {
   export function update(input: { sessionID: string; todos: Info[] }) {
     Database.transaction((db) => {
       db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+
+      TaskGraph.syncTodos(db, {
+        sessionID: input.sessionID,
+        todos: input.todos,
+      })
+
       if (input.todos.length === 0) return
       db.insert(TodoTable)
         .values(
