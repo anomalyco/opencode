@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch } from "solid-js"
+import { createEffect, createMemo, Match, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
@@ -14,6 +14,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { useLocal } from "../context/local"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -25,6 +26,7 @@ export function Home() {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
+  const local = useLocal()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -76,7 +78,8 @@ export function Home() {
 
   let prompt: PromptRef
   const args = useArgs()
-  onMount(() => {
+  createEffect(() => {
+    if (!local.model.ready) return
     if (once) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
