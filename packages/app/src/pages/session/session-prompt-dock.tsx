@@ -109,7 +109,7 @@ export function SessionPromptDock(props: {
         <Show when={props.questionRequest()} keyed>
           {(req) => {
             return (
-              <div class="mb-3">
+              <div>
                 <QuestionDock request={req} />
               </div>
             )
