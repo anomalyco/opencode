@@ -76,20 +76,20 @@ const MigrateCommand = cmd({
       const stats = await JsonMigration.run(sqlite, {
         progress: (event) => {
           const percent = Math.floor((event.current / event.total) * 100)
-          if (percent === last && event.current !== event.total) return
+          if (percent === last) return
           last = percent
           if (tty) {
             const fill = Math.round((percent / 100) * width)
             const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
             process.stderr.write(
-              `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
+              `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.current}/${event.total}${reset} `,
             )
-            if (event.current === event.total) process.stderr.write("\n")
           } else {
             process.stderr.write(`sqlite-migration:${percent}${EOL}`)
           }
         },
       })
+      if (tty) process.stderr.write("\n")
       if (tty) process.stderr.write("\x1b[?25h")
       else process.stderr.write(`sqlite-migration:done${EOL}`)
       UI.println(
