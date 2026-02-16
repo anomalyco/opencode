@@ -263,6 +263,38 @@ export namespace Provider {
               }
               if (awsBearerToken) {
                 mantleOptions.apiKey = awsBearerToken
+              } else if (providerOptions.credentialProvider) {
+                // SigV4 signing for IAM credentials — same pattern as @ai-sdk/amazon-bedrock
+                const { AwsV4Signer } = await import("aws4fetch")
+                const credentialProvider = providerOptions.credentialProvider
+                mantleOptions.fetch = async (input: any, init?: any) => {
+                  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+                  const body = typeof init?.body === "string" ? init.body : JSON.stringify(init?.body)
+                  const headers = init?.headers ?? {}
+                  const headerEntries = headers instanceof Headers
+                    ? Array.from(headers.entries())
+                    : Array.isArray(headers)
+                      ? headers
+                      : Object.entries(headers)
+                  const credentials = await credentialProvider()
+                  const signer = new AwsV4Signer({
+                    url,
+                    method: init?.method ?? "POST",
+                    headers: headerEntries,
+                    body,
+                    region,
+                    accessKeyId: credentials.accessKeyId,
+                    secretAccessKey: credentials.secretAccessKey,
+                    sessionToken: credentials.sessionToken,
+                    service: "bedrock",
+                  })
+                  const signed = await signer.sign()
+                  return fetch(input, {
+                    ...init,
+                    body,
+                    headers: Object.fromEntries(signed.headers.entries()),
+                  })
+                }
               }
               mantleSDKCache.set(cacheKey, createOpenAICompatible(mantleOptions))
             }
