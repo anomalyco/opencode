@@ -542,7 +542,6 @@ test("changing terminal FPS updates all open terminals", async ({ page, gotoSess
 
   await input.fill("1")
   await page.waitForTimeout(100)
-
   await closeDialog(page, dialog)
 
   await expect(terminals).toHaveCount(2)
