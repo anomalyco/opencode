@@ -1610,7 +1610,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
     async function revokeAppToken() {
       if (!appToken) return
 
-      await fetch("https://api.github.com/installation/token", {
+      await fetch(`${ghUrls.apiUrl}/installation/token`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${appToken}`,
