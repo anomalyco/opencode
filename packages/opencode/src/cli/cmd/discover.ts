@@ -13,7 +13,7 @@ export const DiscoverCommand = cmd({
     })
   },
   handler: async (args) => {
-    prompts.intro(`Discovering OpenCode servers (${args.timeout}ms timeout)`)
+    prompts.intro("Discovering OpenCode servers")
 
     try {
       const servers = await MDNS.find(AbortSignal.timeout(args.timeout))

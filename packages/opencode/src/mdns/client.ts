@@ -15,7 +15,7 @@ export interface DiscoveredServer {
   txt: Record<string, string>
 }
 
-export async function find(abort: AbortSignal, idle_timeout: Duration = 200): Promise<DiscoveredServer[]> {
+export async function find(abort: AbortSignal, idleTimeout: Duration = 200): Promise<DiscoveredServer[]> {
   const bonjour = new Bonjour()
   const queue = new AsyncQueue<DiscoveredServer>()
   const list: DiscoveredServer[] = []
@@ -47,7 +47,7 @@ export async function find(abort: AbortSignal, idle_timeout: Duration = 200): Pr
 
   try {
     while (true) {
-      const timer = abortAfterAny(idle_timeout, abort)
+      const timer = abortAfterAny(idleTimeout, abort)
       const server = await nextUntilAbort(queue, timer.signal).finally(() => timer.clearTimeout())
       if (!server) return list
       list.push(server)

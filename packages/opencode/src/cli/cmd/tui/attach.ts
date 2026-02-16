@@ -26,7 +26,6 @@ export const AttachCommand = cmd({
       })
       .option("timeout", {
         type: "number",
-        default: 3000,
         describe: "Discovery timeout (ms)",
       })
       .option("dir", {
@@ -52,7 +51,15 @@ export const AttachCommand = cmd({
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
       })
-      .implies("timeout", "discover"),
+      .check((input) => {
+        if (!input.url && !input.discover) {
+          throw new Error("Provide a URL or use --discover")
+        }
+        if (input.timeout !== undefined && !input.discover) {
+          throw new Error("--timeout requires --discover")
+        }
+        return true
+      }),
   handler: async (args) => {
     const unguard = win32InstallCtrlCGuard()
     try {
@@ -68,10 +75,18 @@ export const AttachCommand = cmd({
 
       if (args.discover) {
         prompts.intro("Discovering OpenCode servers")
-        const servers = await MDNS.find(AbortSignal.timeout(args.timeout))
+        const timeout = args.timeout ?? 3000
+        let servers
+        try {
+          servers = await MDNS.find(AbortSignal.timeout(timeout))
+        } catch (error) {
+          prompts.log.error(`Discovery failed: ${error instanceof Error ? error.message : String(error)}`)
+          prompts.outro("Done")
+          process.exit(1)
+        }
 
         if (servers.length === 0) {
-          prompts.log.error("No OpenCode servers found on the network")
+          prompts.log.warn("No OpenCode servers found on the network")
           prompts.outro("Done")
           return
         }
@@ -87,19 +102,12 @@ export const AttachCommand = cmd({
               value: server.fullUrl,
             })),
           })
-          if (prompts.isCancel(selected)) {
-            prompts.outro("Done")
-            return
-          }
+          if (prompts.isCancel(selected)) throw new UI.CancelledError()
           url = selected
         }
       }
 
-      if (!url) {
-        prompts.log.error("No URL provided. Use --discover or provide a URL")
-        prompts.outro("Done")
-        return
-      }
+      if (!url) throw new Error("No URL provided")
 
       const directory = (() => {
         if (!args.dir) return undefined
