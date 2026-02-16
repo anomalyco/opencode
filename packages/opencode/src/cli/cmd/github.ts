@@ -562,7 +562,9 @@ export const GithubRunCommand = cmd({
         ) {
           const prData = await fetchPR()
           // Local PR
-          if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
+          const headRepo = prData.headRepository?.nameWithOwner
+          const baseRepo = prData.baseRepository?.nameWithOwner
+          if (headRepo && baseRepo && headRepo === baseRepo) {
             await checkoutLocalBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
@@ -577,7 +579,7 @@ export const GithubRunCommand = cmd({
             await removeReaction(commentType)
           }
           // Fork PR
-          else {
+          else if (headRepo && baseRepo) {
             await checkoutForkBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
@@ -590,6 +592,10 @@ export const GithubRunCommand = cmd({
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
             await removeReaction(commentType)
+          }
+          // Missing repository data
+          else {
+            throw new Error("PR repository information is missing - unable to process PR")
           }
         }
         // Issue
@@ -1041,7 +1047,13 @@ export const GithubRunCommand = cmd({
         const localBranch = generateBranchName("pr")
         const depth = Math.max(pr.commits.totalCount, 20)
 
-        await $`git remote add fork https://github.com/${pr.headRepository.nameWithOwner}.git`
+        // headRepository is validated before calling this function
+        const headRepoName = pr.headRepository?.nameWithOwner
+        if (!headRepoName) {
+          throw new Error("PR headRepository information is missing")
+        }
+
+        await $`git remote add fork https://github.com/${headRepoName}.git`
         await $`git fetch fork --depth=${depth} ${remoteBranch}`
         await $`git checkout -b ${localBranch} fork/${remoteBranch}`
       }
