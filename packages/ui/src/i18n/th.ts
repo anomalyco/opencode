@@ -8,6 +8,11 @@ export const dict = {
   "ui.sessionReview.change.added": "เพิ่ม",
   "ui.sessionReview.change.removed": "ลบ",
   "ui.sessionReview.change.modified": "แก้ไข",
+  "ui.sessionReview.image.loading": "กำลังโหลด...",
+  "ui.sessionReview.image.placeholder": "รูปภาพ",
+  "ui.sessionReview.largeDiff.title": "Diff มีขนาดใหญ่เกินไปจนไม่สามารถแสดงผลได้",
+  "ui.sessionReview.largeDiff.meta": "ขีดจำกัด: {{lines}} บรรทัด / {{limit}}. ปัจจุบัน: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "แสดงผลต่อไป",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",
@@ -23,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "กำลังลองใหม่",
   "ui.sessionTurn.retry.inSeconds": "ใน {{seconds}}วิ",
+  "ui.sessionTurn.error.freeUsageExceeded": "เกินขีดจำกัดการใช้งานฟรี",
+  "ui.sessionTurn.error.addCredits": "เพิ่มเครดิต",
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",

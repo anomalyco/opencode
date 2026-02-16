@@ -12,6 +12,11 @@ export const dict = {
   "ui.sessionReview.change.added": "已新增",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.image.loading": "載入中...",
+  "ui.sessionReview.image.placeholder": "圖片",
+  "ui.sessionReview.largeDiff.title": "差異過大，無法渲染",
+  "ui.sessionReview.largeDiff.meta": "限制：{{lines}} 行 / {{limit}}。目前：{{current}}。",
+  "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
 
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
@@ -27,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
+  "ui.sessionTurn.error.addCredits": "新增點數",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
