@@ -87,7 +87,7 @@
     align-items: center;
     justify-content: flex-start;
     gap: 8px;
-    padding: 0 4px;
+    padding: 0;
   }
 
   [data-slot="session-turn-diffs-title"] {
