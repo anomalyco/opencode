@@ -1090,7 +1090,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div
+              class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+              classList={{ "font-mono!": store.mode === "shell" }}
+            >
               {placeholder()}
             </div>
           </Show>
@@ -1127,36 +1130,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Button>
                 </TooltipKeybind>
               </Show>
-              <Tooltip
-                placement="top"
-                inactive={!prompt.dirty() && !working()}
-                value={
-                  <Switch>
-                    <Match when={working()}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.stop")}</span>
-                        <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-                      </div>
-                    </Match>
-                    <Match when={true}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.send")}</span>
-                        <Icon name="enter" size="small" class="text-icon-base" />
-                      </div>
-                    </Match>
-                  </Switch>
-                }
-              >
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={!prompt.dirty() && !working() && commentCount() === 0}
-                  icon={working() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-8"
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
-              </Tooltip>
+              <Show when={store.mode === "normal"}>
+                <Tooltip
+                  placement="top"
+                  inactive={!prompt.dirty() && !working()}
+                  value={
+                    <Switch>
+                      <Match when={working()}>
+                        <div class="flex items-center gap-2">
+                          <span>{language.t("prompt.action.stop")}</span>
+                          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+                        </div>
+                      </Match>
+                      <Match when={true}>
+                        <div class="flex items-center gap-2">
+                          <span>{language.t("prompt.action.send")}</span>
+                          <Icon name="enter" size="small" class="text-icon-base" />
+                        </div>
+                      </Match>
+                    </Switch>
+                  }
+                >
+                  <IconButton
+                    data-action="prompt-submit"
+                    type="submit"
+                    disabled={!prompt.dirty() && !working() && commentCount() === 0}
+                    icon={working() ? "stop" : "arrow-up"}
+                    variant="primary"
+                    class="size-8"
+                    aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  />
+                </Tooltip>
+              </Show>
             </div>
           </div>
 
