@@ -2211,6 +2211,7 @@ export type Command = {
 
 export type Agent = {
   name: string
+  title?: string
   description?: string
   mode: "subagent" | "primary" | "all"
   native?: boolean
