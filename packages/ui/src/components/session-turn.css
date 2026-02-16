@@ -560,6 +560,12 @@
     overflow-y: auto;
   }
 
+  .retry-error-link,
+  .error-card-link {
+    color: var(--text-strong);
+    text-decoration: underline;
+  }
+
   [data-slot="session-turn-collapsible-content-inner"] {
     width: 100%;
     min-width: 0;
