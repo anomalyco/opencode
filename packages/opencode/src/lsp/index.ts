@@ -14,6 +14,30 @@ import { Flag } from "@/flag/flag"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
+  const LSP_RETRY_MAX = 5
+  const LSP_RETRY_BASE_MS = 30_000
+
+  interface BrokenEntry {
+    count: number
+    until: number
+  }
+
+  function markBroken(broken: Map<string, BrokenEntry>, key: string) {
+    const prev = broken.get(key)
+    const count = prev ? prev.count + 1 : 1
+    const until = count > LSP_RETRY_MAX ? Infinity : Date.now() + LSP_RETRY_BASE_MS * Math.pow(2, count - 1)
+    broken.set(key, { count, until })
+    return { count, until }
+  }
+
+  function isBroken(broken: Map<string, BrokenEntry>, key: string): boolean {
+    const entry = broken.get(key)
+    if (!entry) return false
+    if (entry.until === Infinity) return true
+    if (Date.now() < entry.until) return true
+    return false
+  }
+
   export const Event = {
     Updated: BusEvent.define("lsp.updated", z.object({})),
   }
@@ -85,7 +109,7 @@ export namespace LSP {
       if (cfg.lsp === false) {
         log.info("all LSPs are disabled")
         return {
-          broken: new Set<string>(),
+          broken: new Map<string, BrokenEntry>(),
           servers,
           clients,
           spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
@@ -132,7 +156,7 @@ export namespace LSP {
       })
 
       return {
-        broken: new Set<string>(),
+        broken: new Map<string, BrokenEntry>(),
         servers,
         clients,
         spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
@@ -183,11 +207,11 @@ export namespace LSP {
       const handle = await server
         .spawn(root)
         .then((value) => {
-          if (!value) s.broken.add(key)
+          if (!value) markBroken(s.broken, key)
           return value
         })
         .catch((err) => {
-          s.broken.add(key)
+          markBroken(s.broken, key)
           log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
           return undefined
         })
@@ -200,7 +224,7 @@ export namespace LSP {
         server: handle,
         root,
       }).catch((err) => {
-        s.broken.add(key)
+        markBroken(s.broken, key)
         handle.process.kill()
         log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
         return undefined
@@ -226,7 +250,7 @@ export namespace LSP {
 
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      if (isBroken(s.broken, root + server.id)) continue
 
       const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
       if (match) {
@@ -268,7 +292,7 @@ export namespace LSP {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      if (isBroken(s.broken, root + server.id)) continue
       return true
     }
     return false
