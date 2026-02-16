@@ -1065,10 +1065,13 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+        // Apply timeout: use configured value, fall back to 300s default.
+        // Only skip when explicitly set to `false`.
+        const timeout = options["timeout"] ?? 300_000
+        if (timeout !== false) {
           const signals: AbortSignal[] = []
           if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+          signals.push(AbortSignal.timeout(timeout))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
