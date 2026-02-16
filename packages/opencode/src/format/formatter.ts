@@ -364,3 +364,12 @@ export const ormolu: Info = {
     return Bun.which("ormolu") !== null
   },
 }
+
+export const cljfmt: Info = {
+  name: "cljfmt",
+  command: ["cljfmt", "fix", "--quiet", "$FILE"],
+  extensions: [".clj", ".cljs", ".cljc", ".edn"],
+  async enabled() {
+    return Bun.which("cljfmt") !== null
+  },
+}
