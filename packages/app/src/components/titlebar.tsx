@@ -172,7 +172,8 @@ export function Titlebar() {
             <IconButton
               icon="menu"
               variant="ghost"
-              class="size-8 rounded-md"
+              class="titlebar-icon rounded-md"
+              style={layout.mobileSidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
             />
@@ -183,7 +184,8 @@ export function Titlebar() {
             <IconButton
               icon="menu"
               variant="ghost"
-              class="size-8 rounded-md"
+              class="titlebar-icon rounded-md"
+              style={layout.mobileSidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
             />
@@ -198,7 +200,8 @@ export function Titlebar() {
           >
             <Button
               variant="ghost"
-              class="group/sidebar-toggle size-6 p-0"
+              class="group/sidebar-toggle w-8 h-6 p-0 box-border"
+              style={layout.sidebar.opened() ? { "background-color": "var(--surface-base-active)" } : undefined}
               onClick={layout.sidebar.toggle}
               aria-label={language.t("command.sidebar.toggle")}
               aria-expanded={layout.sidebar.opened()}
@@ -228,8 +231,8 @@ export function Titlebar() {
               >
                 <Button
                   variant="ghost"
-                  icon="pencil-line"
-                  class="size-6 p-0"
+                  icon="new-session"
+                  class="w-8 h-6 p-0 box-border"
                   onClick={() => {
                     if (!params.dir) return
                     navigate(`/${params.dir}/session`)
@@ -243,7 +246,7 @@ export function Titlebar() {
                 <Button
                   variant="ghost"
                   icon="chevron-left"
-                  class="size-6 p-0"
+                  class="w-8 h-6 p-0 box-border"
                   disabled={!canBack()}
                   onClick={back}
                   aria-label={language.t("common.goBack")}
@@ -253,7 +256,7 @@ export function Titlebar() {
                 <Button
                   variant="ghost"
                   icon="chevron-right"
-                  class="size-6 p-0"
+                  class="w-8 h-6 p-0 box-border"
                   disabled={!canForward()}
                   onClick={forward}
                   aria-label={language.t("common.goForward")}

@@ -143,3 +143,9 @@
     outline: none;
   }
 }
+
+[data-component="icon-button"].titlebar-icon {
+  width: 32px;
+  height: 24px;
+  aspect-ratio: auto;
+}
