@@ -17,6 +17,9 @@ import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
+  const BASH_ABORT = "Tool execution aborted"
+  const BASH_PARTIAL_LIMIT = 8_000
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const StructuredOutputError = NamedError.create(
@@ -545,6 +548,40 @@ export namespace MessageV2 {
       return { type: "json", value: output as never }
     }
 
+    const clip = (text: string) => {
+      if (text.length <= BASH_PARTIAL_LIMIT) {
+        return {
+          text,
+          truncated: false,
+        }
+      }
+      return {
+        text: text.slice(-BASH_PARTIAL_LIMIT),
+        truncated: true,
+      }
+    }
+
+    const errorText = (tool: string, state: ToolStateError) => {
+      if (tool !== "bash") return state.error
+      if (state.error !== BASH_ABORT) return state.error
+      if (typeof state.metadata?.output !== "string") return state.error
+      if (state.metadata.output.length === 0) return state.error
+      const output = clip(state.metadata.output)
+      return [
+        state.error,
+        "",
+        "<bash_partial_output>",
+        output.text,
+        "</bash_partial_output>",
+        "",
+        "<bash_partial_output_metadata>",
+        "interrupted=true",
+        "complete=false",
+        `truncated=${output.truncated}`,
+        "</bash_partial_output_metadata>",
+      ].join("\n")
+    }
+
     for (const msg of input) {
       if (msg.parts.length === 0) continue
 
@@ -654,7 +691,7 @@ export namespace MessageV2 {
                 state: "output-error",
                 toolCallId: part.callID,
                 input: part.state.input,
-                errorText: part.state.error,
+                errorText: errorText(part.tool, part.state),
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks

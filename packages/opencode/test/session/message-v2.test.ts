@@ -566,6 +566,172 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("includes partial bash output in aborted tool errors", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const output = "step 1\nstep 2"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "error",
+              input: { cmd: "ls" },
+              error: "Tool execution aborted",
+              metadata: {
+                output,
+              },
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const error = [
+      "Tool execution aborted",
+      "",
+      "<bash_partial_output>",
+      output,
+      "</bash_partial_output>",
+      "",
+      "<bash_partial_output_metadata>",
+      "interrupted=true",
+      "complete=false",
+      "truncated=false",
+      "</bash_partial_output_metadata>",
+    ].join("\n")
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "error-text", value: error },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("includes whitespace-only partial bash output in aborted tool errors", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const output = " \n\t"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "error",
+              input: { cmd: "ls" },
+              error: "Tool execution aborted",
+              metadata: {
+                output,
+              },
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const error = [
+      "Tool execution aborted",
+      "",
+      "<bash_partial_output>",
+      output,
+      "</bash_partial_output>",
+      "",
+      "<bash_partial_output_metadata>",
+      "interrupted=true",
+      "complete=false",
+      "truncated=false",
+      "</bash_partial_output_metadata>",
+    ].join("\n")
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "error-text", value: error },
+          },
+        ],
+      },
+    ])
+  })
+
   test("filters assistant messages with non-abort errors", () => {
     const assistantID = "m-assistant"
 
