@@ -257,28 +257,51 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
       printNextSteps()
 
       function printNextSteps() {
-        let step2
-        if (provider === "amazon-bedrock") {
-          step2 =
-            "Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services"
-        } else {
-          step2 = [
-            `    2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
-            "",
-            ...providers[provider].env.map((e) => `       - ${e}`),
-          ].join("\n")
-        }
+        const providerSecrets =
+          provider === "amazon-bedrock"
+            ? [
+                "  2. Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services",
+              ]
+            : [
+                `  2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                "",
+                ...providers[provider].env.map((e) => `     - ${e}`),
+              ]
+
+        const ghesSteps =
+          ghesStrategy === "in-workflow"
+            ? [
+                "",
+                `  3. Add GHES app secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                "",
+                "     - OPENCODE_GHES_APP_ID (the App ID printed above)",
+                "     - OPENCODE_GHES_APP_PRIVATE_KEY (the private key from app creation)",
+              ]
+            : ghesStrategy === "oidc"
+              ? [
+                  "",
+                  `  3. Deploy GHES exchange server (packages/ghes-exchange)`,
+                  "",
+                  `  4. Add secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                  "",
+                  "     - OPENCODE_OIDC_BASE_URL (URL of deployed exchange server)",
+                ]
+              : []
+        const learnMoreStep = ghesStrategy
+          ? "  Go to a GitHub issue and comment `/oc summarize` to see the agent in action"
+          : "  3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action"
 
         prompts.outro(
           [
             "Next steps:",
             "",
-            `    1. Commit the \`${WORKFLOW_FILE}\` file and push`,
-            step2,
+            `  1. Commit \`${WORKFLOW_FILE}\` file and push`,
+            ...providerSecrets,
+            ...ghesSteps,
             "",
-            "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
+            learnMoreStep,
             "",
-            "   Learn more about the GitHub agent - https://opencode.ai/docs/github/#usage-examples",
+            "  Learn more about GitHub agent - https://opencode.ai/docs/github/#usage-examples",
           ].join("\n"),
         )
       }
