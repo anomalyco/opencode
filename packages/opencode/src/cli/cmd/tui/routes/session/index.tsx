@@ -1384,6 +1384,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const isStreaming = () => !props.message.time.completed
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1391,7 +1392,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={true}
+              streaming={isStreaming()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
             />
@@ -1400,7 +1401,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
             <code
               filetype="markdown"
               drawUnstyledText={false}
-              streaming={true}
+              streaming={isStreaming()}
               syntaxStyle={syntax()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
