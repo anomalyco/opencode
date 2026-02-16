@@ -529,9 +529,9 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-          return sessionID
-        })()
+        const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+        return sessionID
+      })()
     const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
@@ -620,7 +620,7 @@ export function Prompt(props: PromptProps) {
             })),
           ],
         })
-        .catch(() => {})
+        .catch(() => { })
     }
     history.append({
       ...store.prompt,
@@ -817,7 +817,9 @@ export function Prompt(props: PromptProps) {
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
-                // directly read from clipboard before the terminal handles it
+                // directly read from clipboard before the terminal handles it.
+                // On Windows, bracketed paste for *text* is also unreliable, so we
+                // handle text clipboard content here too instead of falling through.
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
@@ -829,7 +831,66 @@ export function Prompt(props: PromptProps) {
                     })
                     return
                   }
-                  // If no image, let the default paste behavior continue
+                  // Handle text clipboard content directly — Windows terminals
+                  // may not emit bracketed paste sequences for Ctrl+V
+                  if (content?.mime === "text/plain" && content.data) {
+                    e.preventDefault()
+                    // Normalize CRLF → LF (Windows clipboard often has CRLF)
+                    const normalizedText = content.data.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                    const pastedContent = normalizedText.trim()
+                    if (!pastedContent) return
+
+                    // Check if pasted content is a file path (same logic as onPaste)
+                    const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                    const isUrl = /^(https?):\/\//.test(filepath)
+                    if (!isUrl) {
+                      try {
+                        const file = Bun.file(filepath)
+                        if (file.type === "image/svg+xml") {
+                          const svgContent = await file.text().catch(() => { })
+                          if (svgContent) {
+                            pasteText(svgContent, `[SVG: ${file.name ?? "image"}]`)
+                            return
+                          }
+                        }
+                        if (file.type.startsWith("image/")) {
+                          const imgContent = await file
+                            .arrayBuffer()
+                            .then((buffer) => Buffer.from(buffer).toString("base64"))
+                            .catch(() => { })
+                          if (imgContent) {
+                            await pasteImage({
+                              filename: file.name,
+                              mime: file.type,
+                              content: imgContent,
+                            })
+                            return
+                          }
+                        }
+                      } catch { }
+                    }
+
+                    // Summarize large pastes (same threshold as onPaste)
+                    const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                    if (
+                      (lineCount >= 3 || pastedContent.length > 150) &&
+                      !sync.data.config.experimental?.disable_paste_summary
+                    ) {
+                      pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                      return
+                    }
+
+                    // Short text: insert directly
+                    input.insertText(pastedContent)
+                    setTimeout(() => {
+                      if (!input || input.isDestroyed) return
+                      input.getLayoutNode().markDirty()
+                      renderer.requestRender()
+                    }, 0)
+                    return
+                  }
+                  // If no clipboard content at all, let the default behavior continue
+                  // (bracketed paste may still work on some terminals)
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
@@ -914,7 +975,7 @@ export function Prompt(props: PromptProps) {
                     // Handle SVG as raw text content, not as base64 image
                     if (file.type === "image/svg+xml") {
                       event.preventDefault()
-                      const content = await file.text().catch(() => {})
+                      const content = await file.text().catch(() => { })
                       if (content) {
                         pasteText(content, `[SVG: ${file.name ?? "image"}]`)
                         return
@@ -925,7 +986,7 @@ export function Prompt(props: PromptProps) {
                       const content = await file
                         .arrayBuffer()
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
+                        .catch(() => { })
                       if (content) {
                         await pasteImage({
                           filename: file.name,
@@ -935,7 +996,7 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                  } catch {}
+                  } catch { }
                 }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
@@ -1010,13 +1071,13 @@ export function Prompt(props: PromptProps) {
             customBorderChars={
               theme.backgroundElement.a !== 0
                 ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
+                  ...EmptyBorder,
+                  horizontal: "▀",
+                }
                 : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
+                  ...EmptyBorder,
+                  horizontal: " ",
+                }
             }
           />
         </box>

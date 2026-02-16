@@ -72,6 +72,23 @@ export namespace Clipboard {
     }
   }
 
+  /**
+   * Reads text from the clipboard, normalizing CRLF to LF.
+   * Returns undefined if the clipboard is empty, contains non-text, or on error.
+   * This is used by the Ctrl+V handler to directly paste text on platforms
+   * where bracketed paste is not reliably emitted (e.g. Windows terminals).
+   */
+  export async function readText(): Promise<string | undefined> {
+    try {
+      const text = await clipboardy.read()
+      if (!text) return undefined
+      // Normalize Windows CRLF and stray CR to LF
+      return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    } catch {
+      return undefined
+    }
+  }
+
   const getCopyMethod = lazy(() => {
     const os = platform()
 
