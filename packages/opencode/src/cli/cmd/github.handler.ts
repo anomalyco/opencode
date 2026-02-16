@@ -222,7 +222,13 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
-        return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree, isGHES: parsed.host !== "github.com" }
+        return {
+          owner: parsed.owner,
+          repo: parsed.repo,
+          host: parsed.host,
+          root: ctx.worktree,
+          isGHES: parsed.host !== "github.com",
+        }
       }
 
       async function promptProvider() {
