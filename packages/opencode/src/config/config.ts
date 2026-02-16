@@ -1044,6 +1044,18 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      chime: z
+        .object({
+          enabled: z
+            .boolean()
+            .optional()
+            .describe("Enable chime sound when session completes or waits for input (default: true)"),
+          sound: z
+            .string()
+            .optional()
+            .describe("Path to custom sound file (default: /System/Library/Sounds/Glass.aiff on macOS)"),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z

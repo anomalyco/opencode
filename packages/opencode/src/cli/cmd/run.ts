@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { Chime } from "../../util/chime"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -203,6 +204,8 @@ export const RunCommand = cmd({
           }
 
           if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
+            // Play chime when session becomes idle (waiting for input)
+            Chime.play()
             break
           }
 

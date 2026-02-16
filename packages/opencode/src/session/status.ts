@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
+import { Chime } from "@/util/chime"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -64,6 +65,8 @@ export namespace SessionStatus {
       status,
     })
     if (status.type === "idle") {
+      // Play chime when session becomes idle
+      Chime.play()
       // deprecated
       Bus.publish(Event.Idle, {
         sessionID,
