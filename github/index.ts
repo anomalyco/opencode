@@ -113,6 +113,17 @@ type IssueQueryResponse = {
   }
 }
 
+function getGitHubURLs() {
+  const serverUrl = (process.env.GITHUB_SERVER_URL || "https://github.com").replace(/\/+$/, "")
+  const apiUrl = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "")
+  const host = new URL(serverUrl).host
+  return { serverUrl, apiUrl, host }
+}
+
+function getNoreplyEmail(username: string, host: string) {
+  return `${username}@users.noreply.${host}`
+}
+
 const { client, server } = createOpencode()
 let accessToken: string
 let octoRest: Octokit
