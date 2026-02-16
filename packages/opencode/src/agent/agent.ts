@@ -271,12 +271,12 @@ export namespace Agent {
       if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
       if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
-      return agent.name
+      return cfg.default_agent
     }
 
-    const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
-    if (!primaryVisible) throw new Error("no primary visible agent found")
-    return primaryVisible.name
+    const entry = Object.entries(agents).find(([_, a]) => a.mode !== "subagent" && a.hidden !== true)
+    if (!entry) throw new Error("no primary visible agent found")
+    return entry[0]
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
