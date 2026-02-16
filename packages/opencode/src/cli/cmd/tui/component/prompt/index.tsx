@@ -37,6 +37,7 @@ export type PromptProps = {
   sessionID?: string
   visible?: boolean
   disabled?: boolean
+  maxHeight?: number
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
@@ -821,7 +822,7 @@ export function Prompt(props: PromptProps) {
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
-              maxHeight={6}
+              maxHeight={props.maxHeight ?? 6}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)

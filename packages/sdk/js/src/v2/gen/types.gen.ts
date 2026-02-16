@@ -1699,6 +1699,23 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Opening home-screen prompt sizing preferences
+     */
+    initial_prompt?: {
+      /**
+       * Preset size for the opening home-screen prompt composer
+       */
+      size?: "compact" | "medium" | "large"
+      /**
+       * Override opening home-screen prompt width as terminal percentage (40-100)
+       */
+      width_percent?: number
+      /**
+       * Override opening home-screen prompt max input height as terminal percentage (10-60)
+       */
+      height_percent?: number
+    }
   }
   server?: ServerConfig
   /**

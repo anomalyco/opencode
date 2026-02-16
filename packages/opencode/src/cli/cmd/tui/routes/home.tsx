@@ -2,6 +2,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Logo } from "../component/logo"
 import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
@@ -22,6 +23,7 @@ export function Home() {
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
+  const terminal = useTerminalDimensions()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
@@ -91,29 +93,85 @@ export function Home() {
 
   const keybind = useKeybind()
 
+  const initialPrompt = createMemo(() => sync.data.config.tui?.initial_prompt)
+  const size = createMemo(() => initialPrompt()?.size ?? "compact")
+  const width = createMemo(() => {
+    const value = initialPrompt()?.width_percent
+    if (value) return Math.max(40, Math.min(100, value))
+    if (size() === "medium") return 80
+    if (size() === "large") return 90
+    return 75
+  })
+  const maxWidth = createMemo(() => {
+    if (size() === "compact" && !initialPrompt()?.width_percent) return 75
+    const available = Math.max(50, terminal().width - 8)
+    return Math.max(50, Math.min(available, Math.floor((terminal().width * width()) / 100)))
+  })
+  const height = createMemo(() => {
+    const value = initialPrompt()?.height_percent
+    if (value) return Math.max(10, Math.min(60, value))
+    if (size() === "medium") return 25
+    if (size() === "large") return 35
+    return 0
+  })
+  const maxHeight = createMemo(() => {
+    if (size() === "compact" && !initialPrompt()?.height_percent) return 6
+    const available = Math.max(6, terminal().height - 18)
+    return Math.max(6, Math.min(available, Math.floor((terminal().height * height()) / 100)))
+  })
+  const top = createMemo(() => {
+    if (size() === "medium") return 2
+    if (size() === "large") return 1
+    return 4
+  })
+  const tipsHeight = createMemo(() => {
+    if (size() === "medium") return 3
+    if (size() === "large") return 2
+    return 4
+  })
+  const tipsPadding = createMemo(() => {
+    if (size() === "compact") return 3
+    if (size() === "medium") return 2
+    return 1
+  })
+
   return (
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
+        <box height={top()} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
           <Logo />
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" maxWidth={maxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
           <Prompt
             ref={(r) => {
               prompt = r
               promptRef.set(r)
             }}
             hint={Hint}
+            maxHeight={maxHeight()}
           />
         </box>
-        <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+        <box
+          height={tipsHeight()}
+          minHeight={0}
+          width="100%"
+          maxWidth={maxWidth()}
+          alignItems="center"
+          paddingTop={tipsPadding()}
+          flexShrink={1}
+        >
           <Show when={showTips()}>
             <Tips />
           </Show>
         </box>
+        <Show when={size() !== "compact"}>
+          <box width="100%" maxWidth={maxWidth()} alignItems="center" paddingTop={1}>
+            <text fg={theme.textMuted}>home prompt size: {size()}</text>
+          </box>
+        </Show>
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>

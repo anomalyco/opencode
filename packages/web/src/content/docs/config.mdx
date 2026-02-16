@@ -164,7 +164,12 @@ You can configure TUI-specific settings through the `tui` option.
     "scroll_acceleration": {
       "enabled": true
     },
-    "diff_style": "auto"
+    "diff_style": "auto",
+    "initial_prompt": {
+      "size": "medium",
+      "width_percent": 80,
+      "height_percent": 25
+    }
   }
 }
 ```
@@ -174,6 +179,11 @@ Available options:
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `3`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
+- `initial_prompt.size` - Preset size for the opening home-screen prompt composer. Values: `"compact"` (current behavior), `"medium"`, `"large"`.
+- `initial_prompt.width_percent` - Optional opening-screen width override (percentage of terminal width, `40`-`100`).
+- `initial_prompt.height_percent` - Optional opening-screen max input height override (percentage of terminal height, `10`-`60`).
+
+`initial_prompt` only affects the opening home screen prompt. Session prompt behavior is unchanged.
 
 [Learn more about using the TUI here](/docs/tui).
 

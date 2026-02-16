@@ -333,6 +333,78 @@ test("handles command configuration", async () => {
   })
 })
 
+test("handles tui initial prompt configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        tui: {
+          initial_prompt: {
+            size: "large",
+            width_percent: 92,
+            height_percent: 38,
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.initial_prompt).toEqual({
+        size: "large",
+        width_percent: 92,
+        height_percent: 38,
+      })
+    },
+  })
+})
+
+test("rejects invalid tui initial prompt size", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        tui: {
+          initial_prompt: {
+            size: "huge",
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
+test("rejects invalid tui initial prompt percentages", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        tui: {
+          initial_prompt: {
+            size: "medium",
+            width_percent: 120,
+            height_percent: 5,
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

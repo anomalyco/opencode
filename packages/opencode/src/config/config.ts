@@ -930,6 +930,29 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    initial_prompt: z
+      .object({
+        size: z
+          .enum(["compact", "medium", "large"])
+          .optional()
+          .describe("Preset size for the opening home-screen prompt composer"),
+        width_percent: z
+          .number()
+          .int()
+          .min(40)
+          .max(100)
+          .optional()
+          .describe("Override opening home-screen prompt width as terminal percentage (40-100)"),
+        height_percent: z
+          .number()
+          .int()
+          .min(10)
+          .max(60)
+          .optional()
+          .describe("Override opening home-screen prompt max input height as terminal percentage (10-60)"),
+      })
+      .optional()
+      .describe("Opening home-screen prompt sizing preferences"),
   })
 
   export const Server = z

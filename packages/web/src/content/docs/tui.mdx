@@ -364,6 +364,11 @@ You can customize TUI behavior through your OpenCode config file.
     "scroll_speed": 3,
     "scroll_acceleration": {
       "enabled": true
+    },
+    "initial_prompt": {
+      "size": "medium",
+      "width_percent": 80,
+      "height_percent": 25
     }
   }
 }
@@ -373,6 +378,13 @@ You can customize TUI behavior through your OpenCode config file.
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `initial_prompt.size` - Preset opening-screen prompt size: `compact`, `medium`, or `large`.
+- `initial_prompt.width_percent` - Optional opening-screen width override as percent of terminal width (`40`-`100`).
+- `initial_prompt.height_percent` - Optional opening-screen input max-height override as percent of terminal height (`10`-`60`).
+
+`compact` preserves the current default opening prompt behavior.
+
+`initial_prompt` only affects the opening home screen prompt. Session prompt behavior is unchanged.
 
 ---
 

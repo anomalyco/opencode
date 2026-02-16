@@ -9655,6 +9655,29 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "initial_prompt": {
+                "description": "Opening home-screen prompt sizing preferences",
+                "type": "object",
+                "properties": {
+                  "size": {
+                    "description": "Preset size for the opening home-screen prompt composer",
+                    "type": "string",
+                    "enum": ["compact", "medium", "large"]
+                  },
+                  "width_percent": {
+                    "description": "Override opening home-screen prompt width as terminal percentage (40-100)",
+                    "type": "integer",
+                    "minimum": 40,
+                    "maximum": 100
+                  },
+                  "height_percent": {
+                    "description": "Override opening home-screen prompt max input height as terminal percentage (10-60)",
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 60
+                  }
+                }
               }
             }
           },
