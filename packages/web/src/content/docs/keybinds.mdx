@@ -105,6 +105,151 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
 
 ---
 
+## Keybinds reference
+
+Below is a complete list of all available keybinds with their default values and descriptions.
+
+### Application & UI
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `leader` | `ctrl+x` | Leader key for keybind combinations |
+| `app_exit` | `ctrl+c,ctrl+d,<leader>q` | Exit the application |
+| `editor_open` | `<leader>e` | Open external editor |
+| `theme_list` | `<leader>t` | List available themes |
+| `sidebar_toggle` | `<leader>b` | Toggle sidebar |
+| `scrollbar_toggle` | `none` | Toggle session scrollbar |
+| `username_toggle` | `none` | Toggle username visibility |
+| `status_view` | `<leader>s` | View status |
+| `tool_details` | `none` | Toggle tool details visibility |
+| `tips_toggle` | `<leader>h` | Toggle tips on home screen |
+| `terminal_suspend` | `ctrl+z` | Suspend terminal |
+| `terminal_title_toggle` | `none` | Toggle terminal title |
+| `display_thinking` | `none` | Toggle thinking blocks visibility |
+
+### Session management
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `session_new` | `<leader>n` | Create a new session |
+| `session_list` | `<leader>l` | List all sessions |
+| `session_timeline` | `<leader>g` | Show session timeline |
+| `session_export` | `<leader>x` | Export session to editor |
+| `session_fork` | `none` | Fork session from message |
+| `session_rename` | `none` | Rename session |
+| `session_delete` | `none` | Delete session |
+| `stash_delete` | `none` | Delete stash entry |
+| `session_share` | `none` | Share current session |
+| `session_unshare` | `none` | Unshare current session |
+| `session_interrupt` | `escape` | Interrupt current session |
+| `session_compact` | `<leader>c` | Compact the session |
+| `session_child_cycle` | `<leader>right` | Next child session |
+| `session_child_cycle_reverse` | `<leader>left` | Previous child session |
+| `session_parent` | `<leader>up` | Go to parent session |
+
+### Messages & navigation
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `messages_page_up` | `pageup,ctrl+alt+b` | Scroll messages up by one page |
+| `messages_page_down` | `pagedown,ctrl+alt+f` | Scroll messages down by one page |
+| `messages_line_up` | `ctrl+alt+y` | Scroll messages up by one line |
+| `messages_line_down` | `ctrl+alt+e` | Scroll messages down by one line |
+| `messages_half_page_up` | `ctrl+alt+u` | Scroll messages up by half page |
+| `messages_half_page_down` | `ctrl+alt+d` | Scroll messages down by half page |
+| `messages_first` | `ctrl+g,home` | Navigate to first message |
+| `messages_last` | `ctrl+alt+g,end` | Navigate to last message |
+| `messages_next` | `none` | Navigate to next message |
+| `messages_previous` | `none` | Navigate to previous message |
+| `messages_last_user` | `none` | Navigate to last user message |
+| `messages_copy` | `<leader>y` | Copy message |
+| `messages_undo` | `<leader>u` | Undo message |
+| `messages_redo` | `<leader>r` | Redo message |
+| `messages_toggle_conceal` | `<leader>h` | Toggle code block concealment in messages |
+
+### Model & agent management
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `model_list` | `<leader>m` | List available models |
+| `model_cycle_recent` | `f2` | Next recently used model |
+| `model_cycle_recent_reverse` | `shift+f2` | Previous recently used model |
+| `model_cycle_favorite` | `none` | Next favorite model |
+| `model_cycle_favorite_reverse` | `none` | Previous favorite model |
+| `model_provider_list` | `ctrl+a` | Open provider list from model dialog |
+| `model_favorite_toggle` | `ctrl+f` | Toggle model favorite status |
+| `variant_cycle` | `ctrl+t` | Cycle model variants |
+| `agent_list` | `<leader>a` | List agents |
+| `agent_cycle` | `tab` | Next agent |
+| `agent_cycle_reverse` | `shift+tab` | Previous agent |
+| `command_list` | `ctrl+p` | List available commands |
+
+### Input editing
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `input_submit` | `return` | Submit input |
+| `input_newline` | `shift+return,ctrl+return,alt+return,ctrl+j` | Insert newline in input |
+| `input_clear` | `ctrl+c` | Clear input field |
+| `input_paste` | `ctrl+v` | Paste from clipboard |
+| `input_undo` | `ctrl+-,super+z` | Undo in input |
+| `input_redo` | `ctrl+.,super+shift+z` | Redo in input |
+
+### Cursor movement
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `input_move_left` | `left,ctrl+b` | Move cursor left in input |
+| `input_move_right` | `right,ctrl+f` | Move cursor right in input |
+| `input_move_up` | `up` | Move cursor up in input |
+| `input_move_down` | `down` | Move cursor down in input |
+| `input_line_home` | `ctrl+a` | Move to start of line in input |
+| `input_line_end` | `ctrl+e` | Move to end of line in input |
+| `input_visual_line_home` | `alt+a` | Move to start of visual line in input |
+| `input_visual_line_end` | `alt+e` | Move to end of visual line in input |
+| `input_buffer_home` | `home` | Move to start of buffer in input |
+| `input_buffer_end` | `end` | Move to end of buffer in input |
+| `input_word_forward` | `alt+f,alt+right,ctrl+right` | Move word forward in input |
+| `input_word_backward` | `alt+b,alt+left,ctrl+left` | Move word backward in input |
+
+### Text selection
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `input_select_left` | `shift+left` | Select left in input |
+| `input_select_right` | `shift+right` | Select right in input |
+| `input_select_up` | `shift+up` | Select up in input |
+| `input_select_down` | `shift+down` | Select down in input |
+| `input_select_line_home` | `ctrl+shift+a` | Select to start of line in input |
+| `input_select_line_end` | `ctrl+shift+e` | Select to end of line in input |
+| `input_select_visual_line_home` | `alt+shift+a` | Select to start of visual line in input |
+| `input_select_visual_line_end` | `alt+shift+e` | Select to end of visual line in input |
+| `input_select_buffer_home` | `shift+home` | Select to start of buffer in input |
+| `input_select_buffer_end` | `shift+end` | Select to end of buffer in input |
+| `input_select_word_forward` | `alt+shift+f,alt+shift+right` | Select word forward in input |
+| `input_select_word_backward` | `alt+shift+b,alt+shift+left` | Select word backward in input |
+
+### Text deletion
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `input_backspace` | `backspace,shift+backspace` | Backspace in input |
+| `input_delete` | `ctrl+d,delete,shift+delete` | Delete character in input |
+| `input_delete_line` | `ctrl+shift+d` | Delete line in input |
+| `input_delete_to_line_end` | `ctrl+k` | Delete to end of line in input |
+| `input_delete_to_line_start` | `ctrl+u` | Delete to start of line in input |
+| `input_delete_word_forward` | `alt+d,alt+delete,ctrl+delete` | Delete word forward in input |
+| `input_delete_word_backward` | `ctrl+w,ctrl+backspace,alt+backspace` | Delete word backward in input |
+
+### History
+
+| Keybind | Default | Description |
+| ------- | ------- | ----------- |
+| `history_previous` | `up` | Previous history item |
+| `history_next` | `down` | Next history item |
+
+---
+
 ## Leader key
 
 OpenCode uses a `leader` key for most keybinds. This avoids conflicts in your terminal.
