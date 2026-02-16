@@ -753,20 +753,37 @@
 
   [data-slot="question-progress-segment"] {
     width: 16px;
-    height: 2px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     border-radius: 999px;
-    background-color: var(--icon-weak-base);
-    transition:
-      width 0.2s ease,
-      background-color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: manipulation;
 
-    &[data-active="true"] {
+    &::after {
+      content: "";
       width: 16px;
+      height: 2px;
+      border-radius: 999px;
+      background-color: var(--icon-weak-base);
+      transition: background-color 0.2s ease;
+    }
+
+    &[data-active="true"]::after {
       background-color: var(--icon-strong-base);
     }
 
-    &[data-answered="true"] {
+    &[data-answered="true"]::after {
       background-color: var(--icon-interactive-base);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
     }
   }
 

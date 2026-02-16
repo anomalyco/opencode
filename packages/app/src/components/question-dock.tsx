@@ -142,18 +142,28 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     setStore("editing", false)
   }
 
+  const jump = (tab: number) => {
+    if (store.sending) return
+    setStore("tab", tab)
+    setStore("editing", false)
+  }
+
   return (
     <div data-component="question-prompt">
       <div data-slot="question-body">
         <div data-slot="question-header">
           <div data-slot="question-header-title">{summary()}</div>
-          <div data-slot="question-progress" aria-hidden="true">
+          <div data-slot="question-progress">
             <For each={questions()}>
               {(_, i) => (
-                <span
+                <button
+                  type="button"
                   data-slot="question-progress-segment"
                   data-active={i() === store.tab}
                   data-answered={(store.answers[i()]?.length ?? 0) > 0}
+                  disabled={store.sending}
+                  onClick={() => jump(i())}
+                  aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
                 />
               )}
             </For>
