@@ -722,7 +722,7 @@
     gap: 16px;
     flex: 1;
     min-height: 0;
-    padding: 8px;
+    padding: 8px 8px 0;
     background-color: var(--surface-raised-stronger-non-alpha);
     border-radius: 12px;
     box-shadow: var(--shadow-xs-border);
@@ -822,6 +822,7 @@
     flex-direction: column;
     gap: 6px;
     margin-top: 12px;
+    padding-bottom: 8px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
