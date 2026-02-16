@@ -372,7 +372,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-2 gap-1.5 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
                           onClick={() => openDir(current().id)}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
