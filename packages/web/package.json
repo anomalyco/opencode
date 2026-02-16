@@ -12,7 +12,7 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "12.6.3",
+    "@astrojs/cloudflare": "12.6.6",
     "@astrojs/markdown-remark": "6.3.1",
     "@astrojs/solid-js": "5.1.0",
     "@astrojs/starlight": "0.34.3",
@@ -20,7 +20,7 @@
     "@shikijs/transformers": "3.4.2",
     "@types/luxon": "catalog:",
     "ai": "catalog:",
-    "astro": "5.7.13",
+    "astro": "5.15.9",
     "diff": "catalog:",
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
