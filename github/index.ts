@@ -382,6 +382,9 @@ function useShareUrl() {
 async function getAccessToken() {
   const { repo } = useContext()
 
+  const ghesAppToken = process.env["GHES_APP_TOKEN"]
+  if (ghesAppToken) return ghesAppToken
+
   const envToken = useEnvGithubToken()
   if (envToken) return envToken
 
