@@ -19,7 +19,7 @@ export namespace Billing {
   export const RELOAD_TRIGGER_MIN = 5
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
-      apiVersion: "2025-03-31.basil",
+      apiVersion: "2026-01-28.clover",
       httpClient: Stripe.createFetchHttpClient(),
     })
 
