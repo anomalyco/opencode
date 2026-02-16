@@ -117,6 +117,10 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+
+    [data-component="diff-changes"][data-variant="bars"] {
+      transform: translateY(1px);
+    }
   }
 
   [data-component="session-turn-diffs-content"] {
