@@ -1311,7 +1311,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="shrink-0">
               <div
                 data-component="prompt-mode-toggle"
-                class="relative h-8 w-16 rounded-[4px] bg-surface-inset-base shadow-[var(--shadow-xs-border-base)] p-0 flex items-center gap-1 overflow-visible"
+                class="relative h-8 w-[68px] rounded-[4px] bg-surface-inset-base shadow-[var(--shadow-xs-border-base)] p-0 flex items-center gap-1 overflow-visible"
               >
                 <div
                   class="absolute inset-y-0 left-0 w-[calc((100%-4px)/2)] rounded-[4px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-xs-border)] transition-transform duration-200 ease-out will-change-transform"
@@ -1327,10 +1327,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <Icon
                     name="console"
-                    size="small"
-                    class="size-5"
+                    size="normal"
                     classList={{
-                      "text-icon-warning-base": store.mode === "shell",
+                      "text-icon-strong": store.mode === "shell",
                       "text-icon-weak": store.mode !== "shell",
                     }}
                   />
@@ -1343,8 +1342,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <Icon
                     name="prompt"
-                    size="small"
-                    class="size-5"
+                    size="normal"
                     classList={{
                       "text-icon-interactive-base": store.mode === "normal",
                       "text-icon-weak": store.mode !== "normal",
