@@ -124,6 +124,7 @@ function getNoreplyEmail(username: string, host: string) {
   return `${username}@users.noreply.${host}`
 }
 
+const ghUrls = getGitHubURLs()
 const { client, server } = createOpencode()
 let accessToken: string
 let octoRest: Octokit
@@ -141,8 +142,9 @@ try {
   await assertOpencodeConnected()
 
   accessToken = await getAccessToken()
-  octoRest = new Octokit({ auth: accessToken })
+  octoRest = new Octokit({ auth: accessToken, baseUrl: ghUrls.apiUrl })
   octoGraph = graphql.defaults({
+    baseUrl: ghUrls.apiUrl,
     headers: { authorization: `token ${accessToken}` },
   })
 

@@ -8,6 +8,13 @@ export function parseGitRemote(url: string): { host: string; owner: string; repo
   return { host: match[1], owner: match[2], repo: match[3] }
 }
 
+export function getGitHubURLs() {
+  const serverUrl = (process.env.GITHUB_SERVER_URL || "https://github.com").replace(/\/+$/, "")
+  const apiUrl = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "")
+  const host = new URL(serverUrl).host
+  return { serverUrl, apiUrl, host }
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).

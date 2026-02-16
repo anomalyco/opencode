@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError, getGitHubURLs } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -422,13 +422,14 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     // workflow_dispatch has an actor (the user who triggered it), schedule does not
     const actor = isScheduleEvent ? undefined : context.actor
 
-    const issueId = isRepoEvent
-      ? undefined
-      : context.eventName === "issue_comment" || context.eventName === "issues"
-        ? (payload as IssueCommentEvent | IssuesEvent).issue.number
-        : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
-    const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-    const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
+      const issueId = isRepoEvent
+        ? undefined
+        : context.eventName === "issue_comment" || context.eventName === "issues"
+          ? (payload as IssueCommentEvent | IssuesEvent).issue.number
+          : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
+      const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
+      const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
+      const ghUrls = getGitHubURLs()
 
     let appToken: string
     let octoRest: Octokit
@@ -482,8 +483,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const actionToken = isMock ? args.token! : await getOidcToken()
         appToken = await exchangeForAppToken(actionToken)
       }
-      octoRest = new Octokit({ auth: appToken })
+      octoRest = new Octokit({ auth: appToken, baseUrl: ghUrls.apiUrl })
       octoGraph = graphql.defaults({
+        baseUrl: ghUrls.apiUrl,
         headers: { authorization: `token ${appToken}` },
       })
       githubClientReady = true
