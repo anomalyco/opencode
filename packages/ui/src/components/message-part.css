@@ -809,20 +809,23 @@
     background-color: var(--surface-raised-stronger-non-alpha);
     border: 1px solid var(--border-weak-base);
     border-radius: 6px;
+    box-shadow: none;
     text-align: left;
     width: 100%;
     cursor: pointer;
     transition:
       background-color 0.15s ease,
-      border-color 0.15s ease;
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
 
     &:hover:not([data-picked="true"]) {
       background-color: var(--background-base);
     }
 
     &[data-picked="true"] {
-      background-color: var(--surface-base-interactive-active);
-      border-color: var(--border-weak-selected);
+      background-color: var(--surface-interactive-weak);
+      border-color: transparent;
+      box-shadow: var(--shadow-xs-border-hover);
     }
 
     &:disabled {
