@@ -1108,7 +1108,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
             />
 
-            <div class="pointer-events-auto flex items-center gap-2">
+            <div class="pointer-events-auto flex items-center gap-1">
               <Show when={store.mode === "normal"}>
                 <TooltipKeybind
                   placement="top"
