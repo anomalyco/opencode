@@ -505,6 +505,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Перейти к последнему",
 
   "session.context.addToContext": "Добавить {{selection}} в контекст",
+  "session.todo.title": "Задачи",
+  "session.todo.collapse": "Свернуть",
+  "session.todo.expand": "Развернуть",
 
   "session.new.worktree.main": "Основная ветка",
   "session.new.worktree.mainWithBranch": "Основная ветка ({{branch}})",

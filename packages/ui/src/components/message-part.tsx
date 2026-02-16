@@ -293,7 +293,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     case "glob":
       return {
-        title: "Search",
+        title: i18n.t("ui.tool.glob"),
         subtitle: getDirectory(path),
         args: pattern ? ["pattern=" + pattern] : [],
       }
@@ -302,7 +302,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       if (pattern) args.push("pattern=" + pattern)
       if (include) args.push("include=" + include)
       return {
-        title: "Search",
+        title: i18n.t("ui.tool.grep"),
         subtitle: getDirectory(path),
         args,
       }
@@ -454,7 +454,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
           >
             <span data-slot="context-tool-group-title">
               <span data-slot="context-tool-group-label">
-                <TextShimmer text="Gathering context" />
+                <TextShimmer text={i18n.t("ui.sessionTurn.status.gatheringContext")} />
               </span>
               <Show when={details().length}>
                 <span data-slot="context-tool-group-summary">{details()}</span>

@@ -507,6 +507,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Hopp til nyeste",
 
   "session.context.addToContext": "Legg til {{selection}} i kontekst",
+  "session.todo.title": "Oppgaver",
+  "session.todo.collapse": "Skjul",
+  "session.todo.expand": "Utvid",
 
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",

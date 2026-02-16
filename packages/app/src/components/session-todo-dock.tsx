@@ -40,7 +40,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
     const total = props.todos.length
     if (total === 0) return ""
     const completed = props.todos.filter((todo) => todo.status === "completed").length
-    return `${completed} of ${total} ${props.title.toLowerCase()} completed`
+    return `${completed}/${total}`
   })
 
   const active = createMemo(

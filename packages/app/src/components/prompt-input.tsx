@@ -858,8 +858,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
-      pick()
       event.preventDefault()
+      if (store.mode !== "normal") return
+      pick()
       return
     }
 

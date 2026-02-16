@@ -12,6 +12,7 @@ import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { TextShimmer } from "./text-shimmer"
 import { createAutoScroll } from "../hooks"
+import { useI18n } from "../context/i18n"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -111,6 +112,7 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
+  const i18n = useI18n()
   const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
@@ -169,11 +171,14 @@ export function SessionTurn(
     if (!files?.length) return emptyDiffs
 
     const seen = new Set<string>()
-    return files.filter((diff) => {
-      if (seen.has(diff.file)) return false
-      seen.add(diff.file)
-      return true
-    })
+    return files
+      .reduceRight<FileDiff[]>((result, diff) => {
+        if (seen.has(diff.file)) return result
+        seen.add(diff.file)
+        result.push(diff)
+        return result
+      }, [])
+      .reverse()
   })
   const edited = createMemo(() => diffs().length)
   const [open, setOpen] = createSignal(false)
@@ -271,7 +276,7 @@ export function SessionTurn(
                 </div>
                 <Show when={working() && assistantVisible() === 0 && !error()}>
                   <div data-slot="session-turn-thinking">
-                    <TextShimmer text="Thinking" />
+                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
                   </div>
                 </Show>
                 <Show when={assistantMessages().length > 0}>
@@ -292,9 +297,11 @@ export function SessionTurn(
                       <Collapsible.Trigger>
                         <div data-component="session-turn-diffs-trigger">
                           <div data-slot="session-turn-diffs-title">
-                            <span data-slot="session-turn-diffs-label">Edited</span>
+                            <span data-slot="session-turn-diffs-label">
+                              {i18n.t("ui.sessionReview.change.modified")}
+                            </span>
                             <span data-slot="session-turn-diffs-count">
-                              {edited()} {edited() === 1 ? "file" : "files"}
+                              {edited()} {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
                             </span>
                             <div data-slot="session-turn-diffs-meta">
                               <DiffChanges changes={diffs()} variant="bars" />

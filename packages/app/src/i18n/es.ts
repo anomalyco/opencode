@@ -507,6 +507,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Ir al último",
 
   "session.context.addToContext": "Añadir {{selection}} al contexto",
+  "session.todo.title": "Tareas",
+  "session.todo.collapse": "Contraer",
+  "session.todo.expand": "Expandir",
 
   "session.new.worktree.main": "Rama principal",
   "session.new.worktree.mainWithBranch": "Rama principal ({{branch}})",

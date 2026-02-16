@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { BasicTool } from "@opencode-ai/ui/basic-tool"
@@ -34,56 +34,61 @@ export function SessionPromptDock(props: {
   let timer: number | undefined
   let raf: number | undefined
 
-  createEffect(() => {
+  const scheduleClose = () => {
     if (timer) window.clearTimeout(timer)
-    if (raf) cancelAnimationFrame(raf)
-
-    if (props.todos.length === 0) {
-      setDock(false)
-      setClosing(false)
-      setOpening(false)
-      timer = undefined
-      raf = undefined
-      return
-    }
-
-    if (!done()) {
-      const wasHidden = !dock() || closing()
-      setDock(true)
-      setClosing(false)
-      if (wasHidden) {
-        setOpening(true)
-        raf = requestAnimationFrame(() => {
-          setOpening(false)
-          raf = undefined
-        })
-      } else {
-        setOpening(false)
-        raf = undefined
-      }
-      timer = undefined
-      return
-    }
-
-    setDock(true)
-    setOpening(false)
-    raf = undefined
-    if (!closing()) {
-      setClosing(true)
-      timer = window.setTimeout(() => {
-        setDock(false)
-        setClosing(false)
-        timer = undefined
-      }, 400)
-      return
-    }
-
     timer = window.setTimeout(() => {
       setDock(false)
       setClosing(false)
       timer = undefined
     }, 400)
-  })
+  }
+
+  createEffect(
+    on(
+      () => [props.todos.length, done()] as const,
+      ([count, complete], prev) => {
+        if (raf) cancelAnimationFrame(raf)
+        raf = undefined
+
+        if (count === 0) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          setDock(false)
+          setClosing(false)
+          setOpening(false)
+          return
+        }
+
+        if (!complete) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          const wasHidden = !dock() || closing()
+          setDock(true)
+          setClosing(false)
+          if (wasHidden) {
+            setOpening(true)
+            raf = requestAnimationFrame(() => {
+              setOpening(false)
+              raf = undefined
+            })
+            return
+          }
+          setOpening(false)
+          return
+        }
+
+        if (prev && prev[1]) {
+          if (closing() && !timer) scheduleClose()
+          return
+        }
+
+        setDock(true)
+        setOpening(false)
+        setClosing(true)
+        scheduleClose()
+      },
+    ),
+  )
 
   onCleanup(() => {
     if (!timer) return

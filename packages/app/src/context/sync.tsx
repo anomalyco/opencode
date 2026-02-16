@@ -300,7 +300,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const cached = globalSync.data.session_todo[sessionID]
           if (cached !== undefined) {
             setStore("todo", sessionID, reconcile(cached, { key: "id" }))
-            return
           }
 
           const key = keyFor(directory, sessionID)

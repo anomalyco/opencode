@@ -1002,6 +1002,12 @@
       color: var(--text-weak);
     }
 
+    &:focus-visible {
+      outline: 1px solid var(--border-interactive-base);
+      outline-offset: 2px;
+      border-radius: var(--radius-xs);
+    }
+
     &:disabled {
       opacity: 0.6;
     }

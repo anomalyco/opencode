@@ -552,7 +552,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="flex items-center gap-3 ml-2 shrink-0">
+              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
@@ -585,7 +585,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden lg:block shrink-0">
+              <div class="hidden md:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -615,7 +615,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden lg:block shrink-0">
+              <div class="hidden md:block shrink-0">
                 <div
                   aria-hidden={!view().reviewPanel.opened()}
                   class="overflow-hidden transition-[width,margin-left] duration-200 ease-out motion-reduce:transition-none"
