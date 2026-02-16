@@ -14,7 +14,7 @@
     "aws4fetch": "1.0.20",
     "drizzle-orm": "catalog:",
     "postgres": "3.4.7",
-    "stripe": "18.0.0",
+    "stripe": "20.3.1",
     "ulid": "catalog:",
     "zod": "catalog:"
   },

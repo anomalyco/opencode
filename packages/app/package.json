@@ -24,8 +24,8 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@happy-dom/global-registrator": "20.0.11",
-    "@playwright/test": "1.57.0",
+    "@happy-dom/global-registrator": "20.6.1",
+    "@playwright/test": "1.58.2",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",
