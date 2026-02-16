@@ -385,14 +385,11 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
-      // Monkey-patch the terminal's render loop to throttle FPS for CPU usage
-      // IMPORTANT: This must happen BEFORE t.open(container) so the patched function is used
-      // when the render loop starts
       const termImpl = t as unknown as GhosttyTerminalImpl
 
-      let lastFrameTime = 0
-      let animationFrameId: number | undefined
-      const minFrameInterval = createMemo(() => {
+      let lastFrame = 0
+      let frameId: number | undefined
+      const interval = createMemo(() => {
         const fps = settings.appearance.terminalFps()
         return fps === 0 ? 0 : 1000 / fps
       })
@@ -402,9 +399,9 @@ export const Terminal = (props: TerminalProps) => {
           if (termImpl.isDisposed || !termImpl.isOpen) return
 
           const now = performance.now()
-          const interval = minFrameInterval()
-          if (interval === 0 || now - lastFrameTime >= interval) {
-            if (interval > 0) lastFrameTime = now
+          const ms = interval()
+          if (ms === 0 || now - lastFrame >= ms) {
+            if (ms > 0) lastFrame = now
             termImpl.renderer.render(termImpl.wasmTerm, false, termImpl.viewportY, termImpl, termImpl.scrollbarOpacity)
             const cursor = termImpl.wasmTerm.getCursor()
             if (cursor.y !== termImpl.lastCursorY) {
@@ -412,7 +409,7 @@ export const Terminal = (props: TerminalProps) => {
               termImpl.cursorMoveEmitter.fire()
             }
           }
-          animationFrameId = requestAnimationFrame(throttledLoop)
+          frameId = requestAnimationFrame(throttledLoop)
         }
         throttledLoop()
       }
@@ -442,8 +439,8 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => disposeIfDisposable(onKey))
 
       cleanups.push(() => {
-        if (animationFrameId !== undefined) {
-          cancelAnimationFrame(animationFrameId)
+        if (frameId !== undefined) {
+          cancelAnimationFrame(frameId)
         }
       })
 

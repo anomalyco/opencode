@@ -14,6 +14,7 @@ export const settingsSoundsAgentEnabledSelector = '[data-action="settings-sounds
 export const settingsSoundsPermissionsSelector = '[data-action="settings-sounds-permissions"]'
 export const settingsSoundsPermissionsEnabledSelector = '[data-action="settings-sounds-permissions-enabled"]'
 export const settingsSoundsErrorsSelector = '[data-action="settings-sounds-errors"]'
+export const settingsTerminalFpsSelector = '[data-action="settings-terminal-fps"]'
 export const settingsSoundsErrorsEnabledSelector = '[data-action="settings-sounds-errors-enabled"]'
 export const settingsUpdatesStartupSelector = '[data-action="settings-updates-startup"]'
 export const settingsReleaseNotesSelector = '[data-action="settings-release-notes"]'

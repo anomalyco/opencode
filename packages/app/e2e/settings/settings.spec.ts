@@ -1,6 +1,7 @@
 import { test, expect, settingsKey } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
 import {
+  promptSelector,
   settingsColorSchemeSelector,
   settingsFontSelector,
   settingsLanguageSelectSelector,
@@ -9,12 +10,15 @@ import {
   settingsNotificationsPermissionsSelector,
   settingsReleaseNotesSelector,
   settingsSoundsAgentSelector,
+  settingsTerminalFpsSelector,
   settingsSoundsAgentEnabledSelector,
   settingsSoundsErrorsSelector,
   settingsSoundsPermissionsSelector,
   settingsThemeSelector,
+  terminalSelector,
   settingsUpdatesStartupSelector,
 } from "../selectors"
+import { terminalToggleKey } from "../utils"
 
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -476,4 +480,72 @@ test("toggling release notes switch updates localStorage", async ({ page, gotoSe
   }, settingsKey)
 
   expect(stored?.general?.releaseNotes).toBe(false)
+})
+
+test("changing terminal FPS persists in localStorage", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const input = dialog.locator(settingsTerminalFpsSelector)
+  await expect(input).toBeVisible()
+
+  const initialFps = await input.inputValue()
+  expect(initialFps).toBe("15")
+
+  await input.fill("30")
+  await page.waitForTimeout(100)
+
+  const stored = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  expect(stored?.appearance?.terminalFps).toBe(30)
+})
+
+test("terminal FPS value is retrieved after page reload", async ({ page, gotoSession }) => {
+  await page.addInitScript(() => {
+    const settings = JSON.parse(localStorage.getItem("settings.v3") || "{}")
+    settings.appearance = { ...(settings.appearance || {}), terminalFps: 60 }
+    localStorage.setItem("settings.v3", JSON.stringify(settings))
+  })
+
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const input = dialog.locator(settingsTerminalFpsSelector)
+  await expect(input).toBeVisible()
+
+  const fpsValue = await input.inputValue()
+  expect(fpsValue).toBe("60")
+})
+
+test("changing terminal FPS updates all open terminals", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const terminals = page.locator(terminalSelector)
+  const initiallyOpen = await terminals.first().isVisible()
+  if (!initiallyOpen) {
+    await page.keyboard.press(terminalToggleKey)
+  }
+
+  await page.locator(promptSelector).click()
+  await page.keyboard.press("Control+Alt+T")
+
+  await expect(terminals).toHaveCount(2)
+  await expect(terminals.first().locator("textarea")).toHaveCount(1)
+  await expect(terminals.nth(1).locator("textarea")).toHaveCount(1)
+
+  const dialog = await openSettings(page)
+  const input = dialog.locator(settingsTerminalFpsSelector)
+  await expect(input).toBeVisible()
+
+  await input.fill("1")
+  await page.waitForTimeout(100)
+
+  await closeDialog(page, dialog)
+
+  await expect(terminals).toHaveCount(2)
+  await expect(terminals.first().locator("textarea")).toHaveCount(1)
+  await expect(terminals.nth(1).locator("textarea")).toHaveCount(1)
 })

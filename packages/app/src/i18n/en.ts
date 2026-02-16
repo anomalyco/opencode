@@ -604,7 +604,7 @@ export const dict = {
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
   "settings.general.row.terminalFps.title": "Terminal FPS",
-  "settings.general.row.terminalFps.description": "Terminal rendering speed. 0 = unlimited (uses more CPU).",
+  "settings.general.row.terminalFps.description": "The maximum terminal framerate. 0 = unlimited (uses more CPU).",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
