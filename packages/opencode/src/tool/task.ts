@@ -144,7 +144,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      const cancelled = result.info.role === "assistant" && result.info.error?.name === "MessageAbortedError"
+      const text = cancelled ? "Task was cancelled by user." : result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const output = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,

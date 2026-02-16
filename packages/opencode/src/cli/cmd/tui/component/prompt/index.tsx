@@ -37,6 +37,7 @@ import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 
 export type PromptProps = {
+  parentSessionID?: string
   sessionID?: string
   workspaceID?: string
   visible?: boolean
@@ -50,6 +51,7 @@ export type PromptProps = {
 export type PromptRef = {
   focused: boolean
   current: PromptInfo
+  interrupt: number
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
@@ -127,6 +129,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    interruptTimeout: ReturnType<typeof setTimeout> | undefined,
     placeholder: number
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
@@ -137,6 +140,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    interruptTimeout: undefined,
   })
 
   createEffect(
@@ -144,6 +148,9 @@ export function Prompt(props: PromptProps) {
       () => props.sessionID,
       () => {
         setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
+        clearTimeout(store.interruptTimeout)
+        setStore("interrupt", 0)
+        setStore("interruptTimeout", undefined)
       },
       { defer: true },
     ),
@@ -221,7 +228,7 @@ export function Prompt(props: PromptProps) {
         enabled: status().type !== "idle",
         onSelect: (dialog) => {
           if (autocomplete.visible) return
-          if (!input.focused) return
+          if (!input.focused && !props.parentSessionID) return
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
@@ -229,18 +236,25 @@ export function Prompt(props: PromptProps) {
           }
           if (!props.sessionID) return
 
-          setStore("interrupt", store.interrupt + 1)
+          if (store.interruptTimeout) {
+            clearTimeout(store.interruptTimeout)
+            setStore("interruptTimeout", undefined)
+          }
 
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
+          if (store.interrupt) {
             sdk.client.session.abort({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
+            dialog.clear()
+            return
           }
+
+          setStore("interrupt", store.interrupt + 1)
+          setStore("interruptTimeout", setTimeout(() => {
+            setStore("interrupt", 0)
+            setStore("interruptTimeout", undefined)
+          }, 5000))
           dialog.clear()
         },
       },
@@ -362,6 +376,9 @@ export function Prompt(props: PromptProps) {
     },
     get current() {
       return store.prompt
+    },
+    get interrupt() {
+      return store.interrupt
     },
     focus() {
       input.focus()
@@ -1130,10 +1147,10 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+              <text fg={store.interrupt ? theme.primary : theme.text}>
+                {keybind.print("session_interrupt")}{" "}
+                <span style={{ fg: store.interrupt ? theme.primary : theme.textMuted }}>
+                  {store.interrupt ? "again to interrupt" : "interrupt"}
                 </span>
               </text>
             </box>

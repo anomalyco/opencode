@@ -9,6 +9,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
+import { usePromptRef } from "../../context/prompt"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -44,6 +45,7 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
+  const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
@@ -82,7 +84,9 @@ export function Header() {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
-  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
+  const status = createMemo(() => sync.data.session_status?.[route.sessionID])
+  const isRunning = createMemo(() => status()?.type !== "idle")
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | "cancel" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
 
@@ -149,6 +153,19 @@ export function Header() {
                     Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
                   </text>
                 </box>
+                <Show when={isRunning()}>
+                  <box
+                    onMouseOver={() => setHover("cancel")}
+                    onMouseOut={() => setHover(null)}
+                    onMouseUp={() => command.trigger("session.interrupt")}
+                    backgroundColor={hover() === "cancel" ? theme.backgroundElement : theme.backgroundPanel}
+                  >
+                    <text fg={theme.text}>
+                      Cancel{" "}
+                      <span style={{ fg: promptRef.current?.interrupt ? theme.primary : theme.textMuted }}>{keybind.print("session_interrupt")}{promptRef.current?.interrupt ? " again to confirm" : ""}</span>
+                    </text>
+                  </box>
+                </Show>
               </box>
             </box>
           </Match>

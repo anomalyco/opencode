@@ -1187,6 +1187,7 @@ export function Session() {
                   toBottom()
                 }}
                 sessionID={route.sessionID}
+                parentSessionID={session()?.parentID}
               />
             </box>
           </Show>
