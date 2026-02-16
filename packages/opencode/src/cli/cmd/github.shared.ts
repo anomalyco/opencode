@@ -15,6 +15,10 @@ export function getGitHubURLs() {
   return { serverUrl, apiUrl, host }
 }
 
+export function getNoreplyEmail(username: string, host: string) {
+  return `${username}@users.noreply.${host}`
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).
