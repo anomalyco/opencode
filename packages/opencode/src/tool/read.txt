@@ -1,12 +1,14 @@
-Reads a file from the local filesystem. You can access any file directly by using this tool.
-Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+Read a file or directory from the local filesystem. If the path does not exist, an error is returned.
 
 Usage:
-- The filePath parameter must be an absolute path, not a relative path
-- By default, it reads up to 2000 lines starting from the beginning of the file
-- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
-- Any lines longer than 2000 characters will be truncated
-- Results are returned using cat -n format, with line numbers starting at 1
-- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
-- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
-- You can read image files using this tool.
+- The filePath parameter should be an absolute path.
+- By default, this tool returns up to 2000 lines from the start of the file.
+- The offset parameter is the line number to start from (1-indexed).
+- To read later sections, call this tool again with a larger offset.
+- Use the grep tool to find specific content in large files or files with long lines.
+- If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern.
+- Contents are returned with each line prefixed by its line number as `<line>: <content>`. For example, if a file has contents "foo\n", you will receive "1: foo\n". For directories, entries are returned one per line (without line numbers) with a trailing `/` for subdirectories.
+- Any line longer than 2000 characters is truncated.
+- Call this tool in parallel when you know there are multiple files you want to read.
+- Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
+- This tool can read image files and PDFs and return them as file attachments.

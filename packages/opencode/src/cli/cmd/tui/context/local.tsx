@@ -35,10 +35,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents().find((x) => x.default)?.name ?? agents()[0].name,
+        current: agents()[0].name,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -48,6 +49,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.warning,
         theme.primary,
         theme.error,
+        theme.info,
       ])
       return {
         list() {
@@ -75,10 +77,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const agent = agents().find((x) => x.name === name)
-          if (agent?.color) return RGBA.fromHex(agent.color)
-          const index = agents().findIndex((x) => x.name === name)
+          const index = visibleAgents().findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
+          const agent = visibleAgents()[index]
+
+          if (agent?.color) {
+            const color = agent.color
+            if (color.startsWith("#")) return RGBA.fromHex(color)
+            // already validated by config, just satisfying TS here
+            return theme[color as keyof typeof theme] as RGBA
+          }
           return colors()[index % colors().length]
         },
       }
@@ -112,8 +120,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      const state = {
+        pending: false,
+      }
 
       function save() {
+        if (!modelStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
         Bun.write(
           file,
           JSON.stringify({
@@ -134,6 +150,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .catch(() => {})
         .finally(() => {
           setModelStore("ready", true)
+          if (state.pending) save()
         })
 
       const args = useArgs()

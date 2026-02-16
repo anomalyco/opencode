@@ -96,7 +96,7 @@ export const oxfmt: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -226,7 +226,7 @@ export const rlang: Info = {
 }
 
 export const uvformat: Info = {
-  name: "uv format",
+  name: "uv",
   command: ["uv", "format", "--", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
@@ -338,5 +338,38 @@ export const rustfmt: Info = {
   extensions: [".rs"],
   async enabled() {
     return Bun.which("rustfmt") !== null
+  },
+}
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
+    }
+    return false
+  },
+}
+
+export const ormolu: Info = {
+  name: "ormolu",
+  command: ["ormolu", "-i", "$FILE"],
+  extensions: [".hs"],
+  async enabled() {
+    return Bun.which("ormolu") !== null
+  },
+}
+
+export const cljfmt: Info = {
+  name: "cljfmt",
+  command: ["cljfmt", "fix", "--quiet", "$FILE"],
+  extensions: [".clj", ".cljs", ".cljc", ".edn"],
+  async enabled() {
+    return Bun.which("cljfmt") !== null
   },
 }

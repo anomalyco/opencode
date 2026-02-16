@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import type { NamedError } from "@opencode-ai/util/error"
+import { APICallError } from "ai"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 
@@ -8,6 +10,10 @@ function apiError(headers?: Record<string, string>): MessageV2.APIError {
     isRetryable: true,
     responseHeaders: headers,
   }).toObject() as MessageV2.APIError
+}
+
+function wrap(message: unknown): ReturnType<NamedError["toObject"]> {
+  return { data: { message } } as ReturnType<NamedError["toObject"]>
 }
 
 describe("session.retry.delay", () => {
@@ -58,6 +64,63 @@ describe("session.retry.delay", () => {
     const longError = apiError({ "retry-after-ms": "700000" })
     expect(SessionRetry.delay(1, longError)).toBe(700000)
   })
+
+  test("sleep caps delay to max 32-bit signed integer to avoid TimeoutOverflowWarning", async () => {
+    const controller = new AbortController()
+
+    const warnings: string[] = []
+    const originalWarn = process.emitWarning
+    process.emitWarning = (warning: string | Error) => {
+      warnings.push(typeof warning === "string" ? warning : warning.message)
+    }
+
+    const promise = SessionRetry.sleep(2_560_914_000, controller.signal)
+    controller.abort()
+
+    try {
+      await promise
+    } catch {}
+
+    process.emitWarning = originalWarn
+    expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+  })
+})
+
+describe("session.retry.retryable", () => {
+  test("maps too_many_requests json messages", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
+    expect(SessionRetry.retryable(error)).toBe("Too Many Requests")
+  })
+
+  test("maps overloaded provider codes", () => {
+    const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("handles json messages without code", () => {
+    const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
+    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
+  })
+
+  test("does not throw on numeric error codes", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { code: 123 } }))
+    const result = SessionRetry.retryable(error)
+    expect(result).toBeUndefined()
+  })
+
+  test("returns undefined for non-json message", () => {
+    const error = wrap("not-json")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry context overflow errors", () => {
+    const error = new MessageV2.ContextOverflowError({
+      message: "Input exceeds context window of this model",
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
 })
 
 describe("session.message-v2.fromError", () => {
@@ -107,5 +170,19 @@ describe("session.message-v2.fromError", () => {
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Connection reset by server")
+  })
+
+  test("marks OpenAI 404 status codes as retryable", () => {
+    const error = new APICallError({
+      message: "boom",
+      url: "https://api.openai.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 404,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"boom"}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
   })
 })

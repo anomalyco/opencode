@@ -1,8 +1,9 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
+import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
-import { DidYouKnow, randomizeTip } from "../component/did-you-know"
+import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -36,7 +37,6 @@ export function Home() {
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
-    return false
     // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
     return !tipsHidden()
@@ -77,7 +77,6 @@ export function Home() {
   let prompt: PromptRef
   const args = useArgs()
   onMount(() => {
-    randomizeTip()
     if (once) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
@@ -90,11 +89,18 @@ export function Home() {
   })
   const directory = useDirectory()
 
+  const keybind = useKeybind()
+
   return (
     <>
-      <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
-        <Logo />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
+      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+        <box flexGrow={1} minHeight={0} />
+        <box height={4} minHeight={0} flexShrink={1} />
+        <box flexShrink={0}>
+          <Logo />
+        </box>
+        <box height={1} minHeight={0} flexShrink={1} />
+        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
           <Prompt
             ref={(r) => {
               prompt = r
@@ -103,13 +109,14 @@ export function Home() {
             hint={Hint}
           />
         </box>
+        <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+          <Show when={showTips()}>
+            <Tips />
+          </Show>
+        </box>
+        <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
-      <Show when={!isFirstTimeUser()}>
-        <Show when={showTips()}>
-          <DidYouKnow />
-        </Show>
-      </Show>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
         <box gap={1} flexDirection="row" flexShrink={0}>
@@ -120,7 +127,7 @@ export function Home() {
                   <span style={{ fg: theme.error }}>⊙ </span>
                 </Match>
                 <Match when={true}>
-                  <span style={{ fg: theme.success }}>⊙ </span>
+                  <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
                 </Match>
               </Switch>
               {connectedMcpCount()} MCP

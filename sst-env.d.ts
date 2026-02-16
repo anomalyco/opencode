@@ -49,6 +49,14 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_SUPPORT_BOT_TOKEN": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "DISCORD_SUPPORT_CHANNEL_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Database": {
       "database": string
       "host": string
@@ -64,6 +72,14 @@ declare module "sst" {
     "EnterpriseStorage": {
       "name": string
       "type": "sst.cloudflare.Bucket"
+    }
+    "FEISHU_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FEISHU_APP_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
@@ -104,6 +120,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "STRIPE_PUBLISHABLE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "STRIPE_SECRET_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -124,11 +144,66 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
+    "ZEN_BLACK_LIMITS": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_BLACK_PRICE": {
+      "plan100": string
+      "plan20": string
+      "plan200": string
+      "product": string
+      "type": "sst.sst.Linkable"
+    }
     "ZEN_MODELS1": {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS10": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS11": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS12": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS13": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS14": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS15": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS16": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS17": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS18": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS19": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS2": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS20": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -145,6 +220,22 @@ declare module "sst" {
       "value": string
     }
     "ZEN_MODELS6": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS7": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS8": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS9": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_SESSION_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }

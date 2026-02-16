@@ -32,20 +32,19 @@
     /* } */
     &:focus-visible {
       outline: none;
+      background-color: var(--surface-raised-base-hover);
     }
     &[data-disabled] {
       cursor: not-allowed;
     }
 
     [data-slot="collapsible-arrow"] {
+      flex-shrink: 0;
       width: 24px;
       height: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-
-      /* [data-slot="collapsible-arrow-icon"] { */
-      /* } */
     }
   }
 
@@ -72,10 +71,17 @@
       /* } */
       &:focus-visible {
         outline: none;
+        background-color: var(--surface-raised-base-hover);
       }
       &[data-disabled] {
         cursor: not-allowed;
       }
+    }
+  }
+
+  &[data-variant="ghost"][data-scope="filetree"] {
+    > [data-slot="collapsible-trigger"] {
+      height: 24px;
     }
   }
 }

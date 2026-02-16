@@ -4,6 +4,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
+import { assertExternalDirectory } from "./external-directory"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -16,9 +17,20 @@ export const GlobTool = Tool.define("glob", {
         `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
       ),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
+    await ctx.ask({
+      permission: "glob",
+      patterns: [params.pattern],
+      always: ["*"],
+      metadata: {
+        pattern: params.pattern,
+        path: params.path,
+      },
+    })
+
     let search = params.path ?? Instance.directory
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
     const files = []
@@ -26,6 +38,7 @@ export const GlobTool = Tool.define("glob", {
     for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
+      signal: ctx.abort,
     })) {
       if (files.length >= limit) {
         truncated = true
@@ -49,7 +62,9 @@ export const GlobTool = Tool.define("glob", {
       output.push(...files.map((f) => f.path))
       if (truncated) {
         output.push("")
-        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
+        output.push(
+          `(Results are truncated: showing first ${limit} results. Consider using a more specific path or pattern.)`,
+        )
       }
     }
 

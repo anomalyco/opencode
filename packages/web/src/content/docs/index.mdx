@@ -76,16 +76,23 @@ You can also install it with the following commands:
 - **Using Homebrew on macOS and Linux**
 
   ```bash
-  brew install opencode
+  brew install anomalyco/tap/opencode
   ```
 
-- **Using Paru on Arch Linux**
+  > We recommend using the OpenCode tap for the most up to date releases. The official `brew install opencode` formula is maintained by the Homebrew team and is updated less frequently.
+
+- **Installing on Arch Linux**
 
   ```bash
-  paru -S opencode-bin
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
   ```
 
 #### Windows
+
+:::tip[Recommended: Use WSL]
+For the best experience on Windows, we recommend using [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). It provides better performance and full compatibility with OpenCode's features.
+:::
 
 - **Using Chocolatey**
 
@@ -96,8 +103,7 @@ You can also install it with the following commands:
 - **Using Scoop**
 
   ```bash
-  scoop bucket add extras
-  scoop install extras/opencode
+  scoop install opencode
   ```
 
 - **Using NPM**
@@ -109,18 +115,18 @@ You can also install it with the following commands:
 - **Using Mise**
 
   ```bash
-  mise use -g github:sst/opencode
+  mise use -g github:anomalyco/opencode
   ```
 
 - **Using Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/sst/opencode
+  docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
 Support for installing OpenCode on Windows using Bun is currently in progress.
 
-You can also grab the binary from the [Releases](https://github.com/sst/opencode/releases).
+You can also grab the binary from the [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
 

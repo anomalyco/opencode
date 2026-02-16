@@ -1,8 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "1.0.218",
+  "version": "1.2.5",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "build": "./script/build.ts"
@@ -19,7 +20,7 @@
     "dist"
   ],
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.88.1",
+    "@hey-api/openapi-ts": "0.90.10",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",

@@ -275,13 +275,13 @@ async function assertOpencodeConnected() {
         body: {
           service: "github-workflow",
           level: "info",
-          message: "Prepare to react to Github Workflow event",
+          message: "Prepare to react to GitHub Workflow event",
         },
       })
       connected = true
       break
     } catch (e) {}
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await Bun.sleep(300)
   } while (retry++ < 30)
 
   if (!connected) {

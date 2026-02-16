@@ -12,7 +12,7 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -73,14 +73,16 @@ export function Sidebar(props: { sessionID: string }) {
       <box
         backgroundColor={theme.backgroundPanel}
         width={42}
+        height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
+        position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box>
+            <box paddingRight={1}>
               <text fg={theme.text}>
                 <b>{session().title}</b>
               </text>
@@ -236,17 +238,10 @@ export function Sidebar(props: { sessionID: string }) {
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
                     {(item) => {
-                      const file = createMemo(() => {
-                        const splits = item.file.split(path.sep).filter(Boolean)
-                        const last = splits.at(-1)!
-                        const rest = splits.slice(0, -1).join(path.sep)
-                        if (!rest) return last
-                        return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                      })
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="char">
-                            {file()}
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>

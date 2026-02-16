@@ -12,54 +12,108 @@ import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
-import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
+import {
+  type ParseError as JsoncParseError,
+  applyEdits,
+  modify,
+  parse as parseJsonc,
+  printParseErrorCode,
+} from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { constants, existsSync } from "fs"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
+import { Event } from "../server/event"
+import { PackageRegistry } from "@/bun/registry"
+import { proxied } from "@/util/proxied"
+import { iife } from "@/util/iife"
+import { Control } from "@/control"
 
 export namespace Config {
+  const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+
   const log = Log.create({ service: "config" })
 
-  // Custom merge function that concatenates plugin arrays instead of replacing them
-  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+  // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
+  // These settings override all user and project settings
+  function getManagedConfigDir(): string {
+    switch (process.platform) {
+      case "darwin":
+        return "/Library/Application Support/opencode"
+      case "win32":
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+      default:
+        return "/etc/opencode"
+    }
+  }
+
+  const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || getManagedConfigDir()
+
+  // Custom merge function that concatenates array fields instead of replacing them
+  function merge(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    // If both configs have plugin arrays, concatenate them instead of replacing
     if (target.plugin && source.plugin) {
-      const pluginSet = new Set([...target.plugin, ...source.plugin])
-      merged.plugin = Array.from(pluginSet)
+      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
+    }
+    if (target.instructions && source.instructions) {
+      merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
   }
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    let result = await global()
 
-    // Override with custom config if provided
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeConfigWithPlugins(result, await loadFile(resolved))
-      }
-    }
-
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
+    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
+    // 1) Remote .well-known/opencode (org defaults)
+    // 2) Global config (~/.config/opencode/opencode.json{,c})
+    // 3) Custom config (OPENCODE_CONFIG)
+    // 4) Project config (opencode.json{,c})
+    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
+    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
+    // Managed config directory is enterprise-only and always overrides everything above.
+    let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
+        const response = await fetch(`${key}/.well-known/opencode`)
+        if (!response.ok) {
+          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        }
+        const wellknown = (await response.json()) as any
+        const remoteConfig = wellknown.config ?? {}
+        // Add $schema to prevent load() from trying to write back to a non-existent file
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        result = merge(result, await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`))
+        log.debug("loaded remote config from well-known", { url: key })
+      }
+    }
+
+    const token = await Control.token()
+    if (token) {
+    }
+
+    // Global user config overrides remote config.
+    result = merge(result, await global())
+
+    // Custom config path overrides global config.
+    if (Flag.OPENCODE_CONFIG) {
+      result = merge(result, await loadFile(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    // Project config overrides global and remote config.
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+        for (const resolved of found.toReversed()) {
+          result = merge(result, await loadFile(resolved))
+        }
       }
     }
 
@@ -69,13 +123,17 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Instance.directory,
-          stop: Instance.worktree,
-        }),
-      )),
+      // Only scan project .opencode/ directories when project discovery is enabled
+      ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? await Array.fromAsync(
+            Filesystem.up({
+              targets: [".opencode"],
+              start: Instance.directory,
+              stop: Instance.worktree,
+            }),
+          )
+        : []),
+      // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
@@ -85,17 +143,19 @@ export namespace Config {
       )),
     ]
 
+    // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
       directories.push(Flag.OPENCODE_CONFIG_DIR)
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
-    const promises: Promise<void>[] = []
+    const deps = []
+
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
+          result = merge(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -103,16 +163,37 @@ export namespace Config {
         }
       }
 
-      promises.push(installDependencies(dir))
+      deps.push(
+        iife(async () => {
+          const shouldInstall = await needsInstall(dir)
+          if (shouldInstall) await installDependencies(dir)
+        }),
+      )
+
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
-    await Promise.allSettled(promises)
+
+    // Inline config content overrides all non-managed config sources.
+    if (Flag.OPENCODE_CONFIG_CONTENT) {
+      result = merge(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    }
+
+    // Load managed config files last (highest priority) - enterprise admin-controlled
+    // Kept separate from directories array to avoid write operations when installing plugins
+    // which would fail on system directories requiring elevated permissions
+    // This way it only loads config file and not skills/plugins/commands
+    if (existsSync(managedConfigDir)) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = merge(result, await loadFile(path.join(managedConfigDir, file)))
+      }
+    }
 
     // Migrate deprecated mode field to agent field
-    for (const [name, mode] of Object.entries(result.mode)) {
+    for (const [name, mode] of Object.entries(result.mode ?? {})) {
       result.agent = mergeDeep(result.agent ?? {}, {
         [name]: {
           ...mode,
@@ -125,12 +206,21 @@ export namespace Config {
       result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
     }
 
-    if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
+    // Backwards compatibility: legacy top-level `tools` config
+    if (result.tools) {
+      const perms: Record<string, Config.PermissionAction> = {}
+      for (const [tool, enabled] of Object.entries(result.tools)) {
+        const action: Config.PermissionAction = enabled ? "allow" : "deny"
+        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+          perms.edit = action
+          continue
+        }
+        perms[tool] = action
+      }
+      result.permission = mergeDeep(perms, result.permission ?? {})
     }
+
+    if (!result.username) result.username = os.userInfo().username
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
@@ -147,35 +237,106 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
+    result.plugin = deduplicatePlugins(result.plugin ?? [])
+
     return {
       config: result,
       directories,
+      deps,
     }
   })
 
-  async function installDependencies(dir: string) {
-    if (Installation.isLocal()) return
+  export async function waitForDependencies() {
+    const deps = await state().then((x) => x.deps)
+    await Promise.all(deps)
+  }
 
+  export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
+    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
-    if (!(await Bun.file(pkg).exists())) {
-      await Bun.write(pkg, "{}")
+    const json = await Bun.file(pkg)
+      .json()
+      .catch(() => ({}))
+    json.dependencies = {
+      ...json.dependencies,
+      "@opencode-ai/plugin": targetVersion,
     }
+    await Bun.write(pkg, JSON.stringify(json, null, 2))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
 
     const gitignore = path.join(dir, ".gitignore")
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
-      {
-        cwd: dir,
-      },
-    ).catch(() => {})
-
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(
+      [
+        "install",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() ? ["--no-cache"] : []),
+      ],
+      { cwd: dir },
+    ).catch(() => {})
+  }
+
+  async function isWritable(dir: string) {
+    try {
+      await fs.access(dir, constants.W_OK)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function needsInstall(dir: string) {
+    // Some config dirs may be read-only.
+    // Installing deps there will fail; skip installation in that case.
+    const writable = await isWritable(dir)
+    if (!writable) {
+      log.debug("config dir is not writable, skipping dependency install", { dir })
+      return false
+    }
+
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
+
+    const pkg = path.join(dir, "package.json")
+    const pkgFile = Bun.file(pkg)
+    const pkgExists = await pkgFile.exists()
+    if (!pkgExists) return true
+
+    const parsed = await pkgFile.json().catch(() => null)
+    const dependencies = parsed?.dependencies ?? {}
+    const depVersion = dependencies["@opencode-ai/plugin"]
+    if (!depVersion) return true
+
+    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
+    if (targetVersion === "latest") {
+      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+      if (!isOutdated) return false
+      log.info("Cached version is outdated, proceeding with install", {
+        pkg: "@opencode-ai/plugin",
+        cachedVersion: depVersion,
+      })
+      return true
+    }
+    if (depVersion === targetVersion) return false
+    return true
+  }
+
+  function rel(item: string, patterns: string[]) {
+    for (const pattern of patterns) {
+      const index = item.indexOf(pattern)
+      if (index === -1) continue
+      return item.slice(index + pattern.length)
+    }
+  }
+
+  function trim(file: string) {
+    const ext = path.extname(file)
+    return ext.length ? file.slice(0, -ext.length) : file
   }
 
   const COMMAND_GLOB = new Bun.Glob("{command,commands}/**/*.md")
@@ -187,19 +348,20 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse command ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load command", { command: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-      const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
-        const pattern = patterns.find((p) => item.includes(p))
-
-        if (pattern) {
-          const index = item.indexOf(pattern)
-          return item.slice(index + pattern.length, -3)
-        }
-        return path.basename(item, ".md")
-      })()
+      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const name = trim(file)
 
       const config = {
         name,
@@ -226,23 +388,20 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse agent ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load agent", { agent: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-      // Extract relative path from agent folder for nested agents
-      let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
-        : item.includes("/agent/")
-          ? item.split("/agent/")[1]
-          : agentName + ".md"
-
-      // If agent is in a subfolder, include folder path in name
-      if (agentFolderPath.includes("/")) {
-        const relativePath = agentFolderPath.replace(".md", "")
-        const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
-      }
+      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const agentName = trim(file)
 
       const config = {
         name: agentName,
@@ -259,7 +418,7 @@ export namespace Config {
     return result
   }
 
-  const MODE_GLOB = new Bun.Glob("{mode,modes}/**/*.md")
+  const MODE_GLOB = new Bun.Glob("{mode,modes}/*.md")
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
     for await (const item of MODE_GLOB.scan({
@@ -268,8 +427,16 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse mode ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load mode", { mode: item, err })
+        return undefined
+      })
+      if (!md) continue
 
       const config = {
         name: path.basename(item, ".md"),
@@ -288,7 +455,7 @@ export namespace Config {
     return result
   }
 
-  const PLUGIN_GLOB = new Bun.Glob("{plugin,plugins}/**/*.{ts,js}")
+  const PLUGIN_GLOB = new Bun.Glob("{plugin,plugins}/*.{ts,js}")
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
@@ -301,6 +468,58 @@ export namespace Config {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
+  }
+
+  /**
+   * Extracts a canonical plugin name from a plugin specifier.
+   * - For file:// URLs: extracts filename without extension
+   * - For npm packages: extracts package name without version
+   *
+   * @example
+   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
+   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
+   */
+  export function getPluginName(plugin: string): string {
+    if (plugin.startsWith("file://")) {
+      return path.parse(new URL(plugin).pathname).name
+    }
+    const lastAt = plugin.lastIndexOf("@")
+    if (lastAt > 0) {
+      return plugin.substring(0, lastAt)
+    }
+    return plugin
+  }
+
+  /**
+   * Deduplicates plugins by name, with later entries (higher priority) winning.
+   * Priority order (highest to lowest):
+   * 1. Local plugin/ directory
+   * 2. Local opencode.json
+   * 3. Global plugin/ directory
+   * 4. Global opencode.json
+   *
+   * Since plugins are added in low-to-high priority order,
+   * we reverse, deduplicate (keeping first occurrence), then restore order.
+   */
+  export function deduplicatePlugins(plugins: string[]): string[] {
+    // seenNames: canonical plugin names for duplicate detection
+    // e.g., "oh-my-opencode", "@scope/pkg"
+    const seenNames = new Set<string>()
+
+    // uniqueSpecifiers: full plugin specifiers to return
+    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
+    const uniqueSpecifiers: string[] = []
+
+    for (const specifier of plugins.toReversed()) {
+      const name = getPluginName(specifier)
+      if (!seenNames.has(name)) {
+        seenNames.add(name)
+        uniqueSpecifiers.push(specifier)
+      }
+    }
+
+    return uniqueSpecifiers.toReversed()
   }
 
   export const McpLocal = z
@@ -317,9 +536,7 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe(
-          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
-        ),
+        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
     .strict()
     .meta({
@@ -358,9 +575,7 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe(
-          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
-        ),
+        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
     .strict()
     .meta({
@@ -370,51 +585,176 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.enum(["ask", "allow", "deny"])
+  export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
+    ref: "PermissionActionConfig",
+  })
+  export type PermissionAction = z.infer<typeof PermissionAction>
+
+  export const PermissionObject = z.record(z.string(), PermissionAction).meta({
+    ref: "PermissionObjectConfig",
+  })
+  export type PermissionObject = z.infer<typeof PermissionObject>
+
+  export const PermissionRule = z.union([PermissionAction, PermissionObject]).meta({
+    ref: "PermissionRuleConfig",
+  })
+  export type PermissionRule = z.infer<typeof PermissionRule>
+
+  // Capture original key order before zod reorders, then rebuild in original order
+  const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+  }
+
+  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
+    if (typeof x === "string") return { "*": x as PermissionAction }
+    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
+    const { __originalKeys, ...rest } = obj
+    if (!__originalKeys) return rest as Record<string, PermissionRule>
+    const result: Record<string, PermissionRule> = {}
+    for (const key of __originalKeys) {
+      if (key in rest) result[key] = rest[key] as PermissionRule
+    }
+    return result
+  }
+
+  export const Permission = z
+    .preprocess(
+      permissionPreprocess,
+      z
+        .object({
+          __originalKeys: z.string().array().optional(),
+          read: PermissionRule.optional(),
+          edit: PermissionRule.optional(),
+          glob: PermissionRule.optional(),
+          grep: PermissionRule.optional(),
+          list: PermissionRule.optional(),
+          bash: PermissionRule.optional(),
+          task: PermissionRule.optional(),
+          external_directory: PermissionRule.optional(),
+          todowrite: PermissionAction.optional(),
+          todoread: PermissionAction.optional(),
+          question: PermissionAction.optional(),
+          webfetch: PermissionAction.optional(),
+          websearch: PermissionAction.optional(),
+          codesearch: PermissionAction.optional(),
+          lsp: PermissionRule.optional(),
+          doom_loop: PermissionAction.optional(),
+          skill: PermissionRule.optional(),
+        })
+        .catchall(PermissionRule)
+        .or(PermissionAction),
+    )
+    .transform(permissionTransform)
+    .meta({
+      ref: "PermissionConfig",
+    })
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
     template: z.string(),
     description: z.string().optional(),
     agent: z.string().optional(),
-    model: z.string().optional(),
+    model: ModelId.optional(),
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
+  export const Skills = z.object({
+    paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    urls: z
+      .array(z.string())
+      .optional()
+      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
+  })
+  export type Skills = z.infer<typeof Skills>
+
   export const Agent = z
     .object({
-      model: z.string().optional(),
+      model: ModelId.optional(),
+      variant: z
+        .string()
+        .optional()
+        .describe("Default model variant for this agent (applies only when using the agent's configured model)."),
       temperature: z.number().optional(),
       top_p: z.number().optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.string(), z.boolean()).optional(),
+      tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
-      color: z
-        .string()
-        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
+      hidden: z
+        .boolean()
         .optional()
-        .describe("Hex color code for the agent (e.g., #FF5733)"),
-      maxSteps: z
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+      options: z.record(z.string(), z.any()).optional(),
+      color: z
+        .union([
+          z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format"),
+          z.enum(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
+        ])
+        .optional()
+        .describe("Hex color code (e.g., #FF5733) or theme color (e.g., primary)"),
+      steps: z
         .number()
         .int()
         .positive()
         .optional()
         .describe("Maximum number of agentic iterations before forcing text-only response"),
-      permission: z
-        .object({
-          edit: Permission.optional(),
-          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          webfetch: Permission.optional(),
-          doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
-        })
-        .optional(),
+      maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
+      permission: Permission.optional(),
     })
     .catchall(z.any())
+    .transform((agent, ctx) => {
+      const knownKeys = new Set([
+        "name",
+        "model",
+        "variant",
+        "prompt",
+        "description",
+        "temperature",
+        "top_p",
+        "mode",
+        "hidden",
+        "color",
+        "steps",
+        "maxSteps",
+        "options",
+        "permission",
+        "disable",
+        "tools",
+      ])
+
+      // Extract unknown properties into options
+      const options: Record<string, unknown> = { ...agent.options }
+      for (const [key, value] of Object.entries(agent)) {
+        if (!knownKeys.has(key)) options[key] = value
+      }
+
+      // Convert legacy tools config to permissions
+      const permission: Permission = {}
+      for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
+        const action = enabled ? "allow" : "deny"
+        // write, edit, patch, multiedit all map to edit permission
+        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+          permission.edit = action
+        } else {
+          permission[tool] = action
+        }
+      }
+      Object.assign(permission, agent.permission)
+
+      // Convert legacy maxSteps to steps
+      const steps = agent.steps ?? agent.maxSteps
+
+      return { ...agent, options, permission, steps } as typeof agent & {
+        options?: Record<string, unknown>
+        permission?: Permission
+        steps?: number
+      }
+    })
     .meta({
       ref: "AgentConfig",
     })
@@ -435,13 +775,23 @@ export namespace Config {
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
-      session_rename: z.string().optional().default("none").describe("Rename session"),
+      session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
+      session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
+      stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
+      model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
+      model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
+      messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
+      messages_page_down: z
+        .string()
+        .optional()
+        .default("pagedown,ctrl+alt+f")
+        .describe("Scroll messages down by one page"),
+      messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
+      messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
@@ -561,6 +911,7 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
     })
     .strict()
     .meta({
@@ -586,6 +937,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -663,6 +1015,7 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),
@@ -691,11 +1044,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-      small_model: z
-        .string()
-        .describe("Small model to use for tasks like title generation in the format of provider/model")
-        .optional(),
+      model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      small_model: ModelId.describe(
+        "Small model to use for tasks like title generation in the format of provider/model",
+      ).optional(),
       default_agent: z
         .string()
         .optional()
@@ -729,12 +1081,25 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
+        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      mcp: z
+        .record(
+          z.string(),
+          z.union([
+            Mcp,
+            z
+              .object({
+                enabled: z.boolean(),
+              })
+              .strict(),
+          ]),
+        )
+        .optional()
+        .describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
         .union([
           z.literal(false),
@@ -787,16 +1152,7 @@ export namespace Config {
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
-      permission: z
-        .object({
-          edit: Permission.optional(),
-          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          webfetch: Permission.optional(),
-          doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
-        })
-        .optional(),
+      permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({
@@ -807,33 +1163,16 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          reserved: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
       experimental: z
         .object({
-          hook: z
-            .object({
-              file_edited: z
-                .record(
-                  z.string(),
-                  z
-                    .object({
-                      command: z.string().array(),
-                      environment: z.record(z.string(), z.string()).optional(),
-                    })
-                    .array(),
-                )
-                .optional(),
-              session_completed: z
-                .object({
-                  command: z.string().array(),
-                  environment: z.record(z.string(), z.string()).optional(),
-                })
-                .array()
-                .optional(),
-            })
-            .optional(),
-          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
@@ -869,20 +1208,23 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
-    await import(path.join(Global.Path.config, "config"), {
-      with: {
-        type: "toml",
-      },
-    })
-      .then(async (mod) => {
-        const { provider, model, ...rest } = mod.default
-        if (provider && model) result.model = `${provider}/${model}`
-        result["$schema"] = "https://opencode.ai/config.json"
-        result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-        await fs.unlink(path.join(Global.Path.config, "config"))
+    const legacy = path.join(Global.Path.config, "config")
+    if (existsSync(legacy)) {
+      await import(pathToFileURL(legacy).href, {
+        with: {
+          type: "toml",
+        },
       })
-      .catch(() => {})
+        .then(async (mod) => {
+          const { provider, model, ...rest } = mod.default
+          if (provider && model) result.model = `${provider}/${model}`
+          result["$schema"] = "https://opencode.ai/config.json"
+          result = mergeDeep(result, rest)
+          await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+          await fs.unlink(legacy)
+        })
+        .catch(() => {})
+    }
 
     return result
   })
@@ -900,6 +1242,7 @@ export namespace Config {
   }
 
   async function load(text: string, configFilepath: string) {
+    const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -937,7 +1280,7 @@ export namespace Config {
             })
         ).trim()
         // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
+        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
 
@@ -969,7 +1312,9 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
+        // Write the $schema to the original text to preserve variables like {env:VAR}
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        await Bun.write(configFilepath, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1018,11 +1363,120 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
+  export async function getGlobal() {
+    return global()
+  }
+
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
+  }
+
+  function globalConfigFile() {
+    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+      path.join(Global.Path.config, file),
+    )
+    for (const file of candidates) {
+      if (existsSync(file)) return file
+    }
+    return candidates[0]
+  }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value)
+  }
+
+  function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
+    if (!isRecord(patch)) {
+      const edits = modify(input, path, patch, {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        },
+      })
+      return applyEdits(input, edits)
+    }
+
+    return Object.entries(patch).reduce((result, [key, value]) => {
+      if (value === undefined) return result
+      return patchJsonc(result, value, [...path, key])
+    }, input)
+  }
+
+  function parseConfig(text: string, filepath: string): Info {
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    if (errors.length) {
+      const lines = text.split("\n")
+      const errorDetails = errors
+        .map((e) => {
+          const beforeOffset = text.substring(0, e.offset).split("\n")
+          const line = beforeOffset.length
+          const column = beforeOffset[beforeOffset.length - 1].length + 1
+          const problemLine = lines[line - 1]
+
+          const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
+          if (!problemLine) return error
+
+          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
+        })
+        .join("\n")
+
+      throw new JsonError({
+        path: filepath,
+        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
+      })
+    }
+
+    const parsed = Info.safeParse(data)
+    if (parsed.success) return parsed.data
+
+    throw new InvalidError({
+      path: filepath,
+      issues: parsed.error.issues,
+    })
+  }
+
+  export async function updateGlobal(config: Info) {
+    const filepath = globalConfigFile()
+    const before = await Bun.file(filepath)
+      .text()
+      .catch((err) => {
+        if (err.code === "ENOENT") return "{}"
+        throw new JsonError({ path: filepath }, { cause: err })
+      })
+
+    const next = await (async () => {
+      if (!filepath.endsWith(".jsonc")) {
+        const existing = parseConfig(before, filepath)
+        const merged = mergeDeep(existing, config)
+        await Bun.write(filepath, JSON.stringify(merged, null, 2))
+        return merged
+      }
+
+      const updated = patchJsonc(before, config)
+      const merged = parseConfig(updated, filepath)
+      await Bun.write(filepath, updated)
+      return merged
+    })()
+
+    global.reset()
+
+    void Instance.disposeAll()
+      .catch(() => undefined)
+      .finally(() => {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Event.Disposed.type,
+            properties: {},
+          },
+        })
+      })
+
+    return next
   }
 
   export async function directories() {

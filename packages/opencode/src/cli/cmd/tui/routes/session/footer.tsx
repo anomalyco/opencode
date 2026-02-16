@@ -25,24 +25,27 @@ export function Footer() {
   })
 
   onMount(() => {
+    // Track all timeouts to ensure proper cleanup
+    const timeouts: ReturnType<typeof setTimeout>[] = []
+
     function tick() {
       if (connected()) return
       if (!store.welcome) {
         setStore("welcome", true)
-        timeout = setTimeout(() => tick(), 5000)
+        timeouts.push(setTimeout(() => tick(), 5000))
         return
       }
 
       if (store.welcome) {
         setStore("welcome", false)
-        timeout = setTimeout(() => tick(), 10_000)
+        timeouts.push(setTimeout(() => tick(), 10_000))
         return
       }
     }
-    let timeout = setTimeout(() => tick(), 10_000)
+    timeouts.push(setTimeout(() => tick(), 10_000))
 
     onCleanup(() => {
-      clearTimeout(timeout)
+      timeouts.forEach(clearTimeout)
     })
   })
 
@@ -59,12 +62,12 @@ export function Footer() {
           <Match when={connected()}>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
-                <span style={{ fg: theme.warning }}>◉</span> {permissions().length} Permission
+                <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
             <text fg={theme.text}>
-              <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
+              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
             </text>
             <Show when={mcp()}>
               <text fg={theme.text}>

@@ -6,7 +6,7 @@ Payload Format (JSON array):
 [{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "Shows working tree status"}}]
 
 Notes:
-- 1–10 tool calls per batch
+- 1–25 tool calls per batch
 - All calls start in parallel; ordering NOT guaranteed
 - Partial failures do not stop other tool calls
 - Do NOT use the batch tool within another batch tool.

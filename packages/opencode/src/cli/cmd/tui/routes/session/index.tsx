@@ -1,4 +1,5 @@
 import {
+  batch,
   createContext,
   createEffect,
   createMemo,
@@ -9,20 +10,22 @@ import {
   Show,
   Switch,
   useContext,
-  type Component,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
-import { useTheme } from "@tui/context/theme"
+import { Spinner } from "@tui/component/spinner"
+import { selectedForeground, useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
   ScrollBoxRenderable,
   addDefaultParsers,
   MacOSScrollAccel,
   type ScrollAcceleration,
+  TextAttributes,
+  RGBA,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
@@ -37,10 +40,12 @@ import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
-import type { PatchTool } from "@/tool/patch"
+import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
-import { useKeyboard, useRenderer, useTerminalDimensions, type BoxProps, type JSX } from "@opentui/solid"
+import type { QuestionTool } from "@/tool/question"
+import type { SkillTool } from "@/tool/skill"
+import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "@tui/context/keybind"
@@ -50,12 +55,12 @@ import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
-import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -65,8 +70,14 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { Global } from "@/global"
+import { PermissionPrompt } from "./permission"
+import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { formatTranscript } from "../../util/transcript"
+import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -82,12 +93,11 @@ class CustomSpeedScroll implements ScrollAcceleration {
 
 const context = createContext<{
   width: number
+  sessionID: string
   conceal: () => boolean
   showThinking: () => boolean
   showTimestamps: () => boolean
-  usernameVisible: () => boolean
   showDetails: () => boolean
-  userMessageMarkdown: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
 }>()
@@ -105,9 +115,22 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
-  const session = createMemo(() => sync.session.get(route.sessionID)!)
+  const session = createMemo(() => sync.session.get(route.sessionID))
+  const children = createMemo(() => {
+    const parentID = session()?.parentID ?? session()?.id
+    return sync.data.session
+      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
+  const permissions = createMemo(() => {
+    if (session()?.parentID) return []
+    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  })
+  const questions = createMemo(() => {
+    if (session()?.parentID) return []
+    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+  })
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
@@ -118,24 +141,26 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
+  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
+  const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
-  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
-  const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
-  const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
-  const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
-  const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
-  const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
-  const [animationsEnabled, setAnimationsEnabled] = createSignal(kv.get("animations_enabled", true))
+  const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
+  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
+  const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
+  const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [showHeader, setShowHeader] = kv.signal("header_visible", true)
+  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
+  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
-    if (sidebar() === "show") return true
+    if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
@@ -176,31 +201,48 @@ export function Session() {
     }
   })
 
-  // Auto-navigate to whichever session currently needs permission input
-  createEffect(() => {
-    const currentSession = session()
-    if (!currentSession) return
-    const currentPermissions = permissions()
-    let targetID = currentPermissions.length > 0 ? currentSession.id : undefined
+  let lastSwitch: string | undefined = undefined
+  sdk.event.on("message.part.updated", (evt) => {
+    const part = evt.properties.part
+    if (part.type !== "tool") return
+    if (part.sessionID !== route.sessionID) return
+    if (part.state.status !== "completed") return
+    if (part.id === lastSwitch) return
 
-    if (!targetID) {
-      const child = sync.data.session.find(
-        (x) => x.parentID === currentSession.id && (sync.data.permission[x.id]?.length ?? 0) > 0,
-      )
-      if (child) targetID = child.id
-    }
-
-    if (targetID && targetID !== currentSession.id) {
-      navigate({
-        type: "session",
-        sessionID: targetID,
-      })
+    if (part.tool === "plan_exit") {
+      local.agent.set("build")
+      lastSwitch = part.id
+    } else if (part.tool === "plan_enter") {
+      local.agent.set("plan")
+      lastSwitch = part.id
     }
   })
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Allow exit when in child session (prompt is hidden)
+  const exit = useExit()
+
+  createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    return exit.message.set(
+      [
+        ``,
+        `  █▀▀█  ${UI.Style.TEXT_DIM}${title}${UI.Style.TEXT_NORMAL}`,
+        `  █  █  ${UI.Style.TEXT_DIM}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ▀▀▀▀  `,
+      ].join("\n"),
+    )
+  })
+
+  useKeyboard((evt) => {
+    if (!session()?.parentID) return
+    if (keybind.match("app_exit", evt)) {
+      exit()
+    }
+  })
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
@@ -248,87 +290,68 @@ export function Session() {
     dialog.clear()
   }
 
-  useKeyboard((evt) => {
-    if (dialog.stack.length > 0) return
-
-    const first = permissions()[0]
-    if (first) {
-      const response = iife(() => {
-        if (evt.ctrl || evt.meta) return
-        if (evt.name === "return") return "once"
-        if (evt.name === "a") return "always"
-        if (evt.name === "d") return "reject"
-        if (evt.name === "escape") return "reject"
-        return
-      })
-      if (response) {
-        sdk.client.permission.respond({
-          permissionID: first.id,
-          sessionID: route.sessionID,
-          response: response,
-        })
-      }
-    }
-  })
-
   function toBottom() {
     setTimeout(() => {
-      if (scroll) scroll.scrollTo(scroll.scrollHeight)
+      if (!scroll || scroll.isDestroyed) return
+      scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
 
   const local = useLocal()
 
   function moveChild(direction: number) {
-    const parentID = session()?.parentID ?? session()?.id
-    let children = sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    if (children.length === 1) return
-    let next = children.findIndex((x) => x.id === session()?.id) + direction
-    if (next >= children.length) next = 0
-    if (next < 0) next = children.length - 1
-    if (children[next]) {
+    if (children().length === 1) return
+    let next = children().findIndex((x) => x.id === session()?.id) + direction
+    if (next >= children().length) next = 0
+    if (next < 0) next = children().length - 1
+    if (children()[next]) {
       navigate({
         type: "session",
-        sessionID: children[next].id,
+        sessionID: children()[next].id,
       })
     }
   }
 
   const command = useCommandDialog()
   command.register(() => [
-    ...(sync.data.config.share !== "disabled"
-      ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            suggested: route.type === "session",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  sessionID: route.sessionID,
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
-          },
-        ]
-      : []),
+    {
+      title: session()?.share?.url ? "Copy share link" : "Share session",
+      value: "session.share",
+      suggested: route.type === "session",
+      keybind: "session_share",
+      category: "Session",
+      enabled: sync.data.config.share !== "disabled",
+      slash: {
+        name: "share",
+      },
+      onSelect: async (dialog) => {
+        const copy = (url: string) =>
+          Clipboard.copy(url)
+            .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }))
+        const url = session()?.share?.url
+        if (url) {
+          await copy(url)
+          dialog.clear()
+          return
+        }
+        await sdk.client.session
+          .share({
+            sessionID: route.sessionID,
+          })
+          .then((res) => copy(res.data!.share!.url))
+          .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+        dialog.clear()
+      },
+    },
     {
       title: "Rename session",
       value: "session.rename",
       keybind: "session_rename",
       category: "Session",
+      slash: {
+        name: "rename",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
       },
@@ -338,6 +361,9 @@ export function Session() {
       value: "session.timeline",
       keybind: "session_timeline",
       category: "Session",
+      slash: {
+        name: "timeline",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogTimeline
@@ -358,6 +384,9 @@ export function Session() {
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
+      slash: {
+        name: "fork",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogForkFromTimeline
@@ -377,6 +406,10 @@ export function Session() {
       value: "session.compact",
       keybind: "session_compact",
       category: "Session",
+      slash: {
+        name: "compact",
+        aliases: ["summarize"],
+      },
       onSelect: (dialog) => {
         const selectedModel = local.model.current()
         if (!selectedModel) {
@@ -399,8 +432,11 @@ export function Session() {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",
-      disabled: !session()?.share?.url,
       category: "Session",
+      enabled: !!session()?.share?.url,
+      slash: {
+        name: "unshare",
+      },
       onSelect: async (dialog) => {
         await sdk.client.session
           .unshare({
@@ -416,10 +452,13 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
+      slash: {
+        name: "undo",
+      },
       onSelect: async (dialog) => {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session().revert?.messageID
+        const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
         sdk.client.session
@@ -450,11 +489,14 @@ export function Session() {
       title: "Redo",
       value: "session.redo",
       keybind: "messages_redo",
-      disabled: !session()?.revert?.messageID,
       category: "Session",
+      enabled: !!session()?.revert?.messageID,
+      slash: {
+        name: "redo",
+      },
       onSelect: (dialog) => {
         dialog.clear()
-        const messageID = session().revert?.messageID
+        const messageID = session()?.revert?.messageID
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
@@ -476,32 +518,16 @@ export function Session() {
       keybind: "sidebar_toggle",
       category: "Session",
       onSelect: (dialog) => {
-        setSidebar((prev) => {
-          if (prev === "auto") return sidebarVisible() ? "hide" : "show"
-          if (prev === "show") return "hide"
-          return "show"
-        })
-        if (sidebar() === "show") kv.set("sidebar", "auto")
-        if (sidebar() === "hide") kv.set("sidebar", "hide")
-        dialog.clear()
-      },
-    },
-    {
-      title: usernameVisible() ? "Hide username" : "Show username",
-      value: "session.username_visible.toggle",
-      keybind: "username_toggle",
-      category: "Session",
-      onSelect: (dialog) => {
-        setUsernameVisible((prev) => {
-          const next = !prev
-          kv.set("username_visible", next)
-          return next
+        batch(() => {
+          const isVisible = sidebarVisible()
+          setSidebar(() => (isVisible ? "hide" : "auto"))
+          setSidebarOpen(!isVisible)
         })
         dialog.clear()
       },
     },
     {
-      title: "Toggle code concealment",
+      title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
@@ -514,34 +540,26 @@ export function Session() {
       title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
       category: "Session",
+      slash: {
+        name: "timestamps",
+        aliases: ["toggle-timestamps"],
+      },
       onSelect: (dialog) => {
-        setShowTimestamps((prev) => {
-          const next = !prev
-          kv.set("timestamps", next ? "show" : "hide")
-          return next
-        })
+        setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
         dialog.clear()
       },
     },
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
+      keybind: "display_thinking",
       category: "Session",
-      onSelect: (dialog) => {
-        setShowThinking((prev) => {
-          const next = !prev
-          kv.set("thinking_visibility", next)
-          return next
-        })
-        dialog.clear()
+      slash: {
+        name: "thinking",
+        aliases: ["toggle-thinking"],
       },
-    },
-    {
-      title: "Toggle diff wrapping",
-      value: "session.toggle.diffwrap",
-      category: "Session",
       onSelect: (dialog) => {
-        setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
+        setShowThinking((prev) => !prev)
         dialog.clear()
       },
     },
@@ -551,9 +569,7 @@ export function Session() {
       keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
-        const newValue = !showDetails()
-        setShowDetails(newValue)
-        kv.set("tool_details_visibility", newValue)
+        setShowDetails((prev) => !prev)
         dialog.clear()
       },
     },
@@ -563,37 +579,16 @@ export function Session() {
       keybind: "scrollbar_toggle",
       category: "Session",
       onSelect: (dialog) => {
-        setShowScrollbar((prev) => {
-          const next = !prev
-          kv.set("scrollbar_visible", next)
-          return next
-        })
+        setShowScrollbar((prev) => !prev)
         dialog.clear()
       },
     },
     {
-      title: userMessageMarkdown() ? "Disable user message markdown" : "Enable user message markdown",
-      value: "session.toggle.user_message_markdown",
+      title: showHeader() ? "Hide header" : "Show header",
+      value: "session.toggle.header",
       category: "Session",
       onSelect: (dialog) => {
-        setUserMessageMarkdown((prev) => {
-          const next = !prev
-          kv.set("user_message_markdown", next)
-          return next
-        })
-        dialog.clear()
-      },
-    },
-    {
-      title: animationsEnabled() ? "Disable animations" : "Enable animations",
-      value: "session.toggle.animations",
-      category: "Session",
-      onSelect: (dialog) => {
-        setAnimationsEnabled((prev) => {
-          const next = !prev
-          kv.set("animations_enabled", next)
-          return next
-        })
+        setShowHeader((prev) => !prev)
         dialog.clear()
       },
     },
@@ -602,7 +597,7 @@ export function Session() {
       value: "session.page.up",
       keybind: "messages_page_up",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(-scroll.height / 2)
         dialog.clear()
@@ -613,9 +608,31 @@ export function Session() {
       value: "session.page.down",
       keybind: "messages_page_down",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Line up",
+      value: "session.line.up",
+      keybind: "messages_line_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Line down",
+      value: "session.line.down",
+      keybind: "messages_line_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(1)
         dialog.clear()
       },
     },
@@ -624,7 +641,7 @@ export function Session() {
       value: "session.half.page.up",
       keybind: "messages_half_page_up",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(-scroll.height / 4)
         dialog.clear()
@@ -635,7 +652,7 @@ export function Session() {
       value: "session.half.page.down",
       keybind: "messages_half_page_down",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(scroll.height / 4)
         dialog.clear()
@@ -646,7 +663,7 @@ export function Session() {
       value: "session.first",
       keybind: "messages_first",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollTo(0)
         dialog.clear()
@@ -657,7 +674,7 @@ export function Session() {
       value: "session.last",
       keybind: "messages_last",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
@@ -668,6 +685,7 @@ export function Session() {
       value: "session.messages_last_user",
       keybind: "messages_last_user",
       category: "Session",
+      hidden: true,
       onSelect: () => {
         const messages = sync.data.message[route.sessionID]
         if (!messages || !messages.length) return
@@ -699,7 +717,7 @@ export function Session() {
       value: "session.message.next",
       keybind: "messages_next",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => scrollToMessage("next", dialog),
     },
     {
@@ -707,7 +725,7 @@ export function Session() {
       value: "session.message.previous",
       keybind: "messages_previous",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => scrollToMessage("prev", dialog),
     },
     {
@@ -747,11 +765,6 @@ export function Session() {
           return
         }
 
-        const base64 = Buffer.from(text).toString("base64")
-        const osc52 = `\x1b]52;c;${base64}\x07`
-        const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-        /* @ts-expect-error */
-        renderer.writeOut(finalOsc52)
         Clipboard.copy(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
@@ -761,51 +774,24 @@ export function Session() {
     {
       title: "Copy session transcript",
       value: "session.copy",
-      keybind: "session_copy",
       category: "Session",
+      slash: {
+        name: "copy",
+      },
       onSelect: async (dialog) => {
         try {
-          // Format session transcript as markdown
           const sessionData = session()
+          if (!sessionData) return
           const sessionMessages = messages()
-
-          let transcript = `# ${sessionData.title}\n\n`
-          transcript += `**Session ID:** ${sessionData.id}\n`
-          transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
-          transcript += `**Updated:** ${new Date(sessionData.time.updated).toLocaleString()}\n\n`
-          transcript += `---\n\n`
-
-          for (const msg of sessionMessages) {
-            const parts = sync.data.part[msg.id] ?? []
-            const role = msg.role === "user" ? "User" : "Assistant"
-            transcript += `## ${role}\n\n`
-
-            for (const part of parts) {
-              if (part.type === "text" && !part.synthetic) {
-                transcript += `${part.text}\n\n`
-              } else if (part.type === "reasoning") {
-                if (showThinking()) {
-                  transcript += `_Thinking:_\n\n${part.text}\n\n`
-                }
-              } else if (part.type === "tool") {
-                transcript += `\`\`\`\nTool: ${part.tool}\n`
-                if (showDetails() && part.state.input) {
-                  transcript += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\``
-                }
-                if (showDetails() && part.state.status === "completed" && part.state.output) {
-                  transcript += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\``
-                }
-                if (showDetails() && part.state.status === "error" && part.state.error) {
-                  transcript += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\``
-                }
-                transcript += `\n\`\`\`\n\n`
-              }
-            }
-
-            transcript += `---\n\n`
-          }
-
-          // Copy to clipboard
+          const transcript = formatTranscript(
+            sessionData,
+            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            {
+              thinking: showThinking(),
+              toolDetails: showDetails(),
+              assistantMetadata: showAssistantMetadata(),
+            },
+          )
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch (error) {
@@ -815,75 +801,60 @@ export function Session() {
       },
     },
     {
-      title: "Export session transcript to file",
+      title: "Export session transcript",
       value: "session.export",
       keybind: "session_export",
       category: "Session",
+      slash: {
+        name: "export",
+      },
       onSelect: async (dialog) => {
         try {
-          // Format session transcript as markdown
           const sessionData = session()
+          if (!sessionData) return
           const sessionMessages = messages()
 
           const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
 
-          const options = await DialogExportOptions.show(dialog, defaultFilename, showThinking(), showDetails())
+          const options = await DialogExportOptions.show(
+            dialog,
+            defaultFilename,
+            showThinking(),
+            showDetails(),
+            showAssistantMetadata(),
+            false,
+          )
 
           if (options === null) return
 
-          const { filename: customFilename, thinking: includeThinking, toolDetails: includeToolDetails } = options
+          const transcript = formatTranscript(
+            sessionData,
+            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            {
+              thinking: options.thinking,
+              toolDetails: options.toolDetails,
+              assistantMetadata: options.assistantMetadata,
+            },
+          )
 
-          let transcript = `# ${sessionData.title}\n\n`
-          transcript += `**Session ID:** ${sessionData.id}\n`
-          transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
-          transcript += `**Updated:** ${new Date(sessionData.time.updated).toLocaleString()}\n\n`
-          transcript += `---\n\n`
+          if (options.openWithoutSaving) {
+            // Just open in editor without saving
+            await Editor.open({ value: transcript, renderer })
+          } else {
+            const exportDir = process.cwd()
+            const filename = options.filename.trim()
+            const filepath = path.join(exportDir, filename)
 
-          for (const msg of sessionMessages) {
-            const parts = sync.data.part[msg.id] ?? []
-            const role = msg.role === "user" ? "User" : "Assistant"
-            transcript += `## ${role}\n\n`
+            await Bun.write(filepath, transcript)
 
-            for (const part of parts) {
-              if (part.type === "text" && !part.synthetic) {
-                transcript += `${part.text}\n\n`
-              } else if (part.type === "reasoning") {
-                if (includeThinking) {
-                  transcript += `_Thinking:_\n\n${part.text}\n\n`
-                }
-              } else if (part.type === "tool") {
-                transcript += `\`\`\`\nTool: ${part.tool}\n`
-                if (includeToolDetails && part.state.input) {
-                  transcript += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\``
-                }
-                if (includeToolDetails && part.state.status === "completed" && part.state.output) {
-                  transcript += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\``
-                }
-                if (includeToolDetails && part.state.status === "error" && part.state.error) {
-                  transcript += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\``
-                }
-                transcript += `\n\`\`\`\n\n`
-              }
+            // Open with EDITOR if available
+            const result = await Editor.open({ value: transcript, renderer })
+            if (result !== undefined) {
+              await Bun.write(filepath, result)
             }
 
-            transcript += `---\n\n`
+            toast.show({ message: `Session exported to ${filename}`, variant: "success" })
           }
-
-          // Save to file in current working directory
-          const exportDir = process.cwd()
-          const filename = customFilename.trim()
-          const filepath = path.join(exportDir, filename)
-
-          await Bun.write(filepath, transcript)
-
-          // Open with EDITOR if available
-          const result = await Editor.open({ value: transcript, renderer })
-          if (result !== undefined) {
-            // User edited the file, save the changes
-            await Bun.write(filepath, result)
-          }
-
-          toast.show({ message: `Session exported to ${filename}`, variant: "success" })
         } catch (error) {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
@@ -895,7 +866,7 @@ export function Session() {
       value: "session.child.next",
       keybind: "session_child_cycle",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         moveChild(1)
         dialog.clear()
@@ -906,7 +877,7 @@ export function Session() {
       value: "session.child.previous",
       keybind: "session_child_cycle_reverse",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         moveChild(-1)
         dialog.clear()
@@ -917,7 +888,7 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
@@ -990,12 +961,11 @@ export function Session() {
         get width() {
           return contentWidth()
         },
+        sessionID: route.sessionID,
         conceal,
         showThinking,
         showTimestamps,
-        usernameVisible,
         showDetails,
-        userMessageMarkdown,
         diffWrapMode,
         sync,
       }}
@@ -1003,7 +973,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible()}>
+            <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
             </Show>
             <scrollbox
@@ -1121,26 +1091,51 @@ export function Session() {
               </For>
             </scrollbox>
             <box flexShrink={0}>
+              <Show when={permissions().length > 0}>
+                <PermissionPrompt request={permissions()[0]} />
+              </Show>
+              <Show when={permissions().length === 0 && questions().length > 0}>
+                <QuestionPrompt request={questions()[0]} />
+              </Show>
               <Prompt
+                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
+                  // Apply initial prompt when prompt component mounts (e.g., from fork)
+                  if (route.initialPrompt) {
+                    r.set(route.initialPrompt)
+                  }
                 }}
-                disabled={permissions().length > 0}
+                disabled={permissions().length > 0 || questions().length > 0}
                 onSubmit={() => {
                   toBottom()
                 }}
                 sessionID={route.sessionID}
               />
             </box>
-            <Show when={!sidebarVisible()}>
-              <Footer />
-            </Show>
           </Show>
           <Toast />
         </box>
         <Show when={sidebarVisible()}>
-          <Sidebar sessionID={route.sessionID} />
+          <Switch>
+            <Match when={wide()}>
+              <Sidebar sessionID={route.sessionID} />
+            </Match>
+            <Match when={!wide()}>
+              <box
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                alignItems="flex-end"
+                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+              >
+                <Sidebar sessionID={route.sessionID} />
+              </box>
+            </Match>
+          </Switch>
         </Show>
       </box>
     </context.Provider>
@@ -1169,10 +1164,12 @@ function UserMessage(props: {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
-  const { theme, syntax } = useTheme()
+  const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
+  const color = createMemo(() => local.agent.color(props.message.agent))
+  const queuedFg = createMemo(() => selectedForeground(theme, color()))
+  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -1200,24 +1197,9 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <Switch>
-              <Match when={ctx.userMessageMarkdown()}>
-                <code
-                  filetype="markdown"
-                  drawUnstyledText={false}
-                  streaming={false}
-                  syntaxStyle={syntax()}
-                  content={text()?.text ?? ""}
-                  conceal={ctx.conceal()}
-                  fg={theme.text}
-                />
-              </Match>
-              <Match when={!ctx.userMessageMarkdown()}>
-                <text fg={theme.text}>{text()?.text}</text>
-              </Match>
-            </Switch>
+            <text fg={theme.text}>{text()?.text}</text>
             <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
+              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
                   {(file) => {
                     const bg = createMemo(() => {
@@ -1235,23 +1217,22 @@ function UserMessage(props: {
                 </For>
               </box>
             </Show>
-            <text fg={theme.textMuted}>
-              {ctx.usernameVisible() ? `${sync.data.config.username ?? "You "}` : "You "}
-              <Show
-                when={queued()}
-                fallback={
-                  <Show when={ctx.showTimestamps()}>
+            <Show
+              when={queued()}
+              fallback={
+                <Show when={ctx.showTimestamps()}>
+                  <text fg={theme.textMuted}>
                     <span style={{ fg: theme.textMuted }}>
-                      {ctx.usernameVisible() ? " · " : " "}
                       {Locale.todayTimeOrDateTime(props.message.time.created)}
                     </span>
-                  </Show>
-                }
-              >
-                <span> </span>
-                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
-              </Show>
-            </text>
+                  </text>
+                </Show>
+              }
+            >
+              <text fg={theme.textMuted}>
+                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+              </text>
+            </Show>
           </box>
         </box>
       </Show>
@@ -1303,7 +1284,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.message.error}>
+      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
           border={["left"]}
           paddingTop={1}
@@ -1318,14 +1299,26 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last || final()}>
+        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span style={{ fg: local.agent.color(props.message.mode) }}>▣ </span>{" "}
+              <span
+                style={{
+                  fg:
+                    props.message.error?.name === "MessageAbortedError"
+                      ? theme.textMuted
+                      : local.agent.color(props.message.agent),
+                }}
+              >
+                ▣{" "}
+              </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={props.message.error?.name === "MessageAbortedError"}>
+                <span style={{ fg: theme.textMuted }}> · interrupted</span>
               </Show>
             </text>
           </box>
@@ -1380,15 +1373,27 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={syntax()}
-          content={props.part.text.trim()}
-          conceal={ctx.conceal()}
-          fg={theme.text}
-        />
+        <Switch>
+          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <markdown
+              syntaxStyle={syntax()}
+              streaming={true}
+              content={props.part.text.trim()}
+              conceal={ctx.conceal()}
+            />
+          </Match>
+          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={syntax()}
+              content={props.part.text.trim()}
+              conceal={ctx.conceal()}
+              fg={theme.text}
+            />
+          </Match>
+        </Switch>
       </box>
     </Show>
   )
@@ -1397,112 +1402,93 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
-  const { theme } = useTheme()
-  const { showDetails } = use()
+  const ctx = use()
   const sync = useSync()
-  const [margin, setMargin] = createSignal(0)
-  const component = createMemo(() => {
-    // Hide tool if showDetails is false and tool completed successfully
-    // But always show if there's an error or permission is required
-    const shouldHide =
-      !showDetails() &&
-      props.part.state.status === "completed" &&
-      !sync.data.permission[props.message.sessionID]?.some((x) => x.callID === props.part.callID)
 
-    if (shouldHide) {
-      return undefined
-    }
-
-    const render = ToolRegistry.render(props.part.tool) ?? GenericTool
-
-    const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
-    const input = props.part.state.input ?? {}
-    const container = ToolRegistry.container(props.part.tool)
-    const permissions = sync.data.permission[props.message.sessionID] ?? []
-    const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
-    const permission = permissions[permissionIndex]
-
-    const style: BoxProps =
-      container === "block" || permission
-        ? {
-            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-            paddingTop: 1,
-            paddingBottom: 1,
-            paddingLeft: 2,
-            marginTop: 1,
-            gap: 1,
-            backgroundColor: theme.backgroundPanel,
-            customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-          }
-        : {
-            paddingLeft: 3,
-          }
-
-    return (
-      <box
-        marginTop={margin()}
-        {...style}
-        renderBefore={function () {
-          const el = this as BoxRenderable
-          const parent = el.parent
-          if (!parent) {
-            return
-          }
-          if (el.height > 1) {
-            setMargin(1)
-            return
-          }
-          const children = parent.getChildren()
-          const index = children.indexOf(el)
-          const previous = children[index - 1]
-          if (!previous) {
-            setMargin(0)
-            return
-          }
-          if (previous.height > 1 || previous.id.startsWith("text-")) {
-            setMargin(1)
-            return
-          }
-        }}
-      >
-        <Dynamic
-          component={render}
-          input={input}
-          tool={props.part.tool}
-          metadata={metadata}
-          permission={permission?.metadata ?? {}}
-          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-        />
-        {props.part.state.status === "error" && (
-          <box paddingLeft={2}>
-            <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
-          </box>
-        )}
-        {permission && (
-          <box gap={1}>
-            <text fg={theme.text}>Permission required to run this tool:</text>
-            <box flexDirection="row" gap={2}>
-              <text fg={theme.text}>
-                <b>enter</b>
-                <span style={{ fg: theme.textMuted }}> accept</span>
-              </text>
-              <text fg={theme.text}>
-                <b>a</b>
-                <span style={{ fg: theme.textMuted }}> accept always</span>
-              </text>
-              <text fg={theme.text}>
-                <b>d</b>
-                <span style={{ fg: theme.textMuted }}> deny</span>
-              </text>
-            </box>
-          </box>
-        )}
-      </box>
-    )
+  // Hide tool if showDetails is false and tool completed successfully
+  const shouldHide = createMemo(() => {
+    if (ctx.showDetails()) return false
+    if (props.part.state.status !== "completed") return false
+    return true
   })
 
-  return <Show when={component()}>{component()}</Show>
+  const toolprops = {
+    get metadata() {
+      return props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+    },
+    get input() {
+      return props.part.state.input ?? {}
+    },
+    get output() {
+      return props.part.state.status === "completed" ? props.part.state.output : undefined
+    },
+    get permission() {
+      const permissions = sync.data.permission[props.message.sessionID] ?? []
+      const permissionIndex = permissions.findIndex((x) => x.tool?.callID === props.part.callID)
+      return permissions[permissionIndex]
+    },
+    get tool() {
+      return props.part.tool
+    },
+    get part() {
+      return props.part
+    },
+  }
+
+  return (
+    <Show when={!shouldHide()}>
+      <Switch>
+        <Match when={props.part.tool === "bash"}>
+          <Bash {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "glob"}>
+          <Glob {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "read"}>
+          <Read {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "grep"}>
+          <Grep {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "list"}>
+          <List {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "webfetch"}>
+          <WebFetch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "codesearch"}>
+          <CodeSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "websearch"}>
+          <WebSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "write"}>
+          <Write {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "edit"}>
+          <Edit {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "task"}>
+          <Task {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "apply_patch"}>
+          <ApplyPatch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "todowrite"}>
+          <TodoWrite {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "question"}>
+          <Question {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "skill"}>
+          <Skill {...toolprops} />
+        </Match>
+        <Match when={true}>
+          <GenericTool {...toolprops} />
+        </Match>
+      </Switch>
+    </Show>
+  )
 }
 
 type ToolProps<T extends Tool.Info> = {
@@ -1511,36 +1497,15 @@ type ToolProps<T extends Tool.Info> = {
   permission: Record<string, any>
   tool: string
   output?: string
+  part: ToolPart
 }
 function GenericTool(props: ToolProps<any>) {
   return (
-    <ToolTitle icon="⚙" fallback="Writing command..." when={true}>
+    <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
       {props.tool} {input(props.input)}
-    </ToolTitle>
+    </InlineTool>
   )
 }
-
-type ToolRegistration<T extends Tool.Info = any> = {
-  name: string
-  container: "inline" | "block"
-  render?: Component<ToolProps<T>>
-}
-const ToolRegistry = (() => {
-  const state: Record<string, ToolRegistration> = {}
-  function register<T extends Tool.Info>(input: ToolRegistration<T>) {
-    state[input.name] = input
-    return input
-  }
-  return {
-    register,
-    container(name: string) {
-      return state[name]?.container
-    },
-    render(name: string) {
-      return state[name]?.render
-    },
-  }
-})()
 
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
   const { theme } = useTheme()
@@ -1553,67 +1518,209 @@ function ToolTitle(props: { fallback: string; when: any; icon: string; children:
   )
 }
 
-ToolRegistry.register<typeof BashTool>({
-  name: "bash",
-  container: "block",
-  render(props) {
-    const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
-    const { theme } = useTheme()
-    return (
-      <>
-        <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
-          {props.input.description || "Shell"}
-        </ToolTitle>
-        <Show when={props.input.command}>
-          <text fg={theme.text}>$ {props.input.command}</text>
+function InlineTool(props: {
+  icon: string
+  iconColor?: RGBA
+  complete: any
+  pending: string
+  children: JSX.Element
+  part: ToolPart
+}) {
+  const [margin, setMargin] = createSignal(0)
+  const { theme } = useTheme()
+  const ctx = use()
+  const sync = useSync()
+
+  const permission = createMemo(() => {
+    const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
+    if (!callID) return false
+    return callID === props.part.callID
+  })
+
+  const fg = createMemo(() => {
+    if (permission()) return theme.warning
+    if (props.complete) return theme.textMuted
+    return theme.text
+  })
+
+  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+
+  const denied = createMemo(
+    () =>
+      error()?.includes("rejected permission") ||
+      error()?.includes("specified a rule") ||
+      error()?.includes("user dismissed"),
+  )
+
+  return (
+    <box
+      marginTop={margin()}
+      paddingLeft={3}
+      renderBefore={function () {
+        const el = this as BoxRenderable
+        const parent = el.parent
+        if (!parent) {
+          return
+        }
+        if (el.height > 1) {
+          setMargin(1)
+          return
+        }
+        const children = parent.getChildren()
+        const index = children.indexOf(el)
+        const previous = children[index - 1]
+        if (!previous) {
+          setMargin(0)
+          return
+        }
+        if (previous.height > 1 || previous.id.startsWith("text-")) {
+          setMargin(1)
+          return
+        }
+      }}
+    >
+      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+        <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+          <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
         </Show>
-        <Show when={output()}>
-          <box>
-            <text fg={theme.text}>{output()}</text>
+      </text>
+      <Show when={error() && !denied()}>
+        <text fg={theme.error}>{error()}</text>
+      </Show>
+    </box>
+  )
+}
+
+function BlockTool(props: {
+  title: string
+  children: JSX.Element
+  onClick?: () => void
+  part?: ToolPart
+  spinner?: boolean
+}) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
+  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  return (
+    <box
+      border={["left"]}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      marginTop={1}
+      gap={1}
+      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      customBorderChars={SplitBorder.customBorderChars}
+      borderColor={theme.background}
+      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onClick?.()
+      }}
+    >
+      <Show
+        when={props.spinner}
+        fallback={
+          <text paddingLeft={3} fg={theme.textMuted}>
+            {props.title}
+          </text>
+        }
+      >
+        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      </Show>
+      {props.children}
+      <Show when={error()}>
+        <text fg={theme.error}>{error()}</text>
+      </Show>
+    </box>
+  )
+}
+
+function Bash(props: ToolProps<typeof BashTool>) {
+  const { theme } = useTheme()
+  const sync = useSync()
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
+
+  const workdirDisplay = createMemo(() => {
+    const workdir = props.input.workdir
+    if (!workdir || workdir === ".") return undefined
+
+    const base = sync.data.path.directory
+    if (!base) return undefined
+
+    const absolute = path.resolve(base, workdir)
+    if (absolute === base) return undefined
+
+    const home = Global.Path.home
+    if (!home) return absolute
+
+    const match = absolute === home || absolute.startsWith(home + path.sep)
+    return match ? absolute.replace(home, "~") : absolute
+  })
+
+  const title = createMemo(() => {
+    const desc = props.input.description ?? "Shell"
+    const wd = workdirDisplay()
+    if (!wd) return `# ${desc}`
+    if (desc.includes(wd)) return `# ${desc}`
+    return `# ${desc} in ${wd}`
+  })
+
+  return (
+    <Switch>
+      <Match when={props.metadata.output !== undefined}>
+        <BlockTool
+          title={title()}
+          part={props.part}
+          spinner={isRunning()}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
+          <box gap={1}>
+            <text fg={theme.text}>$ {props.input.command}</text>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
+            <Show when={overflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
           </box>
-        </Show>
-      </>
-    )
-  },
-})
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
+          {props.input.command}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
 
-ToolRegistry.register<typeof ReadTool>({
-  name: "read",
-  container: "inline",
-  render(props) {
-    return (
-      <>
-        <ToolTitle icon="→" fallback="Reading file..." when={props.input.filePath}>
-          Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
-        </ToolTitle>
-      </>
-    )
-  },
-})
+function Write(props: ToolProps<typeof WriteTool>) {
+  const { theme, syntax } = useTheme()
+  const code = createMemo(() => {
+    if (!props.input.content) return ""
+    return props.input.content
+  })
 
-ToolRegistry.register<typeof WriteTool>({
-  name: "write",
-  container: "block",
-  render(props) {
-    const { theme, syntax } = useTheme()
-    const code = createMemo(() => {
-      if (!props.input.content) return ""
-      return props.input.content
-    })
+  const diagnostics = createMemo(() => {
+    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    return props.metadata.diagnostics?.[filePath] ?? []
+  })
 
-    const diagnostics = createMemo(() => {
-      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
-      return props.metadata.diagnostics?.[filePath] ?? []
-    })
-
-    const done = !!props.input.filePath
-
-    return (
-      <>
-        <ToolTitle icon="←" fallback="Preparing write..." when={done}>
-          Wrote {props.input.filePath}
-        </ToolTitle>
-        <Show when={done}>
+  return (
+    <Switch>
+      <Match when={props.metadata.diagnostics !== undefined}>
+        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1623,180 +1730,208 @@ ToolRegistry.register<typeof WriteTool>({
               content={code()}
             />
           </line_number>
-        </Show>
-        <Show when={diagnostics().length}>
-          <For each={diagnostics()}>
-            {(diagnostic) => (
-              <text fg={theme.error}>
-                Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
-              </text>
-            )}
-          </For>
-        </Show>
-      </>
+          <Show when={diagnostics().length}>
+            <For each={diagnostics()}>
+              {(diagnostic) => (
+                <text fg={theme.error}>
+                  Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+                </text>
+              )}
+            </For>
+          </Show>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
+          Write {normalizePath(props.input.filePath!)}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function Glob(props: ToolProps<typeof GlobTool>) {
+  return (
+    <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
+      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      <Show when={props.metadata.count}>
+        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+      </Show>
+    </InlineTool>
+  )
+}
+
+function Read(props: ToolProps<typeof ReadTool>) {
+  const { theme } = useTheme()
+  const loaded = createMemo(() => {
+    if (props.part.state.status !== "completed") return []
+    if (props.part.state.time.compacted) return []
+    const value = props.metadata.loaded
+    if (!value || !Array.isArray(value)) return []
+    return value.filter((p): p is string => typeof p === "string")
+  })
+  return (
+    <>
+      <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
+        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+      </InlineTool>
+      <For each={loaded()}>
+        {(filepath) => (
+          <box paddingLeft={3}>
+            <text paddingLeft={3} fg={theme.textMuted}>
+              ↳ Loaded {normalizePath(filepath)}
+            </text>
+          </box>
+        )}
+      </For>
+    </>
+  )
+}
+
+function Grep(props: ToolProps<typeof GrepTool>) {
+  return (
+    <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
+      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      <Show when={props.metadata.matches}>
+        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+      </Show>
+    </InlineTool>
+  )
+}
+
+function List(props: ToolProps<typeof ListTool>) {
+  const dir = createMemo(() => {
+    if (props.input.path) {
+      return normalizePath(props.input.path)
+    }
+    return ""
+  })
+  return (
+    <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
+      List {dir()}
+    </InlineTool>
+  )
+}
+
+function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+  return (
+    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
+      WebFetch {(props.input as any).url}
+    </InlineTool>
+  )
+}
+
+function CodeSearch(props: ToolProps<any>) {
+  const input = props.input as any
+  const metadata = props.metadata as any
+  return (
+    <InlineTool icon="◇" pending="Searching code..." complete={input.query} part={props.part}>
+      Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+    </InlineTool>
+  )
+}
+
+function WebSearch(props: ToolProps<any>) {
+  const input = props.input as any
+  const metadata = props.metadata as any
+  return (
+    <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
+      Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+    </InlineTool>
+  )
+}
+
+function Task(props: ToolProps<typeof TaskTool>) {
+  const { theme } = useTheme()
+  const keybind = useKeybind()
+  const { navigate } = useRoute()
+  const local = useLocal()
+  const sync = useSync()
+
+  const tools = createMemo(() => {
+    const sessionID = props.metadata.sessionId
+    const msgs = sync.data.message[sessionID ?? ""] ?? []
+    return msgs.flatMap((msg) =>
+      (sync.data.part[msg.id] ?? [])
+        .filter((part): part is ToolPart => part.type === "tool")
+        .map((part) => ({ tool: part.tool, state: part.state })),
     )
-  },
-})
+  })
 
-ToolRegistry.register<typeof GlobTool>({
-  name: "glob",
-  container: "inline",
-  render(props) {
-    return (
-      <>
-        <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-          <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
-        </ToolTitle>
-      </>
-    )
-  },
-})
+  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
 
-ToolRegistry.register<typeof GrepTool>({
-  name: "grep",
-  container: "inline",
-  render(props) {
-    return (
-      <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-        <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
-      </ToolTitle>
-    )
-  },
-})
+  const isRunning = createMemo(() => props.part.state.status === "running")
 
-ToolRegistry.register<typeof ListTool>({
-  name: "list",
-  container: "inline",
-  render(props) {
-    const dir = createMemo(() => {
-      if (props.input.path) {
-        return normalizePath(props.input.path)
-      }
-      return ""
-    })
-    return (
-      <>
-        <ToolTitle icon="→" fallback="Listing directory..." when={props.input.path !== undefined}>
-          List {dir()}
-        </ToolTitle>
-      </>
-    )
-  },
-})
-
-ToolRegistry.register<typeof TaskTool>({
-  name: "task",
-  container: "block",
-  render(props) {
-    const { theme } = useTheme()
-    const keybind = useKeybind()
-    const dialog = useDialog()
-    const renderer = useRenderer()
-
-    return (
-      <>
-        <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
-          {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
-        </ToolTitle>
-        <Show when={props.metadata.summary?.length}>
+  return (
+    <Switch>
+      <Match when={props.input.description || props.input.subagent_type}>
+        <BlockTool
+          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
+          onClick={
+            props.metadata.sessionId
+              ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
+              : undefined
+          }
+          part={props.part}
+          spinner={isRunning()}
+        >
           <box>
-            <For each={props.metadata.summary ?? []}>
-              {(task, index) => {
-                const summary = props.metadata.summary ?? []
+            <text style={{ fg: theme.textMuted }}>
+              {props.input.description} ({tools().length} toolcalls)
+            </text>
+            <Show when={current()}>
+              {(item) => {
+                const title = item().state.status === "completed" ? (item().state as any).title : ""
                 return (
-                  <text style={{ fg: task.state.status === "error" ? theme.error : theme.textMuted }}>
-                    {index() === summary.length - 1 ? "└" : "├"} {Locale.titlecase(task.tool)}{" "}
-                    {task.state.status === "completed" ? task.state.title : ""}
+                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
+                    └ {Locale.titlecase(item().tool)} {title}
                   </text>
                 )
               }}
-            </For>
+            </Show>
           </box>
-        </Show>
-        <text fg={theme.text}>
-          {keybind.print("session_child_cycle")}
-          <span style={{ fg: theme.textMuted }}> view subagents</span>
-        </text>
-      </>
-    )
-  },
-})
+          <Show when={props.metadata.sessionId}>
+            <text fg={theme.text}>
+              {keybind.print("session_child_cycle")}
+              <span style={{ fg: theme.textMuted }}> view subagents</span>
+            </text>
+          </Show>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="#" pending="Delegating..." complete={props.input.subagent_type} part={props.part}>
+          {props.input.subagent_type} Task {props.input.description}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
 
-ToolRegistry.register<typeof WebFetchTool>({
-  name: "webfetch",
-  container: "inline",
-  render(props) {
-    return (
-      <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
-        WebFetch {(props.input as any).url}
-      </ToolTitle>
-    )
-  },
-})
+function Edit(props: ToolProps<typeof EditTool>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
 
-ToolRegistry.register({
-  name: "codesearch",
-  container: "inline",
-  render(props: ToolProps<any>) {
-    const input = props.input as any
-    const metadata = props.metadata as any
-    return (
-      <ToolTitle icon="◇" fallback="Searching code..." when={input.query}>
-        Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
-      </ToolTitle>
-    )
-  },
-})
+  const view = createMemo(() => {
+    const diffStyle = ctx.sync.data.config.tui?.diff_style
+    if (diffStyle === "stacked") return "unified"
+    // Default to "auto" behavior
+    return ctx.width > 120 ? "split" : "unified"
+  })
 
-ToolRegistry.register({
-  name: "websearch",
-  container: "inline",
-  render(props: ToolProps<any>) {
-    const input = props.input as any
-    const metadata = props.metadata as any
-    return (
-      <ToolTitle icon="◈" fallback="Searching web..." when={input.query}>
-        Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
-      </ToolTitle>
-    )
-  },
-})
+  const ft = createMemo(() => filetype(props.input.filePath))
 
-ToolRegistry.register<typeof EditTool>({
-  name: "edit",
-  container: "block",
-  render(props) {
-    const ctx = use()
-    const { theme, syntax } = useTheme()
+  const diffContent = createMemo(() => props.metadata.diff)
 
-    const view = createMemo(() => {
-      const diffStyle = ctx.sync.data.config.tui?.diff_style
-      if (diffStyle === "stacked") return "unified"
-      // Default to "auto" behavior
-      return ctx.width > 120 ? "split" : "unified"
-    })
+  const diagnostics = createMemo(() => {
+    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    const arr = props.metadata.diagnostics?.[filePath] ?? []
+    return arr.filter((x) => x.severity === 1).slice(0, 3)
+  })
 
-    const ft = createMemo(() => filetype(props.input.filePath))
-
-    const diffContent = createMemo(() => props.metadata.diff ?? props.permission["diff"])
-
-    const diagnostics = createMemo(() => {
-      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
-      const arr = props.metadata.diagnostics?.[filePath] ?? []
-      return arr.filter((x) => x.severity === 1).slice(0, 3)
-    })
-
-    return (
-      <>
-        <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
-          Edit {normalizePath(props.input.filePath!)}{" "}
-          {input({
-            replaceAll: props.input.replaceAll,
-          })}
-        </ToolTitle>
-        <Show when={diffContent()}>
+  return (
+    <Switch>
+      <Match when={props.metadata.diff !== undefined}>
+        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -1818,66 +1953,165 @@ ToolRegistry.register<typeof EditTool>({
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-        </Show>
-        <Show when={diagnostics().length}>
-          <box>
-            <For each={diagnostics()}>
-              {(diagnostic) => (
-                <text fg={theme.error}>
-                  Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
-                </text>
-              )}
-            </For>
-          </box>
-        </Show>
-      </>
-    )
-  },
-})
+          <Show when={diagnostics().length}>
+            <box>
+              <For each={diagnostics()}>
+                {(diagnostic) => (
+                  <text fg={theme.error}>
+                    Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
+                    {diagnostic.message}
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
+          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
 
-ToolRegistry.register<typeof PatchTool>({
-  name: "patch",
-  container: "block",
-  render(props) {
-    const { theme } = useTheme()
+function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+
+  const files = createMemo(() => props.metadata.files ?? [])
+
+  const view = createMemo(() => {
+    const diffStyle = ctx.sync.data.config.tui?.diff_style
+    if (diffStyle === "stacked") return "unified"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  function Diff(p: { diff: string; filePath: string }) {
     return (
-      <>
-        <ToolTitle icon="%" fallback="Preparing patch..." when={true}>
+      <box paddingLeft={1}>
+        <diff
+          diff={p.diff}
+          view={view()}
+          filetype={filetype(p.filePath)}
+          syntaxStyle={syntax()}
+          showLineNumbers={true}
+          width="100%"
+          wrapMode={ctx.diffWrapMode()}
+          fg={theme.text}
+          addedBg={theme.diffAddedBg}
+          removedBg={theme.diffRemovedBg}
+          contextBg={theme.diffContextBg}
+          addedSignColor={theme.diffHighlightAdded}
+          removedSignColor={theme.diffHighlightRemoved}
+          lineNumberFg={theme.diffLineNumber}
+          lineNumberBg={theme.diffContextBg}
+          addedLineNumberBg={theme.diffAddedLineNumberBg}
+          removedLineNumberBg={theme.diffRemovedLineNumberBg}
+        />
+      </box>
+    )
+  }
+
+  function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
+    if (file.type === "delete") return "# Deleted " + file.relativePath
+    if (file.type === "add") return "# Created " + file.relativePath
+    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
+    return "← Patched " + file.relativePath
+  }
+
+  return (
+    <Switch>
+      <Match when={files().length > 0}>
+        <For each={files()}>
+          {(file) => (
+            <BlockTool title={title(file)} part={props.part}>
+              <Show
+                when={file.type !== "delete"}
+                fallback={
+                  <text fg={theme.diffRemoved}>
+                    -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                  </text>
+                }
+              >
+                <Diff diff={file.diff} filePath={file.filePath} />
+              </Show>
+            </BlockTool>
+          )}
+        </For>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
           Patch
-        </ToolTitle>
-        <Show when={props.output}>
-          <box>
-            <text fg={theme.text}>{props.output?.trim()}</text>
-          </box>
-        </Show>
-      </>
-    )
-  },
-})
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
 
-ToolRegistry.register<typeof TodoWriteTool>({
-  name: "todowrite",
-  container: "block",
-  render(props) {
-    const { theme } = useTheme()
-    return (
-      <>
-        <Show when={!props.input.todos?.length}>
-          <ToolTitle icon="⚙" fallback="Updating todos..." when={true}>
-            Updating todos...
-          </ToolTitle>
-        </Show>
-        <Show when={props.metadata.todos?.length}>
+function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+  return (
+    <Switch>
+      <Match when={props.metadata.todos?.length}>
+        <BlockTool title="# Todos" part={props.part}>
           <box>
             <For each={props.input.todos ?? []}>
               {(todo) => <TodoItem status={todo.status} content={todo.content} />}
             </For>
           </box>
-        </Show>
-      </>
-    )
-  },
-})
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="⚙" pending="Updating todos..." complete={false} part={props.part}>
+          Updating todos...
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function Question(props: ToolProps<typeof QuestionTool>) {
+  const { theme } = useTheme()
+  const count = createMemo(() => props.input.questions?.length ?? 0)
+
+  function format(answer?: string[]) {
+    if (!answer?.length) return "(no answer)"
+    return answer.join(", ")
+  }
+
+  return (
+    <Switch>
+      <Match when={props.metadata.answers}>
+        <BlockTool title="# Questions" part={props.part}>
+          <box gap={1}>
+            <For each={props.input.questions ?? []}>
+              {(q, i) => (
+                <box flexDirection="column">
+                  <text fg={theme.textMuted}>{q.question}</text>
+                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part}>
+          Asked {count()} question{count() !== 1 ? "s" : ""}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function Skill(props: ToolProps<typeof SkillTool>) {
+  return (
+    <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
+      Skill "{props.input.name}"
+    </InlineTool>
+  )
+}
 
 function normalizePath(input?: string) {
   if (!input) return ""

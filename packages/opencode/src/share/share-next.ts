@@ -4,18 +4,22 @@ import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
-import { Storage } from "@/storage/storage"
+import { Database, eq } from "@/storage/db"
+import { SessionShareTable } from "./share.sql"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
 
-  async function url() {
+  export async function url() {
     return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
   }
 
+  const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+
   export async function init() {
+    if (disabled) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {
@@ -63,6 +67,7 @@ export namespace ShareNext {
   }
 
   export async function create(sessionID: string) {
+    if (disabled) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
     const result = await fetch(`${await url()}/api/share`, {
       method: "POST",
@@ -73,17 +78,26 @@ export namespace ShareNext {
     })
       .then((x) => x.json())
       .then((x) => x as { id: string; url: string; secret: string })
-    await Storage.write(["session_share", sessionID], result)
+    Database.use((db) =>
+      db
+        .insert(SessionShareTable)
+        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+        .onConflictDoUpdate({
+          target: SessionShareTable.session_id,
+          set: { id: result.id, secret: result.secret, url: result.url },
+        })
+        .run(),
+    )
     fullSync(sessionID)
     return result
   }
 
   function get(sessionID: string) {
-    return Storage.read<{
-      id: string
-      secret: string
-      url: string
-    }>(["session_share", sessionID])
+    const row = Database.use((db) =>
+      db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
+    )
+    if (!row) return
+    return { id: row.id, secret: row.secret, url: row.url }
   }
 
   type Data =
@@ -110,6 +124,7 @@ export namespace ShareNext {
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: string, data: Data[]) {
+    if (disabled) return
     const existing = queue.get(sessionID)
     if (existing) {
       for (const item of data) {
@@ -127,7 +142,7 @@ export namespace ShareNext {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const share = await get(sessionID)
+      const share = get(sessionID)
       if (!share) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
@@ -145,8 +160,9 @@ export namespace ShareNext {
   }
 
   export async function remove(sessionID: string) {
+    if (disabled) return
     log.info("removing share", { sessionID })
-    const share = await get(sessionID)
+    const share = get(sessionID)
     if (!share) return
     await fetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
@@ -157,7 +173,7 @@ export namespace ShareNext {
         secret: share.secret,
       }),
     })
-    await Storage.remove(["session_share", sessionID])
+    Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
   }
 
   async function fullSync(sessionID: string) {

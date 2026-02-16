@@ -83,6 +83,14 @@ export namespace Installation {
         name: "brew" as const,
         command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
       },
+      {
+        name: "scoop" as const,
+        command: () => $`scoop list opencode`.throws(false).quiet().text(),
+      },
+      {
+        name: "choco" as const,
+        command: () => $`choco list --limit-output opencode`.throws(false).quiet().text(),
+      },
     ]
 
     checks.sort((a, b) => {
@@ -95,7 +103,9 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      if (output.includes(check.name === "brew" ? "opencode" : "opencode-ai")) {
+      const installedName =
+        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+      if (output.includes(installedName)) {
         return check.name
       }
     }
@@ -111,8 +121,8 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
-    if (tapFormula.includes("opencode")) return "sst/tap/opencode"
+    const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
+    if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
@@ -138,26 +148,45 @@ export namespace Installation {
         break
       case "brew": {
         const formula = await getBrewFormula()
-        cmd = $`brew install ${formula}`.env({
+        if (formula.includes("/")) {
+          cmd =
+            $`brew tap anomalyco/tap && cd "$(brew --repo anomalyco/tap)" && git pull --ff-only && brew upgrade ${formula}`.env(
+              {
+                HOMEBREW_NO_AUTO_UPDATE: "1",
+                ...process.env,
+              },
+            )
+          break
+        }
+        cmd = $`brew upgrade ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
           ...process.env,
         })
         break
       }
+      case "choco":
+        cmd = $`echo Y | choco upgrade opencode --version=${target}`
+        break
+      case "scoop":
+        cmd = $`scoop install opencode@${target}`
+        break
       default:
         throw new Error(`Unknown method: ${method}`)
     }
     const result = await cmd.quiet().throws(false)
+    if (result.exitCode !== 0) {
+      const stderr = method === "choco" ? "not running from an elevated command shell" : result.stderr.toString("utf8")
+      throw new UpgradeFailedError({
+        stderr: stderr,
+      })
+    }
     log.info("upgraded", {
       method,
       target,
       stdout: result.stdout.toString(),
       stderr: result.stderr.toString(),
     })
-    if (result.exitCode !== 0)
-      throw new UpgradeFailedError({
-        stderr: result.stderr.toString("utf8"),
-      })
+    await $`${process.execPath} --version`.nothrow().quiet().text()
   }
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
@@ -169,14 +198,19 @@ export namespace Installation {
 
     if (detectedMethod === "brew") {
       const formula = await getBrewFormula()
-      if (formula === "opencode") {
-        return fetch("https://formulae.brew.sh/api/formula/opencode.json")
-          .then((res) => {
-            if (!res.ok) throw new Error(res.statusText)
-            return res.json()
-          })
-          .then((data: any) => data.versions.stable)
+      if (formula.includes("/")) {
+        const infoJson = await $`brew info --json=v2 ${formula}`.quiet().text()
+        const info = JSON.parse(infoJson)
+        const version = info.formulae?.[0]?.versions?.stable
+        if (!version) throw new Error(`Could not detect version for tap formula: ${formula}`)
+        return version
       }
+      return fetch("https://formulae.brew.sh/api/formula/opencode.json")
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.versions.stable)
     }
 
     if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
@@ -194,7 +228,30 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+    if (detectedMethod === "choco") {
+      return fetch(
+        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
+        { headers: { Accept: "application/json;odata=verbose" } },
+      )
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.d.results[0].Version)
+    }
+
+    if (detectedMethod === "scoop") {
+      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
+        headers: { Accept: "application/json" },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.version)
+    }
+
+    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()

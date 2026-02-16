@@ -13,6 +13,10 @@ export class ACPSessionManager {
     this.sdk = sdk
   }
 
+  tryGet(sessionId: string): ACPSessionState | undefined {
+    return this.sessions.get(sessionId)
+  }
+
   async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .create(
@@ -88,6 +92,18 @@ export class ACPSessionManager {
   setModel(sessionId: string, model: ACPSessionState["model"]) {
     const session = this.get(sessionId)
     session.model = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  getVariant(sessionId: string) {
+    const session = this.get(sessionId)
+    return session.variant
+  }
+
+  setVariant(sessionId: string, variant?: string) {
+    const session = this.get(sessionId)
+    session.variant = variant
     this.sessions.set(sessionId, session)
     return session
   }

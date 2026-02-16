@@ -66,6 +66,73 @@
         ]
       }
     },
+    "/global/config": {
+      "get": {
+        "operationId": "global.config.get",
+        "summary": "Get global configuration",
+        "description": "Retrieve the current global OpenCode configuration settings and preferences.",
+        "responses": {
+          "200": {
+            "description": "Get global config info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.config.get({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "global.config.update",
+        "summary": "Update global configuration",
+        "description": "Update global OpenCode configuration settings and preferences.",
+        "responses": {
+          "200": {
+            "description": "Successfully updated global config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Config"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.config.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/dispose": {
       "post": {
         "operationId": "global.dispose",
@@ -87,6 +154,103 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/{providerID}": {
+      "put": {
+        "operationId": "auth.set",
+        "summary": "Set auth credentials",
+        "description": "Set authentication credentials",
+        "responses": {
+          "200": {
+            "description": "Successfully set authentication credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Auth"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.set({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "auth.remove",
+        "summary": "Remove auth credentials",
+        "description": "Remove authentication credentials",
+        "responses": {
+          "200": {
+            "description": "Successfully removed authentication credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -183,7 +347,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name, icon and color.",
+        "description": "Update project properties such as name, icon, and commands.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -231,7 +395,19 @@
                       "url": {
                         "type": "string"
                       },
+                      "override": {
+                        "type": "string"
+                      },
                       "color": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "commands": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "description": "Startup script to run when creating a new workspace (worktree)",
                         "type": "string"
                       }
                     }
@@ -678,6 +854,58 @@
         ]
       }
     },
+    "/config/providers": {
+      "get": {
+        "operationId": "config.providers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List config providers",
+        "description": "Get a list of all configured AI providers and their default models.",
+        "responses": {
+          "200": {
+            "description": "List of providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Provider"
+                      }
+                    },
+                    "default": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["providers", "default"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.config.providers({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/tool/ids": {
       "get": {
         "operationId": "tool.ids",
@@ -782,9 +1010,9 @@
         ]
       }
     },
-    "/instance/dispose": {
+    "/experimental/worktree": {
       "post": {
-        "operationId": "instance.dispose",
+        "operationId": "worktree.create",
         "parameters": [
           {
             "in": "query",
@@ -794,11 +1022,97 @@
             }
           }
         ],
-        "summary": "Dispose instance",
-        "description": "Clean up and dispose the current OpenCode instance, releasing all resources.",
+        "summary": "Create worktree",
+        "description": "Create a new git worktree for the current project and run any configured startup scripts.",
         "responses": {
           "200": {
-            "description": "Instance disposed",
+            "description": "Worktree created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Worktree"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeCreateInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.create({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "worktree.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List worktrees",
+        "description": "List all sandbox worktrees for the current project.",
+        "responses": {
+          "200": {
+            "description": "List of worktree directories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.list({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "worktree.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Remove worktree",
+        "description": "Remove a git worktree and delete its branch.",
+        "responses": {
+          "200": {
+            "description": "Worktree removed",
             "content": {
               "application/json": {
                 "schema": {
@@ -806,19 +1120,38 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeRemoveInput"
+              }
+            }
           }
         },
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.instance.dispose({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.remove({\n  ...\n})"
           }
         ]
       }
     },
-    "/path": {
-      "get": {
-        "operationId": "path.get",
+    "/experimental/worktree/reset": {
+      "post": {
+        "operationId": "worktree.reset",
         "parameters": [
           {
             "in": "query",
@@ -828,16 +1161,35 @@
             }
           }
         ],
-        "summary": "Get paths",
-        "description": "Retrieve the current working directory and related path information for the OpenCode instance.",
+        "summary": "Reset worktree",
+        "description": "Reset a worktree branch to the primary default branch.",
         "responses": {
           "200": {
-            "description": "Path",
+            "description": "Worktree reset",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Path"
+                  "type": "boolean"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeResetInput"
               }
             }
           }
@@ -845,14 +1197,14 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.path.get({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.reset({\n  ...\n})"
           }
         ]
       }
     },
-    "/vcs": {
+    "/experimental/resource": {
       "get": {
-        "operationId": "vcs.get",
+        "operationId": "experimental.resource.list",
         "parameters": [
           {
             "in": "query",
@@ -862,15 +1214,21 @@
             }
           }
         ],
-        "summary": "Get VCS info",
-        "description": "Retrieve version control system (VCS) information for the current project, such as git branch.",
+        "summary": "Get MCP resources",
+        "description": "Get all available MCP resources from connected servers. Optionally filter by name.",
         "responses": {
           "200": {
-            "description": "VCS info",
+            "description": "MCP resources",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VcsInfo"
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/McpResource"
+                  }
                 }
               }
             }
@@ -879,7 +1237,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.get({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.resource.list({\n  ...\n})"
           }
         ]
       }
@@ -893,7 +1251,40 @@
             "name": "directory",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Filter sessions by project directory"
+          },
+          {
+            "in": "query",
+            "name": "roots",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only return root sessions (no parentID)"
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Filter sessions updated on or after this timestamp (milliseconds since epoch)"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by title (case-insensitive)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Maximum number of sessions to return"
           }
         ],
         "summary": "List sessions",
@@ -967,6 +1358,9 @@
                   },
                   "title": {
                     "type": "string"
+                  },
+                  "permission": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
                   }
                 }
               }
@@ -1714,10 +2108,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "query",
@@ -1728,11 +2122,11 @@
             }
           }
         ],
-        "summary": "Get session diff",
-        "description": "Get all file changes (diffs) made during this session.",
+        "summary": "Get message diff",
+        "description": "Get the file changes (diff) that resulted from a specific user message in the session.",
         "responses": {
           "200": {
-            "description": "List of diffs",
+            "description": "Successfully retrieved diff",
             "content": {
               "application/json": {
                 "schema": {
@@ -1740,26 +2134,6 @@
                   "items": {
                     "$ref": "#/components/schemas/FileDiff"
                   }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -2037,6 +2411,7 @@
                     "type": "boolean"
                   },
                   "tools": {
+                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
                     "type": "object",
                     "propertyNames": {
                       "type": "string"
@@ -2044,6 +2419,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "format": {
+                    "$ref": "#/components/schemas/OutputFormat"
                   },
                   "system": {
                     "type": "string"
@@ -2412,6 +2790,7 @@
                     "type": "boolean"
                   },
                   "tools": {
+                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
                     "type": "object",
                     "propertyNames": {
                       "type": "string"
@@ -2419,6 +2798,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "format": {
+                    "$ref": "#/components/schemas/OutputFormat"
                   },
                   "system": {
                     "type": "string"
@@ -2550,6 +2932,38 @@
                   },
                   "variant": {
                     "type": "string"
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "file"
+                            },
+                            "mime": {
+                              "type": "string"
+                            },
+                            "filename": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "$ref": "#/components/schemas/FilePartSource"
+                            }
+                          },
+                          "required": ["type", "mime", "url"]
+                        }
+                      ]
+                    }
                   }
                 },
                 "required": ["arguments", "command"]
@@ -2831,6 +3245,7 @@
           }
         ],
         "summary": "Respond to permission",
+        "deprecated": true,
         "description": "Approve or deny a permission request from the AI assistant.",
         "responses": {
           "200": {
@@ -2888,6 +3303,87 @@
         ]
       }
     },
+    "/permission/{requestID}/reply": {
+      "post": {
+        "operationId": "permission.reply",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Respond to permission request",
+        "description": "Approve or deny a permission request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Permission processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reply": {
+                    "type": "string",
+                    "enum": ["once", "always", "reject"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["reply"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/permission": {
       "get": {
         "operationId": "permission.list",
@@ -2910,7 +3406,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Permission"
+                    "$ref": "#/components/schemas/PermissionRequest"
                   }
                 }
               }
@@ -2925,9 +3421,9 @@
         ]
       }
     },
-    "/command": {
+    "/question": {
       "get": {
-        "operationId": "command.list",
+        "operationId": "question.list",
         "parameters": [
           {
             "in": "query",
@@ -2937,17 +3433,17 @@
             }
           }
         ],
-        "summary": "List commands",
-        "description": "Get a list of all available commands in the OpenCode system.",
+        "summary": "List pending questions",
+        "description": "Get all pending question requests across all sessions.",
         "responses": {
           "200": {
-            "description": "List of commands",
+            "description": "List of pending questions",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Command"
+                    "$ref": "#/components/schemas/QuestionRequest"
                   }
                 }
               }
@@ -2957,14 +3453,14 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.command.list({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.list({\n  ...\n})"
           }
         ]
       }
     },
-    "/config/providers": {
-      "get": {
-        "operationId": "config.providers",
+    "/question/{requestID}/reply": {
+      "post": {
+        "operationId": "question.reply",
         "parameters": [
           {
             "in": "query",
@@ -2972,35 +3468,126 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
           }
         ],
-        "summary": "List config providers",
-        "description": "Get a list of all configured AI providers and their default models.",
+        "summary": "Reply to question request",
+        "description": "Provide answers to a question request from the AI assistant.",
         "responses": {
           "200": {
-            "description": "List of providers",
+            "description": "Question answered successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "providers": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Provider"
-                      }
-                    },
-                    "default": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "string"
-                      }
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answers": {
+                    "description": "User answers in order of questions (each answer is an array of selected labels)",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/QuestionAnswer"
                     }
-                  },
-                  "required": ["providers", "default"]
+                  }
+                },
+                "required": ["answers"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/question/{requestID}/reject": {
+      "post": {
+        "operationId": "question.reject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Reject question request",
+        "description": "Reject a question request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Question rejected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -3009,7 +3596,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.config.providers({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.reject({\n  ...\n})"
           }
         ]
       }
@@ -3152,6 +3739,9 @@
                                     "context": {
                                       "type": "number"
                                     },
+                                    "input": {
+                                      "type": "number"
+                                    },
                                     "output": {
                                       "type": "number"
                                     }
@@ -3206,9 +3796,11 @@
                                   "properties": {
                                     "npm": {
                                       "type": "string"
+                                    },
+                                    "api": {
+                                      "type": "string"
                                     }
-                                  },
-                                  "required": ["npm"]
+                                  }
                                 },
                                 "variants": {
                                   "type": "object",
@@ -3791,120 +4383,6 @@
         ]
       }
     },
-    "/log": {
-      "post": {
-        "operationId": "app.log",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Write log",
-        "description": "Write a log entry to the server logs with specified level and metadata.",
-        "responses": {
-          "200": {
-            "description": "Log entry written successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "service": {
-                    "description": "Service name for the log entry",
-                    "type": "string"
-                  },
-                  "level": {
-                    "description": "Log level",
-                    "type": "string",
-                    "enum": ["debug", "info", "error", "warn"]
-                  },
-                  "message": {
-                    "description": "Log message",
-                    "type": "string"
-                  },
-                  "extra": {
-                    "description": "Additional metadata for the log entry",
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
-                  }
-                },
-                "required": ["service", "level", "message"]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/agent": {
-      "get": {
-        "operationId": "app.agents",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "List agents",
-        "description": "Get a list of all available AI agents in the OpenCode system.",
-        "responses": {
-          "200": {
-            "description": "List of agents",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Agent"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.agents({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/mcp": {
       "get": {
         "operationId": "mcp.status",
@@ -4366,80 +4844,6 @@
         ]
       }
     },
-    "/lsp": {
-      "get": {
-        "operationId": "lsp.status",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Get LSP status",
-        "description": "Get LSP server status",
-        "responses": {
-          "200": {
-            "description": "LSP server status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LSPStatus"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.status({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/formatter": {
-      "get": {
-        "operationId": "formatter.status",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Get formatter status",
-        "description": "Get formatter status",
-        "responses": {
-          "200": {
-            "description": "Formatter status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FormatterStatus"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.formatter.status({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/tui/append-prompt": {
       "post": {
         "operationId": "tui.appendPrompt",
@@ -4872,6 +5276,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/Event.tui.toast.show"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Event.tui.session.select"
                   }
                 ]
               }
@@ -4882,6 +5289,77 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.tui.publish({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/tui/select-session": {
+      "post": {
+        "operationId": "tui.selectSession",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Select session",
+        "description": "Navigate the TUI to display the specified session.",
+        "responses": {
+          "200": {
+            "description": "Session selected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "description": "Session ID to navigate to",
+                    "type": "string",
+                    "pattern": "^ses"
+                  }
+                },
+                "required": ["sessionID"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.tui.selectSession({\n  ...\n})"
           }
         ]
       }
@@ -4968,9 +5446,9 @@
         ]
       }
     },
-    "/auth/{providerID}": {
-      "put": {
-        "operationId": "auth.set",
+    "/instance/dispose": {
+      "post": {
+        "operationId": "instance.dispose",
         "parameters": [
           {
             "in": "query",
@@ -4978,21 +5456,152 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "in": "path",
-            "name": "providerID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
           }
         ],
-        "summary": "Set auth credentials",
-        "description": "Set authentication credentials",
+        "summary": "Dispose instance",
+        "description": "Clean up and dispose the current OpenCode instance, releasing all resources.",
         "responses": {
           "200": {
-            "description": "Successfully set authentication credentials",
+            "description": "Instance disposed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.instance.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/path": {
+      "get": {
+        "operationId": "path.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get paths",
+        "description": "Retrieve the current working directory and related path information for the OpenCode instance.",
+        "responses": {
+          "200": {
+            "description": "Path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Path"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.path.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs": {
+      "get": {
+        "operationId": "vcs.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get VCS info",
+        "description": "Retrieve version control system (VCS) information for the current project, such as git branch.",
+        "responses": {
+          "200": {
+            "description": "VCS info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VcsInfo"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/command": {
+      "get": {
+        "operationId": "command.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List commands",
+        "description": "Get a list of all available commands in the OpenCode system.",
+        "responses": {
+          "200": {
+            "description": "List of commands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Command"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.command.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/log": {
+      "post": {
+        "operationId": "app.log",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Write log",
+        "description": "Write a log entry to the server logs with specified level and metadata.",
+        "responses": {
+          "200": {
+            "description": "Log entry written successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -5016,7 +5625,31 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Auth"
+                "type": "object",
+                "properties": {
+                  "service": {
+                    "description": "Service name for the log entry",
+                    "type": "string"
+                  },
+                  "level": {
+                    "description": "Log level",
+                    "type": "string",
+                    "enum": ["debug", "info", "error", "warn"]
+                  },
+                  "message": {
+                    "description": "Log message",
+                    "type": "string"
+                  },
+                  "extra": {
+                    "description": "Additional metadata for the log entry",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["service", "level", "message"]
               }
             }
           }
@@ -5024,7 +5657,170 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.set({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/agent": {
+      "get": {
+        "operationId": "app.agents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List agents",
+        "description": "Get a list of all available AI agents in the OpenCode system.",
+        "responses": {
+          "200": {
+            "description": "List of agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Agent"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.agents({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/skill": {
+      "get": {
+        "operationId": "app.skills",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List skills",
+        "description": "Get a list of all available skills in the OpenCode system.",
+        "responses": {
+          "200": {
+            "description": "List of skills",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "location": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name", "description", "location", "content"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.skills({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp": {
+      "get": {
+        "operationId": "lsp.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get LSP status",
+        "description": "Get LSP server status",
+        "responses": {
+          "200": {
+            "description": "LSP server status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LSPStatus"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/formatter": {
+      "get": {
+        "operationId": "formatter.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get formatter status",
+        "description": "Get formatter status",
+        "responses": {
+          "200": {
+            "description": "Formatter status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormatterStatus"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.formatter.status({\n  ...\n})"
           }
         ]
       }
@@ -5126,7 +5922,19 @@
               "url": {
                 "type": "string"
               },
+              "override": {
+                "type": "string"
+              },
               "color": {
+                "type": "string"
+              }
+            }
+          },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "Startup script to run when creating a new workspace (worktree)",
                 "type": "string"
               }
             }
@@ -5145,9 +5953,15 @@
               }
             },
             "required": ["created", "updated"]
+          },
+          "sandboxes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["id", "worktree", "time"]
+        "required": ["id", "worktree", "time", "sandboxes"]
       },
       "Event.project.updated": {
         "type": "object",
@@ -5177,6 +5991,34 @@
               }
             },
             "required": ["directory"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -5217,6 +6059,71 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["file"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "OutputFormatText": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "text"
+          }
+        },
+        "required": ["type"]
+      },
+      "JSONSchema": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "OutputFormatJsonSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "json_schema"
+          },
+          "schema": {
+            "$ref": "#/components/schemas/JSONSchema"
+          },
+          "retryCount": {
+            "default": 2,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "schema"]
+      },
+      "OutputFormat": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OutputFormatText"
+          },
+          {
+            "$ref": "#/components/schemas/OutputFormatJsonSchema"
+          }
+        ]
+      },
       "FileDiff": {
         "type": "object",
         "properties": {
@@ -5234,6 +6141,10 @@
           },
           "deletions": {
             "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
           }
         },
         "required": ["file", "before", "after", "additions", "deletions"]
@@ -5259,6 +6170,9 @@
               }
             },
             "required": ["created"]
+          },
+          "format": {
+            "$ref": "#/components/schemas/OutputFormat"
           },
           "summary": {
             "type": "object",
@@ -5385,6 +6299,50 @@
         },
         "required": ["name", "data"]
       },
+      "StructuredOutputError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "StructuredOutputError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "retries": {
+                "type": "number"
+              }
+            },
+            "required": ["message", "retries"]
+          }
+        },
+        "required": ["name", "data"]
+      },
+      "ContextOverflowError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "ContextOverflowError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "responseBody": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -5471,6 +6429,12 @@
                 "$ref": "#/components/schemas/MessageAbortedError"
               },
               {
+                "$ref": "#/components/schemas/StructuredOutputError"
+              },
+              {
+                "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
                 "$ref": "#/components/schemas/APIError"
               }
             ]
@@ -5511,6 +6475,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -5534,6 +6501,10 @@
               }
             },
             "required": ["input", "output", "reasoning", "cache"]
+          },
+          "structured": {},
+          "variant": {
+            "type": "string"
           },
           "finish": {
             "type": "string"
@@ -5651,6 +6622,49 @@
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "text"]
+      },
+      "SubtaskPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "subtask"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
       },
       "ReasoningPart": {
         "type": "object",
@@ -5785,6 +6799,25 @@
         },
         "required": ["text", "type", "path", "range", "name", "kind"]
       },
+      "ResourceSource": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "$ref": "#/components/schemas/FilePartSourceText"
+          },
+          "type": {
+            "type": "string",
+            "const": "resource"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": ["text", "type", "clientName", "uri"]
+      },
       "FilePartSource": {
         "anyOf": [
           {
@@ -5792,6 +6825,9 @@
           },
           {
             "$ref": "#/components/schemas/SymbolSource"
+          },
+          {
+            "$ref": "#/components/schemas/ResourceSource"
           }
         ]
       },
@@ -6073,6 +7109,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -6253,35 +7292,7 @@
             "$ref": "#/components/schemas/TextPart"
           },
           {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string"
-              },
-              "messageID": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string",
-                "const": "subtask"
-              },
-              "prompt": {
-                "type": "string"
-              },
-              "description": {
-                "type": "string"
-              },
-              "agent": {
-                "type": "string"
-              },
-              "command": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
+            "$ref": "#/components/schemas/SubtaskPart"
           },
           {
             "$ref": "#/components/schemas/ReasoningPart"
@@ -6327,12 +7338,40 @@
             "properties": {
               "part": {
                 "$ref": "#/components/schemas/Part"
+              }
+            },
+            "required": ["part"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.message.part.delta": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "message.part.delta"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string"
+              },
+              "partID": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
               },
               "delta": {
                 "type": "string"
               }
             },
-            "required": ["part"]
+            "required": ["sessionID", "messageID", "partID", "field", "delta"]
           }
         },
         "required": ["type", "properties"]
@@ -6362,39 +7401,25 @@
         },
         "required": ["type", "properties"]
       },
-      "Permission": {
+      "PermissionRequest": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "pattern": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            ]
+            "type": "string",
+            "pattern": "^per.*"
           },
           "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "permission": {
             "type": "string"
           },
-          "messageID": {
-            "type": "string"
-          },
-          "callID": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "metadata": {
             "type": "object",
@@ -6403,27 +7428,36 @@
             },
             "additionalProperties": {}
           },
-          "time": {
+          "always": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tool": {
             "type": "object",
             "properties": {
-              "created": {
-                "type": "number"
+              "messageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
               }
             },
-            "required": ["created"]
+            "required": ["messageID", "callID"]
           }
         },
-        "required": ["id", "type", "sessionID", "messageID", "title", "metadata", "time"]
+        "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"]
       },
-      "Event.permission.updated": {
+      "Event.permission.asked": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "permission.updated"
+            "const": "permission.asked"
           },
           "properties": {
-            "$ref": "#/components/schemas/Permission"
+            "$ref": "#/components/schemas/PermissionRequest"
           }
         },
         "required": ["type", "properties"]
@@ -6441,80 +7475,15 @@
               "sessionID": {
                 "type": "string"
               },
-              "permissionID": {
+              "requestID": {
                 "type": "string"
               },
-              "response": {
-                "type": "string"
+              "reply": {
+                "type": "string",
+                "enum": ["once", "always", "reject"]
               }
             },
-            "required": ["sessionID", "permissionID", "response"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": ["file"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Todo": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Brief description of the task",
-            "type": "string"
-          },
-          "status": {
-            "description": "Current status of the task: pending, in_progress, completed, cancelled",
-            "type": "string"
-          },
-          "priority": {
-            "description": "Priority level of the task: high, medium, low",
-            "type": "string"
-          },
-          "id": {
-            "description": "Unique identifier for the todo item",
-            "type": "string"
-          }
-        },
-        "required": ["content", "status", "priority", "id"]
-      },
-      "Event.todo.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "todo.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "todos": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Todo"
-                }
-              }
-            },
-            "required": ["sessionID", "todos"]
+            "required": ["sessionID", "requestID", "reply"]
           }
         },
         "required": ["type", "properties"]
@@ -6603,6 +7572,151 @@
         },
         "required": ["type", "properties"]
       },
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "description": "Display text (1-5 words, concise)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Explanation of choice",
+            "type": "string"
+          }
+        },
+        "required": ["label", "description"]
+      },
+      "QuestionInfo": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "description": "Complete question",
+            "type": "string"
+          },
+          "header": {
+            "description": "Very short label (max 30 chars)",
+            "type": "string"
+          },
+          "options": {
+            "description": "Available choices",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            }
+          },
+          "multiple": {
+            "description": "Allow selecting multiple choices",
+            "type": "boolean"
+          },
+          "custom": {
+            "description": "Allow typing a custom answer (default: true)",
+            "type": "boolean"
+          }
+        },
+        "required": ["question", "header", "options"]
+      },
+      "QuestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^que.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "questions": {
+            "description": "Questions to ask",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionInfo"
+            }
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "questions"]
+      },
+      "Event.question.asked": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.asked"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/QuestionRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "QuestionAnswer": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "Event.question.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "requestID": {
+                "type": "string"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.question.rejected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.rejected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "requestID": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "requestID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.session.compacted": {
         "type": "object",
         "properties": {
@@ -6618,6 +7732,84 @@
               }
             },
             "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "Brief description of the task",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the task: pending, in_progress, completed, cancelled",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority level of the task: high, medium, low",
+            "type": "string"
+          }
+        },
+        "required": ["content", "status", "priority"]
+      },
+      "Event.todo.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "todos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Todo"
+                }
+              }
+            },
+            "required": ["sessionID", "todos"]
           }
         },
         "required": ["type", "properties"]
@@ -6663,6 +7855,8 @@
                       "session.compact",
                       "session.page.up",
                       "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
                       "session.half.page.up",
                       "session.half.page.down",
                       "session.first",
@@ -6714,6 +7908,27 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.tui.session.select": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.session.select"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "description": "Session ID to navigate to",
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.mcp.tools.changed": {
         "type": "object",
         "properties": {
@@ -6729,6 +7944,28 @@
               }
             },
             "required": ["server"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.mcp.browser.open.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "mcp.browser.open.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "mcpName": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": ["mcpName", "url"]
           }
         },
         "required": ["type", "properties"]
@@ -6763,12 +8000,40 @@
         },
         "required": ["type", "properties"]
       },
+      "PermissionAction": {
+        "type": "string",
+        "enum": ["allow", "deny", "ask"]
+      },
+      "PermissionRule": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PermissionAction"
+          }
+        },
+        "required": ["permission", "pattern", "action"]
+      },
+      "PermissionRuleset": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PermissionRule"
+        }
+      },
       "Session": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^ses.*"
+          },
+          "slug": {
+            "type": "string"
           },
           "projectID": {
             "type": "string"
@@ -6834,6 +8099,9 @@
             },
             "required": ["created", "updated"]
           },
+          "permission": {
+            "$ref": "#/components/schemas/PermissionRuleset"
+          },
           "revert": {
             "type": "object",
             "properties": {
@@ -6853,7 +8121,7 @@
             "required": ["messageID"]
           }
         },
-        "required": ["id", "projectID", "directory", "title", "version", "time"]
+        "required": ["id", "slug", "projectID", "directory", "title", "version", "time"]
       },
       "Event.session.created": {
         "type": "object",
@@ -6965,46 +8233,17 @@
                     "$ref": "#/components/schemas/MessageAbortedError"
                   },
                   {
+                    "$ref": "#/components/schemas/StructuredOutputError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContextOverflowError"
+                  },
+                  {
                     "$ref": "#/components/schemas/APIError"
                   }
                 ]
               }
             }
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
           }
         },
         "required": ["type", "properties"]
@@ -7140,30 +8379,43 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.server.connected": {
+      "Event.worktree.ready": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "server.connected"
+            "const": "worktree.ready"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
           }
         },
         "required": ["type", "properties"]
       },
-      "Event.global.disposed": {
+      "Event.worktree.failed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "global.disposed"
+            "const": "worktree.failed"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
           }
         },
         "required": ["type", "properties"]
@@ -7183,10 +8435,19 @@
             "$ref": "#/components/schemas/Event.server.instance.disposed"
           },
           {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
+          },
+          {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.file.edited"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -7198,19 +8459,16 @@
             "$ref": "#/components/schemas/Event.message.part.updated"
           },
           {
+            "$ref": "#/components/schemas/Event.message.part.delta"
+          },
+          {
             "$ref": "#/components/schemas/Event.message.part.removed"
           },
           {
-            "$ref": "#/components/schemas/Event.permission.updated"
+            "$ref": "#/components/schemas/Event.permission.asked"
           },
           {
             "$ref": "#/components/schemas/Event.permission.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.edited"
-          },
-          {
-            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
             "$ref": "#/components/schemas/Event.session.status"
@@ -7219,7 +8477,22 @@
             "$ref": "#/components/schemas/Event.session.idle"
           },
           {
+            "$ref": "#/components/schemas/Event.question.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.rejected"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.compacted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -7231,7 +8504,13 @@
             "$ref": "#/components/schemas/Event.tui.toast.show"
           },
           {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
           },
           {
             "$ref": "#/components/schemas/Event.command.executed"
@@ -7252,9 +8531,6 @@
             "$ref": "#/components/schemas/Event.session.error"
           },
           {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
-          },
-          {
             "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
@@ -7270,10 +8546,10 @@
             "$ref": "#/components/schemas/Event.pty.deleted"
           },
           {
-            "$ref": "#/components/schemas/Event.server.connected"
+            "$ref": "#/components/schemas/Event.worktree.ready"
           },
           {
-            "$ref": "#/components/schemas/Event.global.disposed"
+            "$ref": "#/components/schemas/Event.worktree.failed"
           }
         ]
       },
@@ -7288,46 +8564,6 @@
           }
         },
         "required": ["directory", "payload"]
-      },
-      "BadRequestError": {
-        "type": "object",
-        "properties": {
-          "data": {},
-          "errors": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            }
-          },
-          "success": {
-            "type": "boolean",
-            "const": false
-          }
-        },
-        "required": ["data", "errors", "success"]
-      },
-      "NotFoundError": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "const": "NotFoundError"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"]
-          }
-        },
-        "required": ["name", "data"]
       },
       "KeybindsConfig": {
         "description": "Custom keybind configurations",
@@ -7400,7 +8636,27 @@
           },
           "session_rename": {
             "description": "Rename session",
-            "default": "none",
+            "default": "ctrl+r",
+            "type": "string"
+          },
+          "session_delete": {
+            "description": "Delete session",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "stash_delete": {
+            "description": "Delete stash entry",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "model_provider_list": {
+            "description": "Open provider list from model dialog",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "model_favorite_toggle": {
+            "description": "Toggle model favorite status",
+            "default": "ctrl+f",
             "type": "string"
           },
           "session_share": {
@@ -7425,12 +8681,22 @@
           },
           "messages_page_up": {
             "description": "Scroll messages up by one page",
-            "default": "pageup",
+            "default": "pageup,ctrl+alt+b",
             "type": "string"
           },
           "messages_page_down": {
             "description": "Scroll messages down by one page",
-            "default": "pagedown",
+            "default": "pagedown,ctrl+alt+f",
+            "type": "string"
+          },
+          "messages_line_up": {
+            "description": "Scroll messages up by one line",
+            "default": "ctrl+alt+y",
+            "type": "string"
+          },
+          "messages_line_down": {
+            "description": "Scroll messages down by one line",
+            "default": "ctrl+alt+e",
             "type": "string"
           },
           "messages_half_page_up": {
@@ -7767,6 +9033,11 @@
             "description": "Toggle tips on home screen",
             "default": "<leader>h",
             "type": "string"
+          },
+          "display_thinking": {
+            "description": "Toggle thinking blocks visibility",
+            "default": "none",
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -7794,6 +9065,10 @@
             "description": "Enable mDNS service discovery",
             "type": "boolean"
           },
+          "mdnsDomain": {
+            "description": "Custom domain name for mDNS service (default: opencode.local)",
+            "type": "string"
+          },
           "cors": {
             "description": "Additional domains to allow for CORS",
             "type": "array",
@@ -7804,10 +9079,109 @@
         },
         "additionalProperties": false
       },
+      "PermissionActionConfig": {
+        "type": "string",
+        "enum": ["ask", "allow", "deny"]
+      },
+      "PermissionObjectConfig": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {
+          "$ref": "#/components/schemas/PermissionActionConfig"
+        }
+      },
+      "PermissionRuleConfig": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PermissionActionConfig"
+          },
+          {
+            "$ref": "#/components/schemas/PermissionObjectConfig"
+          }
+        ]
+      },
+      "PermissionConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "__originalKeys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "read": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "edit": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "glob": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "grep": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "list": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "bash": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "task": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "external_directory": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "todowrite": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "todoread": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "question": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "webfetch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "websearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "codesearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "lsp": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "doom_loop": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "skill": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              }
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PermissionRuleConfig"
+            }
+          },
+          {
+            "$ref": "#/components/schemas/PermissionActionConfig"
+          }
+        ]
+      },
       "AgentConfig": {
         "type": "object",
         "properties": {
           "model": {
+            "type": "string"
+          },
+          "variant": {
+            "description": "Default model variant for this agent (applies only when using the agent's configured model).",
             "type": "string"
           },
           "temperature": {
@@ -7820,6 +9194,7 @@
             "type": "string"
           },
           "tools": {
+            "description": "@deprecated Use 'permission' field instead",
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -7839,73 +9214,44 @@
             "type": "string",
             "enum": ["subagent", "primary", "all"]
           },
-          "color": {
-            "description": "Hex color code for the agent (e.g., #FF5733)",
-            "type": "string",
-            "pattern": "^#[0-9a-fA-F]{6}$"
+          "hidden": {
+            "description": "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
+            "type": "boolean"
           },
-          "maxSteps": {
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "color": {
+            "description": "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              {
+                "type": "string",
+                "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
+              }
+            ]
+          },
+          "steps": {
             "description": "Maximum number of agentic iterations before forcing text-only response",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
           },
+          "maxSteps": {
+            "description": "@deprecated Use 'steps' field instead.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
           "permission": {
-            "type": "object",
-            "properties": {
-              "edit": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "bash": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["ask", "allow", "deny"]
-                  },
-                  {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "enum": ["ask", "allow", "deny"]
-                    }
-                  }
-                ]
-              },
-              "skill": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["ask", "allow", "deny"]
-                  },
-                  {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "enum": ["ask", "allow", "deny"]
-                    }
-                  }
-                ]
-              },
-              "webfetch": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "doom_loop": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              }
-            }
+            "$ref": "#/components/schemas/PermissionConfig"
           }
         },
         "additionalProperties": {}
@@ -8024,6 +9370,9 @@
                     "context": {
                       "type": "number"
                     },
+                    "input": {
+                      "type": "number"
+                    },
                     "output": {
                       "type": "number"
                     }
@@ -8078,9 +9427,11 @@
                   "properties": {
                     "npm": {
                       "type": "string"
+                    },
+                    "api": {
+                      "type": "string"
                     }
-                  },
-                  "required": ["npm"]
+                  }
                 },
                 "variants": {
                   "description": "Variant-specific configuration",
@@ -8183,7 +9534,7 @@
             "type": "boolean"
           },
           "timeout": {
-            "description": "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+            "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
@@ -8249,7 +9600,7 @@
             ]
           },
           "timeout": {
-            "description": "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+            "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
@@ -8336,6 +9687,26 @@
                 }
               },
               "required": ["template"]
+            }
+          },
+          "skills": {
+            "description": "Additional skill folder paths",
+            "type": "object",
+            "properties": {
+              "paths": {
+                "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "urls": {
+                "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "watcher": {
@@ -8425,7 +9796,7 @@
             }
           },
           "agent": {
-            "description": "Agent configuration, see https://opencode.ai/docs/agent",
+            "description": "Agent configuration, see https://opencode.ai/docs/agents",
             "type": "object",
             "properties": {
               "plan": {
@@ -8473,10 +9844,24 @@
             "additionalProperties": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/McpLocalConfig"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/McpLocalConfig"
+                    },
+                    {
+                      "$ref": "#/components/schemas/McpRemoteConfig"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/components/schemas/McpRemoteConfig"
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -8600,61 +9985,7 @@
             "$ref": "#/components/schemas/LayoutConfig"
           },
           "permission": {
-            "type": "object",
-            "properties": {
-              "edit": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "bash": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["ask", "allow", "deny"]
-                  },
-                  {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "enum": ["ask", "allow", "deny"]
-                    }
-                  }
-                ]
-              },
-              "skill": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["ask", "allow", "deny"]
-                  },
-                  {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "enum": ["ask", "allow", "deny"]
-                    }
-                  }
-                ]
-              },
-              "webfetch": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "doom_loop": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              }
-            }
+            "$ref": "#/components/schemas/PermissionConfig"
           },
           "tools": {
             "type": "object",
@@ -8684,75 +10015,18 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "reserved": {
+                "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             }
           },
           "experimental": {
             "type": "object",
             "properties": {
-              "hook": {
-                "type": "object",
-                "properties": {
-                  "file_edited": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "command": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "environment": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["command"]
-                      }
-                    }
-                  },
-                  "session_completed": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "command": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "environment": {
-                          "type": "object",
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "additionalProperties": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "required": ["command"]
-                    }
-                  }
-                }
-              },
-              "chatMaxRetries": {
-                "description": "Number of retries for chat completions on failure",
-                "type": "number"
-              },
               "disable_paste_summary": {
                 "type": "boolean"
               },
@@ -8786,223 +10060,112 @@
         },
         "additionalProperties": false
       },
-      "ToolIDs": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "ToolListItem": {
+      "BadRequestError": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "parameters": {}
-        },
-        "required": ["id", "description", "parameters"]
-      },
-      "ToolList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/ToolListItem"
-        }
-      },
-      "Path": {
-        "type": "object",
-        "properties": {
-          "home": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "config": {
-            "type": "string"
-          },
-          "worktree": {
-            "type": "string"
-          },
-          "directory": {
-            "type": "string"
-          }
-        },
-        "required": ["home", "state", "config", "worktree", "directory"]
-      },
-      "VcsInfo": {
-        "type": "object",
-        "properties": {
-          "branch": {
-            "type": "string"
-          }
-        },
-        "required": ["branch"]
-      },
-      "TextPartInput": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "const": "text"
-          },
-          "text": {
-            "type": "string"
-          },
-          "synthetic": {
-            "type": "boolean"
-          },
-          "ignored": {
-            "type": "boolean"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "type": "number"
-              },
-              "end": {
-                "type": "number"
-              }
-            },
-            "required": ["start"]
-          },
-          "metadata": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          }
-        },
-        "required": ["type", "text"]
-      },
-      "FilePartInput": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "const": "file"
-          },
-          "mime": {
-            "type": "string"
-          },
-          "filename": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/FilePartSource"
-          }
-        },
-        "required": ["type", "mime", "url"]
-      },
-      "AgentPartInput": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "const": "agent"
-          },
-          "name": {
-            "type": "string"
-          },
-          "source": {
-            "type": "object",
-            "properties": {
-              "value": {
-                "type": "string"
-              },
-              "start": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              },
-              "end": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              }
-            },
-            "required": ["value", "start", "end"]
-          }
-        },
-        "required": ["type", "name"]
-      },
-      "SubtaskPartInput": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "const": "subtask"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "prompt", "description", "agent"]
-      },
-      "Command": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
-          },
-          "template": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
-          "subtask": {
-            "type": "boolean"
-          },
-          "hints": {
+          "data": {},
+          "errors": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
             }
+          },
+          "success": {
+            "type": "boolean",
+            "const": false
           }
         },
-        "required": ["name", "template", "hints"]
+        "required": ["data", "errors", "success"]
+      },
+      "OAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "oauth"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "number"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "enterpriseUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "refresh", "access", "expires"]
+      },
+      "ApiAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "api"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "key"]
+      },
+      "WellKnownAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "wellknown"
+          },
+          "key": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "key", "token"]
+      },
+      "Auth": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OAuth"
+          },
+          {
+            "$ref": "#/components/schemas/ApiAuth"
+          },
+          {
+            "$ref": "#/components/schemas/WellKnownAuth"
+          }
+        ]
+      },
+      "NotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "NotFoundError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
       },
       "Model": {
         "type": "object",
@@ -9165,6 +10328,9 @@
               "context": {
                 "type": "number"
               },
+              "input": {
+                "type": "number"
+              },
               "output": {
                 "type": "number"
               }
@@ -9263,6 +10429,235 @@
         },
         "required": ["id", "name", "source", "env", "options", "models"]
       },
+      "ToolIDs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ToolListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "parameters": {}
+        },
+        "required": ["id", "description", "parameters"]
+      },
+      "ToolList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ToolListItem"
+        }
+      },
+      "Worktree": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "branch", "directory"]
+      },
+      "WorktreeCreateInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "startCommand": {
+            "description": "Additional startup script to run after the project's start command",
+            "type": "string"
+          }
+        }
+      },
+      "WorktreeRemoveInput": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"]
+      },
+      "WorktreeResetInput": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"]
+      },
+      "McpResource": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "client": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "uri", "client"]
+      },
+      "TextPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "text"
+          },
+          "text": {
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "ignored": {
+            "type": "boolean"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": "number"
+              }
+            },
+            "required": ["start"]
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": ["type", "text"]
+      },
+      "FilePartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "file"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FilePartSource"
+          }
+        },
+        "required": ["type", "mime", "url"]
+      },
+      "AgentPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "agent"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["value", "start", "end"]
+          }
+        },
+        "required": ["type", "name"]
+      },
+      "SubtaskPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "subtask"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "prompt", "description", "agent"]
+      },
       "ProviderAuthMethod": {
         "type": "object",
         "properties": {
@@ -9359,7 +10754,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "const": "text"
+            "enum": ["text", "binary"]
           },
           "content": {
             "type": "string"
@@ -9448,118 +10843,6 @@
         },
         "required": ["path", "added", "removed", "status"]
       },
-      "Agent": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string",
-            "enum": ["subagent", "primary", "all"]
-          },
-          "native": {
-            "type": "boolean"
-          },
-          "hidden": {
-            "type": "boolean"
-          },
-          "default": {
-            "type": "boolean"
-          },
-          "topP": {
-            "type": "number"
-          },
-          "temperature": {
-            "type": "number"
-          },
-          "color": {
-            "type": "string"
-          },
-          "permission": {
-            "type": "object",
-            "properties": {
-              "edit": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "bash": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "string",
-                  "enum": ["ask", "allow", "deny"]
-                }
-              },
-              "skill": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "string",
-                  "enum": ["ask", "allow", "deny"]
-                }
-              },
-              "webfetch": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "doom_loop": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              },
-              "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
-              }
-            },
-            "required": ["edit", "bash", "skill"]
-          },
-          "model": {
-            "type": "object",
-            "properties": {
-              "modelID": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              }
-            },
-            "required": ["modelID", "providerID"]
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {
-              "type": "boolean"
-            }
-          },
-          "options": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "maxSteps": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          }
-        },
-        "required": ["name", "mode", "permission", "tools", "options"]
-      },
       "MCPStatusConnected": {
         "type": "object",
         "properties": {
@@ -9635,6 +10918,141 @@
           }
         ]
       },
+      "Path": {
+        "type": "object",
+        "properties": {
+          "home": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "config": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["home", "state", "config", "worktree", "directory"]
+      },
+      "VcsInfo": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          }
+        },
+        "required": ["branch"]
+      },
+      "Command": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["command", "mcp", "skill"]
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "subtask": {
+            "type": "boolean"
+          },
+          "hints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["name", "template", "hints"]
+      },
+      "Agent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["subagent", "primary", "all"]
+          },
+          "native": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "topP": {
+            "type": "number"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "color": {
+            "type": "string"
+          },
+          "permission": {
+            "$ref": "#/components/schemas/PermissionRuleset"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "modelID": {
+                "type": "string"
+              },
+              "providerID": {
+                "type": "string"
+              }
+            },
+            "required": ["modelID", "providerID"]
+          },
+          "variant": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "steps": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["name", "mode", "permission", "options"]
+      },
       "LSPStatus": {
         "type": "object",
         "properties": {
@@ -9679,70 +11097,6 @@
           }
         },
         "required": ["name", "extensions", "enabled"]
-      },
-      "OAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "oauth"
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "number"
-          },
-          "enterpriseUrl": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"]
-      },
-      "ApiAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "api"
-          },
-          "key": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "key"]
-      },
-      "WellKnownAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "wellknown"
-          },
-          "key": {
-            "type": "string"
-          },
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "key", "token"]
-      },
-      "Auth": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/OAuth"
-          },
-          {
-            "$ref": "#/components/schemas/ApiAuth"
-          },
-          {
-            "$ref": "#/components/schemas/WellKnownAuth"
-          }
-        ]
       }
     }
   }

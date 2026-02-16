@@ -32,21 +32,78 @@ different order of precedence.
 Configuration files are **merged together**, not replaced.
 :::
 
-Configuration files are merged together, not replaced. Settings from the following config locations are combined. Where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
+Configuration files are merged together, not replaced. Settings from the following config locations are combined. Later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
 
 For example, if your global config sets `theme: "opencode"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
 
 ---
 
+### Precedence order
+
+Config sources are loaded in this order (later sources override earlier ones):
+
+1. **Remote config** (from `.well-known/opencode`) - organizational defaults
+2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
+3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
+4. **Project config** (`opencode.json` in project) - project-specific settings
+5. **`.opencode` directories** - agents, commands, plugins
+6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+
+This means project configs can override global defaults, and global configs can override remote organizational defaults.
+
+:::note
+The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
+:::
+
+---
+
+### Remote
+
+Organizations can provide default configuration via the `.well-known/opencode` endpoint. This is fetched automatically when you authenticate with a provider that supports it.
+
+Remote config is loaded first, serving as the base layer. All other config sources (global, project) can override these defaults.
+
+For example, if your organization provides MCP servers that are disabled by default:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+You can enable specific servers in your local config:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
 ### Global
 
-Place your global OpenCode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use global config for user-wide preferences like themes, providers, or keybinds.
+
+Global config overrides remote organizational defaults.
 
 ---
 
 ### Per project
 
-You can also add a `opencode.json` in your project. Settings from this config are merged with and can override the global config. This is useful for configuring providers or modes specific to your project.
+Add `opencode.json` in your project root. Project config has the highest precedence among standard config files - it overrides both global and remote configs.
 
 :::tip
 Place project specific config in the root of your project.
@@ -60,20 +117,20 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable.
+Specify a custom config file path using the `OPENCODE_CONFIG` environment variable.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
-Settings from this config are merged with and **can override** the global and project configs.
+Custom config is loaded between global and project configs in the precedence order.
 
 ---
 
 ### Custom directory
 
-You can specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+Specify a custom config directory using the `OPENCODE_CONFIG_DIR`
 environment variable. This directory will be searched for agents, commands,
 modes, and plugins just like the standard `.opencode` directory, and should
 follow the same structure.
@@ -115,7 +172,7 @@ You can configure TUI-specific settings through the `tui` option.
 Available options:
 
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
-- `scroll_speed` - Custom scroll speed multiplier (default: `1`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
+- `scroll_speed` - Custom scroll speed multiplier (default: `3`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
 
 [Learn more about using the TUI here](/docs/tui).
@@ -132,7 +189,9 @@ You can configure server settings for the `opencode serve` and `opencode web` co
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
-    "mdns": true
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
   }
 }
 ```
@@ -142,6 +201,8 @@ Available options:
 - `port` - Port to listen on.
 - `hostname` - Hostname to listen on. When `mdns` is enabled and no hostname is set, defaults to `0.0.0.0`.
 - `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenCode server.
+- `mdnsDomain` - Custom domain name for mDNS service. Defaults to `opencode.local`. Useful for running multiple instances on the same network.
+- `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
 
 [Learn more about the server here](/docs/server).
 
@@ -203,6 +264,41 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ---
 
+#### Provider-Specific Options
+
+Some providers support additional configuration options beyond the generic `timeout` and `apiKey` settings.
+
+##### Amazon Bedrock
+
+Amazon Bedrock supports AWS-specific configuration:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - AWS region for Bedrock (defaults to `AWS_REGION` env var or `us-east-1`)
+- `profile` - AWS named profile from `~/.aws/credentials` (defaults to `AWS_PROFILE` env var)
+- `endpoint` - Custom endpoint URL for VPC endpoints. This is an alias for the generic `baseURL` option using AWS-specific terminology. If both are specified, `endpoint` takes precedence.
+
+:::note
+Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](/docs/providers#authentication-precedence) for details.
+:::
+
+[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+
+---
+
 ### Themes
 
 You can configure the theme you want to use in your OpenCode config through the `theme` option.
@@ -240,7 +336,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
 }
 ```
 
-You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
+You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -304,7 +400,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
 }
 ```
 
-You can also define commands using markdown files in `~/.config/opencode/command/` or `.opencode/command/`. [Learn more here](/docs/commands).
+You can also define commands using markdown files in `~/.config/opencode/commands/` or `.opencode/commands/`. [Learn more here](/docs/commands).
 
 ---
 
@@ -335,6 +431,7 @@ OpenCode will automatically download any new updates when it starts up. You can 
 ```
 
 If you don't want updates but want to be notified when a new version is available, set `autoupdate` to `"notify"`.
+Notice that this only works if it was not installed using a package manager such as Homebrew.
 
 ---
 
@@ -393,13 +490,15 @@ You can control context compaction behavior through the `compaction` option.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
 - `auto` - Automatically compact the session when context is full (default: `true`).
 - `prune` - Remove old tool outputs to save tokens (default: `true`).
+- `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction
 
 ---
 
@@ -439,7 +538,7 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 [Plugins](/docs/plugins) extend OpenCode with custom tools, hooks, and integrations.
 
-Place plugin files in `.opencode/plugin/` or `~/.config/opencode/plugin/`. You can also load plugins from npm through the `plugin` option.
+Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You can also load plugins from npm through the `plugin` option.
 
 ```json title="opencode.json"
 {

@@ -114,6 +114,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -133,6 +134,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -154,7 +156,13 @@ export interface Hooks {
    * Called when a new message is received
    */
   "chat.message"?: (
-    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string }; messageID?: string },
+    input: {
+      sessionID: string
+      agent?: string
+      model?: { providerID: string; modelID: string }
+      messageID?: string
+      variant?: string
+    },
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
@@ -164,13 +172,22 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
+  "chat.headers"?: (
+    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    output: { headers: Record<string, string> },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "command.execute.before"?: (
+    input: { command: string; sessionID: string; arguments: string },
+    output: { parts: Part[] },
+  ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
   ) => Promise<void>
+  "shell.env"?: (input: { cwd: string }, output: { env: Record<string, string> }) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string },
+    input: { tool: string; sessionID: string; callID: string; args: any },
     output: {
       title: string
       output: string
@@ -187,7 +204,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: {},
+    input: { sessionID?: string; model: Model },
     output: {
       system: string[]
     },
@@ -207,4 +224,8 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Modify tool definitions (description and parameters) sent to LLM
+   */
+  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
 }

@@ -1,9 +1,10 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "1.0.218",
+  "version": "1.2.5",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit"
   },

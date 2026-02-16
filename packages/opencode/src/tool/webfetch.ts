@@ -2,8 +2,8 @@ import z from "zod"
 import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
-import { Config } from "../config/config"
-import { Permission } from "../permission"
+import { abortAfterAny } from "../util/abort"
+import { Identifier } from "../id/id"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -25,25 +25,20 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("URL must start with http:// or https://")
     }
 
-    const cfg = await Config.get()
-    if (cfg.permission?.webfetch === "ask")
-      await Permission.ask({
-        type: "webfetch",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: "Fetch content from: " + params.url,
-        metadata: {
-          url: params.url,
-          format: params.format,
-          timeout: params.timeout,
-        },
-      })
+    await ctx.ask({
+      permission: "webfetch",
+      patterns: [params.url],
+      always: ["*"],
+      metadata: {
+        url: params.url,
+        format: params.format,
+        timeout: params.timeout,
+      },
+    })
 
     const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    const { signal, clearTimeout } = abortAfterAny(timeout, ctx.abort)
 
     // Build Accept header based on requested format with q parameters for fallbacks
     let acceptHeader = "*/*"
@@ -61,18 +56,22 @@ export const WebFetchTool = Tool.define("webfetch", {
         acceptHeader =
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     }
+    const headers = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+      Accept: acceptHeader,
+      "Accept-Language": "en-US,en;q=0.9",
+    }
 
-    const response = await fetch(params.url, {
-      signal: AbortSignal.any([controller.signal, ctx.abort]),
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: acceptHeader,
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    })
+    const initial = await fetch(params.url, { signal, headers })
 
-    clearTimeout(timeoutId)
+    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+    const response =
+      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
+        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
+        : initial
+
+    clearTimeout()
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
@@ -89,10 +88,33 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
-    const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
-
+    const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
     const title = `${params.url} (${contentType})`
+
+    // Check if response is an image
+    const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
+
+    if (isImage) {
+      const base64Content = Buffer.from(arrayBuffer).toString("base64")
+      return {
+        title,
+        output: "Image fetched successfully",
+        metadata: {},
+        attachments: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${base64Content}`,
+          },
+        ],
+      }
+    }
+
+    const content = new TextDecoder().decode(arrayBuffer)
 
     // Handle content based on requested format and actual content type
     switch (params.format) {

@@ -1,8 +1,18 @@
 import { realpathSync } from "fs"
-import { exists } from "fs/promises"
 import { dirname, join, relative } from "path"
 
 export namespace Filesystem {
+  export const exists = (p: string) =>
+    Bun.file(p)
+      .stat()
+      .then(() => true)
+      .catch(() => false)
+
+  export const isDir = (p: string) =>
+    Bun.file(p)
+      .stat()
+      .then((s) => s.isDirectory())
+      .catch(() => false)
   /**
    * On Windows, normalize a path to its canonical casing using the filesystem.
    * This is needed because Windows paths are case-insensitive but LSP servers

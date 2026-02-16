@@ -3,7 +3,6 @@ import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { Session } from "."
 import { Agent } from "@/agent/agent"
-import { Permission } from "@/permission"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
@@ -13,6 +12,9 @@ import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
+import { SessionCompaction } from "./compaction"
+import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -31,6 +33,7 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    let needsCompaction = false
 
     const result = {
       get message() {
@@ -41,6 +44,7 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
@@ -59,17 +63,19 @@ export namespace SessionProcessor {
                   if (value.id in reasoningMap) {
                     continue
                   }
-                  reasoningMap[value.id] = {
+                  const reasoningPart = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
-                    type: "reasoning",
+                    type: "reasoning" as const,
                     text: "",
                     time: {
                       start: Date.now(),
                     },
                     metadata: value.providerMetadata,
                   }
+                  reasoningMap[value.id] = reasoningPart
+                  await Session.updatePart(reasoningPart)
                   break
 
                 case "reasoning-delta":
@@ -77,7 +83,13 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    if (part.text) await Session.updatePart({ part, delta: value.text })
+                    await Session.updatePartDelta({
+                      sessionID: part.sessionID,
+                      messageID: part.messageID,
+                      partID: part.id,
+                      field: "text",
+                      delta: value.text,
+                    })
                   }
                   break
 
@@ -149,32 +161,18 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const permission = await Agent.get(input.assistantMessage.mode).then((x) => x.permission)
-                      if (permission.doom_loop === "ask") {
-                        await Permission.ask({
-                          type: "doom_loop",
-                          pattern: value.toolName,
-                          sessionID: input.assistantMessage.sessionID,
-                          messageID: input.assistantMessage.id,
-                          callID: value.toolCallId,
-                          title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
-                          metadata: {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                        })
-                      } else if (permission.doom_loop === "deny") {
-                        throw new Permission.RejectedError(
-                          input.assistantMessage.sessionID,
-                          "doom_loop",
-                          value.toolCallId,
-                          {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                          `You seem to be stuck in a doom loop, please stop repeating the same action`,
-                        )
-                      }
+                      const agent = await Agent.get(input.assistantMessage.agent)
+                      await PermissionNext.ask({
+                        permission: "doom_loop",
+                        patterns: [value.toolName],
+                        sessionID: input.assistantMessage.sessionID,
+                        metadata: {
+                          tool: value.toolName,
+                          input: value.input,
+                        },
+                        always: [value.toolName],
+                        ruleset: agent.permission,
+                      })
                     }
                   }
                   break
@@ -186,7 +184,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -210,9 +208,8 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
-                        metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -220,7 +217,10 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof Permission.RejectedError) {
+                    if (
+                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Question.RejectedError
+                    ) {
                       blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]
@@ -279,6 +279,9 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
+                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                    needsCompaction = true
+                  }
                   break
 
                 case "text-start":
@@ -293,17 +296,20 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  await Session.updatePart(currentText)
                   break
 
                 case "text-delta":
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
-                      await Session.updatePart({
-                        part: currentText,
-                        delta: value.text,
-                      })
+                    await Session.updatePartDelta({
+                      sessionID: currentText.sessionID,
+                      messageID: currentText.messageID,
+                      partID: currentText.id,
+                      field: "text",
+                      delta: value.text,
+                    })
                   }
                   break
 
@@ -339,6 +345,7 @@ export namespace SessionProcessor {
                   })
                   continue
               }
+              if (needsCompaction) break
             }
           } catch (e: any) {
             log.error("process", {
@@ -346,6 +353,9 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            if (MessageV2.ContextOverflowError.isInstance(error)) {
+              // TODO: Handle context overflow error
+            }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++
@@ -364,6 +374,7 @@ export namespace SessionProcessor {
               sessionID: input.assistantMessage.sessionID,
               error: input.assistantMessage.error,
             })
+            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
@@ -398,6 +409,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"

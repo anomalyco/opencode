@@ -8,17 +8,17 @@ export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; ass
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: "opencode-darwin-x64",
+    ocBinary: "opencode-darwin-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: "opencode-windows-x64",
+    ocBinary: "opencode-windows-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    ocBinary: "opencode-linux-x64",
+    ocBinary: "opencode-linux-x64-baseline",
     assetExt: "tar.gz",
   },
   {
@@ -41,8 +41,13 @@ export function getCurrentSidecar(target = RUST_TARGET) {
 
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
   await $`mkdir -p src-tauri/sidecars`
-  const dest = `src-tauri/sidecars/opencode-cli-${target}${process.platform === "win32" ? ".exe" : ""}`
+  const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
   await $`cp ${source} ${dest}`
 
   console.log(`Copied ${source} to ${dest}`)
+}
+
+export function windowsify(path: string) {
+  if (path.endsWith(".exe")) return path
+  return `${path}${process.platform === "win32" ? ".exe" : ""}`
 }

@@ -4,35 +4,45 @@ import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
-import {} from "process"
-import { Installation } from "@/installation"
 import { Shell } from "@/shell/shell"
+import { Plugin } from "@/plugin"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
 
+  const BUFFER_LIMIT = 1024 * 1024 * 2
+  const BUFFER_CHUNK = 64 * 1024
+  const encoder = new TextEncoder()
+
+  type Socket = {
+    readyState: number
+    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    close: (code?: number, reason?: string) => void
+  }
+
+  const sockets = new WeakMap<object, number>()
+  let socketCounter = 0
+
+  const tagSocket = (ws: Socket) => {
+    if (!ws || typeof ws !== "object") return
+    const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
+    sockets.set(ws, next)
+    return next
+  }
+
+  // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+  const meta = (cursor: number) => {
+    const json = JSON.stringify({ cursor })
+    const bytes = encoder.encode(json)
+    const out = new Uint8Array(bytes.length + 1)
+    out[0] = 0
+    out.set(bytes, 1)
+    return out
+  }
+
   const pty = lazy(async () => {
-    if (!Installation.isLocal()) {
-      const path = require(
-        `bun-pty/rust-pty/target/release/${
-          process.platform === "win32"
-            ? "rust_pty.dll"
-            : process.platform === "linux" && process.arch === "x64"
-              ? "librust_pty.so"
-              : process.platform === "darwin" && process.arch === "x64"
-                ? "librust_pty.dylib"
-                : process.platform === "darwin" && process.arch === "arm64"
-                  ? "librust_pty_arm64.dylib"
-                  : process.platform === "linux" && process.arch === "arm64"
-                    ? "librust_pty_arm64.so"
-                    : ""
-        }`,
-      )
-      process.env.BUN_PTY_LIB = path
-    }
     const { spawn } = await import("bun-pty")
     return spawn
   })
@@ -84,7 +94,9 @@ export namespace Pty {
     info: Info
     process: IPty
     buffer: string
-    subscribers: Set<WSContext>
+    bufferCursor: number
+    cursor: number
+    subscribers: Map<Socket, number>
   }
 
   const state = Instance.state(
@@ -94,8 +106,12 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers) {
-          ws.close()
+        for (const ws of session.subscribers.keys()) {
+          try {
+            ws.close()
+          } catch {
+            // ignore
+          }
         }
       }
       sessions.clear()
@@ -119,7 +135,20 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
+    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const env = {
+      ...process.env,
+      ...input.env,
+      ...shellEnv.env,
+      TERM: "xterm-256color",
+      OPENCODE_TERMINAL: "1",
+    } as Record<string, string>
+
+    if (process.platform === "win32") {
+      env.LC_ALL = "C.UTF-8"
+      env.LC_CTYPE = "C.UTF-8"
+      env.LANG = "C.UTF-8"
+    }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
@@ -128,6 +157,7 @@ export namespace Pty {
       cwd,
       env,
     })
+
     const info = {
       id,
       title: input.title || `Terminal ${id.slice(-4)}`,
@@ -141,23 +171,47 @@ export namespace Pty {
       info,
       process: ptyProcess,
       buffer: "",
-      subscribers: new Set(),
+      bufferCursor: 0,
+      cursor: 0,
+      subscribers: new Map(),
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
-      if (session.subscribers.size === 0) {
-        session.buffer += data
-        return
-      }
-      for (const ws of session.subscribers) {
-        if (ws.readyState === 1) {
+      session.cursor += data.length
+
+      for (const [ws, id] of session.subscribers) {
+        if (ws.readyState !== 1) {
+          session.subscribers.delete(ws)
+          continue
+        }
+        if (typeof ws === "object" && sockets.get(ws) !== id) {
+          session.subscribers.delete(ws)
+          continue
+        }
+        try {
           ws.send(data)
+        } catch {
+          session.subscribers.delete(ws)
         }
       }
+
+      session.buffer += data
+      if (session.buffer.length <= BUFFER_LIMIT) return
+      const excess = session.buffer.length - BUFFER_LIMIT
+      session.buffer = session.buffer.slice(excess)
+      session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
+      for (const ws of session.subscribers.keys()) {
+        try {
+          ws.close()
+        } catch {
+          // ignore
+        }
+      }
+      session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
       state().delete(id)
     })
@@ -185,9 +239,14 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers) {
-      ws.close()
+    for (const ws of session.subscribers.keys()) {
+      try {
+        ws.close()
+      } catch {
+        // ignore
+      }
     }
+    session.subscribers.clear()
     state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
@@ -206,18 +265,48 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext) {
+  export function connect(id: string, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
       return
     }
     log.info("client connected to session", { id })
-    session.subscribers.add(ws)
-    if (session.buffer) {
-      ws.send(session.buffer)
-      session.buffer = ""
+
+    const start = session.bufferCursor
+    const end = session.cursor
+
+    const from =
+      cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
+
+    const data = (() => {
+      if (!session.buffer) return ""
+      if (from >= end) return ""
+      const offset = Math.max(0, from - start)
+      if (offset >= session.buffer.length) return ""
+      return session.buffer.slice(offset)
+    })()
+
+    if (data) {
+      try {
+        for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
+          ws.send(data.slice(i, i + BUFFER_CHUNK))
+        }
+      } catch {
+        ws.close()
+        return
+      }
     }
+
+    try {
+      ws.send(meta(end))
+    } catch {
+      ws.close()
+      return
+    }
+
+    const socketId = tagSocket(ws)
+    if (typeof socketId === "number") session.subscribers.set(ws, socketId)
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))
