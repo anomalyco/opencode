@@ -90,6 +90,13 @@
   }
 }
 
+/* When we portal select content into a scroll container, ensure it's a positioning
+ * context for Floating UI's `strategy: "absolute"`. */
+[data-select-mount="true"] {
+  position: relative;
+  z-index: 0;
+}
+
 [data-component="select-content"] {
   min-width: 104px;
   max-width: 23rem;
@@ -98,7 +105,7 @@
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 4px;
   box-shadow: var(--shadow-xs-border);
-  z-index: 60;
+  z-index: 80;
 
   &[data-expanded] {
     animation: select-open 0.15s ease-out;
@@ -174,6 +181,7 @@
   min-width: 160px;
   border-radius: 8px;
   padding: 0;
+  z-index: 9;
 
   [data-slot="select-select-content-list"] {
     padding: 4px;

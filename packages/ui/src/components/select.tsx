@@ -1,5 +1,5 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { createMemo, createSignal, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
@@ -35,10 +35,34 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "onSelect",
     "onHighlight",
     "onOpenChange",
+    "flip",
+    "slide",
+    "overlap",
+    "fitViewport",
+    "overflowPadding",
     "children",
     "triggerStyle",
     "triggerVariant",
   ])
+
+  const [mount, setMount] = createSignal<HTMLElement | undefined>()
+
+  const settings = () => local.triggerVariant === "settings"
+
+  const scroller = (el: HTMLElement | undefined) => {
+    if (!el) return undefined
+    if (typeof window === "undefined") return undefined
+
+    let fallback: HTMLElement | undefined
+    for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+      if (node.getAttribute("data-slot") === "dialog-body") fallback = node
+      const value = getComputedStyle(node).overflowY
+      const scroll = value === "auto" || value === "scroll" || value === "overlay"
+      if (scroll) return node
+    }
+
+    return fallback
+  }
 
   const state = {
     key: undefined as string | undefined,
@@ -86,8 +110,13 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       {...others}
       data-component="select"
       data-trigger-style={local.triggerVariant}
-      placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
+      placement={settings() ? "bottom-end" : "bottom-start"}
       gutter={4}
+      flip={local.flip ?? settings()}
+      slide={local.slide ?? settings()}
+      overlap={local.overlap}
+      fitViewport={local.fitViewport ?? settings()}
+      overflowPadding={local.overflowPadding ?? (settings() ? 16 : undefined)}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : (x as string))}
@@ -126,6 +155,14 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         stop()
       }}
       onOpenChange={(open) => {
+        if (open && settings() && !mount() && typeof document !== "undefined") {
+          const el = document.activeElement
+          const node = scroller(el instanceof HTMLElement ? el : undefined)
+          if (node) {
+            node.dataset.selectMount = "true"
+            setMount(node)
+          }
+        }
         local.onOpenChange?.(open)
         if (!open) stop()
       }}
@@ -134,6 +171,13 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         disabled={props.disabled}
         data-slot="select-select-trigger"
         as={Button}
+        onPointerDown={(e) => {
+          if (!settings()) return
+          const node = scroller(e.currentTarget as HTMLElement)
+          if (!node) return
+          node.dataset.selectMount = "true"
+          setMount(node)
+        }}
         size={props.size}
         variant={props.variant}
         style={local.triggerStyle}
@@ -151,10 +195,10 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
+          <Icon name={settings() ? "selector" : "chevron-down"} size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
-      <Kobalte.Portal>
+      <Kobalte.Portal {...(settings() && mount() ? { mount: mount() } : {})}>
         <Kobalte.Content
           classList={{
             ...(local.classList ?? {}),
