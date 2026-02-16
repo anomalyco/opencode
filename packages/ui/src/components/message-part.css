@@ -761,7 +761,7 @@
       background-color 0.2s ease;
 
     &[data-active="true"] {
-      width: 48px;
+      width: 16px;
     }
 
     &[data-answered="true"] {
