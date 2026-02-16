@@ -137,6 +137,6 @@ describe("commands", () => {
 
   test("handles failing commands gracefully", async () => {
     const result = await StatusLine.commands({ bad: "exit 1" }, os.tmpdir())
-    expect(result["shell:bad"]).toBeDefined()
+    expect(result["shell:bad"]).toBe("")
   })
 })
