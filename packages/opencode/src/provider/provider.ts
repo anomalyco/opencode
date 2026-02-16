@@ -81,6 +81,247 @@ export namespace Provider {
     })
   }
 
+  interface LiteLLMModelInfo {
+    model_name: string
+    model_info: {
+      max_tokens?: number | null
+      max_input_tokens?: number | null
+      max_output_tokens?: number | null
+      input_cost_per_token?: number | null
+      output_cost_per_token?: number | null
+      cache_read_input_token_cost?: number | null
+      cache_creation_input_token_cost?: number | null
+      input_cost_per_token_above_200k_tokens?: number | null
+      output_cost_per_token_above_200k_tokens?: number | null
+      supports_vision?: boolean | null
+      supports_function_calling?: boolean | null
+      supports_reasoning?: boolean | null
+      supports_audio_input?: boolean | null
+      supports_audio_output?: boolean | null
+      supports_pdf_input?: boolean | null
+      supported_openai_params?: string[] | null
+      mode?: string | null
+    }
+  }
+
+  async function fetchLiteLLMModelInfo(
+    baseURL: string,
+    headers: Record<string, string>,
+  ): Promise<LiteLLMModelInfo[] | null> {
+    const base = baseURL.replace(/\/+$/, "")
+    const infoUrl = `${base}/model/info`
+
+    const response = await fetch(infoUrl, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    })
+
+    if (!response.ok) return null
+
+    const data = (await response.json()) as { data?: LiteLLMModelInfo[] }
+    return data.data ?? null
+  }
+
+  async function fetchAvailableLiteLLMModels(
+    baseURL: string,
+    headers: Record<string, string>,
+  ): Promise<string[]> {
+    const base = baseURL.replace(/\/+$/, "")
+    const modelsUrl = `${base}/models`
+
+    const response = await fetch(modelsUrl, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    })
+
+    if (!response.ok) return []
+
+    const data = (await response.json()) as { data?: { id: string }[] }
+    return (data.data ?? []).map((m) => m.id).filter(Boolean)
+  }
+
+  function litellmCostPerMillion(costPerToken: number | null | undefined): number {
+    if (!costPerToken) return 0
+    return costPerToken * 1_000_000
+  }
+
+  function modelFromLiteLLMInfo(
+    info: LiteLLMModelInfo,
+    providerID: string,
+    apiUrl: string,
+    npm: string,
+  ): Model {
+    const mi = info.model_info
+    const modelID = info.model_name
+    const supportsVision = mi.supports_vision === true
+    const supportsPdf = mi.supports_pdf_input === true
+    const supportsTemperature = mi.supported_openai_params?.includes("temperature") ?? true
+
+    const hasOver200K =
+      mi.input_cost_per_token_above_200k_tokens != null || mi.output_cost_per_token_above_200k_tokens != null
+
+    const autoModel: Model = {
+      id: modelID,
+      providerID,
+      name: modelID,
+      api: {
+        id: modelID,
+        url: apiUrl,
+        npm,
+      },
+      status: "active",
+      capabilities: {
+        temperature: supportsTemperature,
+        reasoning: mi.supports_reasoning === true,
+        attachment: supportsVision || supportsPdf,
+        toolcall: mi.supports_function_calling !== false,
+        input: {
+          text: true,
+          audio: mi.supports_audio_input === true,
+          image: supportsVision,
+          video: false,
+          pdf: supportsPdf,
+        },
+        output: {
+          text: true,
+          audio: mi.supports_audio_output === true,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: {
+        input: litellmCostPerMillion(mi.input_cost_per_token),
+        output: litellmCostPerMillion(mi.output_cost_per_token),
+        cache: {
+          read: litellmCostPerMillion(mi.cache_read_input_token_cost),
+          write: litellmCostPerMillion(mi.cache_creation_input_token_cost),
+        },
+        experimentalOver200K: hasOver200K
+          ? {
+              input: litellmCostPerMillion(mi.input_cost_per_token_above_200k_tokens),
+              output: litellmCostPerMillion(mi.output_cost_per_token_above_200k_tokens),
+              cache: { read: 0, write: 0 },
+            }
+          : undefined,
+      },
+      limit: {
+        context: mi.max_input_tokens ?? mi.max_tokens ?? 128000,
+        output: mi.max_output_tokens ?? mi.max_tokens ?? 8192,
+      },
+      options: {},
+      headers: {},
+      family: "",
+      release_date: "",
+      variants: {},
+    }
+
+    return autoModel
+  }
+
+  async function autoLoadLiteLLMModels(
+    providers: Record<string, Info>,
+    config: Awaited<ReturnType<typeof Config.get>>,
+  ) {
+    for (const [providerID, provider] of Object.entries(providers)) {
+      const isLiteLLM =
+        provider.options?.["litellmProxy"] === true || providerID.toLowerCase().includes("litellm")
+
+      if (!isLiteLLM || provider.options?.["autoload"] !== true) continue
+
+      const baseURL = provider.options?.["baseURL"]
+      if (!baseURL) continue
+
+      const apiKey = provider.options?.["apiKey"] ?? provider.key
+      const fetchHeaders: Record<string, string> = {}
+      if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`
+      if (provider.options?.["headers"]) {
+        Object.assign(fetchHeaders, provider.options["headers"])
+      }
+
+      try {
+        const configProvider = config.provider?.[providerID]
+        const npm = configProvider?.npm ?? "@ai-sdk/openai-compatible"
+        const apiUrl = configProvider?.api ?? baseURL
+
+        // Try /model/info first for rich metadata, fall back to /models
+        const modelInfos = await fetchLiteLLMModelInfo(baseURL, fetchHeaders)
+
+        if (modelInfos) {
+          for (const info of modelInfos) {
+            const modelID = info.model_name
+            if (!modelID || provider.models[modelID]) continue
+
+            const autoModel = modelFromLiteLLMInfo(info, providerID, apiUrl, npm)
+            autoModel.variants = mapValues(ProviderTransform.variants(autoModel), (v) => v)
+            provider.models[modelID] = autoModel
+          }
+
+          log.info("auto-loaded models from model/info", {
+            providerID,
+            count: modelInfos.filter((i) => i.model_name && !configProvider?.models?.[i.model_name]).length,
+          })
+        } else {
+          // Fallback: /model/info not available, use /models with defaults
+          const modelIDs = await fetchAvailableLiteLLMModels(baseURL, fetchHeaders)
+
+          for (const modelID of modelIDs) {
+            if (provider.models[modelID]) continue
+
+            const autoModel: Model = {
+              id: modelID,
+              providerID,
+              name: modelID,
+              api: {
+                id: modelID,
+                url: apiUrl,
+                npm,
+              },
+              status: "active",
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: true,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+              cost: {
+                input: 0,
+                output: 0,
+                cache: { read: 0, write: 0 },
+              },
+              limit: {
+                context: 128000,
+                output: 8192,
+              },
+              options: {},
+              headers: {},
+              family: "",
+              release_date: "",
+              variants: {},
+            }
+
+            autoModel.variants = mapValues(ProviderTransform.variants(autoModel), (v) => v)
+            provider.models[modelID] = autoModel
+          }
+
+          log.info("auto-loaded models from /models (fallback)", {
+            providerID,
+            count: modelIDs.filter((id) => !configProvider?.models?.[id]).length,
+          })
+        }
+      } catch (e) {
+        log.warn("failed to auto-load models", {
+          providerID,
+          error: e,
+        })
+      }
+    }
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -974,6 +1215,8 @@ export namespace Provider {
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
     }
+
+    await autoLoadLiteLLMModels(providers, config)
 
     for (const [providerID, provider] of Object.entries(providers)) {
       if (!isProviderAllowed(providerID)) {
