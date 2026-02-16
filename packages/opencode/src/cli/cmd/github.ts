@@ -562,7 +562,11 @@ export const GithubRunCommand = cmd({
         ) {
           const prData = await fetchPR()
           // Local PR
-          if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
+          if (
+            prData.headRepository &&
+            prData.baseRepository &&
+            prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner
+          ) {
             await checkoutLocalBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
             const dataPrompt = buildPromptDataForPR(prData)
@@ -1040,6 +1044,10 @@ export const GithubRunCommand = cmd({
         const remoteBranch = pr.headRefName
         const localBranch = generateBranchName("pr")
         const depth = Math.max(pr.commits.totalCount, 20)
+
+        if (!pr.headRepository) {
+          throw new Error("PR headRepository is null - unable to checkout fork branch")
+        }
 
         await $`git remote add fork https://github.com/${pr.headRepository.nameWithOwner}.git`
         await $`git fetch fork --depth=${depth} ${remoteBranch}`
