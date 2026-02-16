@@ -96,7 +96,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       available().map((m) => ({
         ...m,
         name: m.name.replace("(latest)", "").trim(),
-        latest: m.name.includes("(latest)"),
+        latest: latestSet().has(modelKey({ providerID: m.provider.id, modelID: m.id })),
       })),
     )
 
