@@ -549,37 +549,65 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
             ? ""
             : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
-        const permissions = app.isGHES
-          ? `    permissions:
-      contents: write
-      pull-requests: write
-      issues: write`
-          : `    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-      issues: read`
-        const useGithubTokenStr = app.isGHES ? `\n          use_github_token: "true"` : ""
-
-        await Filesystem.write(
-          path.join(app.root, WORKFLOW_FILE),
-          `name: opencode
-
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-
-jobs:
-  opencode:
-    if: |
+        const jobIf = `    if: |
       contains(github.event.comment.body, ' /oc') ||
       startsWith(github.event.comment.body, '/oc') ||
       contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      startsWith(github.event.comment.body, '/opencode')`
+
+        const triggers = `on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]`
+
+        const workflowContent =
+          ghesStrategy === "in-workflow"
+            ? `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
     runs-on: ubuntu-latest
-${permissions}
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: \${{ secrets.OPENCODE_GHES_APP_ID }}
+          private-key: \${{ secrets.OPENCODE_GHES_APP_PRIVATE_KEY }}
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest${envStr}
+        env:
+          GHES_APP_TOKEN: \${{ steps.app-token.outputs.token }}
+        with:
+          model: ${provider}/${model}`
+            : ghesStrategy === "oidc"
+              ? `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -589,8 +617,33 @@ ${permissions}
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}
         with:
-          model: ${provider}/${model}${useGithubTokenStr}`,
-        )
+          model: ${provider}/${model}
+          oidc_base_url: \${{ secrets.OPENCODE_OIDC_BASE_URL }}`
+              : `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest${envStr}
+        with:
+          model: ${provider}/${model}`
+
+        await Filesystem.write(path.join(app.root, WORKFLOW_FILE), workflowContent)
 
         prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
       }
