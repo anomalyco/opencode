@@ -4,6 +4,9 @@ use process_wrap::tokio::CommandWrap;
 use process_wrap::tokio::ProcessGroup;
 #[cfg(windows)]
 use process_wrap::tokio::{JobObject, KillOnDrop};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
 use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
@@ -12,9 +15,6 @@ use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
-use std::{process::Stdio, time::Duration};
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
 
 use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
 
@@ -392,10 +392,7 @@ pub fn spawn_command(
     let event_stream = ReceiverStream::new(rx);
     let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
 
-    Ok((
-        event_stream,
-        CommandChild { kill: kill_tx },
-    ))
+    Ok((event_stream, CommandChild { kill: kill_tx }))
 }
 
 fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
