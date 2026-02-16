@@ -19,7 +19,6 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { combineCommandSections } from "@/pages/session/helpers"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 
 export type SessionCommandContext = {
@@ -450,7 +449,7 @@ export const useSessionCommands = (input: SessionCommandContext) => {
   })
 
   input.command.register("session", () =>
-    combineCommandSections([
+    [
       sessionCommands(),
       fileCommands(),
       contextCommands(),
@@ -460,6 +459,6 @@ export const useSessionCommands = (input: SessionCommandContext) => {
       permissionCommands(),
       sessionActionCommands(),
       shareCommands(),
-    ]),
+    ].flatMap((x) => x),
   )
 }
