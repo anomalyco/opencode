@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { combineCommandSections, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
+import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -43,20 +43,6 @@ describe("focusTerminalById", () => {
     expect(focused).toBe(true)
     expect(document.activeElement).toBe(terminal)
     expect(pointerDown).toBe(true)
-  })
-})
-
-describe("combineCommandSections", () => {
-  test("keeps section order stable", () => {
-    const result = combineCommandSections([
-      [{ id: "a", title: "A" }],
-      [
-        { id: "b", title: "B" },
-        { id: "c", title: "C" },
-      ],
-    ])
-
-    expect(result.map((item) => item.id)).toEqual(["a", "b", "c"])
   })
 })
 
