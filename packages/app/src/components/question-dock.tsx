@@ -18,6 +18,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     tab: 0,
     answers: [] as QuestionAnswer[],
     custom: [] as string[],
+    customOn: [] as boolean[],
     editing: false,
     sending: false,
   })
@@ -27,15 +28,8 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
+  const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
-  const answered = createMemo(() => (store.answers[store.tab]?.length ?? 0) > 0)
-  const customPicked = createMemo(() => {
-    const value = input()
-    if (!value) return false
-    return store.answers[store.tab]?.includes(value) ?? false
-  })
-
-  const customActive = createMemo(() => store.editing || customPicked())
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
@@ -43,6 +37,26 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   })
 
   const last = createMemo(() => store.tab >= total() - 1)
+
+  const customUpdate = (value: string, selected: boolean = on()) => {
+    const prev = input().trim()
+    const next = value.trim()
+
+    setStore("custom", store.tab, value)
+    if (!selected) return
+
+    if (multi()) {
+      setStore("answers", store.tab, (current = []) => {
+        const removed = prev ? current.filter((item) => item.trim() !== prev) : current
+        if (!next) return removed
+        if (removed.some((item) => item.trim() === next)) return removed
+        return [...removed, next]
+      })
+      return
+    }
+
+    setStore("answers", store.tab, next ? [next] : [])
+  }
 
   const measure = () => {
     if (!root) return
@@ -128,6 +142,8 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   const pick = (answer: string, custom: boolean = false) => {
     setStore("answers", store.tab, [answer])
     if (custom) setStore("custom", store.tab, answer)
+    if (!custom) setStore("customOn", store.tab, false)
+    setStore("editing", false)
   }
 
   const toggle = (answer: string) => {
@@ -137,11 +153,41 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     })
   }
 
+  const customToggle = () => {
+    if (store.sending) return
+
+    if (!multi()) {
+      setStore("customOn", store.tab, true)
+      setStore("editing", true)
+      customUpdate(input(), true)
+      return
+    }
+
+    const next = !on()
+    setStore("customOn", store.tab, next)
+    if (next) {
+      setStore("editing", true)
+      customUpdate(input(), true)
+      return
+    }
+
+    const value = input().trim()
+    if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
+    setStore("editing", false)
+  }
+
+  const customOpen = () => {
+    if (store.sending) return
+    if (!on()) setStore("customOn", store.tab, true)
+    setStore("editing", true)
+    customUpdate(input(), true)
+  }
+
   const selectOption = (optIndex: number) => {
     if (store.sending) return
 
     if (optIndex === options().length) {
-      setStore("editing", true)
+      customOpen()
       return
     }
 
@@ -155,23 +201,8 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
   }
 
   const commitCustom = () => {
-    const value = input().trim()
-    if (!value) {
-      setStore("editing", false)
-      return
-    }
-
-    if (multi()) {
-      setStore("answers", store.tab, (current = []) => {
-        if (current.includes(value)) return current
-        return [...current, value]
-      })
-      setStore("editing", false)
-      return
-    }
-
-    pick(value, true)
     setStore("editing", false)
+    customUpdate(input())
   }
 
   const next = () => {
@@ -212,7 +243,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   type="button"
                   data-slot="question-progress-segment"
                   data-active={i() === store.tab}
-                  data-answered={(store.answers[i()]?.length ?? 0) > 0}
+                  data-answered={
+                    (store.answers[i()]?.length ?? 0) > 0 ||
+                    (store.customOn[i()] === true && (store.custom[i()] ?? "").trim().length > 0)
+                  }
                   disabled={store.sending}
                   onClick={() => jump(i())}
                   aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
@@ -268,18 +302,22 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                 <button
                   data-slot="question-option"
                   data-custom="true"
-                  data-picked={customActive()}
+                  data-picked={on()}
                   role={multi() ? "checkbox" : "radio"}
-                  aria-checked={customActive()}
+                  aria-checked={on()}
                   disabled={store.sending}
-                  onClick={() => selectOption(options().length)}
+                  onClick={customOpen}
                 >
-                  <span data-slot="question-option-check" aria-hidden="true">
-                    <span
-                      data-slot="question-option-box"
-                      data-type={multi() ? "checkbox" : "radio"}
-                      data-picked={customActive()}
-                    >
+                  <span
+                    data-slot="question-option-check"
+                    aria-hidden="true"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      customToggle()
+                    }}
+                  >
+                    <span data-slot="question-option-box" data-type={multi() ? "checkbox" : "radio"} data-picked={on()}>
                       <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
                         <Icon name="check-small" size="small" />
                       </Show>
@@ -297,9 +335,9 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
               <form
                 data-slot="question-option"
                 data-custom="true"
-                data-picked={customActive()}
+                data-picked={on()}
                 role={multi() ? "checkbox" : "radio"}
-                aria-checked={customActive()}
+                aria-checked={on()}
                 onMouseDown={(e) => {
                   if (store.sending) {
                     e.preventDefault()
@@ -314,12 +352,16 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   commitCustom()
                 }}
               >
-                <span data-slot="question-option-check" aria-hidden="true">
-                  <span
-                    data-slot="question-option-box"
-                    data-type={multi() ? "checkbox" : "radio"}
-                    data-picked={customActive()}
-                  >
+                <span
+                  data-slot="question-option-check"
+                  aria-hidden="true"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    customToggle()
+                  }}
+                >
+                  <span data-slot="question-option-box" data-type={multi() ? "checkbox" : "radio"} data-picked={on()}>
                     <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
                       <Icon name="check-small" size="small" />
                     </Show>
@@ -351,7 +393,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                       commitCustom()
                     }}
                     onInput={(e) => {
-                      setStore("custom", store.tab, e.currentTarget.value)
+                      customUpdate(e.currentTarget.value)
                       e.currentTarget.style.height = "0px"
                       e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
                     }}
