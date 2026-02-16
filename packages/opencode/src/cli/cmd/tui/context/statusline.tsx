@@ -15,8 +15,8 @@ export const { use: useStatusLine, provider: StatusLineProvider } = createSimple
 
     const poll = async () => {
       const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
-      const result = await sdk.client.tui.statusline({ sessionID })
-      if (!result.data) return
+      const result = await sdk.client.tui.statusline({ sessionID }).catch(() => undefined)
+      if (!result?.data) return
       setTemplates(result.data.templates)
       setFrequency(result.data.interval)
     }
