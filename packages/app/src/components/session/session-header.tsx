@@ -632,7 +632,7 @@ export function SessionHeader() {
                       <div class="relative flex items-center justify-center size-4">
                         <Icon
                           size="small"
-                          name="bullet-list"
+                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
                           classList={{
                             "text-icon-strong": layout.fileTree.opened(),
                             "text-icon-weak": !layout.fileTree.opened(),
