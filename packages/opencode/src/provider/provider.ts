@@ -286,7 +286,7 @@ export namespace Provider {
                     accessKeyId: credentials.accessKeyId,
                     secretAccessKey: credentials.secretAccessKey,
                     sessionToken: credentials.sessionToken,
-                    service: "bedrock",
+                    service: "bedrock-mantle",
                   })
                   const signed = await signer.sign()
                   return fetch(input, {
