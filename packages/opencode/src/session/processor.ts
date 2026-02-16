@@ -9,6 +9,8 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
+import { Database } from "@/storage/db"
+import { TaskMetricsTable, TaskNodeTable } from "@/graph/graph.sql"
 import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
@@ -31,9 +33,20 @@ export namespace SessionProcessor {
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
+    let start: number | undefined
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+
+    const write = (fn: (tx: Database.TxOrDb) => void) => {
+      try {
+        Database.transaction(fn)
+      } catch (error) {
+        log.error("task_metrics", {
+          error,
+        })
+      }
+    }
 
     const result = {
       get message() {
@@ -45,7 +58,9 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
-        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        const cfg = await Config.get()
+        const shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
+        const metrics = cfg.experimental?.task_metrics !== false
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -148,6 +163,36 @@ export namespace SessionProcessor {
                     })
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
+                    if (metrics)
+                      write((db) => {
+                      const now = part.state.time.start
+                      db.insert(TaskNodeTable)
+                        .values({
+                          id: part.id,
+                          session_id: part.sessionID,
+                          version: 1,
+                          type: `tool.${value.toolName}`,
+                          content: value.toolName,
+                          status: "in_progress",
+                          priority: "low",
+                          time_created: now,
+                          time_updated: now,
+                          data: {
+                            kind: "tool",
+                            tool: value.toolName,
+                            call_id: part.callID,
+                          },
+                        })
+                        .onConflictDoUpdate({
+                          target: TaskNodeTable.id,
+                          set: {
+                            status: "in_progress",
+                            time_updated: now,
+                          },
+                        })
+                        .run()
+                      })
+
                     const parts = await MessageV2.parts(input.assistantMessage.id)
                     const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -196,6 +241,58 @@ export namespace SessionProcessor {
                       },
                     })
 
+                    if (metrics)
+                      write((db) => {
+                      const end = Date.now()
+                      const dur = Math.max(0, end - match.state.time.start)
+                      db.insert(TaskNodeTable)
+                        .values({
+                          id: match.id,
+                          session_id: match.sessionID,
+                          version: 1,
+                          type: `tool.${match.tool}`,
+                          content: match.tool,
+                          status: "completed",
+                          priority: "low",
+                          duration: dur,
+                          tokens_used: 0,
+                          result: value.output.title,
+                          time_created: match.state.time.start,
+                          time_updated: end,
+                          data: {
+                            kind: "tool",
+                            tool: match.tool,
+                            call_id: match.callID,
+                          },
+                        })
+                        .onConflictDoUpdate({
+                          target: TaskNodeTable.id,
+                          set: {
+                            status: "completed",
+                            duration: dur,
+                            tokens_used: 0,
+                            result: value.output.title,
+                            time_updated: end,
+                          },
+                        })
+                        .run()
+
+                      db.insert(TaskMetricsTable)
+                        .values({
+                          id: Identifier.ascending("tool"),
+                          session_id: match.sessionID,
+                          task_id: match.id,
+                          duration: dur,
+                          tokens_used: 0,
+                          attempts: 1,
+                          success: 1,
+                          complexity: "simple",
+                          skills_used: [match.tool],
+                          type: match.tool,
+                        })
+                        .run()
+                      })
+
                     delete toolcalls[value.toolCallId]
                   }
                   break
@@ -217,6 +314,58 @@ export namespace SessionProcessor {
                       },
                     })
 
+                    if (metrics)
+                      write((db) => {
+                      const end = Date.now()
+                      const dur = Math.max(0, end - match.state.time.start)
+                      db.insert(TaskNodeTable)
+                        .values({
+                          id: match.id,
+                          session_id: match.sessionID,
+                          version: 1,
+                          type: `tool.${match.tool}`,
+                          content: match.tool,
+                          status: "failed",
+                          priority: "low",
+                          duration: dur,
+                          tokens_used: 0,
+                          result: "error",
+                          time_created: match.state.time.start,
+                          time_updated: end,
+                          data: {
+                            kind: "tool",
+                            tool: match.tool,
+                            call_id: match.callID,
+                          },
+                        })
+                        .onConflictDoUpdate({
+                          target: TaskNodeTable.id,
+                          set: {
+                            status: "failed",
+                            duration: dur,
+                            tokens_used: 0,
+                            result: "error",
+                            time_updated: end,
+                          },
+                        })
+                        .run()
+
+                      db.insert(TaskMetricsTable)
+                        .values({
+                          id: Identifier.ascending("tool"),
+                          session_id: match.sessionID,
+                          task_id: match.id,
+                          duration: dur,
+                          tokens_used: 0,
+                          attempts: 1,
+                          success: 0,
+                          complexity: "simple",
+                          skills_used: [match.tool],
+                          type: match.tool,
+                        })
+                        .run()
+                      })
+
                     if (
                       value.error instanceof PermissionNext.RejectedError ||
                       value.error instanceof Question.RejectedError
@@ -231,6 +380,40 @@ export namespace SessionProcessor {
                   throw value.error
 
                 case "start-step":
+                  if (metrics) {
+                    if (!start) start = Date.now()
+                    write((db) => {
+                    const now = Date.now()
+                    db.insert(TaskNodeTable)
+                      .values({
+                        id: input.assistantMessage.id,
+                        session_id: input.assistantMessage.sessionID,
+                        version: 1,
+                        type: "llm.step",
+                        content: "step",
+                        status: "in_progress",
+                        priority: "low",
+                        time_created: now,
+                        time_updated: now,
+                        data: {
+                          kind: "llm",
+                          message_id: input.assistantMessage.id,
+                          parent_id: input.assistantMessage.parentID,
+                          agent: input.assistantMessage.agent,
+                          provider_id: input.model.providerID,
+                          model_id: input.model.id,
+                        },
+                      })
+                      .onConflictDoUpdate({
+                        target: TaskNodeTable.id,
+                        set: {
+                          status: "in_progress",
+                          time_updated: now,
+                        },
+                      })
+                      .run()
+                    })
+                  }
                   snapshot = await Snapshot.track()
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
@@ -250,6 +433,72 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  if (metrics)
+                    write((db) => {
+                    const end = Date.now()
+                    const dur = Math.max(0, end - (start ?? end))
+                    db.insert(TaskNodeTable)
+                      .values({
+                        id: input.assistantMessage.id,
+                        session_id: input.assistantMessage.sessionID,
+                        version: 1,
+                        type: "llm.step",
+                        content: "step",
+                        status: "completed",
+                        priority: "low",
+                        duration: dur,
+                        tokens_used: usage.tokens.total,
+                        result: value.finishReason,
+                        time_created: start ?? end,
+                        time_updated: end,
+                        data: {
+                          kind: "llm",
+                          message_id: input.assistantMessage.id,
+                          parent_id: input.assistantMessage.parentID,
+                          agent: input.assistantMessage.agent,
+                          provider_id: input.model.providerID,
+                          model_id: input.model.id,
+                          attempts: attempt + 1,
+                          tokens: usage.tokens,
+                        },
+                      })
+                      .onConflictDoUpdate({
+                        target: TaskNodeTable.id,
+                        set: {
+                          status: "completed",
+                          duration: dur,
+                          tokens_used: usage.tokens.total,
+                          result: value.finishReason,
+                          time_updated: end,
+                          data: {
+                            kind: "llm",
+                            message_id: input.assistantMessage.id,
+                            parent_id: input.assistantMessage.parentID,
+                            agent: input.assistantMessage.agent,
+                            provider_id: input.model.providerID,
+                            model_id: input.model.id,
+                            attempts: attempt + 1,
+                            tokens: usage.tokens,
+                          },
+                        },
+                      })
+                      .run()
+
+                    db.insert(TaskMetricsTable)
+                      .values({
+                        id: Identifier.ascending("tool"),
+                        session_id: input.assistantMessage.sessionID,
+                        task_id: input.assistantMessage.id,
+                        duration: dur,
+                        tokens_used: usage.tokens.total,
+                        attempts: attempt + 1,
+                        success: 1,
+                        complexity: "simple",
+                        skills_used: [],
+                        type: "llm",
+                      })
+                      .run()
+                    })
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -260,6 +509,7 @@ export namespace SessionProcessor {
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })
+                  start = undefined
                   await Session.updateMessage(input.assistantMessage)
                   if (snapshot) {
                     const patch = await Snapshot.patch(snapshot)
