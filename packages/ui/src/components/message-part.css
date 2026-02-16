@@ -867,7 +867,7 @@
       width: 6px;
       height: 6px;
       border-radius: 999px;
-      background-color: var(--icon-interactive-base);
+      background-color: var(--background-stronger);
       opacity: 0;
     }
 
@@ -884,7 +884,7 @@
       }
 
       &[data-type="radio"] {
-        background-color: transparent;
+        background-color: var(--icon-interactive-base);
         [data-slot="question-option-radio-dot"] {
           opacity: 1;
         }
