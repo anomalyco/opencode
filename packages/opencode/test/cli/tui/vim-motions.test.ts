@@ -82,6 +82,7 @@ function createHandler(
     enabled?: boolean
     mode?: "normal" | "insert"
     submit?: () => void
+    autocomplete?: () => false | "@" | "/"
   },
 ) {
   const textarea = createTextarea(text)
@@ -126,6 +127,7 @@ function createHandler(
     jump(action) {
       jumpCalls.push(action)
     },
+    autocomplete: options?.autocomplete,
   })
 
   return { textarea, handler, state, scrollCalls, jumpCalls }
@@ -424,6 +426,44 @@ describe("vim motion handler", () => {
     const esc = createEvent("escape")
     expect(ctx.handler.handleKey(esc.event)).toBe(true)
     expect(esc.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("/ and @ stay in normal mode without autocomplete", () => {
+    const ctx = createHandler("abc", { mode: "normal" })
+
+    const slash = createEvent("/")
+    expect(ctx.handler.handleKey(slash.event)).toBe(true)
+    expect(slash.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("normal")
+
+    const at = createEvent("@")
+    expect(ctx.handler.handleKey(at.event)).toBe(true)
+    expect(at.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("/ enters insert on empty input with autocomplete visible", () => {
+    const ctx = createHandler("", {
+      mode: "normal",
+      autocomplete: () => "/",
+    })
+    const slash = createEvent("/")
+
+    expect(ctx.handler.handleKey(slash.event)).toBe(false)
+    expect(slash.prevented()).toBe(false)
+    expect(ctx.state.mode()).toBe("insert")
+  })
+
+  test("/ stays normal on non-empty input with autocomplete visible", () => {
+    const ctx = createHandler("abc", {
+      mode: "normal",
+      autocomplete: () => "/",
+    })
+    const slash = createEvent("/")
+
+    expect(ctx.handler.handleKey(slash.event)).toBe(true)
+    expect(slash.prevented()).toBe(true)
     expect(ctx.state.mode()).toBe("normal")
   })
 

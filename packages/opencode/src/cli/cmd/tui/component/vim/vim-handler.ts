@@ -44,6 +44,7 @@ export function createVimHandler(input: {
   submit: () => void
   scroll: (action: VimScroll) => void
   jump: (action: VimJump) => void
+  autocomplete?: () => false | "@" | "/"
 }) {
   function hasModifier(event: VimEvent) {
     return !!event.ctrl || !!event.meta || !!event.super
@@ -146,6 +147,15 @@ export function createVimHandler(input: {
       if (key === "return" && !hasModifier(event)) {
         input.submit()
         input.state.clearPending()
+        event.preventDefault()
+        return true
+      }
+
+      if ((key === "/" || key === "@") && !hasModifier(event)) {
+        if (input.autocomplete?.() && input.textarea().cursorOffset === 0 && input.textarea().plainText.length === 0) {
+          input.state.setMode("insert")
+          return false
+        }
         event.preventDefault()
         return true
       }
@@ -293,11 +303,6 @@ export function createVimHandler(input: {
         moveBigWordEnd(input.textarea())
         event.preventDefault()
         return true
-      }
-
-      if (key === "/" && !event.shift && !hasModifier(event)) {
-        input.state.setMode("insert")
-        return false
       }
 
       if (key === "backspace" || key === "delete") {
