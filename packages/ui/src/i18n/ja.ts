@@ -9,6 +9,11 @@ export const dict = {
   "ui.sessionReview.change.added": "追加",
   "ui.sessionReview.change.removed": "削除",
   "ui.sessionReview.change.modified": "変更",
+  "ui.sessionReview.image.loading": "読み込み中...",
+  "ui.sessionReview.image.placeholder": "画像",
+  "ui.sessionReview.largeDiff.title": "差分が大きすぎて表示できません",
+  "ui.sessionReview.largeDiff.meta": "上限: {{lines}} 行 / {{limit}}。現在: {{current}}。",
+  "ui.sessionReview.largeDiff.renderAnyway": "それでも表示する",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
   "ui.lineComment.editorLabel.prefix": "",
@@ -22,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "再試行中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
+  "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
