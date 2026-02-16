@@ -616,30 +616,32 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden lg:block shrink-0">
-                <TooltipKeybind
-                  title={language.t("command.fileTree.toggle")}
-                  keybind={command.keybind("fileTree.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="titlebar-icon w-8 h-6 p-0 box-border"
-                    onClick={() => layout.fileTree.toggle()}
-                    aria-label={language.t("command.fileTree.toggle")}
-                    aria-expanded={layout.fileTree.opened()}
-                    aria-controls="file-tree-panel"
+                <Show when={view().reviewPanel.opened()}>
+                  <TooltipKeybind
+                    title={language.t("command.fileTree.toggle")}
+                    keybind={command.keybind("fileTree.toggle")}
                   >
-                    <div class="relative flex items-center justify-center size-4">
-                      <Icon
-                        size="small"
-                        name="bullet-list"
-                        classList={{
-                          "text-icon-strong": layout.fileTree.opened(),
-                          "text-icon-weak": !layout.fileTree.opened(),
-                        }}
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
+                    <Button
+                      variant="ghost"
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => layout.fileTree.toggle()}
+                      aria-label={language.t("command.fileTree.toggle")}
+                      aria-expanded={layout.fileTree.opened()}
+                      aria-controls="file-tree-panel"
+                    >
+                      <div class="relative flex items-center justify-center size-4">
+                        <Icon
+                          size="small"
+                          name="bullet-list"
+                          classList={{
+                            "text-icon-strong": layout.fileTree.opened(),
+                            "text-icon-weak": !layout.fileTree.opened(),
+                          }}
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
               </div>
             </div>
           </Portal>
