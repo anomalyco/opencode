@@ -31,6 +31,8 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.retry.retrying": "Prøver igjen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
+  "ui.sessionTurn.error.addCredits": "Legg til kreditt",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",
