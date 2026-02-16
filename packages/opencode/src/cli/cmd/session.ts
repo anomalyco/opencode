@@ -57,7 +57,7 @@ export const SessionDeleteCommand = cmd({
       try {
         await Session.get(args.sessionID)
       } catch {
-        console.error(`Session not found: ${args.sessionID}`)
+        UI.error(`Session not found: ${args.sessionID}`)
         process.exit(1)
       }
       await Session.remove(args.sessionID)
