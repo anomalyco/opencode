@@ -1,5 +1,6 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import type { Page } from "@playwright/test"
 
@@ -14,7 +15,8 @@ import {
   openWorkspaceMenu,
   setWorkspacesEnabled,
 } from "../actions"
-import { inlineInputSelector, workspaceItemSelector } from "../selectors"
+import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
+import { createSdk, dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
@@ -126,6 +128,49 @@ test("can create a workspace", async ({ page, withProject }) => {
   })
 })
 
+test("non-git projects keep workspace mode disabled", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const nonGit = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-nongit-"))
+  const nonGitSlug = dirSlug(nonGit)
+
+  await fs.writeFile(path.join(nonGit, "README.md"), "# e2e nongit\n")
+
+  try {
+    await withProject(async () => {
+      await page.goto(`/${nonGitSlug}/session`)
+
+      await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
+
+      const activeDir = base64Decode(slugFromUrl(page.url()))
+      expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
+
+      await openSidebar(page)
+      await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
+
+      const trigger = page.locator('[data-action="project-menu"]').first()
+      const hasMenu = await trigger
+        .isVisible()
+        .then((x) => x)
+        .catch(() => false)
+      if (!hasMenu) return
+
+      await trigger.click({ force: true })
+
+      const menu = page.locator(dropdownMenuContentSelector).first()
+      await expect(menu).toBeVisible()
+
+      const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()
+
+      await expect(toggle).toBeVisible()
+      await expect(toggle).toBeDisabled()
+      await expect(menu.getByRole("menuitem", { name: "New workspace" })).toHaveCount(0)
+    })
+  } finally {
+    await cleanupTestProject(nonGit)
+  }
+})
+
 test("can rename a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
@@ -214,14 +259,45 @@ test("can delete a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async (project) => {
-    const { rootSlug, slug } = await setupWorkspaceTest(page, project)
+    const sdk = createSdk(project.directory)
+    const { rootSlug, slug, directory } = await setupWorkspaceTest(page, project)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true)
 
     const menu = await openWorkspaceMenu(page, slug)
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
     await expect(page).toHaveURL(new RegExp(`/${rootSlug}/session`))
-    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0)
+
+    await expect
+      .poll(
+        async () => {
+          const worktrees = await sdk.worktree
+            .list()
+            .then((r) => r.data ?? [])
+            .catch(() => [] as string[])
+          return worktrees.includes(directory)
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(false)
+
+    await project.gotoSession()
+
+    await openSidebar(page)
+    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
   })
 })

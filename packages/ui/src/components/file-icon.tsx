@@ -538,11 +538,7 @@ const toOpenVariant = (icon: IconName): IconName => {
   return icon
 }
 
-const basenameOf = (p: string) =>
-  p
-    .replace(/[/\\]+$/, "")
-    .split(/[\\/]/)
-    .pop() ?? ""
+const basenameOf = (p: string) => p.split("\\").join("/").split("/").filter(Boolean).pop() ?? ""
 
 const folderNameVariants = (name: string) => {
   const n = name.toLowerCase()
