@@ -272,6 +272,7 @@ export default function Page() {
     if (!path) return
     file.load(path)
     openReviewPanel()
+    tabs().setActive(next)
   }
 
   createEffect(() => {
