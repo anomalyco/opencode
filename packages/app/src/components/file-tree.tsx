@@ -71,13 +71,13 @@ const kindLabel = (kind: Kind) => {
 const kindTextColor = (kind: Kind) => {
   if (kind === "add") return "color: var(--icon-diff-add-base)"
   if (kind === "del") return "color: var(--icon-diff-delete-base)"
-  return "color: var(--icon-warning-active)"
+  return "color: var(--icon-diff-modified-base)"
 }
 
 const kindDotColor = (kind: Kind) => {
   if (kind === "add") return "background-color: var(--icon-diff-add-base)"
   if (kind === "del") return "background-color: var(--icon-diff-delete-base)"
-  return "background-color: var(--icon-warning-active)"
+  return "background-color: var(--icon-diff-modified-base)"
 }
 
 const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
