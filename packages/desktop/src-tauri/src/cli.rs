@@ -1,12 +1,19 @@
 use futures::{FutureExt, Stream, StreamExt, future};
+use process_wrap::tokio::CommandWrap;
+#[cfg(unix)]
+use process_wrap::tokio::ProcessGroup;
+#[cfg(windows)]
+use process_wrap::tokio::{JobObject, KillOnDrop};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_shell::{
-    ShellExt,
-    process::{CommandChild, CommandEvent, TerminatedPayload},
-};
 use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
-use tokio::sync::oneshot;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::sync::{mpsc, oneshot};
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
 use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
@@ -23,6 +30,33 @@ pub struct ServerConfig {
 #[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub enum CommandEvent {
+    Stdout(Vec<u8>),
+    Stderr(Vec<u8>),
+    Error(String),
+    Terminated(TerminatedPayload),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TerminatedPayload {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommandChild {
+    kill: mpsc::Sender<()>,
+}
+
+impl CommandChild {
+    pub fn kill(&self) -> std::io::Result<()> {
+        self.kill
+            .try_send(())
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    }
 }
 
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
@@ -190,7 +224,7 @@ pub fn spawn_command(
     app: &tauri::AppHandle,
     args: &str,
     extra_env: &[(&str, String)],
-) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), tauri_plugin_shell::Error> {
+) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), std::io::Error> {
     let state_dir = app
         .path()
         .resolve("", BaseDirectory::AppLocalData)
@@ -217,7 +251,7 @@ pub fn spawn_command(
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
-    let cmd = if cfg!(windows) {
+    let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
             tracing::info!("WSL is enabled, spawning CLI server in WSL");
             let version = app.package_info().version.to_string();
@@ -249,18 +283,16 @@ pub fn spawn_command(
 
             script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
-            app.shell()
-                .command("wsl")
-                .args(["-e", "bash", "-lc", &script.join("\n")])
+            let mut cmd = Command::new("wsl");
+            cmd.args(["-e", "bash", "-lc", &script.join("\n")]);
+            cmd
         } else {
-            let mut cmd = app
-                .shell()
-                .sidecar("opencode-cli")
-                .unwrap()
-                .args(args.split_whitespace());
+            let sidecar = get_sidecar_path(app);
+            let mut cmd = Command::new(sidecar);
+            cmd.args(args.split_whitespace());
 
             for (key, value) in envs {
-                cmd = cmd.env(key, value);
+                cmd.env(key, value);
             }
 
             cmd
@@ -269,26 +301,111 @@ pub fn spawn_command(
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
 
-        let cmd = if shell.ends_with("/nu") {
+        let line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
         } else {
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
+        let mut cmd = Command::new(shell);
+        cmd.args(["-il", "-c", &line]);
 
         for (key, value) in envs {
-            cmd = cmd.env(key, value);
+            cmd.env(key, value);
         }
 
         cmd
     };
 
-    let (rx, child) = cmd.spawn()?;
-    let event_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut wrap = CommandWrap::from(cmd);
+
+    #[cfg(unix)]
+    {
+        wrap.wrap(ProcessGroup::leader());
+    }
+
+    #[cfg(windows)]
+    {
+        wrap.wrap(JobObject).wrap(KillOnDrop);
+    }
+
+    let mut child = wrap.spawn()?;
+    let stdout = child.stdout().take();
+    let stderr = child.stderr().take();
+    let (tx, rx) = mpsc::channel(256);
+    let (kill_tx, mut kill_rx) = mpsc::channel(1);
+
+    if let Some(stdout) = stdout {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let _ = tx.send(CommandEvent::Stdout(line.into_bytes())).await;
+            }
+        });
+    }
+
+    if let Some(stderr) = stderr {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let _ = tx.send(CommandEvent::Stderr(line.into_bytes())).await;
+            }
+        });
+    }
+
+    tokio::spawn(async move {
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Ok(status),
+                Ok(None) => {}
+                Err(err) => break Err(err),
+            }
+
+            tokio::select! {
+                _ = kill_rx.recv() => {
+                    let _ = child.start_kill();
+                }
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+            }
+        };
+
+        match status {
+            Ok(status) => {
+                let payload = TerminatedPayload {
+                    code: status.code(),
+                    signal: signal_from_status(status),
+                };
+                let _ = tx.send(CommandEvent::Terminated(payload)).await;
+            }
+            Err(err) => {
+                let _ = tx.send(CommandEvent::Error(err.to_string())).await;
+            }
+        }
+    });
+
+    let event_stream = ReceiverStream::new(rx);
     let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
 
-    Ok((event_stream, child))
+    Ok((event_stream, CommandChild { kill: kill_tx }))
+}
+
+fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    {
+        return status.signal();
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = status;
+        None
+    }
 }
 
 pub fn serve(
@@ -340,7 +457,6 @@ pub fn serve(
                             let _ = tx.send(payload);
                         }
                     }
-                    _ => {}
                 }
 
                 future::ready(())

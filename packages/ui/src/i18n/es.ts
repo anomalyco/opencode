@@ -28,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "reintentando",
   "ui.sessionTurn.retry.inSeconds": "en {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Límite de uso gratuito excedido",
+  "ui.sessionTurn.error.addCredits": "Añadir créditos",
 
   "ui.sessionTurn.status.delegating": "Delegando trabajo",
   "ui.sessionTurn.status.planning": "Planificando siguientes pasos",

@@ -23,7 +23,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -73,7 +73,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -107,7 +107,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -134,7 +134,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -158,7 +158,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -182,7 +182,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -215,7 +215,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@opencode-ai/ui": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -244,7 +244,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -260,7 +260,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -288,8 +288,8 @@
         "@ai-sdk/vercel": "1.0.33",
         "@ai-sdk/xai": "2.0.51",
         "@clack/prompts": "1.0.0-alpha.1",
-        "@gitlab/gitlab-ai-provider": "3.5.0",
-        "@gitlab/opencode-gitlab-auth": "1.3.2",
+        "@gitlab/gitlab-ai-provider": "3.5.1",
+        "@gitlab/opencode-gitlab-auth": "1.3.3",
         "@hono/standard-validator": "0.1.5",
         "@hono/zod-validator": "catalog:",
         "@modelcontextprotocol/sdk": "1.25.2",
@@ -369,7 +369,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "zod": "catalog:",
@@ -389,7 +389,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",
         "@tsconfig/node22": "catalog:",
@@ -400,7 +400,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -413,7 +413,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -455,7 +455,7 @@
     },
     "packages/util": {
       "name": "@opencode-ai/util",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "zod": "catalog:",
       },
@@ -466,7 +466,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.2.4",
+      "version": "1.2.6",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -989,9 +989,9 @@
 
     "@fontsource/inter": ["@fontsource/inter@5.2.8", "", {}, "sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg=="],
 
-    "@gitlab/gitlab-ai-provider": ["@gitlab/gitlab-ai-provider@3.5.0", "", { "dependencies": { "@anthropic-ai/sdk": "^0.71.0", "@anycable/core": "^0.9.2", "graphql-request": "^6.1.0", "isomorphic-ws": "^5.0.0", "openai": "^6.16.0", "socket.io-client": "^4.8.1", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "peerDependencies": { "@ai-sdk/provider": ">=2.0.0", "@ai-sdk/provider-utils": ">=3.0.0" } }, "sha512-OoAwCz4fOci3h/2l+PRHMclclh3IaFq8w1es2wvBJ8ca7vtglKsBYT7dvmYpsXlu7pg9mopbjcexvmVCQEUTAQ=="],
+    "@gitlab/gitlab-ai-provider": ["@gitlab/gitlab-ai-provider@3.5.1", "", { "dependencies": { "@anthropic-ai/sdk": "^0.71.0", "@anycable/core": "^0.9.2", "graphql-request": "^6.1.0", "isomorphic-ws": "^5.0.0", "openai": "^6.16.0", "socket.io-client": "^4.8.1", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "peerDependencies": { "@ai-sdk/provider": ">=2.0.0", "@ai-sdk/provider-utils": ">=3.0.0" } }, "sha512-I8+EGdUeKmGJSjAdFobHtqpxM9Fm00w0j7NJbtln/D/XQ1SKEGoZIuqJko4v0pV2mkhGUIs7qezljH/2kbXovA=="],
 
-    "@gitlab/opencode-gitlab-auth": ["@gitlab/opencode-gitlab-auth@1.3.2", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-pvGrC+aDVLY8bRCC/fZaG/Qihvt2r4by5xbTo5JTSz9O7yIcR6xG2d9Wkuu4bcXFz674z2C+i5bUk+J/RSdBpg=="],
+    "@gitlab/opencode-gitlab-auth": ["@gitlab/opencode-gitlab-auth@1.3.3", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-FT+KsCmAJjtqWr1YAq0MywGgL9kaLQ4apmsoowAXrPqHtoYf2i/nY10/A+L06kNj22EATeEDRpbB1NWXMto/SA=="],
 
     "@graphql-typed-document-node/core": ["@graphql-typed-document-node/core@3.2.0", "", { "peerDependencies": { "graphql": "^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0" } }, "sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ=="],
 
