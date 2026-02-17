@@ -1,10 +1,22 @@
 import { describe, expect, test } from "bun:test"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
   canDisposeDirectory,
   estimateRootSessionTotal,
   loadRootSessionsWithFallback,
   pickDirectoriesToEvict,
 } from "./global-sync"
+
+const mockSession = (id: string, overrides?: Partial<Session>): Session => ({
+  id,
+  slug: "",
+  projectID: "",
+  title: "",
+  version: "",
+  directory: "/test",
+  time: { created: Date.now(), updated: Date.now() },
+  ...overrides,
+})
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {
@@ -129,5 +141,76 @@ describe("canDisposeDirectory", () => {
         loadingSessions: false,
       }),
     ).toBe(true)
+  })
+})
+
+describe("session deduplication logic", () => {
+  test("deduplicates sessions by id", () => {
+    const sessions: Session[] = [
+      mockSession("a"),
+      mockSession("b"),
+      mockSession("a"),
+      mockSession("c"),
+      mockSession("b"),
+    ]
+
+    const seen = new Set<string>()
+    const deduplicated = sessions.filter((s) => {
+      if (!s.id) return false
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
+
+    expect(deduplicated).toHaveLength(3)
+    expect(deduplicated.map((s) => s.id)).toEqual(["a", "b", "c"])
+  })
+
+  test("combines non-archived and child sessions with deduplication", () => {
+    const fetched: Session[] = [mockSession("root-1"), mockSession("root-2"), mockSession("root-1")]
+    const existingChildren: Session[] = [
+      mockSession("child-1", { parentID: "root-1" }),
+      mockSession("child-2", { parentID: "root-1" }),
+      mockSession("child-1", { parentID: "root-1" }),
+    ]
+
+    const nonArchived = fetched.filter((s) => !s.time?.archived)
+    const childSessions = existingChildren.filter((s) => !!s.parentID)
+
+    const seen = new Set<string>()
+    const deduplicated = [...nonArchived, ...childSessions].filter((s) => {
+      if (!s.id) return false
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
+
+    expect(deduplicated).toHaveLength(4)
+    const ids = deduplicated.map((s) => s.id)
+    expect(ids).toContain("root-1")
+    expect(ids).toContain("root-2")
+    expect(ids).toContain("child-1")
+    expect(ids).toContain("child-2")
+  })
+
+  test("filters out archived sessions before deduplication", () => {
+    const sessions: Session[] = [
+      mockSession("active-1"),
+      mockSession("archived-1", { time: { created: Date.now(), updated: Date.now(), archived: Date.now() } }),
+      mockSession("active-2"),
+      mockSession("archived-1", { time: { created: Date.now(), updated: Date.now(), archived: Date.now() } }),
+    ]
+
+    const nonArchived = sessions.filter((s) => !s.time?.archived)
+    const seen = new Set<string>()
+    const deduplicated = nonArchived.filter((s) => {
+      if (!s.id) return false
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
+
+    expect(deduplicated).toHaveLength(2)
+    expect(deduplicated.map((s) => s.id)).toEqual(["active-1", "active-2"])
   })
 })

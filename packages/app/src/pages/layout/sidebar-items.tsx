@@ -61,6 +61,7 @@ export type SessionItemProps = {
   mobile?: boolean
   dense?: boolean
   popover?: boolean
+  depth?: number
   children: Map<string, string[]>
   allSessions: Session[]
   sidebarExpanded: Accessor<boolean>
@@ -196,6 +197,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const globalSync = useGlobalSync()
   const isSessionExpanded = props.isSessionExpanded ?? (() => false)
   const toggleSessionExpanded = props.toggleSessionExpanded ?? (() => {})
+  const depth = props.depth ?? 0
   const expanded = createMemo(() => isSessionExpanded(props.session.id))
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
@@ -263,19 +265,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
     return text?.text
   }
-
-  const ExpandButton = () => (
-    <button
-      class="flex items-center justify-center size-5 rounded hover:bg-surface-base-hover transition-colors"
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        toggleSessionExpanded(props.session.id)
-      }}
-    >
-      <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-    </button>
-  )
 
   const item = (
     <SessionRow
@@ -360,7 +349,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </div>
         </div>
         <Collapsible.Content>
-          <div class="pl-4 flex flex-col gap-0.5">
+          <div class="flex flex-col gap-0.5" style={{ "padding-left": `${(depth + 1) * 16}px` }}>
             <For each={childSessions()}>
               {(child) => (
                 <SessionItem
@@ -369,6 +358,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
                   mobile={props.mobile}
                   dense={props.dense}
                   popover={props.popover}
+                  depth={depth + 1}
                   children={props.children}
                   allSessions={props.allSessions}
                   sidebarExpanded={props.sidebarExpanded}

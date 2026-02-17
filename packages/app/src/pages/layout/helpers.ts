@@ -43,7 +43,7 @@ export const childMapByParent = (sessions: Session[]) => {
 }
 
 export const getChildSessions = (sessions: Session[], parentID: string): Session[] => {
-  return sessions.filter((s) => s.parentID === parentID).sort(sortSessions(Date.now()))
+  return sessions.filter((s) => s.parentID === parentID && !s.time?.archived).sort(sortSessions(Date.now()))
 }
 
 export function getDraggableId(event: unknown): string | undefined {
