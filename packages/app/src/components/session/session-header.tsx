@@ -329,7 +329,7 @@ export function SessionHeader() {
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
+                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate h-4.5 flex items-center">
                   {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
