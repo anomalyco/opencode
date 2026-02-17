@@ -4,10 +4,10 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -88,8 +88,6 @@ export function MessageTimeline(props: {
   onUnregisterMessage: (id: string) => void
   onFirstTurnMount?: () => void
   lastUserMessageID?: string
-  expanded: Record<string, boolean>
-  onToggleExpanded: (id: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -100,7 +98,7 @@ export function MessageTimeline(props: {
     >
       <div class="relative w-full h-full min-w-0">
         <div
-          class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
+          class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
             "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
             "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
@@ -164,14 +162,15 @@ export function MessageTimeline(props: {
           <Show when={props.showHeader}>
             <div
               classList={{
-                "sticky top-0 z-30 bg-background-stronger": true,
+                "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                 "w-full": true,
-                "px-4 md:px-6": true,
+                "pb-4": true,
+                "pl-2 pr-3 md:pl-4 md:pr-3": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}
             >
-              <div class="h-10 w-full flex items-center justify-between gap-2">
-                <div class="flex items-center gap-1 min-w-0 flex-1">
+              <div class="h-12 w-full flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                   <Show when={props.parentID}>
                     <IconButton
                       tabIndex={-1}
@@ -185,7 +184,10 @@ export function MessageTimeline(props: {
                     <Show
                       when={props.titleState.editing}
                       fallback={
-                        <h1 class="text-16-medium text-text-strong truncate min-w-0" onDblClick={props.openTitleEditor}>
+                        <h1
+                          class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
+                          onDblClick={props.openTitleEditor}
+                        >
                           {props.title}
                         </h1>
                       }
@@ -194,7 +196,8 @@ export function MessageTimeline(props: {
                         ref={props.titleRef}
                         value={props.titleState.draft}
                         disabled={props.titleState.saving}
-                        class="text-16-medium text-text-strong grow-1 min-w-0"
+                        class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                        style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                         onInput={(event) => props.onTitleDraft(event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()
@@ -215,19 +218,24 @@ export function MessageTimeline(props: {
                 </div>
                 <Show when={props.sessionID}>
                   {(id) => (
-                    <div class="shrink-0 flex items-center">
-                      <DropdownMenu open={props.titleState.menuOpen} onOpenChange={props.onTitleMenuOpen}>
-                        <Tooltip value={props.t("common.moreOptions")} placement="top">
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                            aria-label={props.t("common.moreOptions")}
-                          />
-                        </Tooltip>
+                    <div class="shrink-0 flex items-center gap-3">
+                      <SessionContextUsage placement="bottom" />
+                      <DropdownMenu
+                        gutter={4}
+                        placement="bottom-end"
+                        open={props.titleState.menuOpen}
+                        onOpenChange={props.onTitleMenuOpen}
+                      >
+                        <DropdownMenu.Trigger
+                          as={IconButton}
+                          icon="dot-grid"
+                          variant="ghost"
+                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                          aria-label={props.t("common.moreOptions")}
+                        />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content
+                            style={{ "min-width": "104px" }}
                             onCloseAutoFocus={(event) => {
                               if (!props.titleState.pendingRename) return
                               event.preventDefault()
@@ -263,7 +271,7 @@ export function MessageTimeline(props: {
           <div
             ref={props.setContentRef}
             role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
             classList={{
               "w-full": true,
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
@@ -316,8 +324,6 @@ export function MessageTimeline(props: {
                       sessionID={props.sessionID}
                       messageID={message.id}
                       lastUserMessageID={props.lastUserMessageID}
-                      stepsExpanded={props.expanded[message.id] ?? false}
-                      onStepsExpandedToggle={() => props.onToggleExpanded(message.id)}
                       classes={{
                         root: "min-w-0 w-full relative",
                         content: "flex flex-col justify-between !overflow-visible",

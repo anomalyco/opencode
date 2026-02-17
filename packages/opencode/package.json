@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.65",
+  "version": "1.2.6",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -15,7 +15,8 @@
     "lint": "echo 'Running lint checks...' && bun test --coverage",
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
-    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
+    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
+    "db": "bun drizzle-kit"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -42,6 +43,8 @@
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
+    "drizzle-kit": "1.0.0-beta.12-a5629fb",
+    "drizzle-orm": "1.0.0-beta.12-a5629fb",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -59,7 +62,7 @@
     "@ai-sdk/deepinfra": "1.0.36",
     "@ai-sdk/gateway": "2.0.30",
     "@ai-sdk/google": "2.0.52",
-    "@ai-sdk/google-vertex": "3.0.98",
+    "@ai-sdk/google-vertex": "3.0.103",
     "@ai-sdk/groq": "2.0.34",
     "@ai-sdk/mistral": "2.0.27",
     "@ai-sdk/openai": "2.0.89",
@@ -71,8 +74,8 @@
     "@ai-sdk/vercel": "1.0.33",
     "@ai-sdk/xai": "2.0.51",
     "@clack/prompts": "1.0.0-alpha.1",
-    "@gitlab/gitlab-ai-provider": "3.5.0",
-    "@gitlab/opencode-gitlab-auth": "1.3.2",
+    "@gitlab/gitlab-ai-provider": "3.5.1",
+    "@gitlab/opencode-gitlab-auth": "1.3.3",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.25.2",
@@ -100,6 +103,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
+    "drizzle-orm": "1.0.0-beta.12-a5629fb",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
@@ -122,5 +126,8 @@
     "yargs": "18.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
+  },
+  "overrides": {
+    "drizzle-orm": "1.0.0-beta.12-a5629fb"
   }
 }

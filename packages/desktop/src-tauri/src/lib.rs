@@ -1,21 +1,20 @@
 mod cli;
 mod constants;
-#[cfg(windows)]
-mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+#[cfg(target_os = "linux")]
+pub mod linux_windowing;
 mod logging;
 mod markdown;
 mod server;
 mod window_customizer;
 mod windows;
 
+use crate::cli::CommandChild;
 use futures::{
     FutureExt, TryFutureExt,
     future::{self, Shared},
 };
-#[cfg(windows)]
-use job_object::*;
 use std::{
     env,
     net::TcpListener,
@@ -27,7 +26,6 @@ use std::{
 use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_shell::process::CommandChild;
 use tauri_specta::Event;
 use tokio::{
     sync::{oneshot, watch},
@@ -566,7 +564,7 @@ async fn initialize(app: AppHandle) {
     // come from any invocation of the sidecar CLI. The progress is captured by a stdout stream interceptor.
     // Then in the loading task, we wait for sqlite migration to complete before
     // starting our health check against the server, otherwise long migrations could result in a timeout.
-    let needs_sqlite_migration = option_env!("OPENCODE_SQLITE").is_some() && !sqlite_file_exists();
+    let needs_sqlite_migration = !sqlite_file_exists();
     let sqlite_done = needs_sqlite_migration.then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
@@ -630,12 +628,6 @@ async fn initialize(app: AppHandle) {
                             }
 
                             tracing::info!("CLI health check OK");
-
-                            #[cfg(windows)]
-                            {
-                                let job_state = app.state::<JobObjectState>();
-                                job_state.assign_pid(child.pid());
-                            }
 
                             app.state::<ServerState>().set_child(Some(child));
 
@@ -709,9 +701,6 @@ async fn initialize(app: AppHandle) {
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
     app.deep_link().register_all().ok();
-
-    #[cfg(windows)]
-    app.manage(JobObjectState::new());
 
     app.manage(InitState { current: init_rx });
 }
