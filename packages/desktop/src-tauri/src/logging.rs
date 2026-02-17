@@ -36,11 +36,7 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
     tracing_subscriber::registry()
         .with(filter)
         .with(fmt::layer().with_writer(std::io::stderr))
-        .with(
-            fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false),
-        )
+        .with(fmt::layer().with_writer(non_blocking).with_ansi(false))
         .init();
 
     guard
@@ -55,10 +51,7 @@ pub fn tail() -> String {
         return String::new();
     };
 
-    let lines: Vec<String> = BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .collect();
+    let lines: Vec<String> = BufReader::new(file).lines().map_while(Result::ok).collect();
 
     let start = lines.len().saturating_sub(TAIL_LINES);
     lines[start..].join("\n")
