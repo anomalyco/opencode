@@ -82,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "preguntas",
 
   "ui.common.add": "Añadir",
+  "ui.common.back": "Atrás",
   "ui.common.cancel": "Cancelar",
   "ui.common.confirm": "Confirmar",
   "ui.common.dismiss": "Descartar",
@@ -97,6 +98,7 @@ export const dict = {
   "ui.message.collapse": "Colapsar mensaje",
   "ui.message.copy": "Copiar",
   "ui.message.copied": "¡Copiado!",
+  "ui.message.interrupted": "Interrumpido",
   "ui.message.attachment.alt": "adjunto",
 
   "ui.patch.action.deleted": "Eliminado",
@@ -107,6 +109,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} respondidas",
   "ui.question.answer.none": "(sin respuesta)",
   "ui.question.review.notAnswered": "(no respondida)",
-  "ui.question.multiHint": "(selecciona todas las que correspondan)",
+  "ui.question.multiHint": "Selecciona todas las que correspondan",
+  "ui.question.singleHint": "Selecciona una respuesta",
   "ui.question.custom.placeholder": "Escribe tu respuesta...",
 }

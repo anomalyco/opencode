@@ -81,6 +81,7 @@ export const dict = {
   "ui.common.question.other": "spørgsmål",
 
   "ui.common.add": "Tilføj",
+  "ui.common.back": "Tilbage",
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
@@ -96,6 +97,7 @@ export const dict = {
   "ui.message.collapse": "Skjul besked",
   "ui.message.copy": "Kopier",
   "ui.message.copied": "Kopieret!",
+  "ui.message.interrupted": "Afbrudt",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",
@@ -106,6 +108,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",
   "ui.question.review.notAnswered": "(ikke besvaret)",
-  "ui.question.multiHint": "(vælg alle der gælder)",
+  "ui.question.multiHint": "Vælg alle der gælder",
+  "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
 }

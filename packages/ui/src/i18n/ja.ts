@@ -81,6 +81,7 @@ export const dict = {
   "ui.common.question.other": "質問",
 
   "ui.common.add": "追加",
+  "ui.common.back": "戻る",
   "ui.common.cancel": "キャンセル",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "閉じる",
@@ -96,6 +97,7 @@ export const dict = {
   "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
   "ui.message.copied": "コピーしました！",
+  "ui.message.interrupted": "中断",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",
@@ -106,6 +108,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}}件回答済み",
   "ui.question.answer.none": "(回答なし)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(該当するものをすべて選択)",
+  "ui.question.multiHint": "該当するものをすべて選択",
+  "ui.question.singleHint": "1 つ選択",
   "ui.question.custom.placeholder": "回答を入力...",
 }
