@@ -194,6 +194,18 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.webfetch"),
         subtitle: input.url,
       }
+    case "websearch":
+      return {
+        icon: "mcp",
+        title: i18n.t("ui.tool.websearch"),
+        subtitle: typeof input.query === "string" ? input.query : undefined,
+      }
+    case "codesearch":
+      return {
+        icon: "mcp",
+        title: i18n.t("ui.tool.codesearch"),
+        subtitle: typeof input.query === "string" ? input.query : undefined,
+      }
     case "task":
       return {
         icon: "task",
@@ -249,7 +261,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   }
 }
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list", "websearch", "codesearch"])
 
 function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
@@ -322,10 +334,14 @@ function contextToolSummary(parts: ToolPart[]) {
   const read = parts.filter((part) => part.tool === "read").length
   const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
   const list = parts.filter((part) => part.tool === "list").length
+  const websearch = parts.filter((part) => part.tool === "websearch").length
+  const codesearch = parts.filter((part) => part.tool === "codesearch").length
   return [
     read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
     search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
     list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+    websearch ? `${websearch} web ${websearch === 1 ? "search" : "searches"}` : undefined,
+    codesearch ? `${codesearch} code ${codesearch === 1 ? "search" : "searches"}` : undefined,
   ].filter((value): value is string => !!value)
 }
 
