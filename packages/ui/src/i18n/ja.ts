@@ -32,7 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
-  "ui.sessionTurn.status.gatheringContext": "コンテキストを収集中",
+  "ui.sessionTurn.status.gatheringContext": "探索中...",
+  "ui.sessionTurn.status.gatheredContext": "探索済み",
   "ui.sessionTurn.status.searchingCodebase": "コードベースを検索中",
   "ui.sessionTurn.status.searchingWeb": "ウェブを検索中",
   "ui.sessionTurn.status.makingEdits": "編集を実行中",

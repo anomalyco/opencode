@@ -6,7 +6,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createMemo, createSignal, For, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { Message } from "./message-part"
+import { AssistantParts, Message } from "./message-part"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
@@ -89,13 +89,6 @@ function visible(part: PartType) {
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return !!part.text?.trim()
   return false
-}
-
-function AssistantMessageItem(props: { message: AssistantMessage; showAssistantCopyPartID?: string | null }) {
-  const data = useData()
-  const emptyParts: PartType[] = []
-  const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
-  return <Message message={props.message} parts={msgParts()} showAssistantCopyPartID={props.showAssistantCopyPartID} />
 }
 
 export function SessionTurn(
@@ -237,8 +230,7 @@ export function SessionTurn(
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
 
   const assistantCopyPartID = createMemo(() => {
-    if (!isLastUserMessage()) return null
-    if (status().type !== "idle") return null
+    if (working()) return null
     return showAssistantCopyPartID() ?? null
   })
   const assistantVisible = createMemo(() =>
@@ -281,14 +273,11 @@ export function SessionTurn(
                 </Show>
                 <Show when={assistantMessages().length > 0}>
                   <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
-                    <For each={assistantMessages()}>
-                      {(assistantMessage) => (
-                        <AssistantMessageItem
-                          message={assistantMessage}
-                          showAssistantCopyPartID={assistantCopyPartID()}
-                        />
-                      )}
-                    </For>
+                    <AssistantParts
+                      messages={assistantMessages()}
+                      showAssistantCopyPartID={assistantCopyPartID()}
+                      working={working()}
+                    />
                   </div>
                 </Show>
                 <Show when={edited() > 0}>

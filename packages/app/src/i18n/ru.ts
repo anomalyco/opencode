@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Переключиться к предыдущему агенту",
   "command.model.variant.cycle": "Цикл режимов мышления",
   "command.model.variant.cycle.description": "Переключиться к следующему уровню усилий",
+  "command.prompt.mode.shell": "Переключиться в режим оболочки",
+  "command.prompt.mode.normal": "Переключиться в режим промпта",
   "command.permissions.autoaccept.enable": "Авто-принятие изменений",
   "command.permissions.autoaccept.disable": "Прекратить авто-принятие изменений",
   "command.workspace.toggle": "Переключить рабочие пространства",
@@ -227,6 +229,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
   "prompt.placeholder.summarizeComment": "Суммировать комментарий…",
   "prompt.mode.shell": "Оболочка",
+  "prompt.mode.normal": "Промпт",
   "prompt.mode.shell.exit": "esc для выхода",
 
   "prompt.example.1": "Исправить TODO в коде",

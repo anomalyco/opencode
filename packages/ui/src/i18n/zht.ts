@@ -37,7 +37,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
-  "ui.sessionTurn.status.gatheringContext": "正在收集上下文",
+  "ui.sessionTurn.status.gatheringContext": "正在探索...",
+  "ui.sessionTurn.status.gatheredContext": "已探索",
   "ui.sessionTurn.status.searchingCodebase": "正在搜尋程式碼庫",
   "ui.sessionTurn.status.searchingWeb": "正在搜尋網頁",
   "ui.sessionTurn.status.makingEdits": "正在修改",

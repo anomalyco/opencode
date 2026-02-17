@@ -354,7 +354,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-2 pl-0.5 gap-1.5 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
                           onClick={copyPath}
                           aria-label={language.t("session.header.open.copyPath")}
                         >
@@ -468,7 +468,7 @@ export function SessionHeader() {
                       classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
-                    trigger={language.t("session.share.action.share")}
+                    trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
                   >
                     <div class="flex flex-col gap-2">
                       <Show

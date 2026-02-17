@@ -346,7 +346,7 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
-      output = terminalWriter((data) => t.write(data))
+      output = terminalWriter((data, done) => t.write(data, done))
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -520,9 +520,19 @@ export const Terminal = (props: TerminalProps) => {
     disposed = true
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
     if (sizeTimer !== undefined) clearTimeout(sizeTimer)
-    output?.flush()
-    persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
-    cleanup()
+    if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close()
+
+    const finalize = () => {
+      persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
+      cleanup()
+    }
+
+    if (!output) {
+      finalize()
+      return
+    }
+
+    output.flush(finalize)
   })
 
   return (

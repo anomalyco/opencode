@@ -32,7 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",
-  "ui.sessionTurn.status.gatheringContext": "Сбор контекста",
+  "ui.sessionTurn.status.gatheringContext": "Исследование...",
+  "ui.sessionTurn.status.gatheredContext": "Исследовано",
   "ui.sessionTurn.status.searchingCodebase": "Поиск в кодовой базе",
   "ui.sessionTurn.status.searchingWeb": "Поиск в интернете",
   "ui.sessionTurn.status.makingEdits": "Внесение изменений",
