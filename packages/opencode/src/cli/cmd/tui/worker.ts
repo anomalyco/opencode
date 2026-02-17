@@ -1,157 +1,137 @@
-import { Installation } from "@/installation"
 import { Server } from "@/server/server"
-import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Log } from "@/util/log"
 import { Rpc } from "@/util/rpc"
-import { upgrade } from "@/cli/upgrade"
+import { Installation } from "@/installation"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
-import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { upgrade } from "@/cli/upgrade"
+import { GlobalBus } from "@/bus/global"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
   dev: Installation.isLocal(),
-  level: (() => {
-    if (Installation.isLocal()) return "DEBUG"
-    return "INFO"
-  })(),
-})
-
-process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
-  })
+  level: Installation.isLocal() ? "DEBUG" : "INFO",
 })
 
 process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
-  })
+  Log.Default.error(e)
+})
+process.on("unhandledRejection", (e) => {
+  Log.Default.error(e)
+})
+process.on("SIGUSR2", async () => {
+  Config.global.reset()
+  await Instance.disposeAll()
 })
 
-// Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
+const transport = Rpc.self()
+
+GlobalBus.on("event", (data) => {
+  Rpc.emit("global.event", data, transport)
 })
 
-let server: Bun.Server<BunWebSocketData> | undefined
+const BASE_URL = "http://opencode.internal"
 
-const eventStream = {
-  abort: undefined as AbortController | undefined,
+function errmsg(e: unknown) {
+  return e instanceof Error ? e.message : e
 }
 
-const startEventStream = (directory: string) => {
-  if (eventStream.abort) eventStream.abort.abort()
-  const abort = new AbortController()
-  eventStream.abort = abort
-  const signal = abort.signal
+async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const request = new Request(input, init)
+  const password = Flag.OPENCODE_SERVER_PASSWORD
+  if (password) {
+    request.headers.set("Authorization", `Basic ${btoa(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${password}`)}`)
+  }
+  return await Server.App().fetch(request)
+}
 
-  const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init)
-    const auth = getAuthorizationHeader()
-    if (auth) request.headers.set("Authorization", auth)
-    return Server.App().fetch(request)
-  }) as typeof globalThis.fetch
+function provide<T>(directory: string, fn: () => T) {
+  return Instance.provide({ directory, init: InstanceBootstrap, fn })
+}
 
+const abort = new AbortController()
+let listener: ReturnType<typeof Server.listen> | undefined
+
+function startEventStream(directory: string) {
   const sdk = createOpencodeClient({
-    baseUrl: "http://opencode.internal",
-    directory,
-    fetch: fetchFn,
-    signal,
+    baseUrl: BASE_URL,
+    fetch: appFetch as typeof fetch,
   })
-
   ;(async () => {
-    while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
-
+    let backoff = 250
+    while (!abort.signal.aborted) {
+      const events = await Promise.resolve(sdk.event.subscribe({})).catch(() => undefined)
       if (!events) {
-        await Bun.sleep(250)
+        await Bun.sleep(backoff)
+        backoff = Math.min(backoff * 1.5, 30000)
         continue
       }
+      backoff = 250
 
       for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+        Rpc.emit("event", event, transport)
       }
 
-      if (!signal.aborted) {
-        await Bun.sleep(250)
-      }
+      await Bun.sleep(250)
     }
   })().catch((error) => {
-    Log.Default.error("event stream error", {
-      error: error instanceof Error ? error.message : error,
-    })
+    Log.Default.error("event stream error", { error: errmsg(error) })
   })
 }
 
-startEventStream(process.cwd())
-
-export const rpc = {
-  async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
-    const headers = { ...input.headers }
-    const auth = getAuthorizationHeader()
-    if (auth && !headers["authorization"] && !headers["Authorization"]) {
-      headers["Authorization"] = auth
-    }
-    const request = new Request(input.url, {
-      method: input.method,
-      headers,
-      body: input.body,
-    })
-    const response = await Server.App().fetch(request)
-    const body = await response.text()
+const rpc = {
+  async fetch(input: { url: string; init: RequestInit & { headers: Record<string, string> } }) {
+    const url = input.url.startsWith("http") ? input.url : `${BASE_URL}${input.url}`
+    const response = await Server.App().fetch(new Request(url, input.init))
     return {
       status: response.status,
+      statusText: response.statusText,
       headers: Object.fromEntries(response.headers.entries()),
-      body,
+      body: await response.text(),
     }
   },
-  async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
-    if (server) await server.stop(true)
-    server = Server.listen(input)
-    return { url: server.url.toString() }
+  async server(input: {
+    directory: string
+    port?: number
+    hostname?: string
+    mdns?: boolean
+  }): Promise<string | undefined> {
+    startEventStream(input.directory)
+    if (input.port || input.hostname || input.mdns) {
+      listener = Server.listen({
+        port: input.port ?? 0,
+        hostname: input.hostname ?? "127.0.0.1",
+        mdns: input.mdns ?? false,
+      })
+      return listener.url.toString()
+    }
+    return undefined
   },
   async checkUpgrade(input: { directory: string }) {
-    await Instance.provide({
-      directory: input.directory,
-      init: InstanceBootstrap,
-      fn: async () => {
-        await upgrade().catch(() => {})
-      },
-    })
+    return provide(input.directory, async () => {
+      await upgrade().catch(() => {})
+    }).catch(() => {})
   },
-  async reload() {
+  async reload(_input: {}) {
     Config.global.reset()
     await Instance.disposeAll()
   },
-  async shutdown() {
+  async shutdown(_input: {}) {
     Log.Default.info("worker shutting down")
-    if (eventStream.abort) eventStream.abort.abort()
+    abort.abort()
     await Promise.race([
       Instance.disposeAll(),
       new Promise((resolve) => {
         setTimeout(resolve, 5000)
       }),
     ])
-    if (server) server.stop(true)
+    if (listener) listener.stop(true)
   },
 }
 
-Rpc.listen(rpc)
+export type WorkerRpc = typeof rpc
 
-function getAuthorizationHeader(): string | undefined {
-  const password = Flag.OPENCODE_SERVER_PASSWORD
-  if (!password) return undefined
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-  return `Basic ${btoa(`${username}:${password}`)}`
-}
+Rpc.listen(rpc, transport)

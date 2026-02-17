@@ -1,7 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
-import { Rpc } from "@/util/rpc"
-import { type rpc } from "./worker"
 import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
@@ -10,34 +8,45 @@ import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { Installation } from "@/installation"
+import { Rpc } from "@/util/rpc"
+import type { WorkerRpc } from "./worker"
 
-declare global {
-  const OPENCODE_WORKER_PATH: string
-}
+declare const OPENCODE_WORKER_PATH: string | undefined
 
-type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
-
-function createWorkerFetch(client: RpcClient): typeof fetch {
-  const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+function createWorkerFetch(client: ReturnType<typeof Rpc.client<WorkerRpc>>): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
-    const body = request.body ? await request.text() : undefined
+    const url = new URL(request.url)
     const result = await client.call("fetch", {
-      url: request.url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      body,
+      url: url.pathname + url.search,
+      init: {
+        method: request.method,
+        headers: Object.fromEntries(request.headers),
+        body: request.body ? await request.text() : undefined,
+      },
     })
-    return new Response(result.body, {
+    return new Response(result.body ?? null, {
       status: result.status,
       headers: result.headers,
     })
-  }
-  return fn as typeof fetch
+  }) as typeof fetch
 }
 
-function createEventSource(client: RpcClient): EventSource {
+function createEventSource(client: ReturnType<typeof Rpc.client<WorkerRpc>>): EventSource {
+  const handlers = new Set<(event: Event) => void>()
+  const dispatch = (event: Event) => {
+    for (const handler of handlers) handler(event)
+  }
+  client.on("event", dispatch)
+  client.on("global.event", dispatch)
   return {
-    on: (handler) => client.on<Event>("event", handler),
+    on: (handler) => {
+      handlers.add(handler)
+      return () => {
+        handlers.delete(handler)
+      }
+    },
   }
 }
 
@@ -46,44 +55,19 @@ export const TuiThreadCommand = cmd({
   describe: "start opencode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
-      .positional("project", {
-        type: "string",
-        describe: "path to start opencode in",
-      })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
-      .option("continue", {
-        alias: ["c"],
-        describe: "continue the last session",
-        type: "boolean",
-      })
-      .option("session", {
-        alias: ["s"],
-        type: "string",
-        describe: "session id to continue",
-      })
+      .positional("project", { type: "string", describe: "path to start opencode in" })
+      .option("model", { type: "string", alias: ["m"], describe: "model to use in the format of provider/model" })
+      .option("continue", { alias: ["c"], describe: "continue the last session", type: "boolean" })
+      .option("session", { alias: ["s"], type: "string", describe: "session id to continue" })
       .option("fork", {
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
-      .option("prompt", {
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
-      }),
+      .option("prompt", { type: "string", describe: "prompt to use" })
+      .option("agent", { type: "string", describe: "agent to use" }),
   handler: async (args) => {
-    // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
-    // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
     try {
-      // Must be the very first thing — disables CTRL_C_EVENT before any Worker
-      // spawn or async work so the OS cannot kill the process group.
       win32DisableProcessedInput()
 
       if (args.fork && !args.continue && !args.session) {
@@ -91,41 +75,28 @@ export const TuiThreadCommand = cmd({
         process.exitCode = 1
         return
       }
-
-      // Resolve relative paths against PWD to preserve behavior when using --cwd flag
       const baseCwd = process.env.PWD ?? process.cwd()
       const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
-      const localWorker = new URL("./worker.ts", import.meta.url)
-      const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
-      const workerPath = await iife(async () => {
-        if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
-        if (await Bun.file(distWorker).exists()) return distWorker
-        return localWorker
-      })
       try {
         process.chdir(cwd)
-      } catch (e) {
+      } catch {
         UI.error("Failed to change directory to " + cwd)
         return
       }
 
-      const worker = new Worker(workerPath, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+      await Log.init({
+        print: process.argv.includes("--print-logs"),
+        dev: Installation.isLocal(),
+        level: Installation.isLocal() ? "DEBUG" : "INFO",
       })
-      worker.onerror = (e) => {
-        Log.Default.error(e)
-      }
-      const client = Rpc.client<typeof rpc>(worker)
+
+      Log.Default.info("opencode starting", { pid: process.pid })
+
       process.on("uncaughtException", (e) => {
         Log.Default.error(e)
       })
       process.on("unhandledRejection", (e) => {
         Log.Default.error(e)
-      })
-      process.on("SIGUSR2", async () => {
-        await client.call("reload", undefined)
       })
 
       const prompt = await iife(async () => {
@@ -134,7 +105,6 @@ export const TuiThreadCommand = cmd({
         return piped ? piped + "\n" + args.prompt : args.prompt
       })
 
-      // Check if server should be started (port or hostname explicitly set in CLI or config)
       const networkOpts = await resolveNetworkOptions(args)
       const shouldStartServer =
         process.argv.includes("--port") ||
@@ -144,16 +114,32 @@ export const TuiThreadCommand = cmd({
         networkOpts.port !== 0 ||
         networkOpts.hostname !== "127.0.0.1"
 
+      const workerPath =
+        typeof OPENCODE_WORKER_PATH === "string"
+          ? OPENCODE_WORKER_PATH
+          : path.resolve(import.meta.dirname, Installation.isLocal() ? "worker.ts" : "worker.js")
+
+      // Spawn worker thread — all server/agent/DB operations run there
+      const worker = new Worker(workerPath)
+      worker.onerror = (e) => console.error("worker error", e)
+      const transport = Rpc.worker(worker)
+      const client = Rpc.client<WorkerRpc>(transport)
+
       let url: string
       let customFetch: typeof fetch | undefined
       let events: EventSource | undefined
 
       if (shouldStartServer) {
-        // Start HTTP server for external access
-        const server = await client.call("server", networkOpts)
-        url = server.url
+        const result = await client.call("server", {
+          directory: cwd,
+          port: networkOpts.port,
+          hostname: networkOpts.hostname,
+          mdns: networkOpts.mdns,
+        })
+        url = result ?? `http://${networkOpts.hostname}:${networkOpts.port}`
       } else {
-        // Use direct RPC communication (no HTTP)
+        // Start event stream but don't listen on a port
+        await client.call("server", { directory: cwd })
         url = "http://opencode.internal"
         customFetch = createWorkerFetch(client)
         events = createEventSource(client)
@@ -172,10 +158,12 @@ export const TuiThreadCommand = cmd({
           fork: args.fork,
         },
         onExit: async () => {
-          await client.call("shutdown", undefined)
+          await client.call("shutdown", {})
+          worker.terminate()
         },
       })
 
+      // Check for upgrades in background
       setTimeout(() => {
         client.call("checkUpgrade", { directory: cwd }).catch(() => {})
       }, 1000)
