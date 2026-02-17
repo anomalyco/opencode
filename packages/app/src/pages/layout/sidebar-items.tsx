@@ -71,6 +71,8 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  isSessionExpanded?: (sessionId: string) => boolean
+  toggleSessionExpanded?: (sessionId: string) => void
 }
 
 const SessionRow = (props: {
@@ -192,7 +194,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const language = useLanguage()
   const notification = useNotification()
   const globalSync = useGlobalSync()
-  const [expanded, setExpanded] = createSignal(false)
+  const isSessionExpanded = props.isSessionExpanded ?? (() => false)
+  const toggleSessionExpanded = props.toggleSessionExpanded ?? (() => {})
+  const expanded = createMemo(() => isSessionExpanded(props.session.id))
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -266,7 +270,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       onClick={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        setExpanded((v) => !v)
+        toggleSessionExpanded(props.session.id)
       }}
     >
       <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
@@ -298,7 +302,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       data-session-id={props.session.id}
       class="group/session relative w-full rounded-md cursor-default pl-2 pr-0 group-hover/session:pr-0 [&:has(:focus-visible)]:bg-surface-raised-base-hover"
     >
-      <Collapsible open={expanded()} onOpenChange={setExpanded} class="w-full" variant="ghost">
+      <Collapsible
+        open={expanded()}
+        onOpenChange={() => toggleSessionExpanded(props.session.id)}
+        class="w-full"
+        variant="ghost"
+      >
         <div
           class="flex items-center w-full rounded-md transition-colors hover:bg-surface-raised-base-hover"
           classList={{ "bg-surface-base-active": isActive() }}
@@ -370,6 +379,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
                   clearHoverProjectSoon={props.clearHoverProjectSoon}
                   prefetchSession={props.prefetchSession}
                   archiveSession={props.archiveSession}
+                  isSessionExpanded={props.isSessionExpanded}
+                  toggleSessionExpanded={props.toggleSessionExpanded}
                 />
               )}
             </For>
