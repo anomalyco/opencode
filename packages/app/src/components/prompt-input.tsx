@@ -320,7 +320,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const shellModeKey = "mod+shift+x"
-  const normalModeKey = "mod+shift+y"
+  const normalModeKey = "mod+shift+e"
 
   command.register("prompt-input", () => [
     {
