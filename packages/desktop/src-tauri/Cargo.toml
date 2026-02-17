@@ -53,6 +53,7 @@ tracing-appender = "0.2"
 chrono = "0.4"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 process-wrap = { version = "9.0.3", features = ["tokio1"] }
+os_pipe = "1.2.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
