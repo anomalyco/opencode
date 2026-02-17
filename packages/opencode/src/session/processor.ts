@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { ProviderError } from "@/provider/error"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -348,33 +349,36 @@ export namespace SessionProcessor {
               if (needsCompaction) break
             }
           } catch (e: any) {
-            log.error("process", {
-              error: e,
-              stack: JSON.stringify(e.stack),
-            })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
-            if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // TODO: Handle context overflow error
-            }
-            const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
-              attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-              SessionStatus.set(input.sessionID, {
-                type: "retry",
-                attempt,
-                message: retry,
-                next: Date.now() + delay,
+            if (ProviderError.isUnknownSseEventError(e)) {
+               } else {
+              log.error("process", {
+                error: e,
+                stack: JSON.stringify(e.stack),
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
-              continue
+              const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+              if (MessageV2.ContextOverflowError.isInstance(error)) {
+                // TODO: Handle context overflow error
+              }
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined) {
+                attempt++
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
+                  attempt,
+                  message: retry,
+                  next: Date.now() + delay,
+                })
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
+              }
+              input.assistantMessage.error = error
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
+              })
+              SessionStatus.set(input.sessionID, { type: "idle" })
             }
-            input.assistantMessage.error = error
-            Bus.publish(Session.Event.Error, {
-              sessionID: input.assistantMessage.sessionID,
-              error: input.assistantMessage.error,
-            })
-            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

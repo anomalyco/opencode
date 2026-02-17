@@ -163,6 +163,17 @@ export namespace ProviderError {
         metadata?: Record<string, string>
       }
 
+  export function isUnknownSseEventError(e: unknown): boolean {
+    if (!APICallError.isInstance(e)) return false
+    const msg = e.message ?? ""
+    const body = e.responseBody ?? ""
+    const combined = `${msg} ${body}`
+    return (
+      combined.includes("vertex_event") &&
+      (combined.includes("No matching discriminator") || combined.includes("Type validation failed"))
+    )
+  }
+
   export function parseAPICallError(input: { providerID: string; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
     if (isOverflow(m)) {
