@@ -1,29 +1,29 @@
 ---
 title: MCP 服务器
-description: 添加本地和远程MCP工具。
+description: 添加本地和远程 MCP 工具。
 ---
 
-您可以使用“模型上下文协议”或MCP将外部工具添加到opencode。opencode支持本地和远程服务器。
+你可以通过 _Model Context Protocol_（MCP）为 OpenCode 添加外部工具。OpenCode 同时支持本地和远程服务器。
 
-添加使用后，MCP工具将自动与内置工具一起供LLM。
+添加后，MCP 工具会自动与内置工具一起提供给 LLM 使用。
 
 ---
 
 #### 注意事项
 
-当您使用 MCP 服务器时，它会添加到上下文中。如果您有很多工具，这会很快增加。因此，我们建议您选择使用哪些 MCP 服务器。
+使用 MCP 服务器时，它会占用上下文空间。如果你启用了大量工具，上下文消耗会迅速增加。因此，我们建议谨慎选择要使用的 MCP 服务器。
 
 :::tip
-MCP服务器会添加到您的上下文中，因此您需要小心启用哪些服务器。
+MCP 服务器会占用你的上下文空间，所以请谨慎选择启用哪些服务器。
 :::
 
-某些MCP服务器（例如GitHub MCP服务器）往往会添加大量代币，并且很容易超出上下文限制。
+某些 MCP 服务器（例如 GitHub MCP 服务器）往往会消耗大量 Token，很容易超出上下文限制。
 
 ---
 
 ## 启用
 
-您可以在`mcp`下的[opencode配置](https://opencode.ai/docs/config/)中定义MCP服务器。为每个MCP添加唯一的名称。当提示LLM时，您可以通过名称引用该MCP。
+你可以在 [OpenCode 配置](https://opencode.ai/docs/config/)的 `mcp` 字段下定义 MCP 服务器。为每个 MCP 指定一个唯一的名称，在提示词中可以通过该名称来引用对应的 MCP。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -40,15 +40,15 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 }
 ```
 
-您还可以通过将`enabled`设置为`false`来取消服务器。如果您想暂时取消服务器而不将其从配置中删除，这非常有用。
+你也可以将 `enabled` 设置为 `false` 来禁用某个服务器。当你想临时禁用某个服务器而不将其从配置中移除时，这个选项非常有用。
 
 ---
 
 ### 覆盖远程默认值
 
-组织可以通过其 `.well-known/opencode` 端点提供默认的 MCP 服务器。这些服务器可能默认被禁用，允许用户选择他们需要的服务器。
+组织可以通过其 `.well-known/opencode` 端点提供默认的 MCP 服务器。这些服务器可能默认处于禁用状态，允许用户按需启用。
 
-要从组织的远程特定启用服务器，请使用配置 `enabled: true` 将其添加到本地配置：
+要启用组织远程配置中的某个服务器，请在本地配置中添加该服务器并设置 `enabled: true`：
 
 ```json title="opencode.json"
 {
@@ -63,13 +63,13 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 }
 ```
 
-您的本地配置值会覆盖远程默认值。有关更多详细信息，请参阅[配置优先级](/docs/config#precedence-order)。
+本地配置值会覆盖远程默认值。详情请参阅[配置优先级](/docs/config#precedence-order)。
 
 ---
 
 ## 本地
 
-使用`type`将本地MCP服务器添加到MCP对像中的`"local"`。
+通过在 MCP 对象中将 `type` 设置为 `"local"` 来添加本地 MCP 服务器。
 
 ```jsonc title="opencode.jsonc" {15}
 {
@@ -88,9 +88,9 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 }
 ```
 
-该命令是本地MCP服务器的启动方式。您还可以确定环境变量列表。
+`command` 用于指定本地 MCP 服务器的启动命令。你还可以传入一组环境变量。
 
-例如，以下是添加测试 [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP 服务器的方法。
+例如，以下是添加测试用的 [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP 服务器的方法。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -104,7 +104,7 @@ MCP服务器会添加到您的上下文中，因此您需要小心启用哪些�
 }
 ```
 
-要使用它，我可以将 `use the mcp_everything tool` 添加到我的提示中。
+要使用它，可以在提示词中添加 `use the mcp_everything tool`。
 
 ```txt "mcp_everything"
 use the mcp_everything tool to add the number 3 and 4
@@ -116,19 +116,19 @@ use the mcp_everything tool to add the number 3 and 4
 
 以下是配置本地 MCP 服务器的所有选项。
 
-| 选项          | 类型   | 必填 | 描述                                                           |
-| ------------- | ------ | ---- | -------------------------------------------------------------- |
-| `type`        | 字符串 | 是   | MCP 服务器连接类型，必须是`"local"`。                          |
-| `command`     | 数据库 | 是   | 运行 MCP 服务器的命令和参数。                                  |
-| `environment` | 对象   |      | 运行服务器时设置的环境变量。                                   |
-| `enabled`     | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
-| `timeout`     | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
+| 选项          | 类型   | 必填 | 描述                                                              |
+| ------------- | ------ | ---- | ----------------------------------------------------------------- |
+| `type`        | 字符串 | 是   | MCP 服务器连接类型，必须为 `"local"`。                            |
+| `command`     | 数组   | 是   | 运行 MCP 服务器的命令及参数。                                     |
+| `environment` | 对象   |      | 运行服务器时设置的环境变量。                                      |
+| `enabled`     | 布尔值 |      | 启动时启用或禁用该 MCP 服务器。                                   |
+| `timeout`     | 数字   |      | 从 MCP 服务器获取工具的超时时间（毫秒）。默认为 5000（即 5 秒）。 |
 
 ---
 
 ## 远程
 
-通过将`type`设置为ZZPH1Z添加远程MCP服务器。
+通过将 `type` 设置为 `"remote"` 来添加远程 MCP 服务器。
 
 ```json title="opencode.json"
 {
@@ -146,36 +146,36 @@ use the mcp_everything tool to add the number 3 and 4
 }
 ```
 
-`"remote"` 是远程MCP服务器的URL，使用`url`选项您可以创建标头列表。
+`url` 是远程 MCP 服务器的地址，通过 `headers` 选项可以传入一组请求头。
 
 ---
 
 #### 选项
 
-| 选项       | 类型   | 必填 | 描述                                                           |
-| ---------- | ------ | ---- | -------------------------------------------------------------- |
-| `headers`  | 字符串 | 是   | MCP 服务器连接类型，必须是`type`。                             |
-| `"remote"` | 字符串 | 是   | 远程 MCP 服务器的 URL。                                        |
-| `url`      | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
-| `enabled`  | 对象   |      | 随请求一起发送的标头。                                         |
-| `headers`  | 对象   |      | OAuth 身份验证。请参阅下面的配置[开放认证](#oauth) 部分。      |
-| `oauth`    | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
+| 选项      | 类型   | 必填 | 描述                                                              |
+| --------- | ------ | ---- | ----------------------------------------------------------------- |
+| `type`    | 字符串 | 是   | MCP 服务器连接类型，必须为 `"remote"`。                           |
+| `url`     | 字符串 | 是   | 远程 MCP 服务器的 URL。                                           |
+| `enabled` | 布尔值 |      | 启动时启用或禁用该 MCP 服务器。                                   |
+| `headers` | 对象   |      | 随请求发送的请求头。                                              |
+| `oauth`   | 对象   |      | OAuth 身份验证配置。详见下方 [OAuth](#oauth) 部分。               |
+| `timeout` | 数字   |      | 从 MCP 服务器获取工具的超时时间（毫秒）。默认为 5000（即 5 秒）。 |
 
 ---
 
 ## OAuth
 
-opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要身份验证时，opencode将：
+OpenCode 会自动处理远程 MCP 服务器的 OAuth 身份验证。当服务器需要身份验证时，OpenCode 将：
 
 1. 检测 401 响应并启动 OAuth 流程
-2. 如果服务器支持，请使用**动态客户端注册 (RFC 7591)**
-3. 安全地存储Tokens以供将来的请求
+2. 在服务器支持的情况下使用**动态客户端注册（RFC 7591）**
+3. 安全地存储 Token 以供后续请求使用
 
 ---
 
-### 自动
+### 自动认证
 
-对于大多数支持 OAuth 的 MCP 配置服务器，不需要特殊配置。只需远程服务器：
+对于大多数支持 OAuth 的 MCP 服务器，无需特殊配置。只需配置远程服务器即可：
 
 ```json title="opencode.json"
 {
@@ -189,13 +189,13 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 }
 ```
 
-如果服务器需要身份验证，opencode 将在您第一次尝试使用它时提示您进行身份验证。如果没有，您可以使用 `timeout`[手动触发流量](#authenticating)。
+如果服务器需要身份验证，OpenCode 会在你首次使用时提示你进行认证。你也可以使用 `opencode mcp auth <server-name>` [手动触发认证流程](#authenticating)。
 
 ---
 
 ### 预注册
 
-如果您有来自MCP服务器强大的客户端，则可以配置它们：
+如果你已经从 MCP 服务器提供商处获得了客户端凭据，可以直接配置：
 
 ```json title="opencode.json" {7-11}
 {
@@ -218,33 +218,33 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 
 ### 身份验证
 
-您可以手动触发身份验证或管理凭据。
+你可以手动触发身份验证或管理凭据。
 
-使用特定MCP服务器进行身份验证：
+对特定 MCP 服务器进行身份验证：
 
 ```bash
 opencode mcp auth my-oauth-server
 ```
 
-列出所有MCP服务器及其身份验证状态：
+列出所有 MCP 服务器及其认证状态：
 
 ```bash
 opencode mcp list
 ```
 
-删除存储的凭据：
+删除已存储的凭据：
 
 ```bash
 opencode mcp logout my-oauth-server
 ```
 
-`opencode mcp auth <server-name>` 命令将打开您的浏览器进行授权。授权后，opencode Tokens安全地存储在 `mcp auth` 中。
+`mcp auth` 命令会打开浏览器进行授权。授权完成后，OpenCode 会将 Token 安全地存储在 `~/.local/share/opencode/mcp-auth.json` 中。
 
 ---
 
 #### 禁用 OAuth
 
-如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`~/.local/share/opencode/mcp-auth.json`设置为`oauth`：
+如果你想为某个服务器禁用自动 OAuth（例如，该服务器使用 API 密钥而非 OAuth），可以将 `oauth` 设置为 `false`：
 
 ```json title="opencode.json" {7}
 {
@@ -266,38 +266,38 @@ opencode mcp logout my-oauth-server
 
 #### OAuth 选项
 
-| 选项           | 类型            | 描述                                                |
-| -------------- | --------------- | --------------------------------------------------- |
-| `false`        | 对象 \| `oauth` | OAuth 配置对象，或 `false` 以取消 OAuth 自动检测。  |
-| `clientId`     | 字符串          | OAuth 客户端 ID。如果未提供，将尝试动态客户端注册。 |
-| `clientSecret` | 字符串          | OAuth客户端密钥（如果需要授权服务器）。             |
-| `scope`        | 字符串          | 授权期间请求的 OAuth 范围。                         |
+| 选项           | 类型            | 描述                                                   |
+| -------------- | --------------- | ------------------------------------------------------ |
+| `oauth`        | 对象 \| `false` | OAuth 配置对象，或设为 `false` 以禁用 OAuth 自动检测。 |
+| `clientId`     | 字符串          | OAuth 客户端 ID。如果未提供，将尝试动态客户端注册。    |
+| `clientSecret` | 字符串          | OAuth 客户端密钥（如果授权服务器要求提供）。           |
+| `scope`        | 字符串          | 授权时请求的 OAuth 作用域。                            |
 
 #### 调试
 
-如果远程MCP服务器无法进行身份验证，您可以通过以下方式诊断问题：
+如果远程 MCP 服务器身份验证失败，你可以通过以下方式诊断问题：
 
 ```bash
-# View auth status for all OAuth-capable servers
+# 查看所有支持 OAuth 的服务器的认证状态
 opencode mcp auth list
 
-# Debug connection and OAuth flow for a specific server
+# 调试特定服务器的连接和 OAuth 流程
 opencode mcp debug my-oauth-server
 ```
 
-`mcp debug`命令显示当前身份验证状态、测试HTTP连接并尝试OAuth发现流程。
+`mcp debug` 命令会显示当前认证状态、测试 HTTP 连接，并尝试执行 OAuth 发现流程。
 
 ---
 
 ## 管理
 
-您的 MCP 可以作为 opencode 中的工具以及内置工具使用。，您可以像任何其他工具一样通过 opencode 配置来管理它们。
+你的 MCP 在 OpenCode 中作为工具使用，与内置工具并列。因此，你可以像管理其他工具一样，通过 OpenCode 配置来管理它们。
 
 ---
 
 ### 全局
 
-这意味著您可以全局启用或禁用它们。
+你可以全局启用或禁用 MCP 工具。
 
 ```json title="opencode.json" {14}
 {
@@ -318,7 +318,7 @@ opencode mcp debug my-oauth-server
 }
 ```
 
-我们还可以使用 glob 模式来取消所有匹配的 MCP。
+也可以使用 glob 模式来禁用所有匹配的 MCP。
 
 ```json title="opencode.json" {14}
 {
@@ -339,16 +339,16 @@ opencode mcp debug my-oauth-server
 }
 ```
 
-这里我们使用 glob 模式 `my-mcp*` 来取消所有 MCP。
+这里使用 glob 模式 `my-mcp*` 来禁用所有 MCP。
 
 ---
 
-### 每个代理人
+### 按代理配置
 
-如果您有大量 MCP 服务器，您可以选择为每个代理启用它们并全局取消它们。因此：
+如果你有大量 MCP 服务器，可以选择全局禁用它们，然后仅在特定代理中启用。具体做法：
 
-1. 全局禁用它作为工具。
-2. 在您的[代理配置](/docs/agents#tools)中，启用MCP作为服务器工具。
+1. 全局禁用该工具。
+2. 在[代理配置](/docs/agents#tools)中，将 MCP 服务器作为工具启用。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -375,16 +375,16 @@ opencode mcp debug my-oauth-server
 
 ---
 
-#### 全局模式
+#### Glob 模式
 
-glob 模式使用简单的正则表达式 globbing 模式：
+glob 模式使用简单的正则通配符规则：
 
 - `*` 匹配零个或多个任意字符（例如，`"my-mcp*"` 匹配 `my-mcp_search`、`my-mcp_list` 等）
-- `?` 恰好匹配一个字符
-- 所有其他字符均按字面意思匹配
+- `?` 匹配恰好一个字符
+- 其他字符按字面值匹配
 
 :::note
-MCP服务器工具以名称服务器作为出口进行注册，要因此禁用服务器的所有工具，只需使用：
+MCP 服务器工具在注册时以服务器名称作为前缀，因此要禁用某个服务器的所有工具，只需使用：
 
 ```
 "mymcpservername_*": false
@@ -396,13 +396,13 @@ MCP服务器工具以名称服务器作为出口进行注册，要因此禁用�
 
 ## 示例
 
-以下是一些常见的 MCP 服务器的示例。如果您想记录其他服务器，您可以提交 PR。
+以下是一些常见 MCP 服务器的配置示例。如果你想记录其他服务器的用法，欢迎提交 PR。
 
 ---
 
-### 哨兵
+### Sentry
 
-添加[哨兵MCP服务器](https://mcp.sentry.dev)以与您的Sentry项目和问题进行交互。
+添加 [Sentry MCP 服务器](https://mcp.sentry.dev) 以与你的 Sentry 项目和问题进行交互。
 
 ```json title="opencode.json" {4-8}
 {
@@ -417,15 +417,15 @@ MCP服务器工具以名称服务器作为出口进行注册，要因此禁用�
 }
 ```
 
-添加配置后，使用Sentry进行身份验证：
+添加配置后，使用 Sentry 进行身份验证：
 
 ```bash
 opencode mcp auth sentry
 ```
 
-这将打开一个浏览器窗口以完成 OAuth 流程并将 opencode 连接到您的 Sentry 账户。
+这会打开浏览器窗口完成 OAuth 流程，将 OpenCode 连接到你的 Sentry 账户。
 
-通过身份验证后，您可以在提示中使用Sentry工具来查询问题、项目和错误数据。
+认证完成后，你可以在提示词中使用 Sentry 工具来查询问题、项目和错误数据。
 
 ```txt "use sentry"
 Show me the latest unresolved issues in my project. use sentry
@@ -433,9 +433,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### 背景7
+### Context7
 
-添加[Context7 MCP 服务器](https://github.com/upstash/context7) 以搜索文档。
+添加 [Context7 MCP 服务器](https://github.com/upstash/context7) 以搜索文档。
 
 ```json title="opencode.json" {4-7}
 {
@@ -449,7 +449,7 @@ Show me the latest unresolved issues in my project. use sentry
 }
 ```
 
-如果您注册了免费帐户，则可以使用 API 轴并获得更高的速率限制。
+如果你注册了免费账户，可以使用 API 密钥来获得更高的速率限制。
 
 ```json title="opencode.json" {7-9}
 {
@@ -466,15 +466,15 @@ Show me the latest unresolved issues in my project. use sentry
 }
 ```
 
-这里我们假设您设置了 `CONTEXT7_API_KEY` 环境变量。
+这里假设你已经设置了 `CONTEXT7_API_KEY` 环境变量。
 
-将 `use context7` 添加到提示中以使用 Context7 MCP 服务器。
+在提示词中添加 `use context7` 即可使用 Context7 MCP 服务器。
 
 ```txt "use context7"
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-或者，您可以将类似的内容添加到您的[代理.md](/docs/rules/)。
+你也可以在 [AGENTS.md](/docs/rules/) 中添加类似的规则。
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -482,9 +482,9 @@ When you need to search docs, use `context7` tools.
 
 ---
 
-### Vercel 的 Grep
+### Grep by Vercel
 
-添加 [Vercel 的 Grep](https://grep.app) MCP 服务器正在搜索 GitHub 上的代码片段。
+添加 [Grep by Vercel](https://grep.app) MCP 服务器以搜索 GitHub 上的代码片段。
 
 ```json title="opencode.json" {4-7}
 {
@@ -498,13 +498,13 @@ When you need to search docs, use `context7` tools.
 }
 ```
 
-由于我们将 MCP 服务器命名为 `gh_grep`，因此您可以将 `use the gh_grep tool` 添加到提示中以便代理使用它。
+由于我们将 MCP 服务器命名为 `gh_grep`，你可以在提示词中添加 `use the gh_grep tool` 来让代理使用它。
 
 ```txt "use the gh_grep tool"
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-或者，您可以将类似的内容添加到您的[代理.md](/docs/rules/)。
+你也可以在 [AGENTS.md](/docs/rules/) 中添加类似的规则。
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

@@ -85,6 +85,7 @@ export const dict: Record<Keys, string> = {
   "ui.common.question.other": "spørsmål",
 
   "ui.common.add": "Legg til",
+  "ui.common.back": "Tilbake",
   "ui.common.cancel": "Avbryt",
   "ui.common.confirm": "Bekreft",
   "ui.common.dismiss": "Avvis",
@@ -99,7 +100,10 @@ export const dict: Record<Keys, string> = {
   "ui.message.expand": "Utvid melding",
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
+  "ui.message.copyMessage": "Kopier melding",
+  "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
+  "ui.message.interrupted": "Avbrutt",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",
@@ -110,6 +114,7 @@ export const dict: Record<Keys, string> = {
   "ui.question.subtitle.answered": "{{count}} besvart",
   "ui.question.answer.none": "(ingen svar)",
   "ui.question.review.notAnswered": "(ikke besvart)",
-  "ui.question.multiHint": "(velg alle som gjelder)",
+  "ui.question.multiHint": "Velg alle som gjelder",
+  "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
 }
