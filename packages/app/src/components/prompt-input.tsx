@@ -1344,33 +1344,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
                 <button
                   type="button"
-                  class="relative z-10 flex-1 h-full flex items-center justify-center rounded-[4px]"
+                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
                   aria-pressed={store.mode === "shell"}
                   onClick={() => setMode("shell")}
                 >
-                  <Icon
-                    name="console"
-                    class="size-[18px]"
-                    classList={{
-                      "text-icon-strong-base": store.mode === "shell",
-                      "text-icon-weak": store.mode !== "shell",
-                    }}
-                  />
+                  <div
+                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
+                    classList={{ "hover:bg-transparent": store.mode === "shell" }}
+                  >
+                    <Icon
+                      name="console"
+                      class="size-[18px]"
+                      classList={{
+                        "text-icon-strong-base": store.mode === "shell",
+                        "text-icon-weak": store.mode !== "shell",
+                      }}
+                    />
+                  </div>
                 </button>
                 <button
                   type="button"
-                  class="relative z-10 flex-1 h-full flex items-center justify-center rounded-[4px]"
+                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
                   aria-pressed={store.mode === "normal"}
                   onClick={() => setMode("normal")}
                 >
-                  <Icon
-                    name="prompt"
-                    class="size-[18px]"
-                    classList={{
-                      "text-icon-interactive-base": store.mode === "normal",
-                      "text-icon-weak": store.mode !== "normal",
-                    }}
-                  />
+                  <div
+                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
+                    classList={{ "hover:bg-transparent": store.mode === "normal" }}
+                  >
+                    <Icon
+                      name="prompt"
+                      class="size-[18px]"
+                      classList={{
+                        "text-icon-interactive-base": store.mode === "normal",
+                        "text-icon-weak": store.mode !== "normal",
+                      }}
+                    />
+                  </div>
                 </button>
               </div>
             </div>
