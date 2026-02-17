@@ -31,7 +31,8 @@
   <a href="README.no.md">Norsk</a> |
   <a href="README.br.md">Português (Brasil)</a> |
   <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.uk.md">Українська</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -50,7 +51,8 @@ scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS ve Linux (önerilir, her zaman güncel)
 brew install opencode              # macOS ve Linux (resmi brew formülü, daha az güncellenir)
-paru -S opencode-bin               # Arch Linux
+sudo pacman -S opencode            # Arch Linux (Stable)
+paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Tüm işletim sistemleri
 nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için github:anomalyco/opencode
 ```

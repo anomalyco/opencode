@@ -11,7 +11,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ## 使用插件
 
-有两种加載插件的方法。
+有两种加载插件的方法。
 
 ---
 
@@ -22,7 +22,7 @@ description: 编写您自己的插件来扩展 opencode。
 - `.opencode/plugins/` - 项目级插件
 - `~/.config/opencode/plugins/` - 全局插件
 
-这些目录中的文件会在启动時自动加載。
+这些目录中的文件会在启动时自动加载。
 
 ---
 
@@ -53,7 +53,7 @@ description: 编写您自己的插件来扩展 opencode。
 
 ### 加载顺序
 
-插件從所有源加載，所有掛鉤按顺序運行。加載顺序为：
+插件从所有源加载，所有挂钩按顺序运行。加载顺序为：
 
 1. 全局配置 (`~/.config/opencode/opencode.json`)
 2. 项目配置（`opencode.json`）
@@ -67,7 +67,7 @@ description: 编写您自己的插件来扩展 opencode。
 ## 创建一个插件
 
 插件是一个 **JavaScript/TypeScript 模块多个**，它导出一个或插件
-功能。每个函數接收一个上下文对象并返回一个鉤子对象。
+功能。每个函数接收一个上下文对象并返回一个钩子对象。
 
 ---
 
@@ -113,7 +113,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 }
 ```
 
-插件函數接收：
+插件函数接收：
 
 - `project`：当前项目信息。
 - `directory`：当前工作目录。
@@ -141,7 +141,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ### 事件
 
-插件可以訂閱事件，如下面的示例部分所示。以下是可用的不同事件的列表。
+插件可以订阅事件，如下面的示例部分所示。以下是可用的不同事件的列表。
 
 #### 命令事件
 
@@ -217,7 +217,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ### 发送通知
 
-当某些事件發生時發送通知：
+当某些事件发生时发送通知：
 
 ```js title=".opencode/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -306,7 +306,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 - `args`：Zod 模式的工具参数
 - `execute`：调用工具时运行的函数
 
-您的自定義工具将可与内置工具一起用于opencode。
+您的自定义工具将可与内置工具一起用于opencode。
 
 ---
 
@@ -333,7 +333,7 @@ export const MyPlugin = async ({ client }) => {
 
 ### 压缩钩子
 
-自定義壓縮会话時包含的上下文：
+自定义压缩会话时包含的上下文：
 
 ```ts title=".opencode/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
