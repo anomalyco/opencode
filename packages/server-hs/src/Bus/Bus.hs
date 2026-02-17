@@ -1,15 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Bus module - STM-based pub/sub event system
--- Mirrors the TypeScript Bus namespace
-module Bus.Bus
-  ( Bus,
+{- | Bus module - STM-based pub/sub event system
+Mirrors the TypeScript Bus namespace
+-}
+module Bus.Bus (
+    Bus,
     newBus,
     publish,
     subscribe,
     subscribeAll,
     BusEvent (..),
-  )
+)
 where
 
 import Control.Concurrent (forkIO)
@@ -20,23 +21,23 @@ import Data.Text (Text)
 
 -- | A bus event with type and properties
 data BusEvent = BusEvent
-  { beType :: Text,
-    beProperties :: Value
-  }
-  deriving (Show, Eq)
+    { beType :: Text
+    , beProperties :: Value
+    }
+    deriving (Show, Eq)
 
 instance ToJSON BusEvent where
-  toJSON e =
-    object
-      [ "type" .= beType e,
-        "properties" .= beProperties e
-      ]
+    toJSON e =
+        object
+            [ "type" .= beType e
+            , "properties" .= beProperties e
+            ]
 
 instance FromJSON BusEvent where
-  parseJSON = withObject "BusEvent" $ \v ->
-    BusEvent
-      <$> v .: "type"
-      <*> v .: "properties"
+    parseJSON = withObject "BusEvent" $ \v ->
+        BusEvent
+            <$> v .: "type"
+            <*> v .: "properties"
 
 -- | The event bus - a broadcast channel
 newtype Bus = Bus {unBus :: TChan BusEvent}
@@ -49,19 +50,20 @@ newBus = Bus <$> newBroadcastTChanIO
 publish :: Bus -> Text -> Value -> IO ()
 publish bus typ props = atomically $ writeTChan (unBus bus) (BusEvent typ props)
 
--- | Subscribe to all events on the bus
--- Returns an unsubscribe action
+{- | Subscribe to all events on the bus
+Returns an unsubscribe action
+-}
 subscribeAll :: Bus -> (BusEvent -> IO ()) -> IO (IO ())
 subscribeAll bus callback = do
-  chan <- atomically $ dupTChan (unBus bus)
-  tid <- forkIO $ forever $ do
-    event <- atomically $ readTChan chan
-    callback event
-  pure $ void $ forkIO $ atomically $ pure () -- TODO: proper unsubscribe with killThread
+    chan <- atomically $ dupTChan (unBus bus)
+    _ <- forkIO $ forever $ do
+        event <- atomically $ readTChan chan
+        callback event
+    pure $ void $ forkIO $ atomically $ pure () -- TODO: proper unsubscribe with killThread
 
 -- | Subscribe to events of a specific type
 subscribe :: Bus -> Text -> (BusEvent -> IO ()) -> IO (IO ())
 subscribe bus eventType callback = subscribeAll bus $ \event ->
-  if beType event == eventType
-    then callback event
-    else pure ()
+    if beType event == eventType
+        then callback event
+        else pure ()

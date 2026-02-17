@@ -70,37 +70,37 @@ The `Tool` module provides the framework for executing LLM tool calls:
 
 ### Supported Tools
 
-| Tool    | Description                                    |
+| Tool | Description |
 | ------- | ---------------------------------------------- |
-| `read`  | Read file/directory contents with line numbers |
-| `write` | Write content to file                          |
-| `edit`  | Replace oldString with newString in file       |
-| `bash`  | Execute shell command with timeout             |
-| `glob`  | Find files by pattern (uses `fd`)              |
-| `grep`  | Search file contents (uses `rg`)               |
+| `read` | Read file/directory contents with line numbers |
+| `write` | Write content to file |
+| `edit` | Replace oldString with newString in file |
+| `bash` | Execute shell command with timeout |
+| `glob` | Find files by pattern (uses `fd`) |
+| `grep` | Search file contents (uses `rg`) |
 
 ### Flow
 
 1. LLM returns `stop_reason: "tool_use"` with `tool_use` content blocks
-2. Server parses `ToolUse` from response
-3. `Tool.Exec.executeToolUse` runs the tool and returns `ToolResult`
-4. Results sent back as `tool_result` content blocks
-5. Conversation continues until `stop_reason: "end_turn"`
+1. Server parses `ToolUse` from response
+1. `Tool.Exec.executeToolUse` runs the tool and returns `ToolResult`
+1. Results sent back as `tool_result` content blocks
+1. Conversation continues until `stop_reason: "end_turn"`
 
 ### Adding New Tools
 
 1. Add input type to `Tool/Types.hs`
-2. Add `FromJSON` instance for parsing
-3. Add tool definition to `Tool/Defs.hs` with JSON schema
-4. Add executor to `Tool/Exec.hs`
-5. Wire into `execute` dispatcher
+1. Add `FromJSON` instance for parsing
+1. Add tool definition to `Tool/Defs.hs` with JSON schema
+1. Add executor to `Tool/Exec.hs`
+1. Wire into `execute` dispatcher
 
 ## Environment Variables
 
-| Variable             | Description                            |
+| Variable | Description |
 | -------------------- | -------------------------------------- |
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM calls       |
-| `ANTHROPIC_API_KEY`  | Direct Anthropic API key (alternative) |
+| `OPENROUTER_API_KEY` | OpenRouter API key for LLM calls |
+| `ANTHROPIC_API_KEY` | Direct Anthropic API key (alternative) |
 
 ## Dependencies
 

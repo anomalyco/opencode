@@ -3,73 +3,71 @@
 -- | Provider property tests
 module Property.ProviderProps where
 
-import Data.Aeson (Value (..), decode, encode, object, (.=))
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Aeson (decode, encode)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import qualified Data.Text as T
 import Hedgehog
-import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Range as Range
-import Provider.Types
+import Hedgehog.Gen qualified as Gen
+import Hedgehog.Range qualified as Range
 import Provider.Provider qualified as Provider
+import Provider.Types
 import Storage.Storage qualified as Storage
-import System.IO.Temp (createTempDirectory)
 import System.Directory (removeDirectoryRecursive)
+import System.IO.Temp (createTempDirectory)
 import Test.Tasty
 import Test.Tasty.Hedgehog
 
 -- | Property: ModelCost JSON round-trip
 prop_modelCostRoundtrip :: Property
 prop_modelCostRoundtrip = property $ do
-  cost <- forAll genModelCost
-  let json = encode cost
-  case decode json of
-    Nothing -> failure
-    Just cost' -> cost === cost'
+    cost <- forAll genModelCost
+    let json = encode cost
+    case decode json of
+        Nothing -> failure
+        Just cost' -> cost === cost'
 
 -- | Property: Model JSON round-trip
 prop_modelRoundtrip :: Property
 prop_modelRoundtrip = property $ do
-  model <- forAll genModel
-  let json = encode model
-  case decode json of
-    Nothing -> failure
-    Just model' -> model === model'
+    model <- forAll genModel
+    let json = encode model
+    case decode json of
+        Nothing -> failure
+        Just model' -> model === model'
 
 -- | Property: AuthMethod JSON round-trip
 prop_authMethodRoundtrip :: Property
 prop_authMethodRoundtrip = property $ do
-  auth <- forAll genAuthMethod
-  let json = encode auth
-  case decode json of
-    Nothing -> failure
-    Just auth' -> auth === auth'
+    auth <- forAll genAuthMethod
+    let json = encode auth
+    case decode json of
+        Nothing -> failure
+        Just auth' -> auth === auth'
 
 -- | Property: ProviderAuth JSON round-trip
 prop_providerAuthRoundtrip :: Property
 prop_providerAuthRoundtrip = property $ do
-  pa <- forAll genProviderAuth
-  let json = encode pa
-  case decode json of
-    Nothing -> failure
-    Just pa' -> pa === pa'
+    pa <- forAll genProviderAuth
+    let json = encode pa
+    case decode json of
+        Nothing -> failure
+        Just pa' -> pa === pa'
 
 prop_authPersistence :: Property
 prop_authPersistence = property $ do
-  token <- forAll genNonEmptyText
-  result <- evalIO $ do
-    tmpDir <- createTempDirectory "/tmp" "provider-auth"
-    Storage.withStorage tmpDir $ \storage -> do
-      Provider.setAuth storage "openai" token
-      auths <- Provider.authStatus storage
-      Provider.removeAuth storage "openai"
-      authsAfter <- Provider.authStatus storage
-      removeDirectoryRecursive tmpDir
-      pure (auths, authsAfter)
-  let (before, after) = result
-  assert $ any (\a -> paProviderID a == "openai" && paAuthenticated a) before
-  assert $ any (\a -> paProviderID a == "openai" && not (paAuthenticated a)) after
+    token <- forAll genNonEmptyText
+    result <- evalIO $ do
+        tmpDir <- createTempDirectory "/tmp" "provider-auth"
+        Storage.withStorage tmpDir $ \storage -> do
+            Provider.setAuth storage "openai" token
+            auths <- Provider.authStatus storage
+            Provider.removeAuth storage "openai"
+            authsAfter <- Provider.authStatus storage
+            removeDirectoryRecursive tmpDir
+            pure (auths, authsAfter)
+    let (before, afterAuth) = result
+    assert $ any (\a -> paProviderID a == "openai" && paAuthenticated a) before
+    assert $ any (\a -> paProviderID a == "openai" && not (paAuthenticated a)) afterAuth
 
 -- Generators
 genText :: Gen Text
@@ -86,47 +84,47 @@ genMaybeDouble = Gen.maybe genDouble
 
 genModelCost :: Gen ModelCost
 genModelCost =
-  ModelCost
-    <$> genDouble
-    <*> genDouble
-    <*> genMaybeDouble
-    <*> genMaybeDouble
+    ModelCost
+        <$> genDouble
+        <*> genDouble
+        <*> genMaybeDouble
+        <*> genMaybeDouble
 
 genModel :: Gen Model
 genModel =
-  Model
-    <$> genNonEmptyText
-    <*> genText
-    <*> genNonEmptyText
-    <*> Gen.maybe (Gen.int (Range.linear 0 100000))
-    <*> Gen.maybe (Gen.int (Range.linear 0 100000))
-    <*> genModelCost
-    <*> pure Map.empty
-    <*> Gen.maybe (Gen.list (Range.linear 0 3) genNonEmptyText)
-    <*> Gen.maybe (pure Map.empty)
+    Model
+        <$> genNonEmptyText
+        <*> genText
+        <*> genNonEmptyText
+        <*> Gen.maybe (Gen.int (Range.linear 0 100000))
+        <*> Gen.maybe (Gen.int (Range.linear 0 100000))
+        <*> genModelCost
+        <*> pure Map.empty
+        <*> Gen.maybe (Gen.list (Range.linear 0 3) genNonEmptyText)
+        <*> Gen.maybe (pure Map.empty)
 
 genAuthMethod :: Gen AuthMethod
 genAuthMethod =
-  AuthMethod
-    <$> genNonEmptyText
-    <*> Gen.list (Range.linear 0 3) genNonEmptyText
-    <*> Gen.maybe genNonEmptyText
+    AuthMethod
+        <$> genNonEmptyText
+        <*> Gen.list (Range.linear 0 3) genNonEmptyText
+        <*> Gen.maybe genNonEmptyText
 
 genProviderAuth :: Gen ProviderAuth
 genProviderAuth =
-  ProviderAuth
-    <$> genNonEmptyText
-    <*> Gen.bool
-    <*> Gen.maybe genNonEmptyText
+    ProviderAuth
+        <$> genNonEmptyText
+        <*> Gen.bool
+        <*> Gen.maybe genNonEmptyText
 
 -- Test tree
 tests :: TestTree
 tests =
-  testGroup
-    "Provider Property Tests"
-    [ testProperty "ModelCost round-trip" prop_modelCostRoundtrip,
-      testProperty "Model round-trip" prop_modelRoundtrip,
-      testProperty "AuthMethod round-trip" prop_authMethodRoundtrip,
-      testProperty "ProviderAuth round-trip" prop_providerAuthRoundtrip,
-      testProperty "Auth persistence" prop_authPersistence
-    ]
+    testGroup
+        "Provider Property Tests"
+        [ testProperty "ModelCost round-trip" prop_modelCostRoundtrip
+        , testProperty "Model round-trip" prop_modelRoundtrip
+        , testProperty "AuthMethod round-trip" prop_authMethodRoundtrip
+        , testProperty "ProviderAuth round-trip" prop_providerAuthRoundtrip
+        , testProperty "Auth persistence" prop_authPersistence
+        ]

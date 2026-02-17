@@ -2,7 +2,7 @@
 
 module Property.MessagePartProps where
 
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson.KeyMap qualified as KM
 import Data.Text (Text)
 import Hedgehog
@@ -14,38 +14,38 @@ import Test.Tasty.Hedgehog
 
 prop_updatePart :: Property
 prop_updatePart = property $ do
-  pid <- forAll genNonEmptyText
-  part <- forAll (genPart pid)
-  patch <- forAll genPatch
-  parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
-  let allParts = part : parts
-  case Parts.updatePart pid patch allParts of
-    Nothing -> failure
-    Just updated -> do
-      let mpart = Parts.findPart pid updated
-      case mpart of
+    pid <- forAll genNonEmptyText
+    part <- forAll (genPart pid)
+    patch <- forAll genPatch
+    parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
+    let allParts = part : parts
+    case Parts.updatePart pid patch allParts of
         Nothing -> failure
-        Just value -> do
-          value === mergeExpected part patch
+        Just updated -> do
+            let mpart = Parts.findPart pid updated
+            case mpart of
+                Nothing -> failure
+                Just value -> do
+                    value === mergeExpected part patch
 
 prop_deletePart :: Property
 prop_deletePart = property $ do
-  pid <- forAll genNonEmptyText
-  part <- forAll (genPart pid)
-  parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
-  let allParts = part : parts
-  case Parts.deletePart pid allParts of
-    Nothing -> failure
-    Just updated -> do
-      Parts.findPart pid updated === Nothing
+    pid <- forAll genNonEmptyText
+    part <- forAll (genPart pid)
+    parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
+    let allParts = part : parts
+    case Parts.deletePart pid allParts of
+        Nothing -> failure
+        Just updated -> do
+            Parts.findPart pid updated === Nothing
 
 prop_findPart :: Property
 prop_findPart = property $ do
-  pid <- forAll genNonEmptyText
-  part <- forAll (genPart pid)
-  parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
-  let allParts = part : parts
-  Parts.findPart pid allParts === Just part
+    pid <- forAll genNonEmptyText
+    part <- forAll (genPart pid)
+    parts <- forAll $ Gen.list (Range.linear 0 5) genPartAny
+    let allParts = part : parts
+    Parts.findPart pid allParts === Just part
 
 genText :: Gen Text
 genText = Gen.text (Range.linear 0 50) Gen.alphaNum
@@ -55,18 +55,18 @@ genNonEmptyText = Gen.text (Range.linear 1 50) Gen.alphaNum
 
 genPart :: Text -> Gen Value
 genPart pid = do
-  content <- genText
-  pure $ object ["id" .= pid, "type" .= ("text" :: Text), "text" .= content]
+    content <- genText
+    pure $ object ["id" .= pid, "type" .= ("text" :: Text), "text" .= content]
 
 genPartAny :: Gen Value
 genPartAny = do
-  pid <- genNonEmptyText
-  genPart pid
+    pid <- genNonEmptyText
+    genPart pid
 
 genPatch :: Gen Value
 genPatch = do
-  content <- genNonEmptyText
-  pure $ object ["text" .= content]
+    content <- genNonEmptyText
+    pure $ object ["text" .= content]
 
 mergeExpected :: Value -> Value -> Value
 mergeExpected (Object old) (Object new) = Object (KM.union new old)
@@ -74,9 +74,9 @@ mergeExpected _ new = new
 
 tests :: TestTree
 tests =
-  testGroup
-    "Message Part Property Tests"
-    [ testProperty "updatePart merges patch" prop_updatePart,
-      testProperty "deletePart removes part" prop_deletePart,
-      testProperty "findPart locates part" prop_findPart
-    ]
+    testGroup
+        "Message Part Property Tests"
+        [ testProperty "updatePart merges patch" prop_updatePart
+        , testProperty "deletePart removes part" prop_deletePart
+        , testProperty "findPart locates part" prop_findPart
+        ]

@@ -1,53 +1,19 @@
 {
-  description = "OpenCode Haskell Server";
-
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    haskell-flake.url = "github:srid/haskell-flake";
+    treefmt-nix.url = "github:numtide/treefmt-nix";
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      flake-utils,
-    }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-
-        haskellPackages = pkgs.haskellPackages.override {
-          overrides = hself: hsuper: {
-            opencode-server = hself.callCabal2nix "opencode-server" ./. { };
-          };
-        };
-
-        opencode-server = haskellPackages.opencode-server;
-      in
+    inputs@{ flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } (
+      { lib, ... }:
       {
-        packages = {
-          default = opencode-server;
-          inherit opencode-server;
-        };
+        systems = lib.systems.flakeExposed;
 
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            haskellPackages.ghc
-            haskellPackages.cabal-install
-            haskellPackages.haskell-language-server
-            zlib
-            bubblewrap
-          ];
-
-          inputsFrom = [ opencode-server.env ];
-
-          shellHook = ''
-            echo "OpenCode Haskell Server development shell"
-            echo "Run 'cabal build' to build"
-            echo "Run 'cabal run' to start the server"
-          '';
-        };
+        imports = lib.filesystem.listFilesRecursive ./nix;
       }
     );
 }

@@ -7,77 +7,96 @@ build-type:    Simple
 
 library
   exposed-modules:
+    Agent.Agent
+    Agent.Types
     Api
-    Handlers
-    State
     Bus.Bus
     Bus.Event
-    Storage.Storage
-    Session.Types
-    Session.Session
-    Message.Types
-    Message.Parts
-    Config.Types
     Config.Config
-    Provider.Types
-    Provider.Provider
-    Agent.Types
-    Agent.Agent
-    Sandbox.Types
-    Sandbox.Sandbox
-    Pty.Types
-    Pty.Pty
-    Proxy.Types
-    Proxy.Proxy
-    LLM.Types
+    Config.Types
+    Experimental.Worktree
+    Formatter.Status
+    Find.Parse
+    Find.Search
+    Handlers
     LLM.Anthropic
     LLM.OpenRouter
+    LLM.Types
     Log
-    Tool.Types
+    Lsp.Store
+    Health.Build
+    Path.Build
+    Message.Parts
+    Message.Todo
+    Message.Types
+    Project.Build
+    Project.Discovery
+    Provider.OAuth
+    Provider.Provider
+    Provider.Types
+    Proxy.Proxy
+    Proxy.Types
+    Pty.Parse
+    Pty.Pty
+    Pty.Types
+    Request.Store
+    Sandbox.Sandbox
+    Sandbox.Types
+    Session.Session
+    Session.Status
+    Session.Types
+    Skill.Skill
+    State
+    Storage.Storage
     Tool.Defs
     Tool.Exec
     Tool.Tool
-  hs-source-dirs:   src
-  default-language: GHC2021
-  ghc-options:      -Wall -O2
+    Tool.Types
+    Tui.Store
+    Vcs.Diff
+    Vcs.Status
+
+  hs-source-dirs:     src
+  default-language:   GHC2021
+  ghc-options:        -Wall -O2 -Werror
   build-depends:
-    base >= 4.17 && < 5,
-    aeson >= 2.0,
-    servant >= 0.20,
-    servant-server >= 0.20,
-    warp >= 3.3,
-    wai >= 3.2,
-    wai-websockets >= 3.0,
-    websockets >= 0.12,
-    http-types >= 0.12,
-    http-client,
-    http-client-tls,
-    process,
-    case-insensitive >= 1.2,
-    text >= 2.0,
-    bytestring >= 0.11,
-    containers >= 0.6,
-    stm >= 2.5,
-    directory >= 1.3,
-    filepath >= 1.4,
-    time >= 1.12,
-    random >= 1.2,
-    process >= 1.6,
-    unix >= 2.8,
-    posix-pty >= 0.2,
-    network >= 3.1,
-    crypton-connection >= 0.4,
-    data-default-class >= 0.1,
-    tls >= 2.0,
-    katip >= 0.8,
-    mtl >= 2.2,
-    unliftio-core >= 0.2
+    , aeson               >=2.0
+    , base                >=4.17 && <5
+    , bytestring          >=0.11
+    , case-insensitive    >=1.2
+    , containers          >=0.6
+    , crypton-connection  >=0.4
+    , data-default-class  >=0.1
+    , directory           >=1.3
+    , filepath            >=1.4
+    , http-client
+    , http-client-tls
+    , http-types          >=0.12
+    , katip               >=0.8
+    , mtl                 >=2.2
+    , network             >=3.1
+    , posix-pty           >=0.2
+    , process             >=1.6
+    , random              >=1.2
+    , servant             >=0.20
+    , servant-server      >=0.20
+    , stm                 >=2.5
+    , text                >=2.0
+    , time                >=1.12
+    , tls                 >=2.0
+    , unix                >=2.8
+    , unliftio-core       >=0.2
+    , wai                 >=3.2
+    , wai-websockets      >=3.0
+    , warp                >=3.3
+    , websockets          >=0.12
+
   default-extensions:
     DataKinds
-    TypeOperators
     DeriveGeneric
-    OverloadedStrings
     LambdaCase
+    OverloadedStrings
+    TypeOperators
 
 executable opencode-server
   main-is:          Main.hs
@@ -85,73 +104,92 @@ executable opencode-server
   default-language: GHC2021
   ghc-options:      -Wall -O2 -threaded -rtsopts -with-rtsopts=-N -Werror
   build-depends:
-    base >= 4.17 && < 5,
-    opencode-server,
-    aeson,
-    servant-server,
-    warp,
-    wai,
-    wai-websockets,
-    websockets,
-    http-types,
-    stm,
-    bytestring,
-    text,
-    directory,
-    filepath,
-    time,
-    process,
-    containers,
-    katip
+    , aeson
+    , base             >=4.17 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , http-types
+    , katip
+    , opencode-server
+    , process
+    , servant-server
+    , stm
+    , text
+    , time
+    , wai
+    , wai-websockets
+    , warp
+    , websockets
 
 test-suite opencode-server-test
-  type:             exitcode-stdio-1.0
-  main-is:          Spec.hs
+  type:               exitcode-stdio-1.0
+  main-is:            Spec.hs
   other-modules:
-    Property.StorageProps
-    Property.BusProps
-    Property.ConfigProps
-    Property.SessionProps
-    Property.ToolProps
-    Property.MessageProps
-    Property.MessagePartProps
-    Property.LLMProps
-    Property.ProviderProps
-    Property.OpenApiProps
-    Unit.ApiSpec
     ApiCompatibilitySpec
     Integration.ApiComplianceTest
-  hs-source-dirs:   test
-  default-language: GHC2021
-  ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
+    Property.BusProps
+    Property.ConfigProps
+    Property.DiffProps
+    Property.ExperimentalProps
+    Property.FormatterProps
+    Property.FindParseProps
+    Property.HealthProps
+    Property.LLMProps
+    Property.LspProps
+    Property.MessagePartProps
+    Property.MessageProps
+    Property.OAuthProps
+    Property.OpenApiProps
+    Property.PathProps
+    Property.ProjectProps
+    Property.ProjectDiscoveryProps
+    Property.ProviderProps
+    Property.PtyProps
+    Property.RequestProps
+    Property.SessionProps
+    Property.SessionStatusProps
+    Property.SkillProps
+    Property.StorageProps
+    Property.TodoProps
+    Property.ToolProps
+    Property.TuiProps
+    Property.VcsStatusProps
+    Unit.ApiSpec
+
+  hs-source-dirs:     test
+  default-language:   GHC2021
+  ghc-options:        -Wall -threaded -rtsopts -with-rtsopts=-N -Werror
   build-depends:
-    base >= 4.17 && < 5,
-    opencode-server,
-    hspec >= 2.11,
-    hspec-core >= 2.11,
-    hedgehog >= 1.4,
-    tasty >= 1.5,
-    tasty-hedgehog >= 1.4,
-    tasty-hspec >= 1.2,
-    hspec-hedgehog >= 0.1,
-    aeson >= 2.0,
-    text >= 2.0,
-    bytestring >= 0.11,
-    containers >= 0.6,
-    stm >= 2.5,
-    directory >= 1.3,
-    filepath >= 1.4,
-    temporary >= 1.3,
-    http-client,
-    http-client-tls,
-    http-types,
-    process,
-    unordered-containers >= 0.2,
-    regex-pcre >= 0.95
+    , aeson                 >=2.0
+    , base                  >=4.17 && <5
+    , bytestring            >=0.11
+    , containers            >=0.6
+    , directory             >=1.3
+    , filepath              >=1.4
+    , hedgehog              >=1.4
+    , hspec                 >=2.11
+    , hspec-core            >=2.11
+    , hspec-hedgehog        >=0.1
+    , http-client
+    , http-client-tls
+    , http-types
+    , opencode-server
+    , process
+    , regex-pcre            >=0.95
+    , stm                   >=2.5
+    , tasty                 >=1.5
+    , tasty-hedgehog        >=1.4
+    , tasty-hspec           >=1.2
+    , temporary             >=1.3
+    , text                  >=2.0
+    , unordered-containers  >=0.2
+
   default-extensions:
     DataKinds
-    TypeOperators
     DeriveGeneric
-    OverloadedStrings
     LambdaCase
+    OverloadedStrings
     RecordWildCards
+    TypeOperators

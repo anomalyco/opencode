@@ -12,59 +12,59 @@ This document compares the Haskell server rewrite against the original TypeScrip
 
 ### Core Routes
 
-| Method | Path              | Status |
+| Method | Path | Status |
 | ------ | ----------------- | ------ |
-| GET    | /global/health    | ✅     |
-| GET    | /path             | ✅     |
-| GET    | /global/config    | ✅     |
-| GET    | /project          | ✅     |
-| GET    | /project/current  | ✅     |
-| GET    | /config/providers | ✅     |
-| GET    | /provider/auth    | ✅     |
-| GET    | /agent            | ✅     |
-| GET    | /config           | ✅     |
-| GET    | /command          | ✅     |
+| GET | /global/health | ✅ |
+| GET | /path | ✅ |
+| GET | /global/config | ✅ |
+| GET | /project | ✅ |
+| GET | /project/current | ✅ |
+| GET | /config/providers | ✅ |
+| GET | /provider/auth | ✅ |
+| GET | /agent | ✅ |
+| GET | /config | ✅ |
+| GET | /command | ✅ |
 
 ### Session Routes
 
-| Method | Path                         | Status |
+| Method | Path | Status |
 | ------ | ---------------------------- | ------ |
-| GET    | /session/status              | ✅     |
-| GET    | /session                     | ✅     |
-| POST   | /session                     | ✅     |
-| GET    | /session/{sessionID}/message | ✅     |
-| POST   | /session/{sessionID}/message | ✅     |
+| GET | /session/status | ✅ |
+| GET | /session | ✅ |
+| POST | /session | ✅ |
+| GET | /session/{sessionID}/message | ✅ |
+| POST | /session/{sessionID}/message | ✅ |
 
 ### File Routes
 
-| Method | Path          | Status |
+| Method | Path | Status |
 | ------ | ------------- | ------ |
-| GET    | /file         | ✅     |
-| GET    | /file/content | ✅     |
+| GET | /file | ✅ |
+| GET | /file/content | ✅ |
 
 ### PTY Routes (Sandboxed Terminals)
 
-| Method | Path                 | Status |
+| Method | Path | Status |
 | ------ | -------------------- | ------ |
-| GET    | /pty                 | ✅     |
-| POST   | /pty                 | ✅     |
-| GET    | /pty/{ptyID}         | ✅     |
-| PUT    | /pty/{ptyID}         | ✅     |
-| DELETE | /pty/{ptyID}         | ✅     |
-| GET    | /pty/{ptyID}/connect | ✅     |
-| POST   | /pty/{ptyID}/commit  | ✅     |
-| GET    | /pty/{ptyID}/changes | ✅     |
+| GET | /pty | ✅ |
+| POST | /pty | ✅ |
+| GET | /pty/{ptyID} | ✅ |
+| PUT | /pty/{ptyID} | ✅ |
+| DELETE | /pty/{ptyID} | ✅ |
+| GET | /pty/{ptyID}/connect | ✅ |
+| POST | /pty/{ptyID}/commit | ✅ |
+| GET | /pty/{ptyID}/changes | ✅ |
 
 ### Other Routes
 
-| Method | Path          | Status |
+| Method | Path | Status |
 | ------ | ------------- | ------ |
-| GET    | /lsp          | ✅     |
-| GET    | /vcs          | ✅     |
-| GET    | /permission   | ✅     |
-| GET    | /question     | ✅     |
-| GET    | /global/event | ✅     |
-| POST   | /chat         | ✅     |
+| GET | /lsp | ✅ |
+| GET | /vcs | ✅ |
+| GET | /permission | ✅ |
+| GET | /question | ✅ |
+| GET | /global/event | ✅ |
+| POST | /chat | ✅ |
 
 ## Missing Endpoints (TypeScript Only)
 
