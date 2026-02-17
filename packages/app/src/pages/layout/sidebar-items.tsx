@@ -92,7 +92,7 @@ const SessionRow = (props: {
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 has-[.active]:bg-surface-base-active ${props.dense ? "py-0.5" : "py-1"}`}
+    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerEnter={props.scheduleHoverPrefetch}
     onPointerLeave={props.cancelHoverPrefetch}
     onMouseEnter={props.scheduleHoverPrefetch}
@@ -296,11 +296,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class={`group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-0 group-hover/session:pr-0
-             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover ${hasChildren() ? "" : "has-[.active]:bg-surface-base-active"}`}
+      class="group/session relative w-full rounded-md cursor-default pl-2 pr-0 group-hover/session:pr-0 [&:has(:focus-visible)]:bg-surface-raised-base-hover"
     >
       <Collapsible open={expanded()} onOpenChange={setExpanded} class="w-full" variant="ghost">
-        <div class="flex items-center">
+        <div
+          class="flex items-center w-full rounded-md transition-colors hover:bg-surface-raised-base-hover"
+          classList={{ "bg-surface-base-active": isActive() }}
+        >
           <Show when={hasChildren()}>
             <Collapsible.Trigger class="flex items-center justify-center w-6 hover:bg-surface-base-hover rounded transition-colors self-center">
               <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
