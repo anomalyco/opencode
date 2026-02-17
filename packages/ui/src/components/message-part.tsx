@@ -560,16 +560,15 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     return `${hour12}:${minute} ${hours < 12 ? "AM" : "PM"}`
   })
 
-  const meta = createMemo(() => {
+  const metaHead = createMemo(() => {
     const agent = props.message.agent
-    const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      provider(),
-      model(),
-      stamp(),
-      props.interrupted ? i18n.t("ui.message.interrupted") : "",
-    ]
-    return items.filter((x) => !!x).join(" \u00B7 ")
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", provider(), model()]
+    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
+  })
+
+  const metaTail = createMemo(() => {
+    const items = [stamp(), props.interrupted ? i18n.t("ui.message.interrupted") : ""]
+    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
   const openImagePreview = (url: string, alt?: string) => {
@@ -619,14 +618,30 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-body">
-          <div data-slot="user-message-text">
-            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+        <>
+          <div data-slot="user-message-body">
+            <div data-slot="user-message-text">
+              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            </div>
           </div>
           <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
-            <Show when={meta()}>
-              <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                {meta()}
+            <Show when={metaHead() || metaTail()}>
+              <span data-slot="user-message-meta-wrap">
+                <Show when={metaHead()}>
+                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                    {metaHead()}
+                  </span>
+                </Show>
+                <Show when={metaHead() && metaTail()}>
+                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                    {"\u00A0\u00B7\u00A0"}
+                  </span>
+                </Show>
+                <Show when={metaTail()}>
+                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                    {metaTail()}
+                  </span>
+                </Show>
               </span>
             </Show>
             <Tooltip
@@ -647,7 +662,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               />
             </Tooltip>
           </div>
-        </div>
+        </>
       </Show>
     </div>
   )
