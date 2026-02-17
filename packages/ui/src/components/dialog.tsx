@@ -60,7 +60,9 @@ export function Dialog(props: DialogProps) {
             </div>
           </Show>
           <Show when={props.description}>
-            <Kobalte.Description data-slot="dialog-description">{props.description}</Kobalte.Description>
+            <Kobalte.Description data-slot="dialog-description" style={{ "margin-left": "-4px" }}>
+              {props.description}
+            </Kobalte.Description>
           </Show>
           <div data-slot="dialog-body">{props.children}</div>
         </Kobalte.Content>

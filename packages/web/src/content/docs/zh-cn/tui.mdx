@@ -1,0 +1,390 @@
+---
+title: TUI
+description: 使用 opencode 终端用户界面。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+opencode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
+
+执行opencode启动当前目录的TUI。
+
+```bash
+opencode
+```
+
+或者您可以为特定的工作目录启动它。
+
+```bash
+opencode /path/to/project
+```
+
+进入TUI后，您可以查看消息进行提示。
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## 文件引用
+
+您可以使用 `@` 在消息中引用文件。这会在当前工作目录中进行模糊文件搜索。
+
+:::tip
+您还可以使用 `@` 来引用消息中的文件。
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+文件的内容会自动添加到对话中。
+
+---
+
+## Bash 命令
+
+以`!`开始一条消息以执行shell命令。
+
+```bash frame="none"
+!ls -la
+```
+
+命令的输出将作为工具结果添加到对话中。
+
+---
+
+## 命令
+
+使用 opencode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+
+```bash frame="none"
+/help
+```
+
+大多数命令还是以使用 `ctrl+x` 作为主键的键系结，其中 `ctrl+x` 是默认主键。 [了解更多](/docs/keybinds)。
+
+以下是所有可用的斜杠命令：
+
+---
+
+### connect
+
+将提供商添加到 opencode。你可以从可用提供商中选择，并添加它们的 API 密钥。
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+压缩当前会话。_别名_： `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+** 快捷键：** `ctrl+x c`
+
+---
+
+### details
+
+切换工具执行详细信息。
+
+```bash frame="none"
+/details
+```
+
+** 快捷键：** `ctrl+x d`
+
+---
+
+### editor
+
+开启外部编辑器来编写消息。使用`EDITOR`环境变量中设定的编辑器。 [了解更多](#editor-setup)。
+
+```bash frame="none"
+/editor
+```
+
+** 快捷键：** `ctrl+x e`
+
+---
+
+### exit
+
+退出opencode。 _别名_：`/quit`、`/q`
+
+```bash frame="none"
+/exit
+```
+
+** 快捷键：** `ctrl+x q`
+
+---
+
+### export
+
+将当前对话汇出到 Markdown 并在默认编辑器中开启。使用 `EDITOR` 环境变数中设定的编辑器。 [了解更多](#editor-setup)。
+
+```bash frame="none"
+/export
+```
+
+** 快捷键：** `ctrl+x x`
+
+---
+
+### help
+
+显示帮助对话方块。
+
+```bash frame="none"
+/help
+```
+
+** 快捷键：** `ctrl+x h`
+
+---
+
+### init
+
+Create or update `AGENTS.md` file. [Learn more](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+** 快捷键：** `ctrl+x i`
+
+---
+
+### models
+
+列出可用模型。
+
+```bash frame="none"
+/models
+```
+
+** 快捷键：** `ctrl+x m`
+
+---
+
+### new
+
+开始新的会话。 _别名_： `/clear`
+
+```bash frame="none"
+/new
+```
+
+** 快捷键：** `ctrl+x n`
+
+---
+
+### redo
+
+删除之前重做消除的讯息。仅在使用`/undo`后可用。
+
+:::tip
+任何文件更改也将被恢复。
+:::
+
+在内部，这使用 Git 来管理文件更改。所以你的专案**需要
+是一个Git存储库**。
+
+```bash frame="none"
+/redo
+```
+
+** 快捷键：** `ctrl+x r`
+
+---
+
+### sessions
+
+上市会话并在会话之间切换。 _别名_：`/resume`、`/continue`
+
+```bash frame="none"
+/sessions
+```
+
+** 快捷键：** `ctrl+x l`
+
+---
+
+### share
+
+共享当前会话。 [了解更多](/docs/share)。
+
+```bash frame="none"
+/share
+```
+
+** 快捷键：** `ctrl+x s`
+
+---
+
+### themes
+
+列出可用的主题。
+
+```bash frame="none"
+/theme
+```
+
+** 快捷键：** `ctrl+x t`
+
+---
+
+### thinking
+
+切换对话中 thinking/reasoning 块的可视性。启用后，您可以看到支持扩展思考的模型的推理过程。
+
+:::note
+该命令仅控制是否**显示** - 不启用或取消模型的推理功能。要切换实际推理功能，请使用 `ctrl+t` 回圈切换模型变体。
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+撤消对话中的最后一条消息。删除最近的用户消息、所有后续响应以及任何文件更改。
+
+:::tip
+所做的任何文件更改也将被恢复。
+:::
+
+在内部，这使用 Git 来管理文件更改。所以你的专案**需要
+是一个Git存储库**。
+
+```bash frame="none"
+/undo
+```
+
+** 快捷键：** `ctrl+x u`
+
+---
+
+### unshare
+
+取消共享当前会话。 [了解更多](/docs/share#un-sharing)。
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## 编辑器设置
+
+`/editor` 和 `/export` 命令都使用 `EDITOR` 环境变量中指定的编辑器。
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    要使其永久存在，请将其添加到您的 shell 配置文件中；
+    `~/.bashrc`、`~/.zshrc` 等
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    要使其永久化，请使用 **系统属性** > **环境
+    变量**。
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    要使其永久化，请将其添加到您的 PowerShell 配置文件中。
+
+  </TabItem>
+</Tabs>
+
+流行的编辑器选项包括：
+
+- `code` - Visual Studio Code
+- `cursor` - 游标
+- `windsurf` - 风帆冲浪
+- `nvim` - Neovim 编辑器
+- `vim` - Vim 编辑器
+- `nano` - 奈米编辑器
+- `notepad` - Windows 文章书
+- `subl` - 崇高文字
+
+:::note
+一些编辑器如 VS Code 需要以 `--wait` 标志启动。
+:::
+
+某些编辑器需要命令列参数才能在阻止模式下执行。 `--wait` 标志使编辑器程序阻塞直至关闭。
+
+---
+
+## 配置
+
+您可以使用 opencode 配置文件自定义 TUI 行为。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### 选项
+
+- `scroll_acceleration` - 启用 macOS 式滚动加速以实现平滑、自然的滚动。启用后，滚动速度会随着快速滚动滚动而增加，并在较慢的移动时保持精确。 **此设定优先于 `scroll_speed` 并在启用时覆盖它。 **
+- `scroll_speed` - 控制使用滚动控制器时 TUI 滚动的速度（简单：`1`）。默认为 `3`。 **注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则忽略此设置。 **
+
+---
+
+## 自定义
+
+您可以使用命令选项板（`ctrl+x h` 或 `/help`）自定义 TUI 查看的各个方面。这些设置在重新启动后仍然存在。
+
+---
+
+#### 用户名称显示
+
+切换您的用户名称是否出现在聊天消息中。通过以下方式访问：
+
+- 命令面板：搜索“用户名称”或“隐藏用户名称”
+- 该设置会自动保留，放在 TUI 会话中被记住

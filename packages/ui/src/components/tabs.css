@@ -375,8 +375,13 @@
 
     &[data-variant="settings"] {
       [data-slot="tabs-list"] {
-        width: 200px;
-        min-width: 200px;
+        width: 150px;
+        min-width: 150px;
+
+        @media (min-width: 640px) {
+          width: 200px;
+          min-width: 200px;
+        }
         padding: 12px;
         gap: 0;
         background-color: var(--background-base);
@@ -422,6 +427,11 @@
 
         &:hover:not(:disabled) {
           background-color: var(--surface-raised-base-hover);
+        }
+
+        &:has([data-slot="tabs-trigger"]:focus-visible) {
+          background-color: var(--surface-raised-base-hover);
+          box-shadow: var(--shadow-xs-border-focus);
         }
 
         &:has([data-selected]) {

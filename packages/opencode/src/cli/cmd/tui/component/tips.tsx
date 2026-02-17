@@ -2,7 +2,7 @@ import { createMemo, createSignal, For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
-const themeTip = `Use {highlight}/theme{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
+const themeTip = `Use {highlight}/themes{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
 
 type TipPart = { text: string; highlight: boolean }
 
@@ -100,7 +100,7 @@ const TIPS = [
   'Set {highlight}"formatter": false{/highlight} in config to disable all auto-formatting',
   "Define custom formatter commands with file extensions in config",
   "OpenCode uses LSP servers for intelligent code analysis",
-  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tool/{/highlight} to define new LLM tools",
+  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
   "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
   "Use plugins to send OS notifications when sessions complete",
@@ -126,7 +126,7 @@ const TIPS = [
   "Use {highlight}{file:path}{/highlight} to include file contents in config values",
   "Use {highlight}instructions{/highlight} in config to load additional rules files",
   "Set agent {highlight}temperature{/highlight} from 0.0 (focused) to 1.0 (creative)",
-  "Configure {highlight}maxSteps{/highlight} to limit agentic iterations per request",
+  "Configure {highlight}steps{/highlight} to limit agentic iterations per request",
   'Set {highlight}"tools": {"bash": false}{/highlight} to disable specific tools',
   'Set {highlight}"mcp_*": false{/highlight} to disable all tools from an MCP server',
   "Override global tool settings per agent configuration",
@@ -147,7 +147,6 @@ const TIPS = [
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
-  "Use {highlight}/details{/highlight} to toggle tool execution details visibility",
   "Use {highlight}/rename{/highlight} to rename the current session",
   "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
 ]

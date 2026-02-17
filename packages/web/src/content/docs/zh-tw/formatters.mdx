@@ -1,0 +1,131 @@
+---
+title: 格式化程式
+description: opencode 使用特定於語言的格式化程式。
+---
+
+使用特定於語言的格式化程式編寫或編輯檔案後，opencode 會自動格式化檔案。這可確保生成的程式碼遵循專案的程式碼風格。
+
+---
+
+## 內建
+
+opencode 附帶了多個適用於流行語言和框架的內建格式化程式。下面是格式化程式、支援的檔案副檔名以及所需的指令或設定選項的列表。
+
+| 格式化程式           | 副檔名                                                                                                  | 要求                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                                     | `gofmt` 指令可用                                                                      |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | `mix` 指令可用                                                                        |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, 和 [更多](https://prettier.io/docs/en/index.html) | `prettier` 中有 `package.json` 相依套件                                               |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, 和 [更多](https://biomejs.dev/)                   | `biome.json(c)` 設定檔                                                                |
+| zig                  | .zig, .zon                                                                                              | `zig` 指令可用                                                                        |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, 和 [更多](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 設定檔                                                                |
+| ktlint               | .kt, .kts                                                                                               | `ktlint` 指令可用                                                                     |
+| ruff                 | .py, .pyi                                                                                               | `ruff` 指令可用並設定完成                                                             |
+| rustfmt              | .rs                                                                                                     | `rustfmt` 指令可用                                                                    |
+| cargofmt             | .rs                                                                                                     | `cargo fmt` 指令可用                                                                  |
+| uv                   | .py, .pyi                                                                                               | `uv` 指令可用                                                                         |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                               | `rubocop` 指令可用                                                                    |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                               | `standardrb` 指令可用                                                                 |
+| htmlbeautifier       | .erb, .html.erb                                                                                         | `htmlbeautifier` 指令可用                                                             |
+| air                  | .R                                                                                                      | `air` 指令可用                                                                        |
+| dart                 | .dart                                                                                                   | `dart` 指令可用                                                                       |
+| dfmt                 | .d                                                                                                      | `dfmt` 指令可用                                                                       |
+| ocamlformat          | .ml, .mli                                                                                               | `ocamlformat` 指令可用，且存在 `.ocamlformat` 設定檔                                  |
+| terraform            | .tf, .tfvars                                                                                            | `terraform` 指令可用                                                                  |
+| gleam                | .gleam                                                                                                  | `gleam` 指令可用                                                                      |
+| nixfmt               | .nix                                                                                                    | `nixfmt` 指令可用                                                                     |
+| shfmt                | .sh, .bash                                                                                              | `shfmt` 指令可用                                                                      |
+| pint                 | .php                                                                                                    | `laravel/pint` 中有 `composer.json` 相依套件                                          |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                    | `oxfmt` 中有 `package.json` 相依套件且啟用[實驗環境變數旗標](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                                     | `ormolu` 指令可用                                                                     |
+
+因此，如果您的專案的 `package.json` 中有 `prettier`，opencode 將自動使用它。
+
+---
+
+## 它是如何運作的
+
+當 opencode 寫入或編輯檔案時，它：
+
+1. 根據所有啟用的格式化程式檢查檔案副檔名。
+2. 對檔案執行適當的格式化程式指令。
+3. 自動套用格式變更。
+
+此過程在背景進行，確保無需任何手動步驟即可維護您的程式碼樣式。
+
+---
+
+## 設定
+
+您可以透過 opencode 設定中的 `formatter` 部分自定義格式化程式。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+每個格式化程式設定支援以下內容：
+
+| 屬性          | 類型   | 描述                               |
+| ------------- | ------ | ---------------------------------- |
+| `disabled`    | 布林值 | 將其設定為 `true` 以禁用格式化程式 |
+| `command`     | 字串[] | 格式化執行的指令                   |
+| `environment` | 物件   | 執行格式化程式時要設定的環境變數   |
+| `extensions`  | 字串[] | 此格式化程式應處理的檔案副檔名     |
+
+讓我們看一些例子。
+
+---
+
+### 禁用格式化程式
+
+要全域禁用**所有**格式化程式，請將 `formatter` 設定為 `false`：
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+要禁用**特定**格式化程式，請將 `disabled` 設定為 `true`：
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### 自定義格式化程式
+
+您可以覆寫內建格式化程式或透過指定指令、環境變數和檔案副檔名新增新格式化程式：
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+指令中的 **`$FILE` 預留位置** 將替換為正在格式化的檔案的路徑。

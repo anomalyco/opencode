@@ -1,0 +1,237 @@
+---
+title: Autorisations
+description: Contrôlez quelles actions nécessitent une approbation pour être exécutées.
+---
+
+OpenCode utilise la configuration `permission` pour décider si une action donnée doit s'exécuter automatiquement, vous inviter ou être bloquée.
+
+Depuis `v1.1.1`, l'ancienne configuration booléenne `tools` est obsolète et a été fusionnée dans `permission`. L'ancienne configuration `tools` est toujours prise en charge pour des raisons de compatibilité ascendante.
+
+---
+
+## Actions
+
+Chaque règle d'autorisation se résout en l'une des suivantes :
+
+- `"allow"` – exécuter sans approbation
+- `"ask"` – demande d'approbation
+- `"deny"` — bloque l'action
+
+---
+
+## Configuration
+
+Vous pouvez définir des autorisations globalement (avec `*`) et remplacer des outils spécifiques.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Vous pouvez également définir toutes les autorisations en même temps :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Règles granulaires (syntaxe d'objet)
+
+Pour la plupart des autorisations, vous pouvez utiliser un objet pour appliquer différentes actions en fonction de l'entrée de l'outil.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Les règles sont évaluées par correspondance de modèle, la **dernière règle correspondante étant gagnante**. Un modèle courant consiste à placer la règle fourre-tout `"*"` en premier, et les règles plus spécifiques après.
+
+### Caractères génériques
+
+Les modèles d'autorisation utilisent une simple correspondance de caractères génériques :
+
+- `*` correspond à zéro ou plusieurs caractères
+- `?` correspond exactement à un caractère
+- Tous les autres caractères correspondent littéralement
+
+### Extension du répertoire personnel
+
+Vous pouvez utiliser `~` ou `$HOME` au début d'un modèle pour référencer votre répertoire personnel. Ceci est particulièrement utile pour les règles [`external_directory`](#external-directories).
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Répertoires externes
+
+Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `list`, `glob`, `grep` et de nombreuses commandes `bash`).
+
+L'expansion du répertoire personnel (comme `~/...`) n'affecte que la façon dont un modèle est écrit. Cela n'intègre pas un chemin externe à l'espace de travail actuel, donc les chemins en dehors du répertoire de travail doivent toujours être autorisés via `external_directory`.
+
+Par exemple, cela permet d'accéder à tout ce qui se trouve sous `~/projects/personal/` :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Tout répertoire autorisé ici hérite des mêmes valeurs par défaut que l'espace de travail actuel. Étant donné que [`read` est par défaut `allow`](#defaults), les lectures sont également autorisées pour les entrées sous `external_directory`, sauf dérogation. Ajoutez des règles explicites lorsqu'un outil doit être restreint dans ces chemins, comme bloquer les modifications tout en conservant les lectures :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Gardez la liste centrée sur les chemins approuvés et superposez des règles d'autorisation ou de refus supplémentaires selon les besoins pour d'autres outils (par exemple `bash`).
+
+---
+
+## Autorisations disponibles
+
+Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-fous de sécurité :
+
+- `read` — lecture d'un fichier (correspond au chemin du fichier)
+- `edit` — toutes les modifications de fichiers (couvre `edit`, `write`, `patch`, `multiedit`)
+- `glob` — globalisation de fichiers (correspond au modèle global)
+- `grep` — recherche de contenu (correspond au modèle regex)
+- `list` — listant les fichiers dans un répertoire (correspond au chemin du répertoire)
+- `bash` - exécution de commandes shell (correspond aux commandes analysées comme `git status --porcelain`)
+- `task` — lancement de sous-agents (correspond au type de sous-agent)
+- `skill` — chargement d'une compétence (correspond au nom de la compétence)
+- `lsp` — exécution de requêtes LSP (actuellement non granulaires)
+- `todoread`, `todowrite` — lecture/mise à jour de la liste de tâches
+- `webfetch` — récupérer une URL (correspond à l'URL)
+- `websearch`, `codesearch` — recherche Web/code (correspond à la requête)
+- `external_directory` - déclenché lorsqu'un outil touche des chemins en dehors du répertoire de travail du projet
+- `doom_loop` — déclenché lorsque le même appel d'outil se répète 3 fois avec une entrée identique
+
+---
+
+## Valeurs par défaut
+
+Si vous ne spécifiez rien, OpenCode démarre avec les valeurs par défaut permissives :
+
+- La plupart des autorisations sont par défaut `"allow"`.
+- `doom_loop` et `external_directory` sont par défaut `"ask"`.
+- `read` est `"allow"`, mais les fichiers `.env` sont refusés par défaut :
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## Que fait « Demander » ?
+
+Lorsque OpenCode demande l'approbation, l'interface utilisateur propose trois résultats :
+
+- `once` — approuve uniquement cette demande
+- `always` — approuve les futures demandes correspondant aux modèles suggérés (pour le reste de la session OpenCode en cours)
+- `reject` — refuser la demande
+
+L'ensemble des modèles que `always` approuverait est fourni par l'outil (par exemple, les approbations bash mettent généralement sur liste blanche un préfixe de commande sûr comme `git status*`).
+
+---
+
+## Agents
+
+Vous pouvez remplacer les autorisations par agent. Les autorisations des agents sont fusionnées avec la configuration globale et les règles des agents sont prioritaires. [En savoir plus](/docs/agents#permissions) sur les autorisations des agents.
+
+:::note
+Reportez-vous à la section [Règles granulaires (syntaxe d'objet)](#granular-rules-object-syntax) ci-dessus pour des exemples de correspondance de modèles plus détaillés.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Vous pouvez également configurer les autorisations des agents dans Markdown :
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+Utilisez la correspondance de modèles pour les commandes avec des arguments. `"grep *"` autorise `grep pattern file.txt`, tandis que `"grep"` seul le bloquerait. Les commandes comme `git status` fonctionnent pour le comportement par défaut mais nécessitent une autorisation explicite (comme `"git status *"`) lorsque des arguments sont passés.
+:::

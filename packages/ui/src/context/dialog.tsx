@@ -28,18 +28,33 @@ const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
-  let closing = false
+  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  const lock = { value: false }
+
+  onCleanup(() => {
+    if (timer.current === undefined) return
+    clearTimeout(timer.current)
+    timer.current = undefined
+  })
 
   const close = () => {
     const current = active()
-    if (!current || closing) return
-    closing = true
+    if (!current || lock.value) return
+    lock.value = true
     current.onClose?.()
     current.setClosing(true)
-    setTimeout(() => {
+
+    const id = current.id
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+
+    timer.current = setTimeout(() => {
+      timer.current = undefined
       current.dispose()
-      setActive(undefined)
-      closing = false
+      if (active()?.id === id) setActive(undefined)
+      lock.value = false
     }, 100)
   }
 
@@ -64,7 +79,12 @@ function init() {
       current.dispose()
       setActive(undefined)
     }
-    closing = false
+
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+    lock.value = false
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined

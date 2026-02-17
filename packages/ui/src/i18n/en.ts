@@ -1,11 +1,18 @@
 export const dict = {
   "ui.sessionReview.title": "Session changes",
+  "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "Expand all",
   "ui.sessionReview.collapseAll": "Collapse all",
   "ui.sessionReview.change.added": "Added",
   "ui.sessionReview.change.removed": "Removed",
+  "ui.sessionReview.change.modified": "Modified",
+  "ui.sessionReview.image.loading": "Loading...",
+  "ui.sessionReview.image.placeholder": "Image",
+  "ui.sessionReview.largeDiff.title": "Diff too large to render",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{lines}} lines / {{limit}}. Current: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
@@ -21,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
+  "ui.sessionTurn.error.addCredits": "Add credits",
 
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",

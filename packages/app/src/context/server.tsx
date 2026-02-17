@@ -1,11 +1,12 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
+import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
+const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -28,13 +29,14 @@ function projectsKey(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string }) => {
+  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
+        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
@@ -47,19 +49,39 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const healthy = () => state.healthy
 
-    function setActive(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      setState("active", url)
+    const defaultUrl = () => normalizeServerUrl(props.defaultUrl)
+
+    function reconcileStartup() {
+      const fallback = defaultUrl()
+      if (!fallback) return
+
+      const previousSidecarUrl = normalizeServerUrl(store.currentSidecarUrl)
+      const list = previousSidecarUrl ? store.list.filter((url) => url !== previousSidecarUrl) : store.list
+      if (!props.isSidecar) {
+        batch(() => {
+          setStore("list", list)
+          if (store.currentSidecarUrl) setStore("currentSidecarUrl", "")
+          setState("active", fallback)
+        })
+        return
+      }
+
+      const nextList = list.includes(fallback) ? list : [...list, fallback]
+      batch(() => {
+        setStore("list", nextList)
+        setStore("currentSidecarUrl", fallback)
+        setState("active", fallback)
+      })
     }
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-
-      const fallback = normalizeServerUrl(props.defaultUrl)
-      if (fallback && url === fallback) {
-        setState("active", url)
+    function updateServerList(url: string, remove = false) {
+      if (remove) {
+        const list = store.list.filter((x) => x !== url)
+        const next = state.active === url ? (list[0] ?? defaultUrl() ?? "") : state.active
+        batch(() => {
+          setStore("list", list)
+          setState("active", next)
+        })
         return
       }
 
@@ -71,48 +93,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     }
 
-    function remove(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-
-      const list = store.list.filter((x) => x !== url)
-      const next = state.active === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : state.active
-
-      batch(() => {
-        setStore("list", list)
-        setState("active", next)
-      })
-    }
-
-    createEffect(() => {
-      if (!ready()) return
-      if (state.active) return
-      const url = normalizeServerUrl(props.defaultUrl)
-      if (!url) return
-      setState("active", url)
-    })
-
-    const isReady = createMemo(() => ready() && !!state.active)
-
-    const check = (url: string) => {
-      const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
-      const sdk = createOpencodeClient({
-        baseUrl: url,
-        fetch: platform.fetch,
-        signal,
-      })
-      return sdk.global
-        .health()
-        .then((x) => x.data?.healthy === true)
-        .catch(() => false)
-    }
-
-    createEffect(() => {
-      const url = state.active
-      if (!url) return
-
-      setState("healthy", undefined)
-
+    function startHealthPolling(url: string) {
       let alive = true
       let busy = false
 
@@ -130,12 +111,48 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }
 
       run()
-      const interval = setInterval(run, 10_000)
-
-      onCleanup(() => {
+      const interval = setInterval(run, HEALTH_POLL_INTERVAL_MS)
+      return () => {
         alive = false
         clearInterval(interval)
-      })
+      }
+    }
+
+    function setActive(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+      setState("active", url)
+    }
+
+    function add(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+      updateServerList(url)
+    }
+
+    function remove(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+      updateServerList(url, true)
+    }
+
+    createEffect(() => {
+      if (!ready()) return
+      if (state.active) return
+      reconcileStartup()
+    })
+
+    const isReady = createMemo(() => ready() && !!state.active)
+
+    const fetcher = platform.fetch ?? globalThis.fetch
+    const check = (url: string) => checkServerHealth(url, fetcher).then((x) => x.healthy)
+
+    createEffect(() => {
+      const url = state.active
+      if (!url) return
+
+      setState("healthy", undefined)
+      onCleanup(startHealthPolling(url))
     })
 
     const origin = createMemo(() => projectsKey(state.active))
