@@ -468,7 +468,7 @@ export function SessionHeader() {
                       classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
-                    trigger={language.t("session.share.action.share")}
+                    trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
                   >
                     <div class="flex flex-col gap-2">
                       <Show
