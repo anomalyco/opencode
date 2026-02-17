@@ -324,8 +324,10 @@ export const SortableWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
-  const allSessions = createMemo(() => Object.values(workspaceStore.session).flat())
-  const expandedSessions = useExpandedSessions(() => props.directory, allSessions)
+  const expandedSessions = useExpandedSessions(
+    () => props.directory,
+    () => workspaceStore.session,
+  )
   const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
@@ -460,13 +462,13 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
-            allSessions={allSessions}
+            allSessions={() => workspaceStore.session}
             children={children}
             hasMore={hasMore}
             loadMore={loadMore}
             language={language}
-            isSessionExpanded={expandedSessions.isExpanded}
-            toggleSessionExpanded={expandedSessions.toggleExpanded}
+            isSessionExpanded={expandedSessions.expanded}
+            toggleSessionExpanded={expandedSessions.toggle}
           />
         </Collapsible.Content>
       </Collapsible>
@@ -488,8 +490,10 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
-  const allSessions = createMemo(() => Object.values(workspace().store.session).flat())
-  const expandedSessions = useExpandedSessions(() => props.project.worktree, allSessions)
+  const expandedSessions = useExpandedSessions(
+    () => props.project.worktree,
+    () => workspace().store.session,
+  )
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
@@ -524,8 +528,8 @@ export const LocalWorkspace = (props: {
               clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
               prefetchSession={props.ctx.prefetchSession}
               archiveSession={props.ctx.archiveSession}
-              isSessionExpanded={expandedSessions.isExpanded}
-              toggleSessionExpanded={expandedSessions.toggleExpanded}
+              isSessionExpanded={expandedSessions.expanded}
+              toggleSessionExpanded={expandedSessions.toggle}
             />
           )}
         </For>

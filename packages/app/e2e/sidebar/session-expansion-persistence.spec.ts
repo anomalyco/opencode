@@ -1,10 +1,8 @@
 import { test, expect } from "../fixtures"
-import { openSidebar, withSession } from "../actions"
+import { openSidebar, withSession, seedMessage } from "../actions"
 import { sessionItemSelector } from "../selectors"
 
 const EXPANDED_SESSIONS_STORAGE_KEY = "opencode.global.dat:expanded-sessions"
-
-type Sdk = Parameters<typeof withSession>[0]
 
 async function getExpandedSessionsFromStorage(page: import("@playwright/test").Page) {
   const raw = await page.evaluate((key) => localStorage.getItem(key), EXPANDED_SESSIONS_STORAGE_KEY)
@@ -14,23 +12,6 @@ async function getExpandedSessionsFromStorage(page: import("@playwright/test").P
   } catch {
     return {}
   }
-}
-
-async function seedMessage(sdk: Sdk, sessionID: string) {
-  await sdk.session.promptAsync({
-    sessionID,
-    noReply: true,
-    parts: [{ type: "text", text: "e2e seed" }],
-  })
-  await expect
-    .poll(
-      async () => {
-        const messages = await sdk.session.messages({ sessionID, limit: 1 }).then((r) => r.data ?? [])
-        return messages.length
-      },
-      { timeout: 30_000 },
-    )
-    .toBeGreaterThan(0)
 }
 
 test("expanding a session with children persists state to localStorage", async ({ page, sdk, gotoSession }) => {
