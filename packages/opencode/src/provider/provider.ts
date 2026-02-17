@@ -260,6 +260,7 @@ export namespace Provider {
               const mantleOptions: Record<string, any> = {
                 baseURL: `https://bedrock-mantle.${region}.api.aws/v1`,
                 name: "amazon-bedrock",
+                includeUsage: true,
               }
               if (awsBearerToken) {
                 mantleOptions.apiKey = awsBearerToken
