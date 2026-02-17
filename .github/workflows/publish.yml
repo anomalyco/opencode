@@ -137,7 +137,7 @@ jobs:
         if: contains(matrix.settings.host, 'ubuntu')
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives
+          path: ~/apt-cache
           key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.settings.target }}-apt-
@@ -145,8 +145,10 @@ jobs:
       - name: install dependencies (ubuntu only)
         if: contains(matrix.settings.host, 'ubuntu')
         run: |
+          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo chmod -R a+rw ~/apt-cache
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
