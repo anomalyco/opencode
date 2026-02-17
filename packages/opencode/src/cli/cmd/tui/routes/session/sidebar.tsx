@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -12,7 +12,7 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean; onFileClick?: (file: string) => void }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -238,9 +238,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
                     {(item) => {
+                      const [hover, setHover] = createSignal(false)
                       return (
-                        <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="none">
+                        <box
+                          flexDirection="row"
+                          gap={1}
+                          justifyContent="space-between"
+                          onMouseOver={() => props.onFileClick && setHover(true)}
+                          onMouseOut={() => setHover(false)}
+                          onMouseUp={() => props.onFileClick?.(item.file)}
+                        >
+                          <text fg={hover() ? theme.text : theme.textMuted} wrapMode="none">
                             {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>

@@ -298,6 +298,42 @@ export function Session() {
     dialog.clear()
   }
 
+  function scrollToFile(file: string) {
+    const match = (part: ToolPart) => {
+      if (part.tool === "edit" || part.tool === "write") {
+        const filePath = part.state.input.filePath
+        if (typeof filePath !== "string") return false
+        return normalizePath(filePath) === file
+      }
+      if (part.tool !== "apply_patch") return false
+      if (!("metadata" in part.state)) return false
+      const files = part.state.metadata?.files
+      if (!Array.isArray(files)) return false
+      return files.some((entry) => {
+        if (!entry || typeof entry !== "object") return false
+        const item = entry as Record<string, unknown>
+        if (item.relativePath === file) return true
+        if (typeof item.filePath !== "string") return false
+        return normalizePath(item.filePath) === file
+      })
+    }
+
+    const msgs = messages()
+    const message = msgs.findLast((msg) => {
+      if (msg.role !== "assistant") return false
+      const parts = sync.data.part[msg.id] ?? []
+      return parts.some((part) => part.type === "tool" && match(part))
+    })
+    if (!message || message.role !== "assistant") return
+
+    const anchor = msgs.findLast((msg) => msg.role === "user" && msg.id <= message.id)
+    if (!anchor) return
+
+    const child = scroll.getChildren().find((item) => item.id === anchor.id)
+    if (!child) return
+    scroll.scrollBy(child.y - scroll.y - 1)
+  }
+
   function toBottom() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
@@ -1128,7 +1164,7 @@ export function Session() {
         <Show when={sidebarVisible()}>
           <Switch>
             <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
+              <Sidebar sessionID={route.sessionID} onFileClick={scrollToFile} />
             </Match>
             <Match when={!wide()}>
               <box
@@ -1140,7 +1176,7 @@ export function Session() {
                 alignItems="flex-end"
                 backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
               >
-                <Sidebar sessionID={route.sessionID} />
+                <Sidebar sessionID={route.sessionID} onFileClick={scrollToFile} />
               </box>
             </Match>
           </Switch>
