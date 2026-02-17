@@ -8,6 +8,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
