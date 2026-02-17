@@ -535,6 +535,7 @@ export const SessionRoutes = lazy(() =>
             modelID: body.modelID,
           },
           auto: body.auto,
+          prompt: SessionCompaction.lastPrompt(msgs),
         })
         await SessionPrompt.loop({ sessionID })
         return c.json(true)

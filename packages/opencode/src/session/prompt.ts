@@ -549,6 +549,7 @@ export namespace SessionPrompt {
           agent: lastUser.agent,
           model: lastUser.model,
           auto: true,
+          prompt: SessionCompaction.lastPrompt(msgs),
         })
         continue
       }
@@ -709,6 +710,7 @@ export namespace SessionPrompt {
           agent: lastUser.agent,
           model: lastUser.model,
           auto: true,
+          prompt: SessionCompaction.lastPrompt(msgs),
         })
       }
       continue

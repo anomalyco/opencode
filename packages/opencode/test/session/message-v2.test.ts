@@ -256,9 +256,34 @@ describe("session.message-v2.toModelMessage", () => {
             filename: "img.png",
             data: "https://example.com/img.png",
           },
-          { type: "text", text: "What did we do so far?" },
+          { type: "text", text: "[Compacted]" },
           { type: "text", text: "The following tool was executed by the user" },
         ],
+      },
+    ])
+  })
+
+  test("compaction part with prompt includes original request", () => {
+    const messageID = "m-user"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "compaction",
+            auto: true,
+            prompt: "fix the login bug",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "[Compacted]\n\nOriginal request: fix the login bug" }],
       },
     ])
   })

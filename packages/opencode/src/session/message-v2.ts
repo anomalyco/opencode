@@ -196,6 +196,7 @@ export namespace MessageV2 {
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
     auto: z.boolean(),
+    prompt: z.string().optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -573,7 +574,7 @@ export namespace MessageV2 {
           if (part.type === "compaction") {
             userMessage.parts.push({
               type: "text",
-              text: "What did we do so far?",
+              text: part.prompt ? `[Compacted]\n\nOriginal request: ${part.prompt}` : "[Compacted]",
             })
           }
           if (part.type === "subtask") {

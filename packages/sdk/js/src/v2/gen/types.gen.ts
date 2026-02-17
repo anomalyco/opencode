@@ -505,6 +505,7 @@ export type CompactionPart = {
   messageID: string
   type: "compaction"
   auto: boolean
+  prompt?: string
 }
 
 export type Part =

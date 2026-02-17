@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { SessionCompaction } from "../../src/session/compaction"
+import { MessageV2 } from "../../src/session/message-v2"
 import { Token } from "../../src/util/token"
 import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
@@ -224,6 +225,73 @@ describe("session.compaction.isOverflow", () => {
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
       },
     })
+  })
+})
+
+describe("session.compaction.truncate", () => {
+  test("returns text unchanged when within limit", () => {
+    const text = "a".repeat(2500)
+    expect(SessionCompaction.truncate(text)).toBe(text)
+  })
+
+  test("truncates and appends ellipsis when over limit", () => {
+    const text = "a".repeat(2501)
+    const result = SessionCompaction.truncate(text)
+    expect(result).toBe("a".repeat(2500) + "...")
+    expect(result.length).toBe(2503)
+  })
+
+  test("respects custom max", () => {
+    expect(SessionCompaction.truncate("abcdef", 3)).toBe("abc...")
+  })
+
+  test("returns empty string as-is", () => {
+    expect(SessionCompaction.truncate("")).toBe("")
+  })
+})
+
+describe("session.compaction.lastPrompt", () => {
+  const user = (id: string, parts: MessageV2.Part[]) =>
+    ({
+      info: {
+        id,
+        role: "user",
+        sessionID: "s1",
+        time: { created: 0 },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+      },
+      parts,
+    }) as unknown as MessageV2.WithParts
+
+  const part = (id: string, msgID: string, text: string, synthetic?: boolean) =>
+    ({
+      id,
+      messageID: msgID,
+      sessionID: "s1",
+      type: "text",
+      text,
+      ...(synthetic ? { synthetic } : {}),
+    }) as MessageV2.Part
+
+  test("returns last non-synthetic user text", () => {
+    expect(SessionCompaction.lastPrompt([user("m1", [part("p1", "m1", "hello"), part("p2", "m1", "world")])])).toBe(
+      "hello\nworld",
+    )
+  })
+
+  test("skips synthetic text parts", () => {
+    expect(
+      SessionCompaction.lastPrompt([user("m1", [part("p1", "m1", "real"), part("p2", "m1", "synthetic", true)])]),
+    ).toBe("real")
+  })
+
+  test("returns undefined when no user messages", () => {
+    const msg = {
+      info: { id: "m1", role: "assistant", sessionID: "s1", time: { created: 0 } },
+      parts: [],
+    } as unknown as MessageV2.WithParts
+    expect(SessionCompaction.lastPrompt([msg])).toBeUndefined()
   })
 })
 

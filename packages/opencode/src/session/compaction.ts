@@ -228,6 +228,23 @@ When constructing the summary, try to stick to this template:
     return "continue"
   }
 
+  export function lastPrompt(msgs: MessageV2.WithParts[]) {
+    const match = msgs.findLast((m) => m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic))
+    if (!match) return undefined
+    const text = match.parts
+      .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+      .map((p) => p.text)
+      .join("\n")
+    return text || undefined
+  }
+
+  const PROMPT_MAX = 2500
+
+  export function truncate(text: string, max = PROMPT_MAX) {
+    if (text.length <= max) return text
+    return text.slice(0, max) + "..."
+  }
+
   export const create = fn(
     z.object({
       sessionID: Identifier.schema("session"),
@@ -237,8 +254,10 @@ When constructing the summary, try to stick to this template:
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      prompt: z.string().optional(),
     }),
     async (input) => {
+      const prompt = input.prompt ? truncate(input.prompt) : undefined
       const msg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -255,6 +274,7 @@ When constructing the summary, try to stick to this template:
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        prompt,
       })
     },
   )
