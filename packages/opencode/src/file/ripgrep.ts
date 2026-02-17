@@ -9,6 +9,7 @@ import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
+import { FileIgnore } from "./ignore"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -217,10 +218,25 @@ export namespace Ripgrep {
   }) {
     input.signal?.throwIfAborted()
 
-    const args = [await filepath(), "--files", "--glob=!.git/*"]
+    const globs = new Set<string>()
+    globs.add("!.git/**")
+
+    for (const pattern of FileIgnore.PATTERNS) {
+      const hasMeta =
+        pattern.includes("*") || pattern.includes("?") || pattern.includes("[") || pattern.includes("]") || pattern.includes("/")
+      if (hasMeta) {
+        globs.add("!" + pattern)
+        continue
+      }
+      globs.add(`!${pattern}/**`)
+      globs.add(`!**/${pattern}/**`)
+    }
+
+    const args = [await filepath(), "--files", "--no-ignore-vcs"]
     if (input.follow) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
+    for (const g of globs) args.push(`--glob=${g}`)
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
