@@ -5,15 +5,22 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "Divisé",
   "ui.sessionReview.expandAll": "Tout développer",
   "ui.sessionReview.collapseAll": "Tout réduire",
-
   "ui.sessionReview.change.added": "Ajouté",
   "ui.sessionReview.change.removed": "Supprimé",
+  "ui.sessionReview.change.modified": "Modifié",
+  "ui.sessionReview.image.loading": "Chargement...",
+  "ui.sessionReview.image.placeholder": "Image",
+  "ui.sessionReview.largeDiff.title": "Diff trop volumineux pour être affiché",
+  "ui.sessionReview.largeDiff.meta": "Limite : {{lines}} lignes / {{limit}}. Actuel : {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Afficher quand même",
+
   "ui.lineComment.label.prefix": "Commenter sur ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commentaire sur ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.submit": "Commenter",
+
   "ui.sessionTurn.steps.show": "Afficher les étapes",
   "ui.sessionTurn.steps.hide": "Masquer les étapes",
   "ui.sessionTurn.summary.response": "Réponse",
@@ -21,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "nouvelle tentative",
   "ui.sessionTurn.retry.inSeconds": "dans {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
+  "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
 
   "ui.sessionTurn.status.delegating": "Délégation du travail",
   "ui.sessionTurn.status.planning": "Planification des prochaines étapes",
@@ -73,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "questions",
 
   "ui.common.add": "Ajouter",
+  "ui.common.back": "Retour",
   "ui.common.cancel": "Annuler",
   "ui.common.confirm": "Confirmer",
   "ui.common.dismiss": "Ignorer",
@@ -88,6 +98,7 @@ export const dict = {
   "ui.message.collapse": "Réduire le message",
   "ui.message.copy": "Copier",
   "ui.message.copied": "Copié !",
+  "ui.message.interrupted": "Interrompu",
   "ui.message.attachment.alt": "pièce jointe",
 
   "ui.patch.action.deleted": "Supprimé",
@@ -98,6 +109,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} répondu(s)",
   "ui.question.answer.none": "(pas de réponse)",
   "ui.question.review.notAnswered": "(non répondu)",
-  "ui.question.multiHint": "(sélectionnez tout ce qui s'applique)",
+  "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
+  "ui.question.singleHint": "Sélectionnez une réponse",
   "ui.question.custom.placeholder": "Tapez votre réponse...",
 }

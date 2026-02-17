@@ -94,10 +94,11 @@ export namespace ToolRegistry {
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
+    const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
     return [
       InvalidTool,
-      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
+      ...(question ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
@@ -149,9 +150,17 @@ export namespace ToolRegistry {
         })
         .map(async (t) => {
           using _ = log.time(t.id)
+          const tool = await t.init({ agent })
+          const output = {
+            description: tool.description,
+            parameters: tool.parameters,
+          }
+          await Plugin.trigger("tool.definition", { toolID: t.id }, output)
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...tool,
+            description: output.description,
+            parameters: output.parameters,
           }
         }),
     )

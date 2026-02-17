@@ -7,6 +7,12 @@ export const dict = {
   "ui.sessionReview.collapseAll": "Collapse all",
   "ui.sessionReview.change.added": "Added",
   "ui.sessionReview.change.removed": "Removed",
+  "ui.sessionReview.change.modified": "Modified",
+  "ui.sessionReview.image.loading": "Loading...",
+  "ui.sessionReview.image.placeholder": "Image",
+  "ui.sessionReview.largeDiff.title": "Diff too large to render",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{lines}} lines / {{limit}}. Current: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
@@ -22,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
+  "ui.sessionTurn.error.addCredits": "Add credits",
 
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",
@@ -74,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "questions",
 
   "ui.common.add": "Add",
+  "ui.common.back": "Back",
   "ui.common.cancel": "Cancel",
   "ui.common.confirm": "Confirm",
   "ui.common.dismiss": "Dismiss",
@@ -88,7 +97,8 @@ export const dict = {
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",
   "ui.message.copy": "Copy",
-  "ui.message.copied": "Copied!",
+  "ui.message.copied": "Copied",
+  "ui.message.interrupted": "Interrupted",
   "ui.message.attachment.alt": "attachment",
 
   "ui.patch.action.deleted": "Deleted",
@@ -99,6 +109,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} answered",
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
-  "ui.question.multiHint": "(select all that apply)",
+  "ui.question.multiHint": "Select all answers that apply",
+  "ui.question.singleHint": "Select one answer",
   "ui.question.custom.placeholder": "Type your answer...",
 }

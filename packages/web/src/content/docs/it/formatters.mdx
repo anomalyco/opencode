@@ -1,0 +1,131 @@
+---
+title: Formattatori
+description: OpenCode usa formattatori specifici per linguaggio.
+---
+
+OpenCode formatta automaticamente i file dopo che vengono scritti o modificati usando formattatori specifici per linguaggio. Questo assicura che il codice generato segua lo stile del tuo progetto.
+
+---
+
+## Integrati
+
+OpenCode include diversi formattatori integrati per linguaggi e framework popolari. Qui sotto trovi la lista dei formattatori, delle estensioni supportate e dei comandi o opzioni di config richiesti.
+
+| Formattatore         | Estensioni                                                                                               | Requisiti                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                                      | `gofmt` command available                                                                             |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | `mix` command available                                                                               |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `prettier` dependency in `package.json`                                                               |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json(c)` config file                                                                           |
+| zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
+| ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                            |
+| ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
+| rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
+| cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
+| uv                   | .py, .pyi                                                                                                | `uv` command available                                                                                |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available                                                                           |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available                                                                        |
+| htmlbeautifier       | .erb, .html.erb                                                                                          | `htmlbeautifier` command available                                                                    |
+| air                  | .R                                                                                                       | `air` command available                                                                               |
+| dart                 | .dart                                                                                                    | `dart` command available                                                                              |
+| dfmt                 | .d                                                                                                       | `dfmt` command available                                                                              |
+| ocamlformat          | .ml, .mli                                                                                                | `ocamlformat` command available and `.ocamlformat` config file                                        |
+| terraform            | .tf, .tfvars                                                                                             | `terraform` command available                                                                         |
+| gleam                | .gleam                                                                                                   | `gleam` command available                                                                             |
+| nixfmt               | .nix                                                                                                     | `nixfmt` command available                                                                            |
+| shfmt                | .sh, .bash                                                                                               | `shfmt` command available                                                                             |
+| pint                 | .php                                                                                                     | `laravel/pint` dependency in `composer.json`                                                          |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
+
+Quindi, se il progetto ha `prettier` in `package.json`, OpenCode lo usera automaticamente.
+
+---
+
+## Come funziona
+
+Quando OpenCode scrive o modifica un file:
+
+1. Controlla l'estensione del file rispetto a tutti i formattatori abilitati.
+2. Esegue il comando del formattatore appropriato sul file.
+3. Applica automaticamente le modifiche di formattazione.
+
+Questo processo avviene in background, mantenendo lo stile del codice senza passaggi manuali.
+
+---
+
+## Configurazione
+
+Puoi personalizzare i formattatori nella sezione `formatter` della config di OpenCode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+Ogni configurazione di formattatore supporta:
+
+| Proprieta     | Tipo     | Descrizione                                         |
+| ------------- | -------- | --------------------------------------------------- |
+| `disabled`    | boolean  | Impostalo a `true` per disabilitare il formattatore |
+| `command`     | string[] | Il comando da eseguire per la formattazione         |
+| `environment` | object   | Variabili d'ambiente da impostare quando si esegue  |
+| `extensions`  | string[] | Estensioni file gestite da questo formattatore      |
+
+Vediamo alcuni esempi.
+
+---
+
+### Disabilitare i formattatori
+
+Per disabilitare **tutti** i formattatori globalmente, imposta `formatter` a `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+Per disabilitare un formattatore **specifico**, imposta `disabled` a `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Formattatori personalizzati
+
+Puoi sovrascrivere i formattatori integrati o aggiungerne di nuovi specificando comando, variabili d'ambiente ed estensioni file:
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+Il **placeholder `$FILE`** nel comando viene sostituito con il percorso del file in fase di formattazione.

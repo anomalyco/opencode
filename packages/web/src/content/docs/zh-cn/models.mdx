@@ -1,0 +1,222 @@
+---
+title: 模型
+description: 配置 LLM 提供商和模型。
+---
+
+OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 支持 **75+ LLM 提供商**，并支持运行本地模型。
+
+---
+
+## 提供商
+
+大多数热门提供商已默认预加载。如果你通过 `/connect` 命令添加了提供商的凭据，它们将在你启动 OpenCode 时自动可用。
+
+了解更多关于[提供商](/docs/providers)的信息。
+
+---
+
+## 选择模型
+
+配置好提供商后，你可以通过输入以下命令来选择想要使用的模型：
+
+```bash frame="none"
+/models
+```
+
+---
+
+## 推荐模型
+
+市面上有非常多的模型，每周都有新模型发布。
+
+:::tip
+建议使用我们推荐的模型。
+:::
+
+然而，真正擅长代码生成和工具调用的模型只有少数几个。
+
+以下是与 OpenCode 配合良好的几个模型，排名不分先后（此列表并非详尽无遗，也不一定是最新的）：
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## 设置默认模型
+
+要将某个模型设为默认模型，可以在 OpenCode 配置中设置 `model` 字段。
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+这里完整的 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](/docs/zen)，则 GPT 5.1 Codex 对应的值为 `opencode/gpt-5.1-codex`。
+
+如果你配置了[自定义提供商](/docs/providers#custom)，`provider_id` 是配置中 `provider` 部分的键名，`model_id` 是 `provider.models` 中的键名。
+
+---
+
+## 配置模型
+
+你可以通过配置文件全局配置模型的选项。
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-5`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-4-20250514`。
+内置的提供商和模型名称可以在 [Models.dev](https://models.dev) 上查阅。
+
+你还可以为使用中的任何代理配置这些选项。代理配置会覆盖此处的全局选项。[了解更多](/docs/agents/#additional)。
+
+你也可以定义扩展内置变体的自定义变体。变体允许你为同一个模型配置不同的设置，而无需创建重复的条目：
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## 变体
+
+许多模型支持具有不同配置的多种变体。OpenCode 为热门提供商内置了默认变体。
+
+### 内置变体
+
+OpenCode 为许多提供商提供了默认变体：
+
+**Anthropic**：
+
+- `high` - 高思考预算（默认）
+- `max` - 最大思考预算
+
+**OpenAI**：
+
+因模型而异，但大致如下：
+
+- `none` - 无推理
+- `minimal` - 极少推理
+- `low` - 低推理
+- `medium` - 中等推理
+- `high` - 高推理
+- `xhigh` - 超高推理
+
+**Google**：
+
+- `low` - 较低推理/Token 预算
+- `high` - 较高推理/Token 预算
+
+:::tip
+此列表并不全面，许多其他提供商也有内置的默认变体。
+:::
+
+### 自定义变体
+
+你可以覆盖现有变体或添加自己的变体：
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### 切换变体
+
+使用快捷键 `variant_cycle` 可以快速在变体之间切换。[了解更多](/docs/keybinds)。
+
+---
+
+## 加载模型
+
+OpenCode 启动时，会按以下优先顺序加载模型：
+
+1. `--model` 或 `-m` 命令行标志。格式与配置文件中相同：`provider_id/model_id`。
+
+2. OpenCode 配置中的 model 字段。
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   格式为 `provider/model`。
+
+3. 上次使用的模型。
+
+4. 按内部优先级排列的第一个可用模型。

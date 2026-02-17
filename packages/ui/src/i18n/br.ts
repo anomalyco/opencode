@@ -5,15 +5,22 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "Dividido",
   "ui.sessionReview.expandAll": "Expandir tudo",
   "ui.sessionReview.collapseAll": "Recolher tudo",
-
   "ui.sessionReview.change.added": "Adicionado",
   "ui.sessionReview.change.removed": "Removido",
+  "ui.sessionReview.change.modified": "Modificado",
+  "ui.sessionReview.image.loading": "Carregando...",
+  "ui.sessionReview.image.placeholder": "Imagem",
+  "ui.sessionReview.largeDiff.title": "Diff grande demais para renderizar",
+  "ui.sessionReview.largeDiff.meta": "Limite: {{lines}} linhas / {{limit}}. Atual: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Renderizar mesmo assim",
+
   "ui.lineComment.label.prefix": "Comentar em ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Comentando em ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Adicionar comentário",
   "ui.lineComment.submit": "Comentar",
+
   "ui.sessionTurn.steps.show": "Mostrar passos",
   "ui.sessionTurn.steps.hide": "Ocultar passos",
   "ui.sessionTurn.summary.response": "Resposta",
@@ -21,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "tentando novamente",
   "ui.sessionTurn.retry.inSeconds": "em {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Limite de uso gratuito excedido",
+  "ui.sessionTurn.error.addCredits": "Adicionar créditos",
 
   "ui.sessionTurn.status.delegating": "Delegando trabalho",
   "ui.sessionTurn.status.planning": "Planejando próximos passos",
@@ -73,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "perguntas",
 
   "ui.common.add": "Adicionar",
+  "ui.common.back": "Voltar",
   "ui.common.cancel": "Cancelar",
   "ui.common.confirm": "Confirmar",
   "ui.common.dismiss": "Descartar",
@@ -88,16 +98,18 @@ export const dict = {
   "ui.message.collapse": "Recolher mensagem",
   "ui.message.copy": "Copiar",
   "ui.message.copied": "Copiado!",
+  "ui.message.interrupted": "Interrompido",
   "ui.message.attachment.alt": "anexo",
 
   "ui.patch.action.deleted": "Excluído",
   "ui.patch.action.created": "Criado",
   "ui.patch.action.moved": "Movido",
-  "ui.patch.action.patched": "Aplicado patch",
+  "ui.patch.action.patched": "Patch aplicado",
 
   "ui.question.subtitle.answered": "{{count}} respondidas",
   "ui.question.answer.none": "(sem resposta)",
   "ui.question.review.notAnswered": "(não respondida)",
-  "ui.question.multiHint": "(selecione todas que se aplicam)",
+  "ui.question.multiHint": "Selecione todas que se aplicam",
+  "ui.question.singleHint": "Selecione uma resposta",
   "ui.question.custom.placeholder": "Digite sua resposta...",
 }

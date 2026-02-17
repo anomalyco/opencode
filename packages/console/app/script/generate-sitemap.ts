@@ -3,6 +3,7 @@ import { readdir, writeFile } from "fs/promises"
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { config } from "../src/config.js"
+import { LOCALES, route } from "../src/lib/language.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BASE_URL = config.baseUrl
@@ -27,12 +28,14 @@ async function getMainRoutes(): Promise<SitemapEntry[]> {
     { path: "/zen", priority: 0.8, changefreq: "weekly" },
   ]
 
-  for (const route of staticRoutes) {
-    routes.push({
-      url: `${BASE_URL}${route.path}`,
-      priority: route.priority,
-      changefreq: route.changefreq,
-    })
+  for (const item of staticRoutes) {
+    for (const locale of LOCALES) {
+      routes.push({
+        url: `${BASE_URL}${route(locale, item.path)}`,
+        priority: item.priority,
+        changefreq: item.changefreq,
+      })
+    }
   }
 
   return routes
@@ -50,11 +53,13 @@ async function getDocsRoutes(): Promise<SitemapEntry[]> {
       const slug = file.replace(".mdx", "")
       const path = slug === "index" ? "/docs/" : `/docs/${slug}`
 
-      routes.push({
-        url: `${BASE_URL}${path}`,
-        priority: slug === "index" ? 0.9 : 0.7,
-        changefreq: "weekly",
-      })
+      for (const locale of LOCALES) {
+        routes.push({
+          url: `${BASE_URL}${route(locale, path)}`,
+          priority: slug === "index" ? 0.9 : 0.7,
+          changefreq: "weekly",
+        })
+      }
     }
   } catch (error) {
     console.error("Error reading docs directory:", error)

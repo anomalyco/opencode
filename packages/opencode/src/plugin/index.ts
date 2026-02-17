@@ -24,6 +24,7 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
+      directory: Instance.directory,
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
     })
@@ -44,10 +45,10 @@ export namespace Plugin {
       hooks.push(init)
     }
 
-    const plugins = [...(config.plugin ?? [])]
+    let plugins = config.plugin ?? []
     if (plugins.length) await Config.waitForDependencies()
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
+      plugins = [...BUILTIN, ...plugins]
     }
 
     for (let plugin of plugins) {

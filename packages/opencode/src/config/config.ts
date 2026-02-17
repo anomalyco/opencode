@@ -31,8 +31,11 @@ import { Event } from "../server/event"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
+import { Control } from "@/control"
 
 export namespace Config {
+  const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+
   const log = Log.create({ service: "config" })
 
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
@@ -51,7 +54,7 @@ export namespace Config {
   const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || getManagedConfigDir()
 
   // Custom merge function that concatenates array fields instead of replacing them
-  function mergeConfigConcatArrays(target: Info, source: Info): Info {
+  function merge(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
     if (target.plugin && source.plugin) {
       merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
@@ -86,20 +89,21 @@ export namespace Config {
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
-        )
+        result = merge(result, await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`))
         log.debug("loaded remote config from well-known", { url: key })
       }
     }
 
+    const token = await Control.token()
+    if (token) {
+    }
+
     // Global user config overrides remote config.
-    result = mergeConfigConcatArrays(result, await global())
+    result = merge(result, await global())
 
     // Custom config path overrides global config.
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
+      result = merge(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
@@ -108,7 +112,7 @@ export namespace Config {
       for (const file of ["opencode.jsonc", "opencode.json"]) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
-          result = mergeConfigConcatArrays(result, await loadFile(resolved))
+          result = merge(result, await loadFile(resolved))
         }
       }
     }
@@ -151,7 +155,7 @@ export namespace Config {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
+          result = merge(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -174,7 +178,7 @@ export namespace Config {
 
     // Inline config content overrides all non-managed config sources.
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = merge(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -184,7 +188,7 @@ export namespace Config {
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedConfigDir)) {
       for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
+        result = merge(result, await loadFile(path.join(managedConfigDir, file)))
       }
     }
 
@@ -653,19 +657,23 @@ export namespace Config {
     template: z.string(),
     description: z.string().optional(),
     agent: z.string().optional(),
-    model: z.string().optional(),
+    model: ModelId.optional(),
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    urls: z
+      .array(z.string())
+      .optional()
+      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
   })
   export type Skills = z.infer<typeof Skills>
 
   export const Agent = z
     .object({
-      model: z.string().optional(),
+      model: ModelId.optional(),
       variant: z
         .string()
         .optional()
@@ -1036,11 +1044,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-      small_model: z
-        .string()
-        .describe("Small model to use for tasks like title generation in the format of provider/model")
-        .optional(),
+      model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      small_model: ModelId.describe(
+        "Small model to use for tasks like title generation in the format of provider/model",
+      ).optional(),
       default_agent: z
         .string()
         .optional()
@@ -1156,6 +1163,12 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          reserved: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
       experimental: z
@@ -1267,7 +1280,7 @@ export namespace Config {
             })
         ).trim()
         // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
+        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
 

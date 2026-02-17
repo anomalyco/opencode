@@ -1,9 +1,8 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
-import { config } from "~/config"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
 import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
 import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
@@ -19,6 +18,9 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconGemini, IconMiniMax, IconZai } from "~/component/icon"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { LocaleLinks } from "~/component/locale-links"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -28,11 +30,13 @@ const checkLoggedIn = query(async () => {
 
 export default function Home() {
   const loggedin = createAsync(() => checkLoggedIn())
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <main data-page="zen">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/zen`} />
+      <Title>{i18n.t("zen.title")}</Title>
+      <LocaleLinks path="/zen" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
@@ -43,14 +47,10 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <img data-slot="zen logo light" src={zenLogoLight} alt="zen logo light" />
-              <img data-slot="zen logo dark" src={zenLogoDark} alt="zen logo dark" />
-              <h1>Reliable optimized models for coding agents</h1>
-              <p>
-                Zen gives you access to a curated set of AI models that OpenCode has tested and benchmarked specifically
-                for coding agents. No need to worry about inconsistent performance and quality, use validated models
-                that work.
-              </p>
+              <img data-slot="zen logo light" src={zenLogoLight} alt="" />
+              <img data-slot="zen logo dark" src={zenLogoDark} alt="" />
+              <h1>{i18n.t("zen.hero.title")}</h1>
+              <p>{i18n.t("zen.hero.body")}</p>
               <div data-slot="model-logos">
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -123,7 +123,7 @@ export default function Home() {
                 </div>
               </div>
               <a href="/auth">
-                <span>Get started with Zen </span>
+                <span>{i18n.t("zen.cta.start")}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
@@ -136,66 +136,64 @@ export default function Home() {
             </div>
             <div data-slot="pricing-copy">
               <p>
-                <strong>Add $20 Pay as you go balance</strong> <span>(+$1.23 card processing fee)</span>
+                <strong>{i18n.t("zen.pricing.title")}</strong> <span>{i18n.t("zen.pricing.fee")}</span>
               </p>
-              <p>Use with any agent. Set monthly spend limits. Cancel any time.</p>
+              <p>{i18n.t("zen.pricing.body")}</p>
             </div>
           </section>
 
           <section data-component="comparison">
             <video src={compareVideo} autoplay playsinline loop muted preload="auto" poster={compareVideoPoster}>
-              Your browser does not support the video tag.
+              {i18n.t("common.videoUnsupported")}
             </video>
           </section>
 
           <section data-component="problem">
             <div data-slot="section-title">
-              <h3>What problem is Zen solving?</h3>
-              <p>
-                There are so many models available, but only a few work well with coding agents. Most providers
-                configure them differently with varying results.
-              </p>
+              <h3>{i18n.t("zen.problem.title")}</h3>
+              <p>{i18n.t("zen.problem.body")}</p>
             </div>
-            <p>We're fixing this for everyone, not just OpenCode users.</p>
+            <p>{i18n.t("zen.problem.subtitle")}</p>
             <ul>
               <li>
-                <span>[*]</span> Testing select models and consulting their teams
+                <span>[*]</span> {i18n.t("zen.problem.item1")}
               </li>
               <li>
-                <span>[*]</span> Working with providers to ensure they’re delivered properly
+                <span>[*]</span> {i18n.t("zen.problem.item2")}
               </li>
               <li>
-                <span>[*]</span> Benchmarking all model-provider combinations we recommend
+                <span>[*]</span> {i18n.t("zen.problem.item3")}
               </li>
             </ul>
           </section>
 
           <section data-component="how">
             <div data-slot="section-title">
-              <h3>How Zen works</h3>
-              <p>While we suggest you use Zen with OpenCode, you can use Zen with any agent.</p>
+              <h3>{i18n.t("zen.how.title")}</h3>
+              <p>{i18n.t("zen.how.body")}</p>
             </div>
             <ul>
               <li>
                 <span>[1]</span>
                 <div>
-                  <strong>Sign up and add $20 balance</strong> - follow the{" "}
-                  <a href="/docs/zen/#how-it-works" title="setup instructions">
-                    setup instructions
+                  <strong>{i18n.t("zen.how.step1.title")}</strong> - {i18n.t("zen.how.step1.beforeLink")}{" "}
+                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("zen.how.step1.link")}>
+                    {i18n.t("zen.how.step1.link")}
                   </a>
                 </div>
               </li>
               <li>
                 <span>[2]</span>
                 <div>
-                  <strong>Use Zen with transparent pricing</strong> - <a href="/docs/zen/#pricing">pay per request</a>{" "}
-                  with zero markups
+                  <strong>{i18n.t("zen.how.step2.title")}</strong> -{" "}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.how.step2.link")}</a>{" "}
+                  {i18n.t("zen.how.step2.afterLink")}
                 </div>
               </li>
               <li>
                 <span>[3]</span>
                 <div>
-                  <strong>Auto-top up</strong> - when your balance reaches $5 we’ll automatically add $20
+                  <strong>{i18n.t("zen.how.step3.title")}</strong> - {i18n.t("zen.how.step3.body")}
                 </div>
               </li>
             </ul>
@@ -203,12 +201,12 @@ export default function Home() {
 
           <section data-component="privacy">
             <div data-slot="privacy-title">
-              <h3>Your privacy is important to us</h3>
+              <h3>{i18n.t("zen.privacy.title")}</h3>
               <div>
                 <span>[*]</span>
                 <p>
-                  All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data
-                  for model training, with the <a href="/docs/zen/#privacy">following exceptions</a>.
+                  {i18n.t("zen.privacy.beforeExceptions")}{" "}
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.privacy.exceptionsLink")}</a>.
                 </p>
               </div>
             </div>
@@ -224,7 +222,8 @@ export default function Home() {
                   <span>ex-CEO, Terminal Products</span>
                 </div>
                 <div data-slot="quote">
-                  <span>@OpenCode</span> Zen has been life changing, it's truly a no-brainer.
+                  <span>@OpenCode</span>
+                  {" Zen has been life changing, it's truly a no-brainer."}
                 </div>
               </div>
             </a>
@@ -237,7 +236,9 @@ export default function Home() {
                   <span>ex-Founder, SEED, PM, Melt, Pop, Dapt, Cadmus, and ViewPoint</span>
                 </div>
                 <div data-slot="quote">
-                  4 out of 5 people on our team love using <span>@OpenCode</span> Zen.
+                  {"4 out of 5 people on our team love using "}
+                  <span>@OpenCode</span>
+                  {" Zen."}
                 </div>
               </div>
             </a>
@@ -250,7 +251,9 @@ export default function Home() {
                   <span>ex-Hero, AWS</span>
                 </div>
                 <div data-slot="quote">
-                  I can't recommend <span>@OpenCode</span> Zen enough. Seriously, it’s really good.
+                  {"I can't recommend "}
+                  <span>@OpenCode</span>
+                  {" Zen enough. Seriously, it's really good."}
                 </div>
               </div>
             </a>
@@ -263,7 +266,9 @@ export default function Home() {
                   <span>ex-Head of Design, Laravel</span>
                 </div>
                 <div data-slot="quote">
-                  With <span>@OpenCode</span> Zen I know all the models are tested and perfect for coding agents.
+                  {"With "}
+                  <span>@OpenCode</span>
+                  {" Zen I know all the models are tested and perfect for coding agents."}
                 </div>
               </div>
             </a>
@@ -282,54 +287,40 @@ export default function Home() {
 
           <section data-component="faq">
             <div data-slot="section-title">
-              <h3>FAQ</h3>
+              <h3>{i18n.t("common.faq")}</h3>
             </div>
             <ul>
               <li>
-                <Faq question="What is OpenCode Zen?">
-                  Zen is a curated set of AI models tested and benchmarked for coding agents created by the team behind
-                  OpenCode.
+                <Faq question={i18n.t("zen.faq.q1")}>{i18n.t("zen.faq.a1")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q2")}>{i18n.t("zen.faq.a2")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q3")}>{i18n.t("zen.faq.a3")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q4")}>
+                  {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
+                  {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
+                  <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
-                <Faq question="What makes Zen more accurate?">
-                  Zen only provides models that have been specifically tested and benchmarked for coding agents. You
-                  wouldn’t use a butter knife to cut steak, don’t use poor models for coding.
+                <Faq question={i18n.t("zen.faq.q5")}>
+                  {i18n.t("zen.faq.a5.beforeExceptions")}{" "}
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question="Is Zen cheaper?">
-                  Zen is not for profit. Zen passes through the costs from the model providers to you. The higher Zen’s
-                  usage the more OpenCode can negotiate better rates and pass those to you.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q6")}>{i18n.t("zen.faq.a6")}</Faq>
               </li>
               <li>
-                <Faq question="How much does Zen cost?">
-                  Zen <a href="/docs/zen/#pricing">charges per request</a> with zero markups, so you pay exactly what
-                  the model provider charges. Your total cost depends on usage, and you can set monthly spend limits in
-                  your <a href="/auth">account</a>. To cover costs, OpenCode adds only a small payment processing fee of
-                  $1.23 per $20 balance top-up.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q7")}>{i18n.t("zen.faq.a7")}</Faq>
               </li>
               <li>
-                <Faq question="What about data and privacy?">
-                  All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data
-                  for model training, with the <a href="/docs/zen/#privacy">following exceptions</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can I set spend limits?">Yes, you can set monthly spending limits in your account.</Faq>
-              </li>
-              <li>
-                <Faq question="Can I cancel?">
-                  Yes, you can disable billing at any time and use your remaining balance.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can I use Zen with other coding agents?">
-                  While Zen works great with OpenCode, you can use Zen with any agent. Follow the setup instructions in
-                  your preferred coding agent.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q8")}>{i18n.t("zen.faq.a8")}</Faq>
               </li>
             </ul>
           </section>

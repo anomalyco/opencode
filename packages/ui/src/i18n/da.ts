@@ -8,6 +8,12 @@ export const dict = {
 
   "ui.sessionReview.change.added": "Tilføjet",
   "ui.sessionReview.change.removed": "Fjernet",
+  "ui.sessionReview.change.modified": "Ændret",
+  "ui.sessionReview.image.loading": "Indlæser...",
+  "ui.sessionReview.image.placeholder": "Billede",
+  "ui.sessionReview.largeDiff.title": "Diff er for stor til at blive vist",
+  "ui.sessionReview.largeDiff.meta": "Grænse: {{lines}} linjer / {{limit}}. Nuværende: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Vis alligevel",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
@@ -21,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "prøver igen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
+  "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",
@@ -62,8 +70,8 @@ export const dict = {
   "ui.tool.webfetch": "Webhentning",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
-  "ui.tool.todos": "To-dos",
-  "ui.tool.todos.read": "Læs to-dos",
+  "ui.tool.todos": "Opgaver",
+  "ui.tool.todos.read": "Læs opgaver",
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
 
@@ -73,6 +81,7 @@ export const dict = {
   "ui.common.question.other": "spørgsmål",
 
   "ui.common.add": "Tilføj",
+  "ui.common.back": "Tilbage",
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
@@ -88,16 +97,18 @@ export const dict = {
   "ui.message.collapse": "Skjul besked",
   "ui.message.copy": "Kopier",
   "ui.message.copied": "Kopieret!",
+  "ui.message.interrupted": "Afbrudt",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",
   "ui.patch.action.created": "Oprettet",
   "ui.patch.action.moved": "Flyttet",
-  "ui.patch.action.patched": "Patched",
+  "ui.patch.action.patched": "Patchet",
 
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",
   "ui.question.review.notAnswered": "(ikke besvaret)",
-  "ui.question.multiHint": "(vælg alle der gælder)",
+  "ui.question.multiHint": "Vælg alle der gælder",
+  "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
 }
