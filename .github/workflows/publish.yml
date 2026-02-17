@@ -33,7 +33,7 @@ permissions:
 jobs:
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/ohmycode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -41,9 +41,9 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
+      - name: Install OhMyCode
         if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
+        run: bun i -g ohmycode-ai
 
       - id: version
         run: |
@@ -61,7 +61,7 @@ jobs:
   build-cli:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/ohmycode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli
+          name: ohmycode-cli
           path: packages/opencode/dist
 
     outputs:
@@ -189,7 +189,7 @@ jobs:
           releaseId: ${{ needs.version.outputs.release }}
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
-          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+          releaseAssetNamePattern: ohmycode-desktop-[platform]-[arch][ext]
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
@@ -240,7 +240,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli
+          name: ohmycode-cli
           path: packages/opencode/dist
 
       - name: Cache apt packages (AUR)
@@ -258,8 +258,8 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "ohmycode@sst.dev"
+          git config --global user.name "ohmycode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - run: ./script/publish.ts

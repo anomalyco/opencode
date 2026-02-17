@@ -15,6 +15,8 @@ process.chdir(dir)
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
+const artifact = "ohmycode"
+const binaryName = "ohmycode"
 // Fetch and generate models.dev snapshot
 const modelsData = process.env.MODELS_DEV_API_JSON
   ? await Bun.file(process.env.MODELS_DEV_API_JSON).text()
@@ -144,7 +146,7 @@ if (!skipInstall) {
 }
 for (const item of targets) {
   const name = [
-    pkg.name,
+    artifact,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -174,9 +176,9 @@ for (const item of targets) {
       //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
+      target: name.replace(artifact, "bun") as any,
+      outfile: `dist/${name}/bin/${binaryName}`,
+      execArgv: [`--user-agent=ohmycode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],

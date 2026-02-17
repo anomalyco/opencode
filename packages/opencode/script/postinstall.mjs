@@ -49,23 +49,27 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `opencode-${platform}-${arch}`
-  const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
+  const packageNames = [`ohmycode-${platform}-${arch}`, `opencode-${platform}-${arch}`]
+  const binaryNames = platform === "windows" ? ["ohmycode.exe", "opencode.exe"] : ["ohmycode", "opencode"]
 
-  try {
-    // Use require.resolve to find the package
-    const packageJsonPath = require.resolve(`${packageName}/package.json`)
-    const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binaryName)
+  for (const packageName of packageNames) {
+    try {
+      // Use require.resolve to find the package
+      const packageJsonPath = require.resolve(`${packageName}/package.json`)
+      const packageDir = path.dirname(packageJsonPath)
 
-    if (!fs.existsSync(binaryPath)) {
-      throw new Error(`Binary not found at ${binaryPath}`)
+      for (const binaryName of binaryNames) {
+        const binaryPath = path.join(packageDir, "bin", binaryName)
+        if (fs.existsSync(binaryPath)) {
+          return { binaryPath, binaryName }
+        }
+      }
+    } catch {
+      // Keep trying fallback packages
     }
-
-    return { binaryPath, binaryName }
-  } catch (error) {
-    throw new Error(`Could not find package ${packageName}: ${error.message}`)
   }
+
+  throw new Error(`Could not find platform package (${packageNames.join(" or ")})`)
 }
 
 function prepareBinDirectory(binaryName) {
@@ -89,7 +93,7 @@ function symlinkBinary(sourcePath, binaryName) {
   const { targetPath } = prepareBinDirectory(binaryName)
 
   fs.symlinkSync(sourcePath, targetPath)
-  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
+  console.log(`ohmycode binary symlinked: ${targetPath} -> ${sourcePath}`)
 
   // Verify the file exists after operation
   if (!fs.existsSync(targetPath)) {
@@ -112,7 +116,7 @@ async function main() {
     console.log(`Platform binary verified at: ${binaryPath}`)
     console.log("Wrapper script will handle binary execution")
   } catch (error) {
-    console.error("Failed to setup opencode binary:", error.message)
+    console.error("Failed to setup ohmycode binary:", error.message)
     process.exit(1)
   }
 }

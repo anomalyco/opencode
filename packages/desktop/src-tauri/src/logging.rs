@@ -15,7 +15,7 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
     cleanup(log_dir);
 
     let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let filename = format!("opencode-desktop_{timestamp}.log");
+    let filename = format!("ohmycode-desktop_{timestamp}.log");
     let log_path = log_dir.join(&filename);
 
     LOG_PATH

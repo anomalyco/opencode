@@ -435,7 +435,7 @@ pub fn run() {
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
-        .arg("opencode-cli")
+        .arg("ohmycode-cli")
         .output();
 
     let mut builder = tauri::Builder::default()
@@ -622,7 +622,7 @@ async fn initialize(app: AppHandle) {
                                 let _ = child.kill();
 
                                 return Err(format!(
-                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{}",
+                                    "Failed to spawn OhMyCode Server ({err}). Logs:\n{}",
                                     get_logs()
                                 ));
                             }
@@ -794,7 +794,7 @@ fn opencode_db_path() -> Result<PathBuf, &'static str> {
         }
     };
 
-    Ok(data_home.join("opencode").join("opencode.db"))
+    Ok(data_home.join("ohmycode").join("ohmycode.db"))
 }
 
 // Creates a `once` listener for the specified event and returns a future that resolves

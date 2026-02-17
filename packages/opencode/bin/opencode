@@ -17,7 +17,7 @@ function run(target) {
   process.exit(code)
 }
 
-const envPath = process.env.OPENCODE_BIN_PATH
+const envPath = process.env.OHMYCODE_BIN_PATH || process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
 }
@@ -44,8 +44,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const bases = ["ohmycode-" + platform + "-" + arch, "opencode-" + platform + "-" + arch]
+const binaries = platform === "windows" ? ["ohmycode.exe", "opencode.exe"] : ["ohmycode", "opencode"]
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -101,45 +101,50 @@ const names = (() => {
   const avx2 = supportsAvx2()
   const baseline = arch === "x64" && !avx2
 
-  if (platform === "linux") {
-    const musl = (() => {
-      try {
-        if (fs.existsSync("/etc/alpine-release")) return true
-      } catch {
-        // ignore
+  const linux = (() => {
+    try {
+      if (fs.existsSync("/etc/alpine-release")) return true
+    } catch {
+      // ignore
+    }
+
+    try {
+      const result = childProcess.spawnSync("ldd", ["--version"], { encoding: "utf8" })
+      const text = ((result.stdout || "") + (result.stderr || "")).toLowerCase()
+      if (text.includes("musl")) return true
+    } catch {
+      // ignore
+    }
+
+    return false
+  })()
+
+  const variants = bases.flatMap((base) => {
+    if (platform === "linux") {
+      if (linux) {
+        if (arch === "x64") {
+          if (baseline) return [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base]
+          return [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
+        }
+        return [`${base}-musl`, base]
       }
 
-      try {
-        const result = childProcess.spawnSync("ldd", ["--version"], { encoding: "utf8" })
-        const text = ((result.stdout || "") + (result.stderr || "")).toLowerCase()
-        if (text.includes("musl")) return true
-      } catch {
-        // ignore
-      }
-
-      return false
-    })()
-
-    if (musl) {
       if (arch === "x64") {
-        if (baseline) return [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base]
-        return [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
+        if (baseline) return [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`]
+        return [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
       }
-      return [`${base}-musl`, base]
+      return [base, `${base}-musl`]
     }
 
     if (arch === "x64") {
-      if (baseline) return [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`]
-      return [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
+      if (baseline) return [`${base}-baseline`, base]
+      return [base, `${base}-baseline`]
     }
-    return [base, `${base}-musl`]
-  }
 
-  if (arch === "x64") {
-    if (baseline) return [`${base}-baseline`, base]
-    return [base, `${base}-baseline`]
-  }
-  return [base]
+    return [base]
+  })
+
+  return [...new Set(variants)]
 })()
 
 function findBinary(startDir) {
@@ -148,8 +153,10 @@ function findBinary(startDir) {
     const modules = path.join(current, "node_modules")
     if (fs.existsSync(modules)) {
       for (const name of names) {
-        const candidate = path.join(modules, name, "bin", binary)
-        if (fs.existsSync(candidate)) return candidate
+        for (const binary of binaries) {
+          const candidate = path.join(modules, name, "bin", binary)
+          if (fs.existsSync(candidate)) return candidate
+        }
       }
     }
     const parent = path.dirname(current)
@@ -163,7 +170,7 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
+    "It seems that your package manager failed to install the right version of the ohmycode CLI for your platform. You can try manually installing " +
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )
