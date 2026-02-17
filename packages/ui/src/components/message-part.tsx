@@ -891,13 +891,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         <Show when={showPermission() && permission()}>
           <div data-component="permission-prompt">
             <div data-slot="permission-actions">
-              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+              <Button variant="ghost" size="normal" onClick={() => respond("reject")}>
                 {i18n.t("ui.permission.deny")}
               </Button>
-              <Button variant="secondary" size="small" onClick={() => respond("always")}>
+              <Button variant="secondary" size="normal" onClick={() => respond("always")}>
                 {i18n.t("ui.permission.allowAlways")}
               </Button>
-              <Button variant="primary" size="small" onClick={() => respond("once")}>
+              <Button variant="primary" size="normal" onClick={() => respond("once")}>
                 {i18n.t("ui.permission.allowOnce")}
               </Button>
             </div>

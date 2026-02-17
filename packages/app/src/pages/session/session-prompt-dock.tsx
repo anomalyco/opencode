@@ -1,7 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
-import { BasicTool } from "@opencode-ai/ui/basic-tool"
+import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
+import { Icon } from "@opencode-ai/ui/icon"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { SessionTodoDock } from "@/components/session-todo-dock"
@@ -123,63 +124,79 @@ export function SessionPromptDock(props: {
         </Show>
 
         <Show when={props.permissionRequest()} keyed>
-          {(perm) => (
-            <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
-              <BasicTool
-                icon="checklist"
-                locked
-                defaultOpen
-                trigger={{
-                  title: props.t("notification.permission.title"),
-                  subtitle:
-                    perm.permission === "doom_loop"
-                      ? props.t("settings.permissions.tool.doom_loop.title")
-                      : perm.permission,
-                }}
-              >
-                <Show when={perm.patterns.length > 0}>
-                  <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
-                    <For each={perm.patterns}>
-                      {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
-                    </For>
-                  </div>
-                </Show>
-                <Show when={perm.permission === "doom_loop"}>
-                  <div class="text-12-regular text-text-weak pb-2 px-3">
-                    {props.t("settings.permissions.tool.doom_loop.description")}
-                  </div>
-                </Show>
-              </BasicTool>
-              <div data-component="permission-prompt">
-                <div data-slot="permission-actions">
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    onClick={() => props.onDecide("reject")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.deny")}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="small"
-                    onClick={() => props.onDecide("always")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowAlways")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="small"
-                    onClick={() => props.onDecide("once")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowOnce")}
-                  </Button>
-                </div>
+          {(perm) => {
+            const toolDescription = () => {
+              const key = `settings.permissions.tool.${perm.permission}.description`
+              const value = props.t(key)
+              if (value === key) return ""
+              return value
+            }
+
+            return (
+              <div>
+                <DockPrompt
+                  kind="permission"
+                  header={
+                    <div data-slot="permission-row" data-variant="header">
+                      <span data-slot="permission-icon">
+                        <Icon name="warning" size="normal" />
+                      </span>
+                      <div data-slot="permission-header-title">{props.t("notification.permission.title")}</div>
+                    </div>
+                  }
+                  footer={
+                    <>
+                      <div />
+                      <div data-slot="permission-footer-actions">
+                        <Button
+                          variant="ghost"
+                          size="normal"
+                          onClick={() => props.onDecide("reject")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="normal"
+                          onClick={() => props.onDecide("always")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="normal"
+                          onClick={() => props.onDecide("once")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </>
+                  }
+                >
+                  <Show when={toolDescription()}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-hint">{toolDescription()}</div>
+                    </div>
+                  </Show>
+
+                  <Show when={perm.patterns.length > 0}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-patterns">
+                        <For each={perm.patterns}>
+                          {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+                </DockPrompt>
               </div>
-            </div>
-          )}
+            )
+          }}
         </Show>
 
         <Show when={!props.blocked}>
