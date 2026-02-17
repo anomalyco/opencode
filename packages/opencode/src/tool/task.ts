@@ -63,6 +63,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
+      const parent = await Session.get(ctx.sessionID).catch(() => undefined)
+      const inherited = (parent?.permission ?? []).filter((r) => r.action === "deny")
+
       const session = await iife(async () => {
         if (params.task_id) {
           const found = await Session.get(params.task_id).catch(() => {})
@@ -73,6 +76,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
+            ...inherited,
             {
               permission: "todowrite",
               pattern: "*",
