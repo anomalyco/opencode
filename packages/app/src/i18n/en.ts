@@ -224,6 +224,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
+  "prompt.placeholder.simple": "Ask anything...",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
@@ -266,7 +267,7 @@ export const dict = {
   "prompt.context.includeActiveFile": "Include active file",
   "prompt.context.removeActiveFile": "Remove active file from context",
   "prompt.context.removeFile": "Remove file from context",
-  "prompt.action.attachFile": "Attach file",
+  "prompt.action.attachFile": "Add file",
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
@@ -504,6 +505,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Jump to latest",
 
   "session.context.addToContext": "Add {{selection}} to context",
+  "session.todo.title": "Todos",
+  "session.todo.collapse": "Collapse",
+  "session.todo.expand": "Expand",
 
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
