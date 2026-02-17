@@ -186,6 +186,7 @@ jobs:
           rev: ${{ env.TAURI_PORTABLE_SHA }}
 
       - name: Show tauri-cli version
+        if: contains(matrix.settings.host, 'ubuntu')
         run: cargo tauri --version
 
       - name: Build and upload artifacts
