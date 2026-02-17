@@ -1,11 +1,9 @@
 use futures::{FutureExt, Stream, StreamExt, future};
-use os_pipe::{PipeReader, pipe};
 use process_wrap::tokio::CommandWrap;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 #[cfg(windows)]
 use process_wrap::tokio::{JobObject, KillOnDrop};
-use std::io::{BufRead, BufReader};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::sync::Arc;
@@ -13,8 +11,12 @@ use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
 use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
-use tokio::process::Command;
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
@@ -66,8 +68,10 @@ pub async fn get_config(app: &AppHandle) -> Option<Config> {
 
     events
         .fold(String::new(), async |mut config_str, event| {
-            dbg!(&event);
-            if let CommandEvent::Stdout(s) = event {
+            if let CommandEvent::Stdout(s) = &event {
+                config_str += s.as_str()
+            }
+            if let CommandEvent::Stderr(s) = &event {
                 config_str += s.as_str()
             }
 
@@ -318,10 +322,8 @@ pub fn spawn_command(
         cmd
     };
 
-    let (stdout_reader, stdout_writer) = pipe()?;
-    let (stderr_reader, stderr_writer) = pipe()?;
-    cmd.stdout(stdout_writer);
-    cmd.stderr(stderr_writer);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
 
     #[cfg(windows)]
@@ -344,16 +346,16 @@ pub fn spawn_command(
     let (tx, rx) = mpsc::channel(256);
     let (kill_tx, mut kill_rx) = mpsc::channel(1);
 
-    spawn_pipe_reader(
+    let stdout = spawn_pipe_reader(
         tx.clone(),
         guard.clone(),
-        stdout_reader,
+        BufReader::new(child.stdout().take().unwrap()),
         CommandEvent::Stdout,
     );
-    spawn_pipe_reader(
+    let stderr = spawn_pipe_reader(
         tx.clone(),
         guard.clone(),
-        stderr_reader,
+        BufReader::new(child.stderr().take().unwrap()),
         CommandEvent::Stderr,
     );
 
@@ -389,6 +391,9 @@ pub fn spawn_command(
                 let _ = tx.send(CommandEvent::Error(err.to_string())).await;
             }
         }
+
+        stdout.abort();
+        stderr.abort();
     });
 
     let event_stream = ReceiverStream::new(rx);
@@ -434,7 +439,6 @@ pub fn serve(
     tokio::spawn(
         events
             .for_each(move |event| {
-                dbg!(&event);
                 match event {
                     CommandEvent::Stdout(line) => {
                         tracing::info!("{line}");
@@ -486,14 +490,12 @@ pub mod sqlite_migration {
         let mut done = false;
 
         stream.filter_map(move |event| {
-            dbg!(&event);
             if done {
                 return future::ready(Some(event));
             }
 
             future::ready(match &event {
-                CommandEvent::Stdout(s) => {
-                    dbg!(&s);
+                CommandEvent::Stdout(s) | CommandEvent::Stderr(s) => {
                     if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
                         if let Ok(progress) = s.parse::<u8>() {
                             let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
@@ -516,27 +518,31 @@ pub mod sqlite_migration {
 fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
     tx: mpsc::Sender<CommandEvent>,
     guard: Arc<tokio::sync::RwLock<()>>,
-    pipe_reader: PipeReader,
+    pipe_reader: impl AsyncBufRead + Send + Unpin + 'static,
     wrapper: F,
-) {
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let _lock = guard.read().await;
         let reader = BufReader::new(pipe_reader);
 
         read_line(reader, tx, wrapper).await;
-    });
+    })
 }
 
 async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
-    reader: BufReader<PipeReader>,
+    reader: BufReader<impl AsyncBufRead + Unpin>,
     tx: mpsc::Sender<CommandEvent>,
     wrapper: F,
 ) {
-    for line in reader.lines() {
+    let mut lines = reader.lines();
+    loop {
+        let line = lines.next_line().await;
+
         match line {
             Ok(s) => {
-                dbg!(&s);
-                let _ = dbg!(tx.clone().send(wrapper(s)).await);
+                if let Some(s) = s {
+                    let _ = tx.clone().send(wrapper(s)).await;
+                }
             }
             Err(e) => {
                 let tx_ = tx.clone();
