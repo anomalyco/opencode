@@ -274,7 +274,7 @@ export function Titlebar() {
       <div
         classList={{
           "flex items-center min-w-0 justify-end": true,
-          "pr-6": !windows(),
+          "pr-2": !windows(),
         }}
         onMouseDown={drag}
       >
