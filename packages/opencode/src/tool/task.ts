@@ -125,22 +125,41 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
-      })
+      let result: Awaited<ReturnType<typeof SessionPrompt.prompt>>
+      try {
+        result = await SessionPrompt.prompt({
+          messageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(hasTaskPermission ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        })
+      } catch (error) {
+        const output = [
+          `task_id: ${session.id} (subagent session preserved - reuse this id to inspect or retry)`,
+          "",
+          "<task_error>",
+          error instanceof Error ? error.message : String(error),
+          "</task_error>",
+        ].join("\n")
+        return {
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+          },
+          output,
+        }
+      }
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
