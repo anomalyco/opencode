@@ -214,13 +214,14 @@ export function DialogSelectServer() {
     })
   }
 
-  const replaceServer = (original: ServerConnection.Http, next: string) => {
+  const replaceServer = (original: ServerConnection.Http, next: ServerConnection.HttpBase) => {
     const active = server.url
-    const nextActive = active === original.http.url ? next : active
+    const newConn = server.add(next)
+    if (!newConn) return
 
-    server.add(next)
+    const nextActive = active === ServerConnection.key(original) ? ServerConnection.key(newConn) : active
     if (nextActive) server.setActive(nextActive)
-    server.remove(original.http.url)
+    server.remove(ServerConnection.key(original))
   }
 
   const items = createMemo(() => {
@@ -273,11 +274,11 @@ export function DialogSelectServer() {
     if (!persist && store.status[value.http.url]?.healthy === false) return
     dialog.close()
     if (persist) {
-      server.add(value.http.url)
+      server.add(value.http)
       navigate("/")
       return
     }
-    server.setActive(value.http.url)
+    server.setActive(ServerConnection.key(value))
     navigate("/")
   }
 
@@ -346,7 +347,7 @@ export function DialogSelectServer() {
       return
     }
 
-    replaceServer(original, normalized)
+    replaceServer(original, { url: normalized })
 
     resetEdit()
   }
@@ -378,7 +379,7 @@ export function DialogSelectServer() {
     handleEdit(original, store.editServer.value)
   }
 
-  async function handleRemove(url: string) {
+  async function handleRemove(url: ServerConnection.Key) {
     server.remove(url)
     if ((await platform.getDefaultServerUrl?.()) === url) {
       platform.setDefaultServerUrl?.(null)
@@ -506,7 +507,7 @@ export function DialogSelectServer() {
                             </Show>
                             <DropdownMenu.Separator />
                             <DropdownMenu.Item
-                              onSelect={() => handleRemove(i.http.url)}
+                              onSelect={() => handleRemove(ServerConnection.key(i))}
                               class="text-text-on-critical-base hover:bg-surface-critical-weak"
                             >
                               <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>

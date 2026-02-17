@@ -43,7 +43,7 @@ export namespace ServerConnection {
   } & Base
 
   export type Sidecar = {
-    type: "local"
+    type: "sidecar"
     http: HttpBase
   } & (
     | // Regular desktop server
@@ -69,29 +69,32 @@ export namespace ServerConnection {
     // All these are desktop-only
     | (Sidecar | Ssh)
 
-  export const key = (conn: Any): string => {
+  export const key = (conn: Any): Key => {
     switch (conn.type) {
       case "http":
-        return conn.http.url
-      case "local": {
-        if (conn.variant === "wsl") return `wsl:${conn.distro}`
-        return "local"
+        return Key.make(conn.http.url)
+      case "sidecar": {
+        if (conn.variant === "wsl") return Key.make(`wsl:${conn.distro}`)
+        return Key.make("sidecar")
       }
       case "ssh":
-        return `ssh:${conn.host}`
+        return Key.make(`ssh:${conn.host}`)
     }
   }
+
+  export type Key = string & { _brand: "Key" }
+  export const Key = { make: (v: string) => v as Key }
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string; isSidecar?: boolean; servers?: Array<ServerConnection.Any> }) => {
+  init: (props: { defaultUrl: string; servers?: Array<ServerConnection.Ssh | ServerConnection.Sidecar> }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
-        list: [] as string[],
+        list: [] as (string | ServerConnection.HttpBase)[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
@@ -99,60 +102,18 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const allServers = (): Array<ServerConnection.Any> => [
       ...(props.servers ?? []),
-      ...store.list.map((url) => ({
+      ...store.list.map((value) => ({
         type: "http" as const,
-        http: { url },
+        http: typeof value === "string" ? { url: value } : value,
       })),
     ]
 
     const [state, setState] = createStore({
-      active: props.defaultUrl,
+      active: ServerConnection.key({ type: "http", http: { url: props.defaultUrl } }),
       healthy: undefined as boolean | undefined,
     })
 
     const healthy = () => state.healthy
-
-    // const defaultUrl = () => normalizeServerUrl(props.defaultUrl)
-
-    function reconcileStartup() {
-      const fallback = props.defaultUrl
-      if (!fallback) return
-      // const previousSidecarUrl = normalizeServerUrl(store.currentSidecarUrl)
-      // const list = previousSidecarUrl ? store.list.filter((url) => url !== previousSidecarUrl) : store.list
-      // if (!props.isSidecar) {
-      //   batch(() => {
-      //     setStore("list", list)
-      //     if (store.currentSidecarUrl) setStore("currentSidecarUrl", "")
-      setState("active", fallback)
-      //   })
-      //   return
-      // }
-      // const nextList = list.includes(fallback) ? list : [...list, fallback]
-      // batch(() => {
-      //   setStore("list", nextList)
-      //   setStore("currentSidecarUrl", fallback)
-      //   setState("active", fallback)
-      // })
-    }
-
-    function updateServerList(url: string, remove = false) {
-      if (remove) {
-        const list = store.list.filter((x) => x !== url)
-        const next = state.active === url ? (list[0] ?? props.defaultUrl ?? "") : state.active
-        batch(() => {
-          setStore("list", list)
-          setState("active", next)
-        })
-        return
-      }
-
-      batch(() => {
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
-        }
-        setState("active", url)
-      })
-    }
 
     function startHealthPolling(conn: ServerConnection.Any) {
       let alive = true
@@ -179,29 +140,42 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }
     }
 
-    function setActive(input: string) {
+    function setActive(input: ServerConnection.Key) {
       const url = normalizeServerUrl(input)
       if (!url) return
       setState("active", url)
     }
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
+    function add(input: ServerConnection.HttpBase) {
+      const url = normalizeServerUrl(input.url)
       if (!url) return
-      updateServerList(url)
+      return batch(() => {
+        const http: ServerConnection.HttpBase = { ...input, url }
+        if (!store.list.includes(url)) {
+          setStore("list", store.list.length, http)
+        }
+        const conn: ServerConnection.Http = { type: "http", http }
+        setState("active", ServerConnection.key(conn))
+        return conn
+      })
     }
 
-    function remove(input: string) {
+    function remove(input: ServerConnection.Key) {
       const url = normalizeServerUrl(input)
       if (!url) return
-      updateServerList(url, true)
+      const list = store.list.filter((x) => x !== url)
+      const next = state.active === url ? (list[0] ?? props.defaultUrl ?? "") : state.active
+      batch(() => {
+        setStore("list", list)
+        setState(
+          "active",
+          ServerConnection.key({
+            type: "http",
+            http: typeof next === "string" ? { url: next } : next,
+          }),
+        )
+      })
     }
-
-    createEffect(() => {
-      if (!ready()) return
-      if (state.active) return
-      reconcileStartup()
-    })
 
     const isReady = createMemo(() => ready() && !!state.active)
 

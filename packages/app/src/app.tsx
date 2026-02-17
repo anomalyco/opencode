@@ -147,10 +147,10 @@ function ServerKey(props: ParentProps) {
 export function AppInterface(props: {
   children?: JSX.Element
   defaultUrl: string
-  servers?: Array<ServerConnection.Any>
+  servers?: Array<ServerConnection.Ssh | ServerConnection.Sidecar>
 }) {
   return (
-    <ServerProvider defaultUrl={props.defaultUrl} servers={props.servers} isSidecar>
+    <ServerProvider defaultUrl={props.defaultUrl} servers={props.servers}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>

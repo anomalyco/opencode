@@ -447,9 +447,9 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            const [servers] = createStore<Array<ServerConnection.Any>>([
+            const [servers] = createStore<Array<ServerConnection.Sidecar>>([
               {
-                type: "local",
+                type: "sidecar",
                 variant: "base",
                 http: {
                   url: data().url,
