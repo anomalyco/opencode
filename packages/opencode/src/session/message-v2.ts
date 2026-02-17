@@ -573,7 +573,7 @@ export namespace MessageV2 {
           if (part.type === "compaction") {
             userMessage.parts.push({
               type: "text",
-              text: "What did we do so far?",
+              text: "[Compacted]",
             })
           }
           if (part.type === "subtask") {
