@@ -179,7 +179,7 @@ export function resolvePluginProviders(input: {
     const id = hook.auth.provider
     if (seen.has(id)) continue
     seen.add(id)
-    if (id in input.existingProviders) continue
+    if (Object.hasOwn(input.existingProviders, id)) continue
     if (input.disabled.has(id)) continue
     if (input.enabled && !input.enabled.has(id)) continue
     result.push({
