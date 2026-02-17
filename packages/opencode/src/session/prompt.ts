@@ -1737,6 +1737,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
 
+  function isCommandHandledSentinel(err: unknown): boolean {
+    if (err instanceof Error && err.name === "COMMAND_HANDLED") return true
+    return String(err).includes("COMMAND_HANDLED")
+  }
+
+  function handledCommandResponse(
+    input: CommandInput,
+    agentName: string,
+    model: { providerID: string; modelID: string },
+  ): MessageV2.WithParts {
+    const info: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      parentID: input.messageID ?? Identifier.ascending("message"),
+      mode: agentName,
+      agent: agentName,
+      cost: 0,
+      path: { cwd: Instance.directory, root: Instance.worktree },
+      time: { created: Date.now() },
+      role: "assistant",
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: model.modelID,
+      providerID: model.providerID,
+    }
+    return { info, parts: [] }
+  }
+
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
@@ -1852,15 +1879,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         : await lastModel(input.sessionID)
       : taskModel
 
-    await Plugin.trigger(
-      "command.execute.before",
-      {
-        command: input.command,
-        sessionID: input.sessionID,
-        arguments: input.arguments,
-      },
-      { parts },
-    )
+    const hookOutput = { parts, handled: false }
+    try {
+      await Plugin.trigger(
+        "command.execute.before",
+        {
+          command: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+        },
+        hookOutput,
+      )
+    } catch (err) {
+      if (isCommandHandledSentinel(err)) return handledCommandResponse(input, agentName, taskModel)
+      throw err
+    }
+    if (hookOutput.handled) return handledCommandResponse(input, agentName, taskModel)
 
     const result = (await prompt({
       sessionID: input.sessionID,

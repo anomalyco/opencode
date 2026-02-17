@@ -17,6 +17,13 @@ import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
 
+export class CommandHandledError extends Error {
+  constructor() {
+    super("COMMAND_HANDLED")
+    this.name = "COMMAND_HANDLED"
+  }
+}
+
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
   info: Provider
@@ -179,7 +186,7 @@ export interface Hooks {
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
-    output: { parts: Part[] },
+    output: { parts: Part[]; handled?: boolean },
   ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
