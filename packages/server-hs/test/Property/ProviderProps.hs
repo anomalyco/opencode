@@ -12,6 +12,10 @@ import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Provider.Types
+import Provider.Provider qualified as Provider
+import Storage.Storage qualified as Storage
+import System.IO.Temp (createTempDirectory)
+import System.Directory (removeDirectoryRecursive)
 import Test.Tasty
 import Test.Tasty.Hedgehog
 
@@ -50,6 +54,22 @@ prop_providerAuthRoundtrip = property $ do
   case decode json of
     Nothing -> failure
     Just pa' -> pa === pa'
+
+prop_authPersistence :: Property
+prop_authPersistence = property $ do
+  token <- forAll genNonEmptyText
+  result <- evalIO $ do
+    tmpDir <- createTempDirectory "/tmp" "provider-auth"
+    Storage.withStorage tmpDir $ \storage -> do
+      Provider.setAuth storage "openai" token
+      auths <- Provider.authStatus storage
+      Provider.removeAuth storage "openai"
+      authsAfter <- Provider.authStatus storage
+      removeDirectoryRecursive tmpDir
+      pure (auths, authsAfter)
+  let (before, after) = result
+  assert $ any (\a -> paProviderID a == "openai" && paAuthenticated a) before
+  assert $ any (\a -> paProviderID a == "openai" && not (paAuthenticated a)) after
 
 -- Generators
 genText :: Gen Text
@@ -107,5 +127,6 @@ tests =
     [ testProperty "ModelCost round-trip" prop_modelCostRoundtrip,
       testProperty "Model round-trip" prop_modelRoundtrip,
       testProperty "AuthMethod round-trip" prop_authMethodRoundtrip,
-      testProperty "ProviderAuth round-trip" prop_providerAuthRoundtrip
+      testProperty "ProviderAuth round-trip" prop_providerAuthRoundtrip,
+      testProperty "Auth persistence" prop_authPersistence
     ]

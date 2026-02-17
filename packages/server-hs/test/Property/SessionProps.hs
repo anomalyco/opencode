@@ -111,6 +111,32 @@ prop_listReturnsCreated = property $ do
   -- Should find all created sessions
   length sessions === count
 
+prop_updateSummaryShareRevert :: Property
+prop_updateSummaryShareRevert = property $ do
+  msgId <- forAll $ Gen.text (Range.linear 3 20) Gen.alphaNum
+  url <- forAll $ Gen.text (Range.linear 3 20) Gen.alphaNum
+  (summary, share, revert) <- evalIO $ withTestContext $ \ctx -> do
+    session <- Session.create ctx ST.CreateSessionInput
+      { ST.csiTitle = Just "test"
+      , ST.csiParentID = Nothing
+      }
+    let sid = ST.sessionId session
+    let summary = ST.SessionSummary 1 2 (Just 3)
+    let share = ST.SessionShare url
+    let revert = ST.SessionRevert msgId Nothing Nothing Nothing
+    _ <- Session.update ctx sid (\s -> s
+      { ST.sessionSummary = Just summary
+      , ST.sessionShare = Just share
+      , ST.sessionRevert = Just revert
+      })
+    updated <- Session.get ctx sid
+    case updated of
+      Nothing -> fail "session not found"
+      Just s -> pure (ST.sessionSummary s, ST.sessionShare s, ST.sessionRevert s)
+  summary === Just (ST.SessionSummary 1 2 (Just 3))
+  share === Just (ST.SessionShare url)
+  revert === Just (ST.SessionRevert msgId Nothing Nothing Nothing)
+
 -- Generators
 genKeyPart :: Gen Text
 genKeyPart = Gen.text (Range.linear 1 20) Gen.alphaNum
@@ -123,5 +149,6 @@ tests =
     [ testProperty "create then get" prop_createGet,
       testProperty "get non-existent" prop_getNonExistent,
       testProperty "delete removes" prop_deleteRemoves,
-      testProperty "list returns created" prop_listReturnsCreated
+      testProperty "list returns created" prop_listReturnsCreated,
+      testProperty "update summary/share/revert" prop_updateSummaryShareRevert
     ]

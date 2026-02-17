@@ -5,6 +5,7 @@ import Property.BusProps qualified as BusProps
 import Property.ConfigProps qualified as ConfigProps
 import Property.LLMProps qualified as LLMProps
 import Property.MessageProps qualified as MessageProps
+import Property.MessagePartProps qualified as MessagePartProps
 import Property.ProviderProps qualified as ProviderProps
 import Property.SessionProps qualified as SessionProps
 import Property.StorageProps qualified as StorageProps
@@ -27,6 +28,7 @@ main = do
             SessionProps.tests,
             ToolProps.tests,
             MessageProps.tests,
+            MessagePartProps.tests,
             LLMProps.tests,
             ProviderProps.tests
           ],

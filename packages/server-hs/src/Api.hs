@@ -172,6 +172,66 @@ instance FromJSON SessionTime where
       <*> v .: "updated"
       <*> v .:? "archived"
 
+data SessionSummary = SessionSummary
+  { ssAdditions :: Int,
+    ssDeletions :: Int,
+    ssFiles :: Maybe Int
+  }
+  deriving (Eq, Show, Generic)
+
+instance ToJSON SessionSummary where
+  toJSON ss =
+    object
+      [ "additions" .= ssAdditions ss,
+        "deletions" .= ssDeletions ss,
+        "files" .= ssFiles ss
+      ]
+
+instance FromJSON SessionSummary where
+  parseJSON = withObject "SessionSummary" $ \v ->
+    SessionSummary
+      <$> v .: "additions"
+      <*> v .: "deletions"
+      <*> v .:? "files"
+
+newtype SessionShare = SessionShare
+  { shareUrl :: Text
+  }
+  deriving (Eq, Show, Generic)
+
+instance ToJSON SessionShare where
+  toJSON ss = object ["url" .= shareUrl ss]
+
+instance FromJSON SessionShare where
+  parseJSON = withObject "SessionShare" $ \v ->
+    SessionShare
+      <$> v .: "url"
+
+data SessionRevert = SessionRevert
+  { srMessageId :: Text,
+    srPartId :: Maybe Text,
+    srSnapshot :: Maybe Text,
+    srDiff :: Maybe Text
+  }
+  deriving (Eq, Show, Generic)
+
+instance ToJSON SessionRevert where
+  toJSON sr =
+    object
+      [ "messageID" .= srMessageId sr,
+        "partID" .= srPartId sr,
+        "snapshot" .= srSnapshot sr,
+        "diff" .= srDiff sr
+      ]
+
+instance FromJSON SessionRevert where
+  parseJSON = withObject "SessionRevert" $ \v ->
+    SessionRevert
+      <$> v .: "messageID"
+      <*> v .:? "partID"
+      <*> v .:? "snapshot"
+      <*> v .:? "diff"
+
 data Session = Session
   { sesId :: Text,
     sesSlug :: Text,
@@ -180,7 +240,10 @@ data Session = Session
     sesTitle :: Text,
     sesVersion :: Text,
     sesTime :: SessionTime,
-    sesParentId :: Maybe Text
+    sesParentId :: Maybe Text,
+    sesSummary :: Maybe SessionSummary,
+    sesShare :: Maybe SessionShare,
+    sesRevert :: Maybe SessionRevert
   }
   deriving (Eq, Show, Generic)
 
@@ -194,7 +257,10 @@ instance ToJSON Session where
         "title" .= sesTitle s,
         "version" .= sesVersion s,
         "time" .= sesTime s,
-        "parentID" .= sesParentId s
+        "parentID" .= sesParentId s,
+        "summary" .= sesSummary s,
+        "share" .= sesShare s,
+        "revert" .= sesRevert s
       ]
 
 instance FromJSON Session where
@@ -208,6 +274,34 @@ instance FromJSON Session where
       <*> v .: "version"
       <*> v .: "time"
       <*> v .:? "parentID"
+      <*> v .:? "summary"
+      <*> v .:? "share"
+      <*> v .:? "revert"
+
+data UpdateSessionInput = UpdateSessionInput
+  { usiTitle :: Maybe Text,
+    usiSummary :: Maybe SessionSummary,
+    usiShare :: Maybe SessionShare,
+    usiRevert :: Maybe SessionRevert
+  }
+  deriving (Eq, Show, Generic)
+
+instance FromJSON UpdateSessionInput where
+  parseJSON = withObject "UpdateSessionInput" $ \v ->
+    UpdateSessionInput
+      <$> v .:? "title"
+      <*> v .:? "summary"
+      <*> v .:? "share"
+      <*> v .:? "revert"
+
+instance ToJSON UpdateSessionInput where
+  toJSON usi =
+    object
+      [ "title" .= usiTitle usi,
+        "summary" .= usiSummary usi,
+        "share" .= usiShare usi,
+        "revert" .= usiRevert usi
+      ]
 
 data CreateSessionInput = CreateSessionInput
   { csiTitle :: Maybe Text,
@@ -327,11 +421,76 @@ type SessionListAPI = "session" :> QueryParam "directory" Text :> QueryParam "ro
 -- /session (Create)
 type SessionCreateAPI = "session" :> QueryParam "directory" Text :> ReqBody '[JSON] CreateSessionInput :> Post '[JSON] Session
 
+-- /session/:sessionID (Get)
+type SessionGetAPI = "session" :> Capture "sessionID" Text :> Get '[JSON] Session
+
+-- /session/:sessionID (Delete)
+type SessionDeleteAPI = "session" :> Capture "sessionID" Text :> Delete '[JSON] Bool
+
+-- /session/:sessionID (Patch)
+type SessionUpdateAPI = "session" :> Capture "sessionID" Text :> ReqBody '[JSON] UpdateSessionInput :> Patch '[JSON] Session
+
+-- /session/:sessionID/children
+type SessionChildrenAPI = "session" :> Capture "sessionID" Text :> "children" :> Get '[JSON] [Session]
+
+-- /session/:sessionID/todo
+type SessionTodoAPI = "session" :> Capture "sessionID" Text :> "todo" :> Get '[JSON] [Value]
+
+-- /session/:sessionID/init
+type SessionInitAPI = "session" :> Capture "sessionID" Text :> "init" :> Post '[JSON] Value
+
+-- /session/:sessionID/fork
+type SessionForkAPI = "session" :> Capture "sessionID" Text :> "fork" :> Post '[JSON] Session
+
+-- /session/:sessionID/abort
+type SessionAbortAPI = "session" :> Capture "sessionID" Text :> "abort" :> Post '[JSON] Value
+
+-- /session/:sessionID/share
+type SessionShareCreateAPI = "session" :> Capture "sessionID" Text :> "share" :> Post '[JSON] SessionShare
+
+type SessionShareDeleteAPI = "session" :> Capture "sessionID" Text :> "share" :> Delete '[JSON] Bool
+
+-- /session/:sessionID/diff
+type SessionDiffAPI = "session" :> Capture "sessionID" Text :> "diff" :> Get '[JSON] Value
+
+-- /session/:sessionID/summarize
+type SessionSummarizeAPI = "session" :> Capture "sessionID" Text :> "summarize" :> Post '[JSON] SessionSummary
+
+-- /session/:sessionID/command
+type SessionCommandAPI = "session" :> Capture "sessionID" Text :> "command" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /session/:sessionID/shell
+type SessionShellAPI = "session" :> Capture "sessionID" Text :> "shell" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /session/:sessionID/revert
+type SessionRevertAPI = "session" :> Capture "sessionID" Text :> "revert" :> ReqBody '[JSON] SessionRevert :> Post '[JSON] SessionRevert
+
+-- /session/:sessionID/unrevert
+type SessionUnrevertAPI = "session" :> Capture "sessionID" Text :> "unrevert" :> Post '[JSON] Bool
+
+-- /session/:sessionID/permissions/:permissionID
+type SessionPermissionAPI = "session" :> Capture "sessionID" Text :> "permissions" :> Capture "permissionID" Text :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
 -- /session/message (List)
 type SessionMessageListAPI = "session" :> Capture "sessionID" Text :> "message" :> QueryParam "limit" Int :> Get '[JSON] [Message]
 
 -- /session/message (Create)
 type SessionMessageCreateAPI = "session" :> Capture "sessionID" Text :> "message" :> ReqBody '[JSON] CreateMessageInput :> Post '[JSON] Message
+
+-- /session/message (Get)
+type SessionMessageGetAPI = "session" :> Capture "sessionID" Text :> "message" :> Capture "messageID" Text :> Get '[JSON] Message
+
+-- /session/message/part (Delete)
+type SessionMessagePartDeleteAPI =
+  "session" :> Capture "sessionID" Text :> "message" :> Capture "messageID" Text :> "part" :> Capture "partID" Text :> Delete '[JSON] Bool
+
+-- /session/message/part (Patch)
+type SessionMessagePartUpdateAPI =
+  "session" :> Capture "sessionID" Text :> "message" :> Capture "messageID" Text :> "part" :> Capture "partID" Text :> ReqBody '[JSON] Value :> Patch '[JSON] Value
+
+-- /session/prompt_async
+type SessionPromptAsyncAPI =
+  "session" :> Capture "sessionID" Text :> "prompt_async" :> ReqBody '[JSON] CreateMessageInput :> Post '[JSON] Value
 
 -- /lsp
 type LspAPI = "lsp" :> Get '[JSON] [Value]
@@ -345,11 +504,23 @@ type PermissionAPI = "permission" :> Get '[JSON] [Value]
 -- /question
 type QuestionAPI = "question" :> Get '[JSON] [Value]
 
+-- /question/:requestID/reply
+type QuestionReplyAPI = "question" :> Capture "requestID" Text :> "reply" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /question/:requestID/reject
+type QuestionRejectAPI = "question" :> Capture "requestID" Text :> "reject" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /permission/:requestID/reply
+type PermissionReplyAPI = "permission" :> Capture "requestID" Text :> "reply" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
 -- /file
 type FileListAPI = "file" :> QueryParam "directory" Text :> QueryParam' '[Required] "path" Text :> Get '[JSON] [FileNode]
 
 -- /file/content
 type FileReadAPI = "file" :> "content" :> QueryParam "directory" Text :> QueryParam' '[Required] "path" Text :> Get '[JSON] FileContent
+
+-- /file/status
+type FileStatusAPI = "file" :> "status" :> QueryParam "directory" Text :> QueryParam "path" Text :> Get '[JSON] [Value]
 
 -- /global/event
 type GlobalEventAPI = "global" :> "event" :> Raw
@@ -383,6 +554,84 @@ type PtyChangesAPI = "pty" :> Capture "ptyID" Text :> "changes" :> Get '[JSON] V
 -- /chat (LLM chat completion via OpenRouter)
 type ChatAPI = "chat" :> ReqBody '[JSON] ChatInput :> Post '[JSON] Value
 
+-- /auth/:providerID
+type AuthCreateAPI = "auth" :> Capture "providerID" Text :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type AuthUpdateAPI = "auth" :> Capture "providerID" Text :> ReqBody '[JSON] Value :> Put '[JSON] Value
+
+type AuthDeleteAPI = "auth" :> Capture "providerID" Text :> Delete '[JSON] Value
+
+-- /provider
+type ProviderAPI = "provider" :> Get '[JSON] [Value]
+
+type ProviderOauthAuthorizeAPI =
+  "provider" :> Capture "providerID" Text :> "oauth" :> "authorize" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type ProviderOauthCallbackAPI =
+  "provider" :> Capture "providerID" Text :> "oauth" :> "callback" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /project/:projectID
+type ProjectGetAPI = "project" :> Capture "projectID" Text :> Get '[JSON] Project
+
+-- /find
+type FindAPI = "find" :> QueryParam "query" Text :> QueryParam "pattern" Text :> QueryParam "directory" Text :> Get '[JSON] [Value]
+
+type FindFileAPI = "find" :> "file" :> QueryParam "pattern" Text :> QueryParam "directory" Text :> Get '[JSON] [Value]
+
+type FindSymbolAPI = "find" :> "symbol" :> QueryParam "query" Text :> QueryParam "directory" Text :> Get '[JSON] [Value]
+
+-- /tui/*
+type TuiAppendPromptAPI = "tui" :> "append-prompt" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiOpenHelpAPI = "tui" :> "open-help" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiOpenSessionsAPI = "tui" :> "open-sessions" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiOpenThemesAPI = "tui" :> "open-themes" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiOpenModelsAPI = "tui" :> "open-models" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiSubmitPromptAPI = "tui" :> "submit-prompt" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiClearPromptAPI = "tui" :> "clear-prompt" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiExecuteCommandAPI = "tui" :> "execute-command" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiShowToastAPI = "tui" :> "show-toast" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiPublishAPI = "tui" :> "publish" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiSelectSessionAPI = "tui" :> "select-session" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiControlNextAPI = "tui" :> "control" :> "next" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type TuiControlResponseAPI = "tui" :> "control" :> "response" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /instance/dispose
+type InstanceDisposeAPI = "instance" :> "dispose" :> Post '[JSON] Value
+
+-- /log
+type LogAPI = "log" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /skill
+type SkillAPI = "skill" :> Get '[JSON] [Value]
+
+-- /formatter
+type FormatterAPI = "formatter" :> Get '[JSON] Value
+
+-- /experimental/tool/ids
+type ExperimentalToolIdsAPI = "experimental" :> "tool" :> "ids" :> Get '[JSON] [Text]
+
+-- /experimental/tool
+type ExperimentalToolAPI = "experimental" :> "tool" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+-- /experimental/worktree
+type ExperimentalWorktreeGetAPI = "experimental" :> "worktree" :> Get '[JSON] Value
+
+type ExperimentalWorktreePostAPI = "experimental" :> "worktree" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
+type ExperimentalWorktreeResetAPI = "experimental" :> "worktree" :> "reset" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+
 -- Chat input
 data ChatInput = ChatInput
   { ciMessage :: Text,
@@ -402,23 +651,58 @@ type OpencodeAPI =
     :<|> PathAPI
     :<|> GlobalConfigAPI
     :<|> ProjectListAPI
+    :<|> ProjectGetAPI
     :<|> ProjectCurrentAPI
     :<|> ProviderListAPI
     :<|> ProviderAuthAPI
+    :<|> ProviderAPI
+    :<|> ProviderOauthAuthorizeAPI
+    :<|> ProviderOauthCallbackAPI
+    :<|> AuthCreateAPI
+    :<|> AuthUpdateAPI
+    :<|> AuthDeleteAPI
     :<|> AgentAPI
     :<|> ConfigAPI
     :<|> CommandAPI
     :<|> SessionStatusAPI
     :<|> SessionListAPI
     :<|> SessionCreateAPI
+    :<|> SessionGetAPI
+    :<|> SessionDeleteAPI
+    :<|> SessionUpdateAPI
+    :<|> SessionChildrenAPI
+    :<|> SessionTodoAPI
+    :<|> SessionInitAPI
+    :<|> SessionForkAPI
+    :<|> SessionAbortAPI
+    :<|> SessionShareCreateAPI
+    :<|> SessionShareDeleteAPI
+    :<|> SessionDiffAPI
+    :<|> SessionSummarizeAPI
+    :<|> SessionCommandAPI
+    :<|> SessionShellAPI
+    :<|> SessionRevertAPI
+    :<|> SessionUnrevertAPI
+    :<|> SessionPermissionAPI
     :<|> SessionMessageListAPI
     :<|> SessionMessageCreateAPI
+    :<|> SessionMessageGetAPI
+    :<|> SessionMessagePartDeleteAPI
+    :<|> SessionMessagePartUpdateAPI
+    :<|> SessionPromptAsyncAPI
     :<|> LspAPI
     :<|> VcsAPI
     :<|> PermissionAPI
+    :<|> PermissionReplyAPI
     :<|> QuestionAPI
+    :<|> QuestionReplyAPI
+    :<|> QuestionRejectAPI
+    :<|> FindAPI
+    :<|> FindFileAPI
+    :<|> FindSymbolAPI
     :<|> FileListAPI
     :<|> FileReadAPI
+    :<|> FileStatusAPI
     :<|> GlobalEventAPI
     -- PTY routes
     :<|> PtyListAPI
@@ -429,6 +713,29 @@ type OpencodeAPI =
     :<|> PtyConnectAPI
     :<|> PtyCommitAPI
     :<|> PtyChangesAPI
+    -- TUI
+    :<|> TuiAppendPromptAPI
+    :<|> TuiOpenHelpAPI
+    :<|> TuiOpenSessionsAPI
+    :<|> TuiOpenThemesAPI
+    :<|> TuiOpenModelsAPI
+    :<|> TuiSubmitPromptAPI
+    :<|> TuiClearPromptAPI
+    :<|> TuiExecuteCommandAPI
+    :<|> TuiShowToastAPI
+    :<|> TuiPublishAPI
+    :<|> TuiSelectSessionAPI
+    :<|> TuiControlNextAPI
+    :<|> TuiControlResponseAPI
+    :<|> InstanceDisposeAPI
+    :<|> LogAPI
+    :<|> SkillAPI
+    :<|> FormatterAPI
+    :<|> ExperimentalToolIdsAPI
+    :<|> ExperimentalToolAPI
+    :<|> ExperimentalWorktreeGetAPI
+    :<|> ExperimentalWorktreePostAPI
+    :<|> ExperimentalWorktreeResetAPI
     -- LLM
     :<|> ChatAPI
 

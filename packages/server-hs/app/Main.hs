@@ -128,23 +128,58 @@ server st =
     :<|> pathHandler
     :<|> globalConfigHandler
     :<|> projectListHandler
+    :<|> projectGetHandler
     :<|> projectCurrentHandler
     :<|> providerListHandler st
     :<|> providerAuthHandler st
+    :<|> providerHandler
+    :<|> providerOauthAuthorizeHandler
+    :<|> providerOauthCallbackHandler
+    :<|> authCreateHandler st
+    :<|> authUpdateHandler st
+    :<|> authDeleteHandler st
     :<|> agentHandler
     :<|> configHandler st
     :<|> commandHandler
     :<|> sessionStatusHandler
     :<|> sessionListHandler st
     :<|> sessionCreateHandler st
+    :<|> sessionGetHandler st
+    :<|> sessionDeleteHandler st
+    :<|> sessionUpdateHandler st
+    :<|> sessionChildrenHandler st
+    :<|> sessionTodoHandler st
+    :<|> sessionInitHandler st
+    :<|> sessionForkHandler st
+    :<|> sessionAbortHandler st
+    :<|> sessionShareCreateHandler st
+    :<|> sessionShareDeleteHandler st
+    :<|> sessionDiffHandler st
+    :<|> sessionSummarizeHandler st
+    :<|> sessionCommandHandler st
+    :<|> sessionShellHandler st
+    :<|> sessionRevertHandler st
+    :<|> sessionUnrevertHandler st
+    :<|> sessionPermissionHandler st
     :<|> sessionMessageListHandler st
     :<|> sessionMessageCreateHandler st
+    :<|> sessionMessageGetHandler st
+    :<|> sessionMessagePartDeleteHandler st
+    :<|> sessionMessagePartUpdateHandler st
+    :<|> sessionPromptAsyncHandler st
     :<|> lspHandler
     :<|> vcsHandler
     :<|> permissionHandler
+    :<|> permissionReplyHandler st
     :<|> questionHandler
+    :<|> questionReplyHandler st
+    :<|> questionRejectHandler st
+    :<|> findHandler
+    :<|> findFileHandler
+    :<|> findSymbolHandler
     :<|> fileListHandler
     :<|> fileReadHandler
+    :<|> fileStatusHandler
     :<|> globalEventHandler st
     -- PTY handlers
     :<|> ptyListHandler st
@@ -155,6 +190,29 @@ server st =
     :<|> ptyConnectHandler st
     :<|> ptyCommitHandler st
     :<|> ptyChangesHandler st
+    -- TUI handlers
+    :<|> tuiHandler st "append-prompt"
+    :<|> tuiHandler st "open-help"
+    :<|> tuiHandler st "open-sessions"
+    :<|> tuiHandler st "open-themes"
+    :<|> tuiHandler st "open-models"
+    :<|> tuiHandler st "submit-prompt"
+    :<|> tuiHandler st "clear-prompt"
+    :<|> tuiHandler st "execute-command"
+    :<|> tuiHandler st "show-toast"
+    :<|> tuiHandler st "publish"
+    :<|> tuiHandler st "select-session"
+    :<|> tuiHandler st "control-next"
+    :<|> tuiHandler st "control-response"
+    :<|> instanceDisposeHandler st
+    :<|> logHandler st
+    :<|> skillHandler
+    :<|> formatterHandler
+    :<|> experimentalToolIdsHandler
+    :<|> experimentalToolHandler
+    :<|> experimentalWorktreeGetHandler st
+    :<|> experimentalWorktreePostHandler st
+    :<|> experimentalWorktreeResetHandler st
     -- LLM
     :<|> chatHandler st
 

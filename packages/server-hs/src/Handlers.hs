@@ -14,8 +14,8 @@ import qualified Data.Text.IO as TIO
 import Data.Maybe (fromMaybe)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
-import System.Directory (listDirectory, doesDirectoryExist, makeAbsolute, getCurrentDirectory)
-import System.FilePath ((</>))
+import System.Directory (listDirectory, doesDirectoryExist, makeAbsolute, getCurrentDirectory, doesFileExist)
+import System.FilePath ((</>), takeFileName)
 import Control.Monad (forM)
 import Control.Concurrent (forkIO)
 import Data.Aeson (Value(..), object, (.=))
@@ -26,6 +26,7 @@ import Control.Exception (catch, SomeException)
 
 import Api
 import State
+import qualified Message.Parts as Parts
 import qualified Bus.Bus as Bus
 import qualified Storage.Storage as Storage
 import qualified Session.Session as Sess
@@ -38,6 +39,9 @@ import qualified Config.Config as Config
 import qualified Pty.Pty as Pty
 import qualified Pty.Types as PtyT
 import qualified LLM.OpenRouter as LLM
+import qualified Proxy.Proxy as Proxy
+import qualified Tool.Defs as Tool
+import qualified Tool.Types as ToolT
 import System.Environment (lookupEnv)
 import qualified Log
 import qualified Katip
@@ -49,6 +53,38 @@ resolvePath mDir path = do
     Just d -> pure (unpack d)
     Nothing -> getCurrentDirectory
   makeAbsolute (base </> unpack path)
+
+findMatches :: Text -> Text -> Maybe Text -> IO [Value]
+findMatches query pattern mDir = do
+  base <- case mDir of
+    Just d -> pure (unpack d)
+    Nothing -> getCurrentDirectory
+  exists <- doesDirectoryExist base
+  case exists of
+    False -> return []
+    True -> do
+      files <- listDirectoryRecursive base
+      let q = T.toLower query
+      let p = T.toLower pattern
+      let matches = filter (matchesTerm q p) files
+      return $ map (\path -> object ["path" .= pack path, "name" .= pack (takeFileName path)]) matches
+  where
+    matchesTerm q p path =
+      let name = T.toLower (pack (takeFileName path))
+          qok = if T.null q then True else T.isInfixOf q name
+          pok = if T.null p then True else T.isInfixOf p name
+      in qok && pok
+
+listDirectoryRecursive :: FilePath -> IO [FilePath]
+listDirectoryRecursive dir = do
+  entries <- listDirectory dir
+  paths <- forM entries $ \name -> do
+    let path = dir </> name
+    isDir <- doesDirectoryExist path
+    if isDir
+      then listDirectoryRecursive path
+      else pure [path]
+  pure (concat paths)
 
 -- | Get session context from app state
 sessionContext :: AppState -> Sess.SessionContext
@@ -74,6 +110,45 @@ toApiSession s = Session
       (ST.stUpdated (ST.sessionTime s))
       (ST.stArchived (ST.sessionTime s))
   , sesParentId = ST.sessionParentID s
+  , sesSummary = toApiSummary <$> ST.sessionSummary s
+  , sesShare = toApiShare <$> ST.sessionShare s
+  , sesRevert = toApiRevert <$> ST.sessionRevert s
+  }
+
+toApiSummary :: ST.SessionSummary -> SessionSummary
+toApiSummary s = SessionSummary
+  { ssAdditions = ST.ssAdditions s
+  , ssDeletions = ST.ssDeletions s
+  , ssFiles = ST.ssFiles s
+  }
+
+toApiShare :: ST.SessionShare -> SessionShare
+toApiShare s = SessionShare { shareUrl = ST.shareUrl s }
+
+toApiRevert :: ST.SessionRevert -> SessionRevert
+toApiRevert r = SessionRevert
+  { srMessageId = ST.revertMessageID r
+  , srPartId = ST.revertPartID r
+  , srSnapshot = ST.revertSnapshot r
+  , srDiff = ST.revertDiff r
+  }
+
+toInternalSummary :: SessionSummary -> ST.SessionSummary
+toInternalSummary s = ST.SessionSummary
+  { ST.ssAdditions = ssAdditions s
+  , ST.ssDeletions = ssDeletions s
+  , ST.ssFiles = ssFiles s
+  }
+
+toInternalShare :: SessionShare -> ST.SessionShare
+toInternalShare s = ST.SessionShare { ST.shareUrl = shareUrl s }
+
+toInternalRevert :: SessionRevert -> ST.SessionRevert
+toInternalRevert r = ST.SessionRevert
+  { ST.revertMessageID = srMessageId r
+  , ST.revertPartID = srPartId r
+  , ST.revertSnapshot = srSnapshot r
+  , ST.revertDiff = srDiff r
   }
 
 -- | Convert API CreateSessionInput to internal
@@ -116,6 +191,15 @@ projectCurrentHandler _ = liftIO $ do
     , Api.name = Just "Default Project"
     }
 
+projectGetHandler :: Text -> Handler Project
+projectGetHandler pid = liftIO $ do
+  cwd <- getCurrentDirectory
+  return $ Project
+    { Api.id = pid
+    , Api.worktree = pack cwd
+    , Api.name = Just ("Project " <> pid)
+    }
+
 -- * Provider/Config Handlers
 
 providerListHandler :: AppState -> Handler ProviderList
@@ -136,6 +220,47 @@ providerAuthHandler :: AppState -> Handler Value
 providerAuthHandler st = liftIO $ do
   auths <- Provider.authStatus (stStorage st)
   return $ Data.Aeson.toJSON auths
+
+providerHandler :: Handler [Value]
+providerHandler = liftIO $ do
+  providers <- Provider.list
+  return $ map Data.Aeson.toJSON providers
+
+providerOauthAuthorizeHandler :: Text -> Value -> Handler Value
+providerOauthAuthorizeHandler pid _ = return $ object
+  [ "providerID" .= pid
+  , "url" .= ("https://auth.opencode.ai/oauth/" <> pid)
+  ]
+
+providerOauthCallbackHandler :: Text -> Value -> Handler Value
+providerOauthCallbackHandler pid _ = return $ object
+  [ "providerID" .= pid
+  , "success" .= True
+  ]
+
+authCreateHandler :: AppState -> Text -> Value -> Handler Value
+authCreateHandler st pid input = liftIO $ do
+  case extractToken input of
+    Nothing -> return $ object ["providerID" .= pid, "authenticated" .= False]
+    Just token -> do
+      Provider.setAuth (stStorage st) pid token
+      return $ object ["providerID" .= pid, "authenticated" .= True]
+
+authUpdateHandler :: AppState -> Text -> Value -> Handler Value
+authUpdateHandler = authCreateHandler
+
+authDeleteHandler :: AppState -> Text -> Handler Value
+authDeleteHandler st pid = liftIO $ do
+  Provider.removeAuth (stStorage st) pid
+  return $ object ["providerID" .= pid, "authenticated" .= False]
+
+extractToken :: Value -> Maybe Text
+extractToken (Object obj) = case KM.lookup "token" obj of
+  Just (String t) -> Just t
+  _ -> case KM.lookup "apiKey" obj of
+    Just (String t) -> Just t
+    _ -> Nothing
+extractToken _ = Nothing
 
 configHandler :: AppState -> Handler Value
 configHandler st = liftIO $ do
@@ -168,6 +293,158 @@ sessionCreateHandler st _mDir input = liftIO $ do
   let ctx = sessionContext st
   session <- Sess.create ctx (toInternalInput input)
   return $ toApiSession session
+
+sessionGetHandler :: AppState -> Text -> Handler Session
+sessionGetHandler st sid = do
+  let ctx = sessionContext st
+  msession <- liftIO $ Sess.get ctx sid
+  case msession of
+    Nothing -> throwError err404
+    Just session -> return $ toApiSession session
+
+sessionDeleteHandler :: AppState -> Text -> Handler Bool
+sessionDeleteHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  Sess.delete ctx sid
+
+sessionUpdateHandler :: AppState -> Text -> UpdateSessionInput -> Handler Session
+sessionUpdateHandler st sid input = do
+  let ctx = sessionContext st
+  msession <- liftIO $ Sess.update ctx sid (applyUpdate input)
+  case msession of
+    Nothing -> throwError err404
+    Just session -> return $ toApiSession session
+  where
+    applyUpdate usi s =
+      let title = case usiTitle usi of
+            Just t -> t
+            Nothing -> ST.sessionTitle s
+          summary = case usiSummary usi of
+            Just v -> Just (toInternalSummary v)
+            Nothing -> ST.sessionSummary s
+          share = case usiShare usi of
+            Just v -> Just (toInternalShare v)
+            Nothing -> ST.sessionShare s
+          revert = case usiRevert usi of
+            Just v -> Just (toInternalRevert v)
+            Nothing -> ST.sessionRevert s
+      in s
+          { ST.sessionTitle = title
+          , ST.sessionSummary = summary
+          , ST.sessionShare = share
+          , ST.sessionRevert = revert
+          }
+
+sessionChildrenHandler :: AppState -> Text -> Handler [Session]
+sessionChildrenHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  sessions <- Sess.list ctx Nothing Nothing
+  let children = filter (\s -> ST.sessionParentID s == Just sid) sessions
+  return $ map toApiSession children
+
+sessionTodoHandler :: AppState -> Text -> Handler [Value]
+sessionTodoHandler _ _ = return []
+
+sessionInitHandler :: AppState -> Text -> Handler Value
+sessionInitHandler st sid = liftIO $ do
+  Bus.publish (stBus st) "session.initialized" (object ["sessionID" .= sid])
+  return $ object ["sessionID" .= sid, "initialized" .= True]
+
+sessionForkHandler :: AppState -> Text -> Handler Session
+sessionForkHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  parent <- Sess.get ctx sid
+  let title = case parent of
+        Just p -> Just ("Fork of " <> ST.sessionTitle p)
+        Nothing -> Just "Forked session"
+  session <- Sess.create ctx ST.CreateSessionInput
+    { ST.csiTitle = title
+    , ST.csiParentID = Just sid
+    }
+  return $ toApiSession session
+
+sessionAbortHandler :: AppState -> Text -> Handler Value
+sessionAbortHandler st sid = liftIO $ do
+  Bus.publish (stBus st) "session.error" (object ["sessionID" .= sid, "aborted" .= True])
+  return $ object ["sessionID" .= sid, "aborted" .= True]
+
+sessionShareCreateHandler :: AppState -> Text -> Handler SessionShare
+sessionShareCreateHandler st sid = do
+  let ctx = sessionContext st
+  msession <- liftIO $ Sess.update ctx sid (setShare sid)
+  case msession of
+    Nothing -> throwError err404
+    Just session -> case ST.sessionShare session of
+      Nothing -> throwError err500
+      Just share -> return $ toApiShare share
+  where
+    setShare sid' s =
+      let url = "https://share.opencode.ai/session/" <> sid'
+      in s { ST.sessionShare = Just (ST.SessionShare url) }
+
+sessionShareDeleteHandler :: AppState -> Text -> Handler Bool
+sessionShareDeleteHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  updated <- Sess.update ctx sid (\s -> s { ST.sessionShare = Nothing })
+  return $ case updated of
+    Nothing -> False
+    Just _ -> True
+
+sessionDiffHandler :: AppState -> Text -> Handler Value
+sessionDiffHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  msession <- Sess.get ctx sid
+  case msession of
+    Nothing -> return $ object ["sessionID" .= sid, "diff" .= ("" :: Text)]
+    Just session -> return $ object
+      [ "sessionID" .= sid
+      , "summary" .= (toApiSummary <$> ST.sessionSummary session)
+      ]
+
+sessionSummarizeHandler :: AppState -> Text -> Handler SessionSummary
+sessionSummarizeHandler st sid = do
+  let ctx = sessionContext st
+  msession <- liftIO $ Sess.update ctx sid (setSummary)
+  case msession of
+    Nothing -> throwError err404
+    Just session -> case ST.sessionSummary session of
+      Nothing -> throwError err500
+      Just summary -> return $ toApiSummary summary
+  where
+    setSummary s =
+      let summary = ST.SessionSummary 0 0 (Just 0)
+      in s { ST.sessionSummary = Just summary }
+
+sessionCommandHandler :: AppState -> Text -> Value -> Handler Value
+sessionCommandHandler st sid input = liftIO $ do
+  Bus.publish (stBus st) "command.executed" (object ["sessionID" .= sid, "command" .= input])
+  return $ object ["sessionID" .= sid, "ok" .= True]
+
+sessionShellHandler :: AppState -> Text -> Value -> Handler Value
+sessionShellHandler st sid input = liftIO $ do
+  Bus.publish (stBus st) "command.executed" (object ["sessionID" .= sid, "shell" .= input])
+  return $ object ["sessionID" .= sid, "ok" .= True]
+
+sessionRevertHandler :: AppState -> Text -> SessionRevert -> Handler SessionRevert
+sessionRevertHandler st sid input = do
+  let ctx = sessionContext st
+  msession <- liftIO $ Sess.update ctx sid (\s -> s { ST.sessionRevert = Just (toInternalRevert input) })
+  case msession of
+    Nothing -> throwError err404
+    Just _ -> return input
+
+sessionUnrevertHandler :: AppState -> Text -> Handler Bool
+sessionUnrevertHandler st sid = liftIO $ do
+  let ctx = sessionContext st
+  updated <- Sess.update ctx sid (\s -> s { ST.sessionRevert = Nothing })
+  return $ case updated of
+    Nothing -> False
+    Just _ -> True
+
+sessionPermissionHandler :: AppState -> Text -> Text -> Value -> Handler Value
+sessionPermissionHandler st sid pid input = liftIO $ do
+  Bus.publish (stBus st) "permission.replied" (object ["sessionID" .= sid, "permissionID" .= pid, "response" .= input])
+  return $ object ["sessionID" .= sid, "permissionID" .= pid, "ok" .= True]
 
 -- * Message Handlers (still in-memory for now, TODO: port to storage)
 
@@ -308,6 +585,58 @@ sessionMessageCreateHandler st sid input = liftIO $ do
         
   return aMsg
 
+sessionMessageGetHandler :: AppState -> Text -> Text -> Handler Message
+sessionMessageGetHandler st sid msgId = do
+  let key = ["message", sid, msgId]
+  result <- liftIO $ (Just <$> Storage.read (stStorage st) key)
+    `catch` \(Storage.NotFoundError _) -> return Nothing
+  case result of
+    Nothing -> throwError err404
+    Just msg -> return msg
+
+sessionMessagePartDeleteHandler :: AppState -> Text -> Text -> Text -> Handler Bool
+sessionMessagePartDeleteHandler st sid msgId partId = liftIO $ do
+  let key = ["message", sid, msgId]
+  result <- (Just <$> Storage.read (stStorage st) key)
+    `catch` \(Storage.NotFoundError _) -> return Nothing
+  case result of
+    Nothing -> return False
+    Just msg -> do
+      let updated = Parts.deletePart partId (msgParts msg)
+      case updated of
+        Nothing -> return False
+        Just parts -> do
+          let next = msg { msgParts = parts }
+          Storage.write (stStorage st) key next
+          Bus.publish (stBus st) "message.part.removed" (object ["sessionID" .= sid, "messageID" .= msgId, "partID" .= partId])
+          return True
+
+sessionMessagePartUpdateHandler :: AppState -> Text -> Text -> Text -> Value -> Handler Value
+sessionMessagePartUpdateHandler st sid msgId partId input = do
+  let key = ["message", sid, msgId]
+  result <- liftIO $ (Just <$> Storage.read (stStorage st) key)
+    `catch` \(Storage.NotFoundError _) -> return Nothing
+  case result of
+    Nothing -> throwError err404
+    Just msg -> do
+      let updated = Parts.updatePart partId input (msgParts msg)
+      case updated of
+        Nothing -> throwError err404
+        Just parts -> do
+          let next = msg { msgParts = parts }
+          liftIO $ Storage.write (stStorage st) key next
+          let mpart = Parts.findPart partId parts
+          case mpart of
+            Nothing -> throwError err404
+            Just part -> do
+              liftIO $ Bus.publish (stBus st) "message.part.updated" (object ["sessionID" .= sid, "messageID" .= msgId, "part" .= part])
+              return part
+
+sessionPromptAsyncHandler :: AppState -> Text -> CreateMessageInput -> Handler Value
+sessionPromptAsyncHandler st sid input = liftIO $ do
+  Bus.publish (stBus st) "prompt.async" (object ["sessionID" .= sid, "parts" .= cmiParts input])
+  return $ object ["sessionID" .= sid, "queued" .= True]
+
 -- | Extract text content from user message parts
 extractUserText :: [Value] -> Text
 extractUserText parts = T.intercalate "\n" $ concatMap extractText parts
@@ -401,6 +730,87 @@ permissionHandler = return []
 
 questionHandler :: Handler [Value]
 questionHandler = return []
+
+questionReplyHandler :: AppState -> Text -> Value -> Handler Value
+questionReplyHandler st rid input = liftIO $ do
+  Bus.publish (stBus st) "question.replied" (object ["requestID" .= rid, "reply" .= input])
+  return $ object ["requestID" .= rid, "ok" .= True]
+
+questionRejectHandler :: AppState -> Text -> Value -> Handler Value
+questionRejectHandler st rid input = liftIO $ do
+  Bus.publish (stBus st) "question.rejected" (object ["requestID" .= rid, "reject" .= input])
+  return $ object ["requestID" .= rid, "ok" .= True]
+
+permissionReplyHandler :: AppState -> Text -> Value -> Handler Value
+permissionReplyHandler st rid input = liftIO $ do
+  Bus.publish (stBus st) "permission.replied" (object ["requestID" .= rid, "reply" .= input])
+  return $ object ["requestID" .= rid, "ok" .= True]
+
+findHandler :: Maybe Text -> Maybe Text -> Maybe Text -> Handler [Value]
+findHandler mQuery mPattern mDir = liftIO $ do
+  results <- findMatches (fromMaybe "" mQuery) (fromMaybe "" mPattern) mDir
+  return results
+
+findFileHandler :: Maybe Text -> Maybe Text -> Handler [Value]
+findFileHandler mPattern mDir = liftIO $ do
+  results <- findMatches "" (fromMaybe "" mPattern) mDir
+  return results
+
+findSymbolHandler :: Maybe Text -> Maybe Text -> Handler [Value]
+findSymbolHandler mQuery mDir = liftIO $ do
+  results <- findMatches (fromMaybe "" mQuery) "" mDir
+  return results
+
+fileStatusHandler :: Maybe Text -> Maybe Text -> Handler [Value]
+fileStatusHandler mDir mPath = liftIO $ do
+  case mPath of
+    Nothing -> return []
+    Just path -> do
+      fullPath <- resolvePath mDir path
+      exists <- doesFileExist fullPath
+      return [object ["path" .= path, "exists" .= exists, "status" .= ("clean" :: Text)]]
+
+tuiHandler :: AppState -> Text -> Value -> Handler Value
+tuiHandler st name input = liftIO $ do
+  Bus.publish (stBus st) ("tui." <> name) (object ["payload" .= input])
+  return $ object ["ok" .= True]
+
+instanceDisposeHandler :: AppState -> Handler Value
+instanceDisposeHandler st = liftIO $ do
+  case stProxy st of
+    Nothing -> pure ()
+    Just proxy -> Proxy.stop proxy
+  Bus.publish (stBus st) "server.instance.disposed" (object [])
+  return $ object ["disposed" .= True]
+
+logHandler :: AppState -> Value -> Handler Value
+logHandler st input = liftIO $ do
+  let lg = Log.withNS (stLogger st) "client"
+  Log.logMsg lg Katip.InfoS $ "log " <> T.pack (show input)
+  return $ object ["ok" .= True]
+
+skillHandler :: Handler [Value]
+skillHandler = return []
+
+formatterHandler :: Handler Value
+formatterHandler = return $ object []
+
+experimentalToolIdsHandler :: Handler [Text]
+experimentalToolIdsHandler = return $ map ToolT.tdName Tool.allTools
+
+experimentalToolHandler :: Value -> Handler Value
+experimentalToolHandler input = return $ object ["ok" .= True, "input" .= input]
+
+experimentalWorktreeGetHandler :: AppState -> Handler Value
+experimentalWorktreeGetHandler st = return $ object ["root" .= stDirectory st]
+
+experimentalWorktreePostHandler :: AppState -> Value -> Handler Value
+experimentalWorktreePostHandler st input =
+  return $ object ["root" .= stDirectory st, "input" .= input]
+
+experimentalWorktreeResetHandler :: AppState -> Value -> Handler Value
+experimentalWorktreeResetHandler st input =
+  return $ object ["root" .= stDirectory st, "reset" .= True, "input" .= input]
 
 -- * PTY Handlers (sandboxed terminals)
 

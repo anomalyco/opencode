@@ -16,6 +16,7 @@ library
     Session.Types
     Session.Session
     Message.Types
+    Message.Parts
     Config.Types
     Config.Config
     Provider.Types
@@ -113,6 +114,7 @@ test-suite opencode-server-test
     Property.SessionProps
     Property.ToolProps
     Property.MessageProps
+    Property.MessagePartProps
     Property.LLMProps
     Property.ProviderProps
     Property.OpenApiProps
