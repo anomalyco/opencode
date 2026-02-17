@@ -991,7 +991,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
             <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
               placement="top"
               gutter={4}
             >
@@ -1001,7 +1001,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 variant="ghost"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
               />
             </Tooltip>
             <Show when={meta()}>
