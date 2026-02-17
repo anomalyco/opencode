@@ -121,6 +121,24 @@ export namespace Worktree {
     }),
   )
 
+  export const MergeFailedError = NamedError.create(
+    "WorktreeMergeFailedError",
+    z.object({
+      message: z.string(),
+    }),
+  )
+
+  export const MergeInput = z
+    .object({
+      sourceDirectory: z.string(),
+      targetDirectory: z.string(),
+    })
+    .meta({
+      ref: "WorktreeMergeInput",
+    })
+
+  export type MergeInput = z.infer<typeof MergeInput>
+
   const ADJECTIVES = [
     "brave",
     "calm",
@@ -637,6 +655,95 @@ export namespace Worktree {
 
     const projectID = Instance.project.id
     queueStartScripts(worktreePath, { projectID })
+
+    return true
+  })
+
+  export const merge = fn(MergeInput, async (input) => {
+    if (Instance.project.vcs !== "git") {
+      throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+    }
+
+    const source = await canonical(input.sourceDirectory)
+    const target = await canonical(input.targetDirectory)
+
+    if (source === target) {
+      throw new MergeFailedError({ message: "Source and target worktrees must be different" })
+    }
+
+    const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    if (list.exitCode !== 0) {
+      throw new MergeFailedError({ message: errorText(list) || "Failed to read git worktrees" })
+    }
+
+    const lines = outputText(list.stdout)
+      .split("\n")
+      .map((line) => line.trim())
+    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+      if (!line) return acc
+      if (line.startsWith("worktree ")) {
+        acc.push({ path: line.slice("worktree ".length).trim() })
+        return acc
+      }
+      const current = acc[acc.length - 1]
+      if (!current) return acc
+      if (line.startsWith("branch ")) {
+        current.branch = line.slice("branch ".length).trim()
+      }
+      return acc
+    }, [])
+
+    const locate = async (directory: string) => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    }
+
+    const sourceEntry = await locate(source)
+    if (!sourceEntry?.path) {
+      throw new MergeFailedError({ message: "Source worktree not found" })
+    }
+
+    const targetEntry = await locate(target)
+    if (!targetEntry?.path) {
+      throw new MergeFailedError({ message: "Target worktree not found" })
+    }
+
+    const sourceBranch = sourceEntry.branch?.replace(/^refs\/heads\//, "")
+    if (!sourceBranch) {
+      throw new MergeFailedError({ message: "Source worktree has no branch" })
+    }
+
+    const status = await $`git status --porcelain`.quiet().nothrow().cwd(sourceEntry.path)
+    if (status.exitCode !== 0) {
+      throw new MergeFailedError({ message: errorText(status) || "Failed to check source worktree status" })
+    }
+    if (outputText(status.stdout)) {
+      throw new MergeFailedError({ message: "Source worktree has uncommitted changes" })
+    }
+
+    const targetBranch = targetEntry.branch?.replace(/^refs\/heads\//, "")
+    if (!targetBranch) {
+      throw new MergeFailedError({ message: "Target worktree has no branch" })
+    }
+
+    const revList = await $`git rev-list ${targetBranch}..${sourceBranch}`.quiet().nothrow().cwd(Instance.worktree)
+    if (revList.exitCode !== 0) {
+      throw new MergeFailedError({ message: errorText(revList) || "Failed to compare branches" })
+    }
+    const commits = outputText(revList.stdout)
+    if (!commits) {
+      throw new MergeFailedError({ message: "Source branch has no new commits to merge" })
+    }
+
+    const merged = await $`git merge ${sourceBranch}`.quiet().nothrow().cwd(targetEntry.path)
+    if (merged.exitCode !== 0) {
+      throw new MergeFailedError({ message: errorText(merged) || "Merge failed" })
+    }
+
+    await remove({ directory: sourceEntry.path })
 
     return true
   })

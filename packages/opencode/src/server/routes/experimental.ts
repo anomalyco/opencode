@@ -184,6 +184,32 @@ export const ExperimentalRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/worktree/merge",
+      describeRoute({
+        summary: "Merge worktree",
+        description: "Merge a source worktree branch into a target worktree, then delete the source worktree.",
+        operationId: "worktree.merge",
+        responses: {
+          200: {
+            description: "Worktree merged",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Worktree.merge.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Worktree.merge(body)
+        await Project.removeSandbox(Instance.project.id, body.sourceDirectory)
+        return c.json(true)
+      },
+    )
     .get(
       "/resource",
       describeRoute({

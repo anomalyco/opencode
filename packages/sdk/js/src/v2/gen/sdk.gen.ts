@@ -168,6 +168,9 @@ import type {
   WorktreeCreateInput,
   WorktreeCreateResponses,
   WorktreeListResponses,
+  WorktreeMergeErrors,
+  WorktreeMergeInput,
+  WorktreeMergeResponses,
   WorktreeRemoveErrors,
   WorktreeRemoveInput,
   WorktreeRemoveResponses,
@@ -887,6 +890,41 @@ export class Worktree extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<WorktreeResetResponses, WorktreeResetErrors, ThrowOnError>({
       url: "/experimental/worktree/reset",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Merge worktree
+   *
+   * Merge a source worktree branch into a target worktree, then delete the source worktree.
+   */
+  public merge<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      worktreeMergeInput?: WorktreeMergeInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "worktreeMergeInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorktreeMergeResponses, WorktreeMergeErrors, ThrowOnError>({
+      url: "/experimental/worktree/merge",
       ...options,
       ...params,
       headers: {

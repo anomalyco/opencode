@@ -1233,6 +1233,50 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  const mergeWorkspace = async (root: string, sourceDirectory: string, targetDirectory: string) => {
+    if (sourceDirectory === root) return
+    if (sourceDirectory === targetDirectory) return
+
+    setBusy(sourceDirectory, true)
+
+    const result = await globalSDK.client.worktree
+      .merge({ worktreeMergeInput: { sourceDirectory, targetDirectory } })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: "Merge failed",
+          description: errorMessage(err, language.t("common.requestFailed")),
+        })
+        return false
+      })
+
+    setBusy(sourceDirectory, false)
+
+    if (!result) return
+
+    globalSync.set(
+      "project",
+      produce((draft) => {
+        const project = draft.find((item) => item.worktree === root)
+        if (!project) return
+        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => sandbox !== sourceDirectory)
+      }),
+    )
+    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== sourceDirectory))
+
+    layout.projects.close(sourceDirectory)
+    layout.projects.open(targetDirectory)
+
+    if (params.dir && currentDir() === sourceDirectory) {
+      navigateToProject(targetDirectory)
+    }
+
+    showToast({
+      title: "Workspace merged",
+      description: `Successfully merged into target workspace`,
+    })
+  }
+
   const resetWorkspace = async (root: string, directory: string) => {
     if (directory === root) return
     setBusy(directory, true)
@@ -1434,6 +1478,56 @@ export default function Layout(props: ParentProps) {
             </Button>
             <Button variant="primary" size="large" disabled={state.status === "loading"} onClick={handleReset}>
               {language.t("workspace.reset.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function DialogMergeWorkspace(props: { root: string; directory: string }) {
+    const name = createMemo(() => getFilename(props.directory))
+    const targets = createMemo(() => {
+      const project = layout.projects.list().find((p) => p.worktree === props.root)
+      if (!project) return [props.root]
+      return [props.root, ...(project.sandboxes ?? [])].filter((d) => d !== props.directory)
+    })
+    const [target, setTarget] = createSignal(props.root)
+
+    const handleMerge = () => {
+      dialog.close()
+      void mergeWorkspace(props.root, props.directory, target())
+    }
+
+    return (
+      <Dialog title="Merge workspace" fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              Merge <strong>{name()}</strong> into another workspace?
+            </span>
+            <span class="text-12-regular text-text-weak">
+              This will merge the branch and delete the source workspace.
+            </span>
+          </div>
+          <div class="flex flex-col gap-2">
+            <span class="text-12-medium text-text-base">Merge into</span>
+            <select
+              class="text-14-regular text-text-strong bg-background-base border border-border-weak-base rounded-md px-3 py-2"
+              value={target()}
+              onChange={(e) => setTarget(e.currentTarget.value)}
+            >
+              <For each={targets()}>
+                {(dir) => <option value={dir}>{dir === props.root ? "Main workspace" : getFilename(dir)}</option>}
+              </For>
+            </select>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleMerge}>
+              Merge
             </Button>
           </div>
         </div>
@@ -1649,6 +1743,8 @@ export default function Layout(props: ParentProps) {
       dialog.show(() => <DialogResetWorkspace root={root} directory={directory} />),
     showDeleteWorkspaceDialog: (root, directory) =>
       dialog.show(() => <DialogDeleteWorkspace root={root} directory={directory} />),
+    showMergeWorkspaceDialog: (root, directory) =>
+      dialog.show(() => <DialogMergeWorkspace root={root} directory={directory} />),
     setScrollContainerRef: (el, mobile) => {
       if (!mobile) scrollContainerRef = el
     },
