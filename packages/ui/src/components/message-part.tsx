@@ -506,6 +506,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; interrupted?: boolean }) {
+  const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
@@ -534,6 +535,21 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
+  const provider = createMemo(() => {
+    const id = props.message.model?.providerID
+    if (!id) return ""
+    const match = data.store.provider?.all?.find((p) => p.id === id)
+    return match?.name ?? id
+  })
+
+  const model = createMemo(() => {
+    const providerID = props.message.model?.providerID
+    const modelID = props.message.model?.modelID
+    if (!providerID || !modelID) return ""
+    const match = data.store.provider?.all?.find((p) => p.id === providerID)
+    return match?.models?.[modelID]?.name ?? modelID
+  })
+
   const stamp = createMemo(() => {
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
@@ -546,12 +562,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const meta = createMemo(() => {
     const agent = props.message.agent
-    const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      props.message.model?.providerID,
-      props.message.model?.modelID,
-      stamp(),
-    ]
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", provider(), model(), stamp()]
     return items.filter((x) => !!x).join(" \u00B7 ")
   })
 
