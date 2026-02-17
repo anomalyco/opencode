@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { persisted } from "@/utils/persist"
 import { Persist } from "@/utils/persist"
@@ -14,7 +14,8 @@ export function useExpandedSessions(
 } {
   const storageKey = createMemo(() => {
     const dir = directory()
-    const sum = checksum(dir) ?? "0"
+    const sum = checksum(dir)
+    if (!sum) throw new Error("Failed to generate checksum for directory")
     const head = dir.slice(0, 12) || "workspace"
     return `workspace.${head}.${sum}.expanded-sessions`
   })
@@ -25,25 +26,41 @@ export function useExpandedSessions(
   )
 
   const [local, setLocal] = createSignal<string[]>([])
+  const [migrated, setMigrated] = createSignal(false)
 
   const prefix = () => storageKey() + "."
 
   const expanded = (sessionId: string) => {
-    if (!ready()) return local().includes(sessionId)
+    if (!ready() && !migrated()) return local().includes(sessionId)
     return store[prefix() + sessionId] ?? false
   }
 
   const toggle = (sessionId: string) => {
     const key = prefix() + sessionId
+    const isReady = ready()
     const current = expanded(sessionId)
 
-    if (!ready()) {
+    if (!isReady && !migrated()) {
       setLocal((prev) => (current ? prev.filter((id) => id !== sessionId) : [...prev, sessionId]))
       return
     }
 
     setStore(key, !current)
   }
+
+  onMount(() => {
+    if (ready() && !migrated()) {
+      const localIds = local()
+      if (localIds.length > 0) {
+        const pfx = prefix()
+        for (const id of localIds) {
+          setStore(pfx + id, true)
+        }
+        setLocal([])
+      }
+      setMigrated(true)
+    }
+  })
 
   return { expanded, toggle }
 }

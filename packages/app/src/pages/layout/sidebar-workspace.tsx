@@ -506,7 +506,7 @@ export const LocalWorkspace = (props: {
   return (
     <div
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
-      class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+      class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none] pr-2"
     >
       <nav class="flex flex-col gap-1 px-2">
         <Show when={loading()}>

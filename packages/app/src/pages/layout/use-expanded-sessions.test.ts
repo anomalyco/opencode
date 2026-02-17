@@ -154,31 +154,88 @@ describe("useExpandedSessions", () => {
         const [local, setLocal] = createSignal<string[]>([])
         const [store, setStore] = createStore<Record<string, boolean>>({})
         let isReady = false
+        let hasMigrated = false
         const prefix = "workspace.test."
 
         const expanded = (sessionId: string) => {
-          if (!isReady) return local().includes(sessionId)
+          if (!isReady && !hasMigrated) return local().includes(sessionId)
           return store[prefix + sessionId] ?? false
         }
 
         const toggle = (sessionId: string) => {
-          if (!isReady) {
-            const current = expanded(sessionId)
+          const readyCheck = isReady
+          const current = expanded(sessionId)
+
+          if (!readyCheck && !hasMigrated) {
             setLocal((prev) => (current ? prev.filter((id) => id !== sessionId) : [...prev, sessionId]))
             return
           }
           const key = prefix + sessionId
-          setStore(key, !expanded(sessionId))
+          setStore(key, !current)
         }
 
         toggle("session-1")
         expect(expanded("session-1")).toBe(true)
 
         isReady = true
+        hasMigrated = true
+
         expect(expanded("session-1")).toBe(false)
 
         toggle("session-1")
         expect(expanded("session-1")).toBe(true)
+        dispose()
+      })
+    })
+
+    test("migrates local state to store when ready", () => {
+      createRoot((dispose) => {
+        const [local, setLocal] = createSignal<string[]>([])
+        const [store, setStore] = createStore<Record<string, boolean>>({})
+        let isReady = false
+        let hasMigrated = false
+        const prefix = "workspace.test."
+
+        const expanded = (sessionId: string) => {
+          if (!isReady && !hasMigrated) return local().includes(sessionId)
+          return store[prefix + sessionId] ?? false
+        }
+
+        const toggle = (sessionId: string) => {
+          const readyCheck = isReady
+          const current = expanded(sessionId)
+
+          if (!readyCheck && !hasMigrated) {
+            setLocal((prev) => (current ? prev.filter((id) => id !== sessionId) : [...prev, sessionId]))
+            return
+          }
+          const key = prefix + sessionId
+          setStore(key, !current)
+        }
+
+        const migrate = () => {
+          const localIds = local()
+          for (const id of localIds) {
+            setStore(prefix + id, true)
+          }
+          setLocal([])
+          hasMigrated = true
+        }
+
+        toggle("session-1")
+        toggle("session-2")
+        expect(local()).toHaveLength(2)
+        expect(expanded("session-1")).toBe(true)
+        expect(expanded("session-2")).toBe(true)
+
+        isReady = true
+        migrate()
+
+        expect(local()).toHaveLength(0)
+        expect(expanded("session-1")).toBe(true)
+        expect(expanded("session-2")).toBe(true)
+        expect(store[`${prefix}session-1`]).toBe(true)
+        expect(store[`${prefix}session-2`]).toBe(true)
         dispose()
       })
     })

@@ -6,6 +6,7 @@ import {
   getChildSessions,
   getDraggableId,
   syncWorkspaceOrder,
+  validateParentIDs,
   workspaceKey,
 } from "./helpers"
 import type { Session } from "@opencode-ai/sdk/v2/client"
@@ -165,5 +166,47 @@ describe("getChildSessions", () => {
     expect(children.map((s) => s.id)).toEqual(expect.arrayContaining(["active-1", "active-2"]))
     expect(children.find((s) => s.id === "archived-1")).toBeUndefined()
     expect(children.find((s) => s.id === "archived-2")).toBeUndefined()
+  })
+})
+
+describe("validateParentIDs", () => {
+  test("returns valid when all parentID references exist", () => {
+    const sessions: Session[] = [
+      mockSession("root"),
+      mockSession("child-1", { parentID: "root" }),
+      mockSession("child-2", { parentID: "root" }),
+      mockSession("grandchild", { parentID: "child-1" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(true)
+    expect(result.orphaned).toHaveLength(0)
+  })
+
+  test("returns invalid when parentID references are missing", () => {
+    const sessions: Session[] = [
+      mockSession("root"),
+      mockSession("child-1", { parentID: "root" }),
+      mockSession("orphaned-1", { parentID: "non-existent" }),
+      mockSession("orphaned-2", { parentID: "also-missing" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(false)
+    expect(result.orphaned).toHaveLength(2)
+    expect(result.orphaned).toContain("orphaned-1")
+    expect(result.orphaned).toContain("orphaned-2")
+  })
+
+  test("handles sessions without parentID", () => {
+    const sessions: Session[] = [
+      mockSession("root-1"),
+      mockSession("root-2"),
+      mockSession("child", { parentID: "root-1" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(true)
+    expect(result.orphaned).toHaveLength(0)
   })
 })

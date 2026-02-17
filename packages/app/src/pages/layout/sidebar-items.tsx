@@ -92,56 +92,54 @@ const SessionRow = (props: {
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   scheduleHoverPrefetch: () => void
   cancelHoverPrefetch: () => void
-}): JSX.Element => (
-  <A
-    href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-    onPointerEnter={props.scheduleHoverPrefetch}
-    onPointerLeave={props.cancelHoverPrefetch}
-    onMouseEnter={props.scheduleHoverPrefetch}
-    onMouseLeave={props.cancelHoverPrefetch}
-    onFocus={() => props.prefetchSession(props.session, "high")}
-    onClick={() => {
-      props.setHoverSession(undefined)
-      if (props.sidebarOpened()) return
-      props.clearHoverProjectSoon()
-    }}
-  >
-    <div class="flex items-center gap-1 w-full">
-      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={props.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={props.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={props.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={props.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-        {props.session.title}
-      </span>
-      <Show when={props.session.summary}>
-        {(summary) => (
-          <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-            <DiffChanges changes={summary()} />
+}): JSX.Element => {
+  const hasStatus = () => props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0
+
+  const getStatusIcon = () => {
+    if (props.isWorking()) return <Spinner class="size-[15px]" />
+    if (props.hasPermissions()) return <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+    if (props.hasError()) return <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+    return <div class="size-1.5 rounded-full bg-text-interactive-base" />
+  }
+
+  return (
+    <A
+      href={`/${props.slug}/session/${props.session.id}`}
+      class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+      onPointerEnter={props.scheduleHoverPrefetch}
+      onPointerLeave={props.cancelHoverPrefetch}
+      onMouseEnter={props.scheduleHoverPrefetch}
+      onMouseLeave={props.cancelHoverPrefetch}
+      onFocus={() => props.prefetchSession(props.session, "high")}
+      onClick={() => {
+        props.setHoverSession(undefined)
+        if (props.sidebarOpened()) return
+        props.clearHoverProjectSoon()
+      }}
+    >
+      <div class="flex items-center gap-1 w-full">
+        <Show when={hasStatus()}>
+          <div
+            class="shrink-0 size-6 flex items-center justify-center"
+            style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+          >
+            {getStatusIcon()}
           </div>
-        )}
-      </Show>
-    </div>
-  </A>
-)
+        </Show>
+        <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+          {props.session.title}
+        </span>
+        <Show when={props.session.summary}>
+          {(summary) => (
+            <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+              <DiffChanges changes={summary()} />
+            </div>
+          )}
+        </Show>
+      </div>
+    </A>
+  )
+}
 
 const SessionHoverPreview = (props: {
   mobile?: boolean
