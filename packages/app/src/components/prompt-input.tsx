@@ -319,6 +319,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
+  const shellModeKey = "mod+shift+x"
+  const normalModeKey = "mod+shift+y"
+
   command.register("prompt-input", () => [
     {
       id: "file.attach",
@@ -327,6 +330,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: "mod+u",
       disabled: store.mode !== "normal",
       onSelect: pick,
+    },
+    {
+      id: "prompt.mode.shell",
+      title: language.t("command.prompt.mode.shell"),
+      category: language.t("command.category.session"),
+      keybind: shellModeKey,
+      disabled: store.mode === "shell",
+      onSelect: () => setMode("shell"),
+    },
+    {
+      id: "prompt.mode.normal",
+      title: language.t("command.prompt.mode.normal"),
+      category: language.t("command.category.session"),
+      keybind: normalModeKey,
+      disabled: store.mode === "normal",
+      onSelect: () => setMode("normal"),
     },
   ])
 
@@ -1345,15 +1364,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 current={store.mode}
                 value={(mode) => mode}
                 label={(mode) => (
-                  <Icon
-                    name={mode === "shell" ? "console" : "prompt"}
-                    class="size-[18px]"
-                    classList={{
-                      "text-icon-strong-base": mode === "shell" && store.mode === "shell",
-                      "text-icon-interactive-base": mode === "normal" && store.mode === "normal",
-                      "text-icon-weak": store.mode !== mode,
-                    }}
-                  />
+                  <TooltipKeybind
+                    placement="top"
+                    gutter={4}
+                    title={language.t(mode === "shell" ? "command.prompt.mode.shell" : "command.prompt.mode.normal")}
+                    keybind={command.keybind(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
+                    class="size-full flex items-center justify-center"
+                  >
+                    <Icon
+                      name={mode === "shell" ? "console" : "prompt"}
+                      class="size-[18px]"
+                      classList={{
+                        "text-icon-strong-base": mode === "shell" && store.mode === "shell",
+                        "text-icon-interactive-base": mode === "normal" && store.mode === "normal",
+                        "text-icon-weak": store.mode !== mode,
+                      }}
+                    />
+                  </TooltipKeybind>
                 )}
                 onSelect={(mode) => mode && setMode(mode)}
                 fill
