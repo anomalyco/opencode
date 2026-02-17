@@ -1,10 +1,9 @@
 name: deploy
 
+# Disabled: Cloudflare deployment is not used for local-only codemie.
+# Artifacts are produced by the publish-codemie workflow instead.
+# To re-enable, restore the push trigger below.
 on:
-  push:
-    branches:
-      - dev
-      - production
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
