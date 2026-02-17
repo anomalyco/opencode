@@ -15,6 +15,7 @@ import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogWorkspaceCreate, openWorkspaceSession } from "./dialog-workspace-create"
 import { Spinner } from "./spinner"
+import { Keybind } from "@/util/keybind"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
@@ -28,6 +29,7 @@ export function DialogSessionList() {
   const sdk = useSDK()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [showArchived, setShowArchived] = createSignal(false)
   const [search, setSearch] = createDebouncedSignal("", 150)
 
   const [searchResults] = createResource(search, async (query) => {
@@ -59,7 +61,11 @@ export function DialogSessionList() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
-      .filter((x) => x.parentID === undefined)
+      .filter((x) => {
+        if (x.parentID !== undefined) return false
+        if (showArchived()) return !!x.time.archived
+        return !x.time.archived
+      })
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
         const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
@@ -124,7 +130,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={showArchived() ? "Archived Sessions" : "Sessions"}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -133,6 +139,13 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
+        if (showArchived()) {
+          sdk.client.session.update({
+            sessionID: option.value,
+            time: { archived: 0 },
+          })
+          return
+        }
         route.navigate({
           type: "session",
           sessionID: option.value,
@@ -140,25 +153,61 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       keybind={[
+        ...(showArchived()
+          ? []
+          : [
+              {
+                keybind: keybind.all.session_delete?.[0],
+                title: "delete",
+                onTrigger: async (option: { value: string }) => {
+                  if (toDelete() === option.value) {
+                    sdk.client.session.delete({
+                      sessionID: option.value,
+                    })
+                    setToDelete(undefined)
+                    return
+                  }
+                  setToDelete(option.value)
+                },
+              },
+              {
+                keybind: keybind.all.session_archive?.[0],
+                title: "archive",
+                onTrigger: async (option: { value: string }) => {
+                  sdk.client.session.update({
+                    sessionID: option.value,
+                    time: { archived: Date.now() },
+                  })
+                },
+              },
+              {
+                keybind: keybind.all.session_rename?.[0],
+                title: "rename",
+                onTrigger: async (option: { value: string }) => {
+                  dialog.replace(() => <DialogSessionRename session={option.value} />)
+                },
+              },
+            ]),
+        ...(showArchived()
+          ? [
+              {
+                keybind: keybind.all.session_archive?.[0],
+                title: "unarchive",
+                onTrigger: async (option: { value: string }) => {
+                  sdk.client.session.update({
+                    sessionID: option.value,
+                    time: { archived: 0 },
+                  })
+                },
+              },
+            ]
+          : []),
         {
-          keybind: keybind.all.session_delete?.[0],
-          title: "delete",
-          onTrigger: async (option) => {
-            if (toDelete() === option.value) {
-              sdk.client.session.delete({
-                sessionID: option.value,
-              })
-              setToDelete(undefined)
-              return
-            }
-            setToDelete(option.value)
-          },
-        },
-        {
-          keybind: keybind.all.session_rename?.[0],
-          title: "rename",
-          onTrigger: async (option) => {
-            dialog.replace(() => <DialogSessionRename session={option.value} />)
+          keybind: Keybind.parse("tab")[0],
+          title: showArchived() ? "active" : "archived",
+          onTrigger: async () => {
+            setShowArchived((prev) => !prev)
+            setToDelete(undefined)
           },
         },
         {
