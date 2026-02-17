@@ -114,6 +114,12 @@ export const SettingsGeneral: Component = () => {
       label: language.label(locale),
     })),
   )
+  const followupOptions = createMemo(
+    (): { value: "queue" | "steer"; label: string }[] => [
+      { value: "queue", label: language.t("settings.general.followup.queue") },
+      { value: "steer", label: language.t("settings.general.followup.steer") },
+    ],
+  )
 
   const fontOptions = [
     { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
@@ -133,7 +139,6 @@ export const SettingsGeneral: Component = () => {
   const fontOptionsList = [...fontOptions]
 
   const soundOptions = [...SOUND_OPTIONS]
-
   const soundSelectProps = (current: () => string, set: (id: string) => void) => ({
     options: soundOptions,
     current: soundOptions.find((o) => o.id === current()),
@@ -416,6 +421,31 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const BehaviorSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.behavior")}</h3>
+
+      <div class="bg-surface-raised-base px-4 rounded-lg">
+        <SettingsRow
+          title={language.t("settings.general.followup.title")}
+          description={language.t("settings.general.followup.description")}
+        >
+          <Select
+            data-action="settings-followup-behavior"
+            options={followupOptions()}
+            current={followupOptions().find((o) => o.value === settings.general.followup())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+          />
+        </SettingsRow>
+      </div>
+    </div>
+  )
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -426,6 +456,8 @@ export const SettingsGeneral: Component = () => {
 
       <div class="flex flex-col gap-8 w-full">
         <AppearanceSection />
+
+        <BehaviorSection />
 
         <NotificationsSection />
 

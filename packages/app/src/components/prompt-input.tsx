@@ -6,6 +6,7 @@ import { useLocal } from "@/context/local"
 import { useFile } from "@/context/file"
 import {
   ContentPart,
+  ContextItem,
   DEFAULT_PROMPT,
   isPromptEqual,
   Prompt,
@@ -26,6 +27,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -36,6 +38,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import {
@@ -88,6 +91,13 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
+type SubmitMode = "queue" | "steer"
+type QueuedFollowup = {
+  id: number
+  prompt: Prompt
+  context: (ContextItem & { key: string })[]
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
@@ -104,12 +114,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettings()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
 
   const mirror = { input: false }
+  const ids = { followup: 0 }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -214,6 +226,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    followupMode: SubmitMode | undefined
+    queuedFollowups: QueuedFollowup[]
+    sendingQueued: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -222,6 +237,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    followupMode: undefined,
+    queuedFollowups: [],
+    sendingQueued: false,
   })
   const placeholder = createMemo(() =>
     promptPlaceholder({
@@ -249,6 +267,99 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       entries: [],
     }),
   )
+  const showFollowupMode = createMemo(() => store.mode === "normal" && store.queuedFollowups.length > 0)
+  const submitMode = createMemo<SubmitMode>(() => {
+    if (!working()) return "queue"
+    if (store.followupMode) return store.followupMode
+    return settings.general.followup()
+  })
+  const clonePrompt = (value: Prompt): Prompt =>
+    value.map((part) => {
+      if (part.type === "file") {
+        return {
+          ...part,
+          selection: part.selection
+            ? {
+                ...part.selection,
+              }
+            : undefined,
+        }
+      }
+      return {
+        ...part,
+      }
+    })
+  const cloneContext = (items: (ContextItem & { key: string })[]) =>
+    items.map((item) => ({
+      ...item,
+      selection: item.selection
+        ? {
+            ...item.selection,
+          }
+        : undefined,
+    }))
+  const setContext = (items: (ContextItem & { key: string })[]) => {
+    prompt.context
+      .items()
+      .forEach((item) => {
+        prompt.context.remove(item.key)
+      })
+    items.forEach((item) => {
+      const { key, ...value } = item
+      void key
+      prompt.context.add(value)
+    })
+  }
+  const followupPreview = (queued: QueuedFollowup) => {
+    const text = queued.prompt
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+      .trim()
+      .replace(/\s+/g, " ")
+    if (text.length > 0) return text
+    if (queued.context.some((item) => !!item.comment?.trim())) return language.t("prompt.followup.commentOnly")
+    return "..."
+  }
+  const focusEditor = () => {
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+      queueScroll()
+    })
+  }
+  const findFollowup = (id: number) => store.queuedFollowups.find((item) => item.id === id)
+  const editFollowup = (id: number) => {
+    const queued = findFollowup(id)
+    if (!queued) return
+    const parts = clonePrompt(queued.prompt)
+    setContext(queued.context)
+    prompt.set(parts, promptLength(parts))
+    setStore("queuedFollowups", (items) => items.filter((item) => item.id !== id))
+    setStore("followupMode", undefined)
+    focusEditor()
+  }
+  const clearFollowup = (id: number) => {
+    setStore("queuedFollowups", (items) => items.filter((item) => item.id !== id))
+    setStore("followupMode", undefined)
+  }
+  const stageFollowup = () => {
+    const queued = {
+      id: ++ids.followup,
+      prompt: clonePrompt(prompt.current()),
+      context: cloneContext(prompt.context.items()),
+    }
+    setStore("queuedFollowups", (items) => [...items, queued])
+    setContext([])
+    prompt.reset()
+    setStore("followupMode", undefined)
+    focusEditor()
+  }
+
+  createEffect(() => {
+    if (working()) return
+    if (!store.followupMode) return
+    setStore("followupMode", undefined)
+  })
 
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
@@ -794,11 +905,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
-  const { abort, handleSubmit } = createPromptSubmit({
+  const { abort, handleSubmit: submitPrompt } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
     mode: () => store.mode,
+    submitMode,
     working,
     editor: () => editorRef,
     queueScroll,
@@ -812,6 +924,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
+  })
+  const sendQueuedFollowup = async (id: number, mode: SubmitMode) => {
+    const queued = findFollowup(id)
+    if (!queued) return
+    if (store.sendingQueued) return
+    setStore("sendingQueued", true)
+    setStore("queuedFollowups", (items) => items.filter((item) => item.id !== id))
+    setStore("followupMode", mode)
+    const parts = clonePrompt(queued.prompt)
+    setContext(queued.context)
+    prompt.set(parts, promptLength(parts))
+    const event = new Event("submit", { cancelable: true })
+    try {
+      await submitPrompt(event)
+    } finally {
+      setStore("followupMode", undefined)
+      setStore("sendingQueued", false)
+    }
+  }
+  const handleSubmit = async (event: Event) => {
+    event.preventDefault()
+    if (store.mode === "normal" && working() && submitMode() === "queue" && (prompt.dirty() || commentCount() > 0)) {
+      stageFollowup()
+      return
+    }
+    await submitPrompt(event)
+  }
+
+  createEffect(() => {
+    const queued = store.queuedFollowups[0]
+    if (!queued) return
+    if (working()) return
+    if (store.sendingQueued) return
+    void sendQueuedFollowup(queued.id, "queue")
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -858,7 +1004,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
     // and should always insert a newline regardless of composition state
-    if (event.key === "Enter" && event.shiftKey) {
+    if (event.key === "Enter" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
@@ -923,7 +1069,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Note: Shift+Enter is handled earlier, before IME check
+    const invertFollowup = event.key === "Enter" && event.shiftKey && !event.altKey && (event.metaKey || event.ctrlKey)
+    if (invertFollowup) {
+      const mode = settings.general.followup() === "queue" ? "steer" : "queue"
+      setStore("followupMode", mode)
+      void handleSubmit(event).finally(() => setStore("followupMode", undefined))
+      return
+    }
+
+    // Note: plain Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -953,6 +1107,78 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
+      <Show when={showFollowupMode()}>
+        <div class="bg-surface-raised-stronger-non-alpha shadow-xs-border rounded-[14px] border border-border-base overflow-clip">
+          <For each={store.queuedFollowups}>
+            {(queued, index) => (
+              <div
+                classList={{
+                  "flex items-center gap-1 px-3 py-2": true,
+                  "border-t border-border-base": index() > 0,
+                }}
+              >
+                <div class="min-w-0 flex flex-1 items-center gap-2">
+                  <Icon name="align-right" size="small" class="shrink-0 text-icon-weak" />
+                  <span class="truncate text-14-regular text-text-base">{followupPreview(queued)}</span>
+                </div>
+                <Button
+                  type="button"
+                  size="small"
+                  variant="ghost"
+                  data-selected
+                  onClick={() => void sendQueuedFollowup(queued.id, "steer")}
+                  disabled={store.sendingQueued}
+                >
+                  {language.t("prompt.submitMode.steer")}
+                </Button>
+                <IconButton
+                  type="button"
+                  icon="trash"
+                  variant="ghost"
+                  class="size-6"
+                  onClick={() => clearFollowup(queued.id)}
+                  disabled={store.sendingQueued}
+                  aria-label={language.t("common.delete")}
+                />
+                <DropdownMenu gutter={6} placement="bottom-end">
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    type="button"
+                    icon="dot-grid"
+                    variant="ghost"
+                    class="size-6"
+                    aria-label={language.t("common.moreOptions")}
+                  />
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content>
+                      <DropdownMenu.Item onSelect={() => editFollowup(queued.id)}>
+                        <div class="flex size-4 shrink-0 items-center justify-center">
+                          <Icon name="edit" size="small" class="text-icon-weak" />
+                        </div>
+                        <DropdownMenu.ItemLabel>{language.t("prompt.followup.menu.editMessage")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        onSelect={() =>
+                          settings.general.setFollowup(settings.general.followup() === "queue" ? "steer" : "queue")
+                        }
+                      >
+                        <div class="flex size-4 shrink-0 items-center justify-center">
+                          <Icon name="align-right" size="small" class="text-icon-weak" />
+                        </div>
+                        <DropdownMenu.ItemLabel>
+                          {settings.general.followup() === "queue"
+                            ? language.t("prompt.followup.menu.turnOffQueueing")
+                            : language.t("prompt.followup.menu.turnOnQueueing")}
+                        </DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
       <form
         onSubmit={handleSubmit}
         classList={{

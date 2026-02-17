@@ -228,6 +228,13 @@ export const dict = {
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "esc to exit",
+  "prompt.submitMode.label": "Send mode",
+  "prompt.submitMode.queue": "Queue",
+  "prompt.submitMode.steer": "Steer",
+  "prompt.followup.commentOnly": "Follow-up from comments",
+  "prompt.followup.menu.editMessage": "Edit message",
+  "prompt.followup.menu.turnOffQueueing": "Turn off queueing",
+  "prompt.followup.menu.turnOnQueueing": "Turn on queueing",
 
   "prompt.example.1": "Fix a TODO in the codebase",
   "prompt.example.2": "What is the tech stack of this project?",
@@ -590,6 +597,7 @@ export const dict = {
   "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "Appearance",
+  "settings.general.section.behavior": "Behavior",
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
@@ -611,6 +619,10 @@ export const dict = {
 
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
+  "settings.general.followup.title": "Follow-up behavior",
+  "settings.general.followup.description": "Queue follow-ups or steer the current run.",
+  "settings.general.followup.queue": "Queue",
+  "settings.general.followup.steer": "Steer",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",

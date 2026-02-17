@@ -22,6 +22,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    followup: "queue" | "steer"
   }
   updates: {
     startup: boolean
@@ -42,6 +43,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    followup: "queue",
   },
   updates: {
     startup: true,
@@ -119,6 +121,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
+        setFollowup(value: "queue" | "steer") {
+          setStore("general", "followup", value)
         },
       },
       updates: {

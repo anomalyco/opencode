@@ -6,6 +6,8 @@ let createPromptSubmit: typeof import("./submit").createPromptSubmit
 const createdClients: string[] = []
 const createdSessions: string[] = []
 const sentShell: string[] = []
+const sentPrompt: string[] = []
+const sentPromptAsync: string[] = []
 const syncedDirectories: string[] = []
 
 let selected = "/repo/worktree-a"
@@ -22,7 +24,14 @@ const clientFor = (directory: string) => ({
       sentShell.push(directory)
       return { data: undefined }
     },
-    prompt: async () => ({ data: undefined }),
+    prompt: async () => {
+      sentPrompt.push(directory)
+      return { data: undefined }
+    },
+    promptAsync: async () => {
+      sentPromptAsync.push(directory)
+      return { data: undefined }
+    },
     command: async () => ({ data: undefined }),
     abort: async () => ({ data: undefined }),
   },
@@ -137,6 +146,8 @@ beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
   sentShell.length = 0
+  sentPrompt.length = 0
+  sentPromptAsync.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
 })
@@ -148,6 +159,7 @@ describe("prompt submit worktree selection", () => {
       imageAttachments: () => [],
       commentCount: () => 0,
       mode: () => "shell",
+      submitMode: () => "queue",
       working: () => false,
       editor: () => undefined,
       queueScroll: () => undefined,
@@ -171,5 +183,59 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+  })
+
+  test("uses queue mode for normal prompts", async () => {
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      mode: () => "normal",
+      submitMode: () => "queue",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+    await submit.handleSubmit(event)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(sentPromptAsync).toEqual(["/repo/main"])
+    expect(sentPrompt).toEqual([])
+  })
+
+  test("uses steer mode for normal prompts", async () => {
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      mode: () => "normal",
+      submitMode: () => "steer",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+    await submit.handleSubmit(event)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(sentPrompt).toEqual(["/repo/main"])
+    expect(sentPromptAsync).toEqual([])
   })
 })

@@ -29,6 +29,7 @@ type PromptSubmitInput = {
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   mode: Accessor<"normal" | "shell">
+  submitMode: Accessor<"queue" | "steer">
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
@@ -116,6 +117,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
+    const submitMode = input.submitMode()
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
       if (input.working()) abort()
@@ -385,14 +387,19 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
-      await client.session.promptAsync({
+      const args = {
         sessionID: session.id,
         agent,
         model,
         messageID,
         parts: requestParts,
         variant,
-      })
+      }
+      if (submitMode === "steer") {
+        await client.session.prompt(args)
+        return
+      }
+      await client.session.promptAsync(args)
     }
 
     void send().catch((err) => {
