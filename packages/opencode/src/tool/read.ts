@@ -12,6 +12,7 @@ import { InstructionPrompt } from "../session/instruction"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
+const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
@@ -165,7 +166,7 @@ export const ReadTool = Tool.define("read", {
           continue
         }
 
-        const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + "..." : text
+        const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
         const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
         if (bytes + size > MAX_BYTES) {
           truncatedByBytes = true

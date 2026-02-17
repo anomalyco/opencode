@@ -363,7 +363,7 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "long-line.txt") }, ctx)
-        expect(result.output).toContain("...")
+        expect(result.output).toContain("(line truncated to 2000 chars)")
         expect(result.output.length).toBeLessThan(3000)
       },
     })
