@@ -101,6 +101,7 @@ export const dict = {
   "ui.message.expand": "展開訊息",
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
+  "ui.message.copyMessage": "複製訊息",
   "ui.message.copied": "已複製！",
   "ui.message.interrupted": "已中斷",
   "ui.message.attachment.alt": "附件",

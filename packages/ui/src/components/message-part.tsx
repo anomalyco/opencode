@@ -562,7 +562,13 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const meta = createMemo(() => {
     const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", provider(), model(), stamp()]
+    const items = [
+      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      provider(),
+      model(),
+      stamp(),
+      props.interrupted ? i18n.t("ui.message.interrupted") : "",
+    ]
     return items.filter((x) => !!x).join(" \u00B7 ")
   })
 
@@ -618,18 +624,13 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           </div>
           <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
-            <Show when={props.interrupted}>
-              <span data-slot="user-message-interrupted" class="text-13-regular text-text-weak cursor-default">
-                {i18n.t("ui.message.interrupted")}
-              </span>
-            </Show>
             <Show when={meta()}>
               <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}
               </span>
             </Show>
             <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               placement="top"
               gutter={4}
             >
@@ -642,7 +643,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   event.stopPropagation()
                   handleCopy()
                 }}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               />
             </Tooltip>
           </div>

@@ -97,6 +97,7 @@ export const dict = {
   "ui.message.expand": "메시지 펼치기",
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
+  "ui.message.copyMessage": "메시지 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
   "ui.message.attachment.alt": "첨부 파일",

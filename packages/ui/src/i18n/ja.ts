@@ -96,6 +96,7 @@ export const dict = {
   "ui.message.expand": "メッセージを展開",
   "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
+  "ui.message.copyMessage": "メッセージをコピー",
   "ui.message.copied": "コピーしました！",
   "ui.message.interrupted": "中断",
   "ui.message.attachment.alt": "添付ファイル",

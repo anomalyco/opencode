@@ -97,6 +97,7 @@ export const dict = {
   "ui.message.expand": "ขยายข้อความ",
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
+  "ui.message.copyMessage": "คัดลอกข้อความ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
   "ui.message.attachment.alt": "ไฟล์แนบ",
