@@ -120,6 +120,28 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+function flattenInput(obj: Record<string, unknown> | undefined): string[] {
+  if (!obj || typeof obj !== "object") return []
+  const out: string[] = []
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null) continue
+    if (typeof value === "object" && !Array.isArray(value)) continue
+    const s = Array.isArray(value) ? value.join(", ") : String(value)
+    if (s.length > 80) out.push(`${key}=${s.slice(0, 77)}…`)
+    else out.push(`${key}=${s}`)
+  }
+  return out
+}
+
+export function GenericTool(props: {
+  tool: string
+  input?: Record<string, unknown>
+  status?: string
+  hideDetails?: boolean
+}) {
+  const trigger = {
+    title: props.tool,
+    args: flattenInput(props.input),
+  }
+  return <BasicTool icon="mcp" status={props.status} trigger={trigger} hideDetails={props.hideDetails} />
 }
