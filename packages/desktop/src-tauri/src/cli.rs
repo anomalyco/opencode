@@ -358,6 +358,7 @@ pub fn spawn_command(
     );
 
     tokio::task::spawn(async move {
+        let mut kill_open = true;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),
@@ -366,9 +367,11 @@ pub fn spawn_command(
             }
 
             tokio::select! {
-                a = kill_rx.recv() => {
-                  dbg!(a);
-                    let _ = child.start_kill();
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {}
             }
