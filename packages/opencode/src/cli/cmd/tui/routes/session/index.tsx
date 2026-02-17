@@ -212,7 +212,9 @@ export function Session() {
 
     if (part.tool === "plan_exit") {
       const meta = part.state.metadata
-      if (!meta?.cleanContext || !meta?.sessionID) {
+      const sessionID = meta?.sessionID as string | undefined
+      const plan = meta?.plan as string | undefined
+      if (!meta?.cleanContext || !sessionID) {
         local.agent.set("build")
         lastSwitch = part.id
         return
@@ -226,7 +228,7 @@ export function Session() {
       local.agent.set("build")
       sdk.client.session
         .prompt({
-          sessionID: meta.sessionID,
+          sessionID,
           ...model,
           messageID: Identifier.ascending("message"),
           agent: "build",
@@ -235,12 +237,12 @@ export function Session() {
             {
               id: Identifier.ascending("part"),
               type: "text" as const,
-              text: `The plan at ${meta.plan} has been approved, you can now edit files. Execute the plan`,
+              text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
             },
           ],
         })
         .catch(() => {})
-      navigate({ type: "session", sessionID: meta.sessionID })
+      navigate({ type: "session", sessionID })
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")
