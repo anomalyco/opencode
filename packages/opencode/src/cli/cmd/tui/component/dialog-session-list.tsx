@@ -30,6 +30,7 @@ export function DialogSessionList() {
   const sdk = useSDK()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [showArchived, setShowArchived] = createSignal(false)
   const [search, setSearch] = createDebouncedSignal("", 150)
 
   const [searchResults, { refetch }] = createResource(
@@ -115,7 +116,11 @@ export function DialogSessionList() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
-      .filter((x) => x.parentID === undefined)
+      .filter((x) => {
+        if (x.parentID !== undefined) return false
+        if (showArchived()) return !!x.time.archived
+        return !x.time.archived
+      })
       .toSorted((a, b) => {
         const updatedDay = new Date(b.time.updated).setHours(0, 0, 0, 0) - new Date(a.time.updated).setHours(0, 0, 0, 0)
         if (updatedDay !== 0) return updatedDay
@@ -179,7 +184,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={showArchived() ? "Archived Sessions" : "Sessions"}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -188,6 +193,13 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
+        if (showArchived()) {
+          sdk.client.session.update({
+            sessionID: option.value,
+            time: { archived: 0 },
+          })
+          return
+        }
         route.navigate({
           type: "session",
           sessionID: option.value,
@@ -195,59 +207,141 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       keybind={[
-        {
-          keybind: keybind.all.session_delete?.[0],
-          title: "delete",
-          onTrigger: async (option) => {
-            if (toDelete() === option.value) {
-              const session = sessions().find((item) => item.id === option.value)
-              const status = session?.workspaceID ? project.workspace.status(session.workspaceID) : undefined
-
-              try {
-                const result = await sdk.client.session.delete({
-                  sessionID: option.value,
-                })
-                if (result.error) {
-                  if (session?.workspaceID) {
-                    recover(session)
-                  } else {
-                    toast.show({
-                      variant: "error",
-                      title: "Failed to delete session",
-                      message: errorMessage(result.error),
-                    })
+        ...(showArchived()
+          ? []
+          : [
+              {
+                keybind: keybind.all.session_delete?.[0],
+                title: "delete",
+                onTrigger: async (option: { value: string }) => {
+                  if (toDelete() === option.value) {
+                    const session = sessions().find((item) => item.id === option.value)
+                    const status = session?.workspaceID ? project.workspace.status(session.workspaceID) : undefined
+                    try {
+                      const result = await sdk.client.session.delete({
+                        sessionID: option.value,
+                      })
+                      if (result.error) {
+                        if (session?.workspaceID) {
+                          recover(session)
+                        } else {
+                          toast.show({
+                            variant: "error",
+                            title: "Failed to delete session",
+                            message: errorMessage(result.error),
+                          })
+                        }
+                        setToDelete(undefined)
+                        return
+                      }
+                    } catch (err) {
+                      if (session?.workspaceID) {
+                        recover(session)
+                      } else {
+                        toast.show({
+                          variant: "error",
+                          title: "Failed to delete session",
+                          message: errorMessage(err),
+                        })
+                      }
+                      setToDelete(undefined)
+                      return
+                    }
+                    if (status && status !== "connected") {
+                      await sync.session.refresh()
+                    }
+                    if (search()) await refetch()
+                    setToDelete(undefined)
+                    return
                   }
-                  setToDelete(undefined)
-                  return
-                }
-              } catch (err) {
-                if (session?.workspaceID) {
-                  recover(session)
-                } else {
-                  toast.show({
-                    variant: "error",
-                    title: "Failed to delete session",
-                    message: errorMessage(err),
+                  setToDelete(option.value)
+                },
+              },
+              {
+                keybind: keybind.all.session_archive?.[0],
+                title: "archive",
+                onTrigger: async (option: { value: string }) => {
+                  sdk.client.session.update({
+                    sessionID: option.value,
+                    time: { archived: Date.now() },
                   })
-                }
-                setToDelete(undefined)
-                return
-              }
-              if (status && status !== "connected") {
-                await sync.session.refresh()
-              }
-              if (search()) await refetch()
-              setToDelete(undefined)
-              return
-            }
-            setToDelete(option.value)
-          },
-        },
+                },
+              },
+              {
+                keybind: keybind.all.session_rename?.[0],
+                title: "rename",
+                onTrigger: async (option: { value: string }) => {
+                  dialog.replace(() => <DialogSessionRename session={option.value} />)
+                },
+              },
+            ]),
+        ...(showArchived()
+          ? [
+              {
+                keybind: keybind.all.session_delete?.[0],
+                title: "delete",
+                onTrigger: async (option: { value: string }) => {
+                  if (toDelete() === option.value) {
+                    const session = sessions().find((item) => item.id === option.value)
+                    const status = session?.workspaceID ? project.workspace.status(session.workspaceID) : undefined
+                    try {
+                      const result = await sdk.client.session.delete({
+                        sessionID: option.value,
+                      })
+                      if (result.error) {
+                        if (session?.workspaceID) {
+                          recover(session)
+                        } else {
+                          toast.show({
+                            variant: "error",
+                            title: "Failed to delete session",
+                            message: errorMessage(result.error),
+                          })
+                        }
+                        setToDelete(undefined)
+                        return
+                      }
+                    } catch (err) {
+                      if (session?.workspaceID) {
+                        recover(session)
+                      } else {
+                        toast.show({
+                          variant: "error",
+                          title: "Failed to delete session",
+                          message: errorMessage(err),
+                        })
+                      }
+                      setToDelete(undefined)
+                      return
+                    }
+                    if (status && status !== "connected") {
+                      await sync.session.refresh()
+                    }
+                    if (search()) await refetch()
+                    setToDelete(undefined)
+                    return
+                  }
+                  setToDelete(option.value)
+                },
+              },
+              {
+                keybind: keybind.all.session_archive?.[0],
+                title: "unarchive",
+                onTrigger: async (option: { value: string }) => {
+                  sdk.client.session.update({
+                    sessionID: option.value,
+                    time: { archived: 0 },
+                  })
+                },
+              },
+            ]
+          : []),
         {
-          keybind: keybind.all.session_rename?.[0],
-          title: "rename",
-          onTrigger: async (option) => {
-            dialog.replace(() => <DialogSessionRename session={option.value} />)
+          keybind: Keybind.parse("tab")[0],
+          title: showArchived() ? "active" : "archived",
+          onTrigger: async () => {
+            setShowArchived((prev) => !prev)
+            setToDelete(undefined)
           },
         },
         {

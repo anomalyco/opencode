@@ -30,6 +30,7 @@ const KeybindsSchema = Schema.Struct({
   session_fork: keybind("none", "Fork session from message"),
   session_rename: keybind("ctrl+r", "Rename session"),
   session_delete: keybind("ctrl+d", "Delete session"),
+  session_archive: keybind("none", "Archive session"),
   stash_delete: keybind("ctrl+d", "Delete stash entry"),
   model_provider_list: keybind("ctrl+a", "Open provider list from model dialog"),
   model_favorite_toggle: keybind("ctrl+f", "Toggle model favorite status"),

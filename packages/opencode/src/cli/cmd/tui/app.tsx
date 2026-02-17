@@ -806,6 +806,20 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
+  sdk.event.on(SessionApi.Event.Updated.type, (evt) => {
+    if (
+      route.data.type === "session" &&
+      route.data.sessionID === evt.properties.info.id &&
+      evt.properties.info.time.archived
+    ) {
+      route.navigate({ type: "home" })
+      toast.show({
+        variant: "info",
+        message: "The current session was archived",
+      })
+    }
+  })
+
   event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return

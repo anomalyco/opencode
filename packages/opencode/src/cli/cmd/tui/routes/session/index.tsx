@@ -540,6 +540,25 @@ export function Session() {
       },
     },
     {
+      title: "Archive session",
+      value: "session.archive",
+      keybind: "session_archive",
+      category: "Session",
+      slash: {
+        name: "archive",
+      },
+      onSelect: async (dialog) => {
+        await sdk.client.session
+          .update({
+            sessionID: route.sessionID,
+            time: { archived: Date.now() },
+          })
+          .then(() => toast.show({ message: "Session archived", variant: "success" }))
+          .catch(() => toast.show({ message: "Failed to archive session", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
       title: "Undo previous message",
       value: "session.undo",
       keybind: "messages_undo",
