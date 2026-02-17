@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
+import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { SessionTodoDock } from "@/components/session-todo-dock"
@@ -139,64 +140,57 @@ export function SessionPromptDock(props: {
 
             return (
               <div>
-                <div data-component="question-prompt" data-permission="true">
-                  <div data-slot="question-body">
-                    <div data-slot="question-header">
-                      <div data-slot="question-header-title">
-                        {props.t("notification.permission.title")}{" "}
-                        <span class="text-13-regular text-text-weak">{toolTitle()}</span>
+                <DockPrompt
+                  kind="permission"
+                  header={
+                    <>
+                      <div data-slot="permission-header-title">{props.t("notification.permission.title")}</div>
+                    </>
+                  }
+                  footer={
+                    <>
+                      <div />
+                      <div data-slot="permission-footer-actions">
+                        <Button
+                          variant="ghost"
+                          size="normal"
+                          onClick={() => props.onDecide("reject")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="normal"
+                          onClick={() => props.onDecide("always")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="normal"
+                          onClick={() => props.onDecide("once")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowOnce")}
+                        </Button>
                       </div>
-                    </div>
+                    </>
+                  }
+                >
+                  <Show when={toolDescription()}>
+                    <div data-slot="permission-hint">{toolDescription()}</div>
+                  </Show>
 
-                    <div data-slot="question-content">
-                      <Show when={toolDescription()}>
-                        <div data-slot="question-hint">{toolDescription()}</div>
-                      </Show>
-
-                      <Show when={perm.patterns.length > 0}>
-                        <div data-slot="question-options">
-                          <For each={perm.patterns}>
-                            {(pattern) => (
-                              <div class="px-[10px]">
-                                <code class="text-12-regular text-text-base break-all">{pattern}</code>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
+                  <Show when={perm.patterns.length > 0}>
+                    <div data-slot="permission-patterns">
+                      <For each={perm.patterns}>
+                        {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                      </For>
                     </div>
-                  </div>
-
-                  <div data-slot="question-footer">
-                    <div />
-                    <div data-slot="question-footer-actions">
-                      <Button
-                        variant="ghost"
-                        size="normal"
-                        onClick={() => props.onDecide("reject")}
-                        disabled={props.responding}
-                      >
-                        {props.t("ui.permission.deny")}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="normal"
-                        onClick={() => props.onDecide("always")}
-                        disabled={props.responding}
-                      >
-                        {props.t("ui.permission.allowAlways")}
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="normal"
-                        onClick={() => props.onDecide("once")}
-                        disabled={props.responding}
-                      >
-                        {props.t("ui.permission.allowOnce")}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                  </Show>
+                </DockPrompt>
               </div>
             )
           }}
