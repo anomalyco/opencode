@@ -69,10 +69,9 @@ Examples:
 - Provider integration issues
 - New, broken, or poor-quality models
 
-
 #### acp
 
-If the issue mentions acp support, assign acp label. 
+If the issue mentions acp support, assign acp label.
 
 #### docs
 
