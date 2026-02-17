@@ -1,8 +1,7 @@
-import { Locator } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { modKey } from "../utils"
 
-const expanded = async (el: Locator) => {
+const expanded = async (el: { getAttribute: (name: string) => Promise<string | null> }) => {
   const value = await el.getAttribute("aria-expanded")
   if (value !== "true" && value !== "false") throw new Error(`Expected aria-expanded to be true|false, got: ${value}`)
   return value === "true"
@@ -32,6 +31,22 @@ test("review panel can be toggled via keybind", async ({ page, gotoSession }) =>
 })
 
 test("file tree panel can be toggled via keybind", async ({ page, gotoSession }) => {
+  await page.addInitScript(() => {
+    const key = "settings.v3"
+    const raw = localStorage.getItem(key)
+    const prev = raw ? JSON.parse(raw) : {}
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        ...prev,
+        keybinds: {
+          ...(prev?.keybinds ?? {}),
+          "fileTree.toggle": "mod+shift+u",
+        },
+      }),
+    )
+  })
+
   await gotoSession()
 
   const reviewToggle = page.getByRole("button", { name: "Toggle review" }).first()
@@ -45,11 +60,11 @@ test("file tree panel can be toggled via keybind", async ({ page, gotoSession })
   await expect(treeToggle).toHaveAttribute("aria-expanded", "false")
   await expect(page.locator("#file-tree-panel")).toHaveCount(0)
 
-  await page.keyboard.press(`${modKey}+Backslash`)
+  await page.keyboard.press(`${modKey}+Shift+KeyU`)
   await expect(treeToggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#file-tree-panel")).toBeVisible()
 
-  await page.keyboard.press(`${modKey}+Backslash`)
+  await page.keyboard.press(`${modKey}+Shift+KeyU`)
   await expect(treeToggle).toHaveAttribute("aria-expanded", "false")
   await expect(page.locator("#file-tree-panel")).toHaveCount(0)
 })
