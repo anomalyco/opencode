@@ -9,6 +9,11 @@ export const dict = {
   "ui.sessionReview.change.added": "Dodano",
   "ui.sessionReview.change.removed": "Usunięto",
   "ui.sessionReview.change.modified": "Zmodyfikowano",
+  "ui.sessionReview.image.loading": "Ładowanie...",
+  "ui.sessionReview.image.placeholder": "Obraz",
+  "ui.sessionReview.largeDiff.title": "Diff jest zbyt duży, aby go wyrenderować",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{lines}} linii / {{limit}}. Obecnie: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Renderuj mimo to",
   "ui.lineComment.label.prefix": "Komentarz do ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Komentowanie: ",
@@ -22,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponawianie",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Przekroczono limit darmowego użytkowania",
+  "ui.sessionTurn.error.addCredits": "Dodaj kredyty",
 
   "ui.sessionTurn.status.delegating": "Delegowanie pracy",
   "ui.sessionTurn.status.planning": "Planowanie kolejnych kroków",
@@ -74,6 +81,7 @@ export const dict = {
   "ui.common.question.other": "pytania",
 
   "ui.common.add": "Dodaj",
+  "ui.common.back": "Wstecz",
   "ui.common.cancel": "Anuluj",
   "ui.common.confirm": "Potwierdź",
   "ui.common.dismiss": "Odrzuć",
@@ -88,7 +96,10 @@ export const dict = {
   "ui.message.expand": "Rozwiń wiadomość",
   "ui.message.collapse": "Zwiń wiadomość",
   "ui.message.copy": "Kopiuj",
+  "ui.message.copyMessage": "Kopiuj wiadomość",
+  "ui.message.copyResponse": "Kopiuj odpowiedź",
   "ui.message.copied": "Skopiowano!",
+  "ui.message.interrupted": "Przerwano",
   "ui.message.attachment.alt": "załącznik",
 
   "ui.patch.action.deleted": "Usunięto",
@@ -99,6 +110,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} odpowiedzi",
   "ui.question.answer.none": "(brak odpowiedzi)",
   "ui.question.review.notAnswered": "(bez odpowiedzi)",
-  "ui.question.multiHint": "(zaznacz wszystkie pasujące)",
+  "ui.question.multiHint": "Zaznacz wszystkie pasujące",
+  "ui.question.singleHint": "Wybierz jedną odpowiedź",
   "ui.question.custom.placeholder": "Wpisz swoją odpowiedź...",
 }

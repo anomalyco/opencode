@@ -62,12 +62,13 @@ export namespace ZenData {
     apiKey: z.string(),
     format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
+    payloadModifier: z.record(z.string(), z.any()).optional(),
     family: z.string().optional(),
   })
 
   const ProviderFamilySchema = z.object({
     headers: z.record(z.string(), z.string()).optional(),
-    bodyModifier: z.record(z.string(), z.string()).optional(),
+    responseModifier: z.record(z.string(), z.string()).optional(),
   })
 
   const ModelsSchema = z.object({
@@ -101,7 +102,17 @@ export namespace ZenData {
         Resource.ZEN_MODELS17.value +
         Resource.ZEN_MODELS18.value +
         Resource.ZEN_MODELS19.value +
-        Resource.ZEN_MODELS20.value,
+        Resource.ZEN_MODELS20.value +
+        Resource.ZEN_MODELS21.value +
+        Resource.ZEN_MODELS22.value +
+        Resource.ZEN_MODELS23.value +
+        Resource.ZEN_MODELS24.value +
+        Resource.ZEN_MODELS25.value +
+        Resource.ZEN_MODELS26.value +
+        Resource.ZEN_MODELS27.value +
+        Resource.ZEN_MODELS28.value +
+        Resource.ZEN_MODELS29.value +
+        Resource.ZEN_MODELS30.value,
     )
     const { models, providers, providerFamilies } = ModelsSchema.parse(json)
     return {

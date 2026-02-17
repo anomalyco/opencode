@@ -12,6 +12,11 @@ export const dict = {
   "ui.sessionReview.change.added": "已新增",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.image.loading": "載入中...",
+  "ui.sessionReview.image.placeholder": "圖片",
+  "ui.sessionReview.largeDiff.title": "差異過大，無法渲染",
+  "ui.sessionReview.largeDiff.meta": "限制：{{lines}} 行 / {{limit}}。目前：{{current}}。",
+  "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
 
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
@@ -27,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
+  "ui.sessionTurn.error.addCredits": "新增點數",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
@@ -79,6 +86,7 @@ export const dict = {
   "ui.common.question.other": "個問題",
 
   "ui.common.add": "新增",
+  "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "忽略",
@@ -93,7 +101,10 @@ export const dict = {
   "ui.message.expand": "展開訊息",
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
+  "ui.message.copyMessage": "複製訊息",
+  "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
+  "ui.message.interrupted": "已中斷",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
@@ -104,6 +115,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(無答案)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(可多選)",
+  "ui.question.multiHint": "可多選",
+  "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
 } satisfies Partial<Record<Keys, string>>

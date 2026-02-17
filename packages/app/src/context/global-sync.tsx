@@ -4,6 +4,7 @@ import {
   type Project,
   type ProviderAuthResponse,
   type ProviderListResponse,
+  type Todo,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -41,10 +42,27 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error) return error
+  return "Unknown error"
+}
+
+function setDevStats(value: {
+  activeDirectoryStores: number
+  evictions: number
+  loadSessionsFullFetchFallback: number
+}) {
+  ;(globalThis as { __OPENCODE_GLOBAL_SYNC_STATS?: typeof value }).__OPENCODE_GLOBAL_SYNC_STATS = value
 }
 
 function createGlobalSync() {
@@ -73,27 +91,34 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    session_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
     reload: undefined,
   })
 
+  const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
+    if (!sessionID) return
+    if (!todos) {
+      setGlobalStore(
+        "session_todo",
+        produce((draft) => {
+          delete draft[sessionID]
+        }),
+      )
+      return
+    }
+    setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
+  }
+
   const updateStats = (activeDirectoryStores: number) => {
     if (!import.meta.env.DEV) return
-    ;(
-      globalThis as {
-        __OPENCODE_GLOBAL_SYNC_STATS?: {
-          activeDirectoryStores: number
-          evictions: number
-          loadSessionsFullFetchFallback: number
-        }
-      }
-    ).__OPENCODE_GLOBAL_SYNC_STATS = {
+    setDevStats({
       activeDirectoryStores,
       evictions: stats.evictions,
       loadSessionsFullFetchFallback: stats.loadSessionsFallback,
-    }
+    })
   }
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
@@ -204,7 +229,10 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
-        showToast({ title: language.t("toast.session.listFailed.title", { project }), description: err.message })
+        showToast({
+          title: language.t("toast.session.listFailed.title", { project }),
+          description: errorMessage(err),
+        })
       })
 
     sessionLoads.set(directory, promise)
@@ -261,6 +289,11 @@ function createGlobalSync() {
           setGlobalStore("project", next)
         },
       })
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        for (const directory of Object.keys(children.children)) {
+          queue.push(directory)
+        }
+      }
       return
     }
 
@@ -274,6 +307,7 @@ function createGlobalSync() {
       store,
       setStore,
       push: queue.push,
+      setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
         sdkFor(directory)
@@ -307,12 +341,28 @@ function createGlobalSync() {
     void bootstrap()
   })
 
-  function projectMeta(directory: string, patch: ProjectMeta) {
-    children.projectMeta(directory, patch)
+  const projectApi = {
+    loadSessions,
+    meta(directory: string, patch: ProjectMeta) {
+      children.projectMeta(directory, patch)
+    },
+    icon(directory: string, value: string | undefined) {
+      children.projectIcon(directory, value)
+    },
   }
 
-  function projectIcon(directory: string, value: string | undefined) {
-    children.projectIcon(directory, value)
+  const updateConfig = async (config: Config) => {
+    setGlobalStore("reload", "pending")
+    return globalSDK.client.global.config
+      .update({ config })
+      .then(bootstrap)
+      .then(() => {
+        setGlobalStore("reload", "complete")
+      })
+      .catch((error) => {
+        setGlobalStore("reload", undefined)
+        throw error
+      })
   }
 
   return {
@@ -326,18 +376,10 @@ function createGlobalSync() {
     },
     child: children.child,
     bootstrap,
-    updateConfig: (config: Config) => {
-      setGlobalStore("reload", "pending")
-      return globalSDK.client.global.config.update({ config }).finally(() => {
-        setTimeout(() => {
-          setGlobalStore("reload", "complete")
-        }, 1000)
-      })
-    },
-    project: {
-      loadSessions,
-      meta: projectMeta,
-      icon: projectIcon,
+    updateConfig,
+    project: projectApi,
+    todo: {
+      set: setSessionTodo,
     },
   }
 }

@@ -80,6 +80,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
+      globalSync.todo.set(sessionID, undefined)
       return Promise.resolve()
     }
     return sdk.client.session
@@ -87,6 +88,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         sessionID,
       })
       .catch(() => {})
+      .finally(() => {
+        globalSync.todo.set(sessionID, undefined)
+      })
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {
@@ -385,7 +389,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
-      await client.session.prompt({
+      await client.session.promptAsync({
         sessionID: session.id,
         agent,
         model,

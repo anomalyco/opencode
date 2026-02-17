@@ -223,6 +223,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "輸入 shell 命令...",
   "prompt.placeholder.normal": '隨便問點什麼... "{{example}}"',
+  "prompt.placeholder.simple": "隨便問點什麼...",
   "prompt.placeholder.summarizeComments": "摘要評論…",
   "prompt.placeholder.summarizeComment": "摘要這則評論…",
   "prompt.mode.shell": "Shell",
@@ -497,6 +498,9 @@ export const dict = {
 
   "session.messages.jumpToLatest": "跳到最新",
   "session.context.addToContext": "將 {{selection}} 新增到上下文",
+  "session.todo.title": "待辦事項",
+  "session.todo.collapse": "折疊",
+  "session.todo.expand": "展開",
 
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支 ({{branch}})",
@@ -567,6 +571,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "連線任意提供者即可使用更多模型，如 Claude、GPT、Gemini 等。",
   "sidebar.project.recentSessions": "最近工作階段",
   "sidebar.project.viewAllSessions": "查看全部工作階段",
+  "sidebar.project.clearNotifications": "清除通知",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",
@@ -620,6 +625,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "警報 01",
   "sound.option.alert02": "警報 02",
   "sound.option.alert03": "警報 03",
