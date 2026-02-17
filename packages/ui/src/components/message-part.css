@@ -168,6 +168,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    gap: 10px;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
@@ -177,6 +178,10 @@
       display: inline-flex;
       width: fit-content;
     }
+  }
+
+  [data-slot="text-part-meta"] {
+    user-select: none;
   }
 
   [data-slot="text-part-copy-wrapper"][data-interrupted] {

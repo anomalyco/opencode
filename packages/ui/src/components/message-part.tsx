@@ -902,6 +902,47 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     () =>
       props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
   )
+
+  const provider = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const id = (props.message as AssistantMessage).providerID
+    const match = data.store.provider?.all?.find((p) => p.id === id)
+    return match?.name ?? id
+  })
+
+  const model = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
+    return match?.models?.[message.modelID]?.name ?? message.modelID
+  })
+
+  const duration = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    const completed = message.time.completed
+    if (typeof completed !== "number") return ""
+    const ms = completed - message.time.created
+    if (!(ms >= 0)) return ""
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+    const minutes = Math.floor(ms / 60_000)
+    const seconds = Math.round((ms - minutes * 60_000) / 1000)
+    return `${minutes}m ${seconds}s`
+  })
+
+  const meta = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const agent = (props.message as AssistantMessage).agent
+    const items = [
+      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      provider(),
+      model(),
+      duration(),
+      interrupted() ? i18n.t("ui.message.interrupted") : "",
+    ]
+    return items.filter((x) => !!x).join(" \u00B7 ")
+  })
+
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
@@ -934,11 +975,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Show when={interrupted()}>
-              <span data-slot="text-part-interrupted" class="text-13-regular text-text-weak cursor-default">
-                {i18n.t("ui.message.interrupted")}
-              </span>
-            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"
@@ -953,6 +989,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
             </Tooltip>
+            <Show when={meta()}>
+              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+                {meta()}
+              </span>
+            </Show>
           </div>
         </Show>
       </div>
