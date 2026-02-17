@@ -341,7 +341,7 @@ pub fn spawn_command(
         wrap.wrap(JobObject).wrap(KillOnDrop);
     }
 
-    let mut child = wrap.spawn().expect("failed to spawn");
+    let mut child = wrap.spawn()?;
     let guard = Arc::new(tokio::sync::RwLock::new(()));
     let (tx, rx) = mpsc::channel(256);
     let (kill_tx, mut kill_rx) = mpsc::channel(1);
