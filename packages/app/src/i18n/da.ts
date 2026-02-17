@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Skift til forrige agent",
   "command.model.variant.cycle": "Skift tænkeindsats",
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
+  "command.prompt.mode.shell": "Skift til shell-tilstand",
+  "command.prompt.mode.normal": "Skift til prompt-tilstand",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
   "command.workspace.toggle": "Skift arbejdsområder",
@@ -226,6 +228,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
   "prompt.placeholder.summarizeComment": "Opsummér kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc for at afslutte",
 
   "prompt.example.1": "Ret en TODO i koden",

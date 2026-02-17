@@ -73,6 +73,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "切換到上一個代理程式",
   "command.model.variant.cycle": "循環思考強度",
   "command.model.variant.cycle.description": "切換到下一個強度等級",
+  "command.prompt.mode.shell": "切換到 Shell 模式",
+  "command.prompt.mode.normal": "切換到 Prompt 模式",
   "command.permissions.autoaccept.enable": "自動接受編輯",
   "command.permissions.autoaccept.disable": "停止自動接受編輯",
   "command.workspace.toggle": "切換工作區",
@@ -227,6 +229,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "摘要評論…",
   "prompt.placeholder.summarizeComment": "摘要這則評論…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",
 
   "prompt.example.1": "修復程式碼庫中的一個 TODO",
