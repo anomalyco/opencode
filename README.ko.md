@@ -51,6 +51,7 @@ scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS 및 Linux (권장, 항상 최신)
 brew install opencode              # macOS 및 Linux (공식 brew formula, 업데이트 빈도 낮음)
+sudo port install opencode         # macOS (MacPorts)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # 어떤 OS든
