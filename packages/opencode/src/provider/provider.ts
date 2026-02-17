@@ -5,6 +5,7 @@ import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
+import { sanitizeSurrogates } from "../util/sanitize-surrogates"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
@@ -1091,6 +1092,10 @@ export namespace Provider {
             }
             opts.body = JSON.stringify(body)
           }
+        }
+
+        if (typeof opts.body === "string") {
+          opts.body = sanitizeSurrogates(opts.body)
         }
 
         return fetchFn(input, {
