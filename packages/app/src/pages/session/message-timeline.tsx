@@ -172,15 +172,6 @@ export function MessageTimeline(props: {
             >
               <div class="h-10 w-full flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1 min-w-0 flex-1">
-                  <Show when={props.parentID}>
-                    <IconButton
-                      tabIndex={-1}
-                      icon="arrow-left"
-                      variant="ghost"
-                      onClick={props.onNavigateParent}
-                      aria-label={props.t("common.goBack")}
-                    />
-                  </Show>
                   <Show when={props.title || props.titleState.editing}>
                     <Show
                       when={props.titleState.editing}
@@ -216,6 +207,21 @@ export function MessageTimeline(props: {
                 <Show when={props.sessionID}>
                   {(id) => (
                     <div class="shrink-0 flex items-center">
+                      <Show when={props.parentID}>
+                        <Tooltip value="Navigate to parent" placement="top">
+                          <IconButton
+                            tabIndex={-1}
+                            icon="arrow-up"
+                            variant="ghost"
+                            onClick={props.onNavigateParent}
+                            aria-label="Navigate to parent"
+                            class="size-5"
+                          />
+                        </Tooltip>
+                        <Tooltip value="Subagent" placement="top">
+                          <Icon name="brain" class="text-text-weak mr-1" />
+                        </Tooltip>
+                      </Show>
                       <DropdownMenu open={props.titleState.menuOpen} onOpenChange={props.onTitleMenuOpen}>
                         <Tooltip value={props.t("common.moreOptions")} placement="top">
                           <DropdownMenu.Trigger

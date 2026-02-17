@@ -5,6 +5,7 @@ import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -14,8 +15,9 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
-import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
+import { getChildSessions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -60,6 +62,7 @@ export type SessionItemProps = {
   dense?: boolean
   popover?: boolean
   children: Map<string, string[]>
+  allSessions: Session[]
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   nav: Accessor<HTMLElement | undefined>
@@ -102,25 +105,27 @@ const SessionRow = (props: {
     }}
   >
     <div class="flex items-center gap-1 w-full">
-      <div
-        class="shrink-0 size-6 flex items-center justify-center"
-        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-      >
-        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-          <Match when={props.isWorking()}>
-            <Spinner class="size-[15px]" />
-          </Match>
-          <Match when={props.hasPermissions()}>
-            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-          </Match>
-          <Match when={props.hasError()}>
-            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
-          </Match>
-        </Switch>
-      </div>
+      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+        <div
+          class="shrink-0 size-6 flex items-center justify-center"
+          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+        >
+          <Switch>
+            <Match when={props.isWorking()}>
+              <Spinner class="size-[15px]" />
+            </Match>
+            <Match when={props.hasPermissions()}>
+              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+            </Match>
+            <Match when={props.hasError()}>
+              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+            </Match>
+            <Match when={props.unseenCount() > 0}>
+              <div class="size-1.5 rounded-full bg-text-interactive-base" />
+            </Match>
+          </Switch>
+        </div>
+      </Show>
       <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
         {props.session.title}
       </span>
@@ -187,9 +192,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const language = useLanguage()
   const notification = useNotification()
   const globalSync = useGlobalSync()
+  const [expanded, setExpanded] = createSignal(false)
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
+  const childSessions = createMemo(() => getChildSessions(props.allSessions, props.session.id))
+  const hasChildren = createMemo(() => childSessions().length > 0)
   const hasPermissions = createMemo(() => {
     const permissions = sessionStore.permission?.[props.session.id] ?? []
     if (permissions.length > 0) return true
@@ -251,6 +259,20 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
     return text?.text
   }
+
+  const ExpandButton = () => (
+    <button
+      class="flex items-center justify-center size-5 rounded hover:bg-surface-base-hover transition-colors"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setExpanded((v) => !v)
+      }}
+    >
+      <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+    </button>
+  )
+
   const item = (
     <SessionRow
       session={props.session}
@@ -274,42 +296,84 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
-             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-0 group-hover/session:pr-0
+             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
     >
-      <Show
-        when={hoverEnabled()}
-        fallback={
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            {item}
-          </Tooltip>
-        }
-      >
-        <SessionHoverPreview
-          mobile={props.mobile}
-          nav={props.nav}
-          hoverSession={props.hoverSession}
-          session={props.session}
-          sidebarHovering={props.sidebarHovering}
-          hoverReady={hoverReady}
-          hoverMessages={hoverMessages}
-          language={language}
-          isActive={isActive}
-          slug={props.slug}
-          setHoverSession={props.setHoverSession}
-          messageLabel={messageLabel}
-          onMessageSelect={(message) => {
-            if (!isActive()) {
-              layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-              navigate(`${props.slug}/session/${props.session.id}`)
-              return
-            }
-            window.history.replaceState(null, "", `#message-${message.id}`)
-            window.dispatchEvent(new HashChangeEvent("hashchange"))
-          }}
-          trigger={item}
-        />
-      </Show>
+      <Collapsible open={expanded()} onOpenChange={setExpanded} class="w-full" variant="ghost">
+        <div class="flex items-center">
+          <Show when={hasChildren()}>
+            <Collapsible.Trigger class="flex items-center justify-center w-6 hover:bg-surface-base-hover rounded transition-colors self-center">
+              <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+            </Collapsible.Trigger>
+          </Show>
+          <Show when={!hasChildren()}>
+            <div class="w-6 self-center" />
+          </Show>
+          <div class="flex-1 min-w-0">
+            <Show
+              when={hoverEnabled()}
+              fallback={
+                <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+                  {item}
+                </Tooltip>
+              }
+            >
+              <SessionHoverPreview
+                mobile={props.mobile}
+                nav={props.nav}
+                hoverSession={props.hoverSession}
+                session={props.session}
+                sidebarHovering={props.sidebarHovering}
+                hoverReady={hoverReady}
+                hoverMessages={hoverMessages}
+                language={language}
+                isActive={isActive}
+                slug={props.slug}
+                setHoverSession={props.setHoverSession}
+                messageLabel={messageLabel}
+                onMessageSelect={(message) => {
+                  if (!isActive()) {
+                    layout.pendingMessage.set(
+                      `${base64Encode(props.session.directory)}/${props.session.id}`,
+                      message.id,
+                    )
+                    navigate(`${props.slug}/session/${props.session.id}`)
+                    return
+                  }
+                  window.history.replaceState(null, "", `#message-${message.id}`)
+                  window.dispatchEvent(new HashChangeEvent("hashchange"))
+                }}
+                trigger={item}
+              />
+            </Show>
+          </div>
+        </div>
+        <Collapsible.Content>
+          <div class="pl-4 flex flex-col gap-0.5">
+            <For each={childSessions()}>
+              {(child) => (
+                <SessionItem
+                  session={child}
+                  slug={props.slug}
+                  mobile={props.mobile}
+                  dense={props.dense}
+                  popover={props.popover}
+                  children={props.children}
+                  allSessions={props.allSessions}
+                  sidebarExpanded={props.sidebarExpanded}
+                  sidebarHovering={props.sidebarHovering}
+                  nav={props.nav}
+                  hoverSession={props.hoverSession}
+                  setHoverSession={props.setHoverSession}
+                  clearHoverProjectSoon={props.clearHoverProjectSoon}
+                  prefetchSession={props.prefetchSession}
+                  archiveSession={props.archiveSession}
+                />
+              )}
+            </For>
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
       <div
         class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
         classList={{

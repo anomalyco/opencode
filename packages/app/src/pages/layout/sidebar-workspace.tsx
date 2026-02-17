@@ -244,6 +244,7 @@ const WorkspaceSessionList = (props: {
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
   sessions: Accessor<Session[]>
+  allSessions: Accessor<Session[]>
   children: Accessor<Map<string, string[]>>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
@@ -269,6 +270,7 @@ const WorkspaceSessionList = (props: {
           slug={props.slug()}
           mobile={props.mobile}
           children={props.children()}
+          allSessions={props.allSessions()}
           sidebarExpanded={props.ctx.sidebarExpanded}
           sidebarHovering={props.ctx.sidebarHovering}
           nav={props.ctx.nav}
@@ -451,6 +453,7 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
+            allSessions={() => workspaceStore.session}
             children={children}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -501,6 +504,7 @@ export const LocalWorkspace = (props: {
               slug={slug()}
               mobile={props.mobile}
               children={children()}
+              allSessions={workspace().store.session}
               sidebarExpanded={props.ctx.sidebarExpanded}
               sidebarHovering={props.ctx.sidebarHovering}
               nav={props.ctx.nav}

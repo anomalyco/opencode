@@ -118,7 +118,7 @@ export type DisposeCheck = {
 export type RootLoadArgs = {
   directory: string
   limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
+  list: (query: { directory: string; roots?: boolean; limit?: number }) => Promise<{ data?: Session[] }>
   onFallback: () => void
 }
 
