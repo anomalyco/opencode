@@ -68,6 +68,8 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Pobieranie sieciowe",
+  "ui.tool.websearch": "Web Search",
+  "ui.tool.codesearch": "Code Search",
   "ui.tool.shell": "Terminal",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Zadania",
