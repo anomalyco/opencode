@@ -7,6 +7,22 @@ use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindo
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
+#[cfg(target_os = "linux")]
+use std::sync::OnceLock;
+
+#[cfg(target_os = "linux")]
+fn use_decorations() -> bool {
+    static DECORATIONS: OnceLock<bool> = OnceLock::new();
+    *DECORATIONS.get_or_init(|| {
+        crate::linux_windowing::use_decorations(&crate::linux_windowing::SessionEnv::capture())
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn use_decorations() -> bool {
+    true
+}
+
 pub struct MainWindow(WebviewWindow);
 
 impl Deref for MainWindow {
@@ -31,13 +47,13 @@ impl MainWindow {
             .ok()
             .map(|v| v.enabled)
             .unwrap_or(false);
-
+        let decorations = use_decorations();
         let window_builder = base_window_config(
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
             app,
+            decorations,
         )
         .title("OpenCode")
-        .decorations(true)
         .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
         .visible(true)
@@ -113,9 +129,12 @@ impl LoadingWindow {
     pub const LABEL: &str = "loading";
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
+        let decorations = use_decorations();
+
         let window_builder = base_window_config(
             WebviewWindowBuilder::new(app, Self::LABEL, tauri::WebviewUrl::App("/loading".into())),
             app,
+            decorations,
         )
         .center()
         .resizable(false)
@@ -129,8 +148,9 @@ impl LoadingWindow {
 fn base_window_config<'a, R: Runtime, M: Manager<R>>(
     window_builder: WebviewWindowBuilder<'a, R, M>,
     _app: &AppHandle,
+    decorations: bool,
 ) -> WebviewWindowBuilder<'a, R, M> {
-    let window_builder = window_builder.decorations(true);
+    let window_builder = window_builder.decorations(decorations);
 
     #[cfg(windows)]
     let window_builder = window_builder
