@@ -2256,16 +2256,11 @@ test("kilo provider loaded from config with env var", async () => {
       const providers = await Provider.list()
       expect(providers["kilo"]).toBeDefined()
       expect(providers["kilo"].source).toBe("config")
-      expect(providers["kilo"].options.baseURL).toBe(
-        "https://api.kilo.ai/api/gateway",
-      )
+      expect(providers["kilo"].options.baseURL).toBe("https://api.kilo.ai/api/gateway")
       expect(providers["kilo"].options.headers).toBeDefined()
-      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe(
-        "https://opencode.ai/",
-      )
+      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe("https://opencode.ai/")
       expect(providers["kilo"].options.headers["X-Title"]).toBe("opencode")
-      const model =
-        providers["kilo"].models["anthropic/claude-sonnet-4-20250514"]
+      const model = providers["kilo"].models["anthropic/claude-sonnet-4-20250514"]
       expect(model).toBeDefined()
       expect(model.name).toBe("Claude Sonnet 4 (via Kilo)")
     },
@@ -2306,12 +2301,8 @@ test("kilo provider loaded from config without env var still has custom loader o
       const providers = await Provider.list()
       expect(providers["kilo"]).toBeDefined()
       expect(providers["kilo"].source).toBe("config")
-      expect(providers["kilo"].options.baseURL).toBe(
-        "https://api.kilo.ai/api/gateway",
-      )
-      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe(
-        "https://opencode.ai/",
-      )
+      expect(providers["kilo"].options.baseURL).toBe("https://api.kilo.ai/api/gateway")
+      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe("https://opencode.ai/")
       expect(providers["kilo"].options.headers["X-Title"]).toBe("opencode")
     },
   })
@@ -2354,14 +2345,10 @@ test("kilo provider config options deeply merged with custom loader", async () =
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["kilo"]).toBeDefined()
-      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe(
-        "https://opencode.ai/",
-      )
+      expect(providers["kilo"].options.headers["HTTP-Referer"]).toBe("https://opencode.ai/")
       expect(providers["kilo"].options.apiKey).toBe("custom-key-from-config")
       expect(providers["kilo"].models["openai/gpt-4o"]).toBeDefined()
-      expect(providers["kilo"].models["openai/gpt-4o"].name).toBe(
-        "GPT-4o (via Kilo)",
-      )
+      expect(providers["kilo"].models["openai/gpt-4o"].name).toBe("GPT-4o (via Kilo)")
     },
   })
 })
