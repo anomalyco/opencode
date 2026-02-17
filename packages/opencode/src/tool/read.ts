@@ -1,5 +1,6 @@
 import z from "zod"
-import * as fs from "fs"
+import { createReadStream } from "fs"
+import * as fs from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
 import { Tool } from "./tool"
@@ -52,14 +53,18 @@ export const ReadTool = Tool.define("read", {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
-      const dirEntries = fs.readdirSync(dir)
-      const suggestions = dirEntries
-        .filter(
-          (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+      const suggestions = await fs
+        .readdir(dir)
+        .then((entries) =>
+          entries
+            .filter(
+              (entry) =>
+                entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+            )
+            .map((entry) => path.join(dir, entry))
+            .slice(0, 3),
         )
-        .map((entry) => path.join(dir, entry))
-        .slice(0, 3)
+        .catch(() => [])
 
       if (suggestions.length > 0) {
         throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
@@ -69,12 +74,12 @@ export const ReadTool = Tool.define("read", {
     }
 
     if (stat.isDirectory()) {
-      const dirents = await fs.promises.readdir(filepath, { withFileTypes: true })
+      const dirents = await fs.readdir(filepath, { withFileTypes: true })
       const entries = await Promise.all(
         dirents.map(async (dirent) => {
           if (dirent.isDirectory()) return dirent.name + "/"
           if (dirent.isSymbolicLink()) {
-            const target = await fs.promises.stat(path.join(filepath, dirent.name)).catch(() => undefined)
+            const target = await fs.stat(path.join(filepath, dirent.name)).catch(() => undefined)
             if (target?.isDirectory()) return dirent.name + "/"
           }
           return dirent.name
@@ -140,7 +145,7 @@ export const ReadTool = Tool.define("read", {
     const isBinary = await isBinaryFile(filepath, stat.size)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
-    const stream = fs.createReadStream(filepath, { encoding: "utf8" })
+    const stream = createReadStream(filepath, { encoding: "utf8" })
     const rl = createInterface({
       input: stream,
       // Note: we use the crlfDelay option to recognize all instances of CR LF
@@ -267,7 +272,7 @@ async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean
 
   if (fileSize === 0) return false
 
-  const fh = await fs.promises.open(filepath, "r")
+  const fh = await fs.open(filepath, "r")
   try {
     const sampleSize = Math.min(4096, fileSize)
     const bytes = Buffer.alloc(sampleSize)
