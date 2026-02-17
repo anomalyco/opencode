@@ -18,6 +18,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
+import { useExpandedSessions } from "./use-expanded-sessions"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -249,6 +250,8 @@ const WorkspaceSessionList = (props: {
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
+  isSessionExpanded: (sessionId: string) => boolean
+  toggleSessionExpanded: (sessionId: string) => void
 }): JSX.Element => (
   <nav class="flex flex-col gap-1 px-2">
     <Show when={props.showNew()}>
@@ -279,6 +282,8 @@ const WorkspaceSessionList = (props: {
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
           prefetchSession={props.ctx.prefetchSession}
           archiveSession={props.ctx.archiveSession}
+          isSessionExpanded={props.isSessionExpanded}
+          toggleSessionExpanded={props.toggleSessionExpanded}
         />
       )}
     </For>
@@ -319,6 +324,8 @@ export const SortableWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const allSessions = createMemo(() => Object.values(workspaceStore.session).flat())
+  const expandedSessions = useExpandedSessions(() => props.directory, allSessions)
   const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
@@ -453,11 +460,13 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
-            allSessions={() => workspaceStore.session}
+            allSessions={allSessions}
             children={children}
             hasMore={hasMore}
             loadMore={loadMore}
             language={language}
+            isSessionExpanded={expandedSessions.isExpanded}
+            toggleSessionExpanded={expandedSessions.toggleExpanded}
           />
         </Collapsible.Content>
       </Collapsible>
@@ -479,6 +488,8 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
+  const allSessions = createMemo(() => Object.values(workspace().store.session).flat())
+  const expandedSessions = useExpandedSessions(() => props.project.worktree, allSessions)
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
@@ -513,6 +524,8 @@ export const LocalWorkspace = (props: {
               clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
               prefetchSession={props.ctx.prefetchSession}
               archiveSession={props.ctx.archiveSession}
+              isSessionExpanded={expandedSessions.isExpanded}
+              toggleSessionExpanded={expandedSessions.toggleExpanded}
             />
           )}
         </For>
