@@ -270,6 +270,11 @@ function createGlobalSync() {
           setGlobalStore("project", next)
         },
       })
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        for (const directory of Object.keys(children.children)) {
+          queue.push(directory)
+        }
+      }
       return
     }
 
