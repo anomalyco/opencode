@@ -1,1 +1,21 @@
 @import "@opencode-ai/ui/styles/tailwind";
+
+[data-component="prompt-mode-toggle"] [data-slot="icon-svg"] {
+  color: var(--icon-base);
+}
+
+[data-component="prompt-mode-toggle"] [data-slot="icon-svg"] * {
+  color: inherit;
+}
+
+[data-component="prompt-mode-toggle"] button[aria-pressed="true"] [data-slot="icon-svg"] {
+  color: var(--icon-strong-base);
+}
+
+[data-component="prompt-mode-toggle"] [data-slot="icon-svg"] [stroke]:not([stroke="none"]) {
+  stroke: currentColor;
+}
+
+[data-component="prompt-mode-toggle"] [data-slot="icon-svg"] [fill]:not([fill="none"]) {
+  fill: currentColor;
+}

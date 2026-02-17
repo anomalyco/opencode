@@ -1361,14 +1361,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
                     classList={{ "hover:bg-transparent": store.mode === "shell" }}
                   >
-                    <Icon
-                      name="console"
-                      class="size-[18px]"
-                      classList={{
-                        "text-icon-strong-base": store.mode === "shell",
-                        "text-icon-weak": store.mode !== "shell",
-                      }}
-                    />
+                    <Icon name="console" class="size-[18px]" />
                   </div>
                 </button>
                 <button
@@ -1381,14 +1374,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
                     classList={{ "hover:bg-transparent": store.mode === "normal" }}
                   >
-                    <Icon
-                      name="prompt"
-                      class="size-[18px]"
-                      classList={{
-                        "text-icon-interactive-base": store.mode === "normal",
-                        "text-icon-weak": store.mode !== "normal",
-                      }}
-                    />
+                    <Icon name="prompt" class="size-[18px]" />
                   </div>
                 </button>
               </div>
