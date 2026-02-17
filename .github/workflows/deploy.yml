@@ -30,6 +30,7 @@ jobs:
       - name: Fix Pulumi version conflict
         run: sudo rm -f /usr/local/bin/pulumi-language-nodejs
 
-      - run: bun sst deploy --stage=${{ github.ref_name }}
+      - run: bun sst deploy --stage=${{ github.ref_name }} --print-logs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
