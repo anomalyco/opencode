@@ -297,6 +297,40 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("allows reading empty file at default offset", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "empty.txt") }, ctx)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).toContain("End of file - total 0 lines")
+      },
+    })
+  })
+
+  test("throws when offset > 1 for empty file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "empty.txt"), offset: 2 }, ctx)).rejects.toThrow(
+          "Offset 2 is out of range for this file (0 lines)",
+        )
+      },
+    })
+  })
+
   test("does not mark final directory page as truncated", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

@@ -180,7 +180,9 @@ export const ReadTool = Tool.define("read", {
       stream.destroy()
     }
 
-    if (lines < offset) throw new Error(`Offset ${offset} is out of range for this file (${lines} lines)`)
+    if (lines < offset && !(lines === 0 && offset === 1)) {
+      throw new Error(`Offset ${offset} is out of range for this file (${lines} lines)`)
+    }
 
     const content = raw.map((line, index) => {
       return `${index + offset}: ${line}`
