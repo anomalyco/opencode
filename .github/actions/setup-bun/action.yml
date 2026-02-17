@@ -4,6 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: Mount Bun Cache
+      if: ${{ runner.os == 'Linux' }}
       uses: useblacksmith/stickydisk@v1
       with:
         key: ${{ github.repository }}-bun-cache-${{ runner.os }}
