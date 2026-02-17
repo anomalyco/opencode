@@ -28,6 +28,9 @@ export namespace Snapshot {
     stderr: string
     signalCode: number | string | null
   }
+  type SpawnOptions = Omit<NonNullable<Parameters<typeof Bun.spawn>[1]>, "cwd" | "env"> & {
+    input?: string
+  }
 
   export type Cleanup = {
     status: "gc" | "reset" | "skipped" | "failed"
@@ -362,23 +365,59 @@ export namespace Snapshot {
     }
   }
 
-  async function spawn(cmds: string[], env: Env, options?: Parameters<typeof Bun.spawn>[1]): Promise<Spawned> {
-    const proc = Bun.spawn(cmds, {
-      cwd: Instance.directory,
-      env,
-      stdout: "ignore",
-      stderr: "pipe",
-      ...options,
-    })
+  async function spawn(cmds: string[], env: Env, options?: SpawnOptions): Promise<Spawned> {
+    const { input, ...opts } = options ?? {}
 
-    const stderr = proc.stderr instanceof ReadableStream ? new Response(proc.stderr).text() : Promise.resolve("")
-    const exitCode = await proc.exited
+    try {
+      const proc = Bun.spawn(cmds, {
+        cwd: Instance.directory,
+        env,
+        stdout: "ignore",
+        stderr: "pipe",
+        ...opts,
+        stdin: input === undefined ? opts.stdin : "pipe",
+      })
 
-    return {
-      exitCode,
-      stderr: (await stderr).trim(),
-      signalCode: proc.signalCode,
+      if (input !== undefined && proc.stdin && typeof proc.stdin !== "number") {
+        proc.stdin.write(input)
+        proc.stdin.end()
+      }
+
+      const stderr = proc.stderr instanceof ReadableStream ? new Response(proc.stderr).text() : Promise.resolve("")
+      const exitCode = await proc.exited
+
+      return {
+        exitCode,
+        stderr: (await stderr).trim(),
+        signalCode: proc.signalCode,
+      }
+    } catch (error) {
+      return {
+        exitCode: 1,
+        stderr: error instanceof Error ? error.message : String(error),
+        signalCode: null,
+      }
     }
+  }
+
+  async function spawnPathspec(
+    cmds: string[],
+    env: Env,
+    files: string[],
+    options?: Omit<SpawnOptions, "stdin" | "input">,
+  ): Promise<Spawned> {
+    if (files.length === 0) {
+      return {
+        exitCode: 0,
+        stderr: "",
+        signalCode: null,
+      }
+    }
+
+    return spawn([...cmds, "--pathspec-from-file=-", "--pathspec-file-nul"], env, {
+      ...options,
+      input: `${files.join("\0")}\0`,
+    })
   }
 
   async function gitAddFiltered(git: string): Promise<string[]> {
@@ -408,21 +447,12 @@ export namespace Snapshot {
     const largeFiles = await findLargeFiles(stagedFiles)
     await unstageAndExclude(env, largeFiles)
 
-    const filesWithoutLarge = stagedFiles.filter((file) => !largeFiles.includes(file))
-    const addOutput = await spawn(
-      [
-        "git",
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "core.longpaths=true",
-        "-c",
-        "core.symlinks=true",
-        "add",
-        "--",
-        ...filesWithoutLarge,
-      ],
+    const large = new Set(largeFiles)
+    const filesWithoutLarge = stagedFiles.filter((file) => !large.has(file))
+    const addOutput = await spawnPathspec(
+      ["git", "-c", "core.autocrlf=false", "-c", "core.longpaths=true", "-c", "core.symlinks=true", "add"],
       env,
+      filesWithoutLarge,
     )
     if (addOutput.exitCode !== 0) {
       log.warn("git add failed", { exitCode: addOutput.exitCode, stderr: addOutput.stderr })
@@ -457,7 +487,7 @@ export namespace Snapshot {
     if (files.length === 0) return
 
     async function execGitRmCached() {
-      const output = await spawn(
+      const output = await spawnPathspec(
         [
           "git",
           "-c",
@@ -469,10 +499,9 @@ export namespace Snapshot {
           "rm",
           "--cached",
           "--ignore-unmatch",
-          "--",
-          ...files,
         ],
         env,
+        files,
         {
           stderr: "ignore",
         },

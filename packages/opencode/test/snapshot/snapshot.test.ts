@@ -385,6 +385,42 @@ test("diffFull ignores files larger than snapshot threshold", async () => {
   })
 })
 
+test("patch handles large staged file sets without argv overflow", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // Regression test for Windows CI failure (ENAMETOOLONG in uv_spawn) when
+      // snapshot staging passed thousands of paths as argv to `git add`/`git rm`.
+      // Keep this large enough to stress command length and validate
+      // `--pathspec-from-file` handling.
+      const dir =
+        process.platform === "win32"
+          ? path.join(tmp.path, "bulk")
+          : path.join(tmp.path, "bulk", "x".repeat(96), "y".repeat(96), "z".repeat(96))
+      await fs.mkdir(dir, { recursive: true })
+
+      const count = process.platform === "win32" ? 800 : 6000
+      const files = Array.from({ length: count }, (_, i) =>
+        path.join(dir, `${i.toString().padStart(4, "0")}-${"n".repeat(64)}.txt`),
+      )
+
+      const step = 200
+      for (let i = 0; i < files.length; i += step) {
+        await Promise.all(files.slice(i, i + step).map((file) => Bun.write(file, "x")))
+      }
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files.length).toBe(files.length)
+      expect(patch.files).toContain(files[0]!)
+      expect(patch.files).toContain(files[files.length - 1]!)
+    },
+  })
+})
+
 test("cleanup keeps snapshot dir when no oversized objects are found", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
