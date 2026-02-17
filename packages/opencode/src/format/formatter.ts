@@ -373,3 +373,12 @@ export const cljfmt: Info = {
     return Bun.which("cljfmt") !== null
   },
 }
+
+export const dfmt: Info = {
+  name: "dfmt",
+  command: ["dfmt", "-i", "$FILE"],
+  extensions: [".d"],
+  async enabled() {
+    return Bun.which("dfmt") !== null
+  },
+}
