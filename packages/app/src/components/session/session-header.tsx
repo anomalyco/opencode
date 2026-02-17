@@ -327,7 +327,7 @@ export function SessionHeader() {
             >
               <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
-                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate h-4.5 flex items-center">
+                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
                   {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
@@ -354,7 +354,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-2 border-none shadow-none"
                           onClick={copyPath}
                           aria-label={language.t("session.header.open.copyPath")}
                         >
