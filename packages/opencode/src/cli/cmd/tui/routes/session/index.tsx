@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -221,6 +222,43 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Scroll anchoring: prevents content shift/jitter when the user has scrolled
+  // up to read older messages. When content resizes (tree-sitter highlights,
+  // tool results expanding, etc.), yoga recalculates child positions. Without
+  // anchoring, the same scrollTop value shows different content because
+  // children's _y values shifted. We save a reference child's position and
+  // compensate after the layout tree walk completes.
+  const SCROLL_BOTTOM_THRESHOLD = 5
+  let userAtBottom = true
+  let anchorChildId: string | undefined
+  let anchorChildY = 0
+
+  function updateUserAtBottom() {
+    if (!scroll || scroll.isDestroyed) return
+    const max = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+    userAtBottom = max <= 0 || scroll.scrollTop >= max - SCROLL_BOTTOM_THRESHOLD
+  }
+
+  function saveAnchor() {
+    if (!scroll || scroll.isDestroyed) return
+    const top = scroll.scrollTop
+    for (const child of scroll.getChildren()) {
+      if (child.id && (child as any)._y + child.height > top) {
+        anchorChildId = child.id
+        anchorChildY = (child as any)._y
+        return
+      }
+    }
+    anchorChildId = undefined
+  }
+
+  // Poll to track user scroll position and save anchor state.
+  const pollId = setInterval(() => {
+    updateUserAtBottom()
+    if (!userAtBottom) saveAnchor()
+  }, 50)
+  onCleanup(() => clearInterval(pollId))
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -985,7 +1023,33 @@ export function Session() {
               <Header />
             </Show>
             <scrollbox
-              ref={(r) => (scroll = r)}
+              ref={(r) => {
+                scroll = r
+                // Scroll anchoring: after content resizes, yoga recalculates
+                // child positions during the tree walk. recalculateBarProps
+                // fires mid-walk (children not yet updated). We schedule a
+                // process.nextTick to run AFTER the tree walk finishes, then
+                // compare the anchor child's new _y with its saved position
+                // and adjust scrollTop to keep the same content in view.
+                const original = (r as any).recalculateBarProps.bind(r)
+                ;(r as any).recalculateBarProps = () => {
+                  const savedId = anchorChildId
+                  const savedY = anchorChildY
+                  const wasAtBottom = userAtBottom
+                  original()
+                  if (wasAtBottom || !savedId) return
+                  process.nextTick(() => {
+                    if (r.isDestroyed) return
+                    const anchor = r.getChildren().find((c: any) => c.id === savedId)
+                    if (!anchor) return
+                    const delta = (anchor as any)._y - savedY
+                    if (delta !== 0) {
+                      r.scrollTop = r.scrollTop + delta
+                    }
+                    saveAnchor()
+                  })
+                }
+              }}
               viewportOptions={{
                 paddingRight: showScrollbar() ? 1 : 0,
               }}
