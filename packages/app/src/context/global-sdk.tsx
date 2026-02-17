@@ -2,8 +2,13 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
+import z from "zod"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
+
+const abortError = z.object({
+  name: z.literal("AbortError"),
+})
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -93,11 +98,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     let streamErrorLogged = false
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-    const aborted = (error: unknown) =>
-      typeof error === "object" &&
-      error !== null &&
-      "name" in error &&
-      (error as { name?: string }).name === "AbortError"
+    const aborted = (error: unknown) => abortError.safeParse(error).success
 
     let attempt: AbortController | undefined
     const HEARTBEAT_TIMEOUT_MS = 15_000
