@@ -1334,7 +1334,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="shrink-0">
               <div
                 data-component="prompt-mode-toggle"
-                class="relative h-8 w-[68px] rounded-[4px] bg-surface-inset-base shadow-[var(--shadow-xs-border-base)] p-0 flex items-center gap-1 overflow-visible"
+                class="relative h-6 w-[68px] rounded-[4px] bg-surface-inset-base border border-[0.5px] border-border-weak-base p-0 flex items-center gap-1 overflow-visible"
               >
                 <div
                   class="absolute inset-y-0 left-0 w-[calc((100%-4px)/2)] rounded-[4px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-xs-border)] transition-transform duration-200 ease-out will-change-transform"
@@ -1344,33 +1344,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
                 <button
                   type="button"
-                  class="relative z-10 flex-1 h-full flex items-center justify-center rounded-[4px]"
+                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
                   aria-pressed={store.mode === "shell"}
                   onClick={() => setMode("shell")}
                 >
-                  <Icon
-                    name="console"
-                    size="normal"
-                    classList={{
-                      "text-icon-strong-base": store.mode === "shell",
-                      "text-icon-weak": store.mode !== "shell",
-                    }}
-                  />
+                  <div
+                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
+                    classList={{ "hover:bg-transparent": store.mode === "shell" }}
+                  >
+                    <Icon
+                      name="console"
+                      class="size-[18px]"
+                      classList={{
+                        "text-icon-strong-base": store.mode === "shell",
+                        "text-icon-weak": store.mode !== "shell",
+                      }}
+                    />
+                  </div>
                 </button>
                 <button
                   type="button"
-                  class="relative z-10 flex-1 h-full flex items-center justify-center rounded-[4px]"
+                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
                   aria-pressed={store.mode === "normal"}
                   onClick={() => setMode("normal")}
                 >
-                  <Icon
-                    name="prompt"
-                    size="normal"
-                    classList={{
-                      "text-icon-interactive-base": store.mode === "normal",
-                      "text-icon-weak": store.mode !== "normal",
-                    }}
-                  />
+                  <div
+                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
+                    classList={{ "hover:bg-transparent": store.mode === "normal" }}
+                  >
+                    <Icon
+                      name="prompt"
+                      class="size-[18px]"
+                      classList={{
+                        "text-icon-interactive-base": store.mode === "normal",
+                        "text-icon-weak": store.mode !== "normal",
+                      }}
+                    />
+                  </div>
                 </button>
               </div>
             </div>
