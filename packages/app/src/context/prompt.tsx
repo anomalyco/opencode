@@ -120,9 +120,6 @@ function createPromptActions(
   setStore: SetStoreFunction<{
     prompt: Prompt
     cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
   }>,
 ) {
   return {
@@ -142,6 +139,15 @@ function createPromptActions(
   }
 }
 
+function migratePromptValue(value: unknown) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value
+  const record = value as { prompt?: unknown; cursor?: unknown }
+  return {
+    prompt: record.prompt,
+    cursor: record.cursor,
+  }
+}
+
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
@@ -155,39 +161,46 @@ type PromptCacheEntry = {
 function createPromptSession(dir: string, id: string | undefined) {
   const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
 
-  const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
+  const [promptStore, setPromptStore, _, promptReady] = persisted(
+    {
+      ...Persist.scoped(dir, id, "prompt", [legacy]),
+      writeDelay: 160,
+      migrate: migratePromptValue,
+    },
     createStore<{
       prompt: Prompt
       cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
     }>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,
-      context: {
-        items: [],
-      },
     }),
   )
 
-  const actions = createPromptActions(setStore)
+  const [contextStore, setContextStore, , contextReady] = persisted(
+    Persist.scoped(dir, id, "prompt-context"),
+    createStore<{
+      items: (ContextItem & { key: string })[]
+    }>({
+      items: [],
+    }),
+  )
+
+  const actions = createPromptActions(setPromptStore)
 
   return {
-    ready,
-    current: createMemo(() => store.prompt),
-    cursor: createMemo(() => store.cursor),
-    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
+    ready: () => promptReady() && contextReady(),
+    current: createMemo(() => promptStore.prompt),
+    cursor: createMemo(() => promptStore.cursor),
+    dirty: createMemo(() => !isPromptEqual(promptStore.prompt, DEFAULT_PROMPT)),
     context: {
-      items: createMemo(() => store.context.items),
+      items: createMemo(() => contextStore.items),
       add(item: ContextItem) {
         const key = contextItemKey(item)
-        if (store.context.items.find((x) => x.key === key)) return
-        setStore("context", "items", (items) => [...items, { key, ...item }])
+        if (contextStore.items.find((x) => x.key === key)) return
+        setContextStore("items", (items) => [...items, { key, ...item }])
       },
       remove(key: string) {
-        setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+        setContextStore("items", (items) => items.filter((x) => x.key !== key))
       },
     },
     set: actions.set,

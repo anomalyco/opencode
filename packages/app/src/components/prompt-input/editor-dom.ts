@@ -1,30 +1,62 @@
 export function createTextFragment(content: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
-  const segments = content.split("\n")
-  segments.forEach((segment, index) => {
-    if (segment) {
-      fragment.appendChild(document.createTextNode(segment))
-    }
-    if (index < segments.length - 1) {
-      fragment.appendChild(document.createElement("br"))
-    }
-  })
+  fragment.appendChild(document.createTextNode(content))
   return fragment
 }
 
 export function getNodeLength(node: Node): number {
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
-  return (node.textContent ?? "").replace(/\u200B/g, "").length
+  const text = node.textContent ?? ""
+  if (!text.includes("\u200B")) return text.length
+  return text.replace(/\u200B/g, "").length
 }
 
 export function getTextLength(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? ""
+    if (!text.includes("\u200B")) return text.length
+    return text.replace(/\u200B/g, "").length
+  }
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
   let length = 0
-  for (const child of Array.from(node.childNodes)) {
-    length += getTextLength(child)
+  const children = node.childNodes
+  for (let i = 0; i < children.length; i++) {
+    length += getTextLength(children[i]!)
   }
   return length
+}
+
+function offsetInNode(node: Node, offset: number) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = (node.textContent ?? "").slice(0, offset)
+    if (!text.includes("\u200B")) return text.length
+    return text.replace(/\u200B/g, "").length
+  }
+
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") {
+    return Math.min(offset, 1)
+  }
+
+  let length = 0
+  const children = node.childNodes
+  const limit = Math.min(offset, children.length)
+  for (let i = 0; i < limit; i++) {
+    length += getTextLength(children[i]!)
+  }
+  return length
+}
+
+function lengthBefore(root: Node, target: Node, offset: number): number | undefined {
+  if (root === target) return offsetInNode(root, offset)
+
+  let total = 0
+  const children = root.childNodes
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i]!
+    const length = lengthBefore(child, target, offset)
+    if (length !== undefined) return total + length
+    total += getTextLength(child)
+  }
 }
 
 export function getCursorPosition(parent: HTMLElement): number {
@@ -32,10 +64,7 @@ export function getCursorPosition(parent: HTMLElement): number {
   if (!selection || selection.rangeCount === 0) return 0
   const range = selection.getRangeAt(0)
   if (!parent.contains(range.startContainer)) return 0
-  const preCaretRange = range.cloneRange()
-  preCaretRange.selectNodeContents(parent)
-  preCaretRange.setEnd(range.startContainer, range.startOffset)
-  return getTextLength(preCaretRange.cloneContents())
+  return lengthBefore(parent, range.startContainer, range.startOffset) ?? 0
 }
 
 export function setCursorPosition(parent: HTMLElement, position: number) {

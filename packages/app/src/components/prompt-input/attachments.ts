@@ -8,6 +8,9 @@ import { getCursorPosition } from "./editor-dom"
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
 
+const LARGE_PASTE_TEXT = 8_000
+const LARGE_EDITOR_TEXT = 60_000
+
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isFocused: () => boolean
@@ -89,6 +92,16 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     if (!plainText) return
+
+    const promptLength = prompt
+      .current()
+      .reduce((total, part) => total + ("content" in part ? part.content.length : 0), 0)
+
+    if (plainText.length > LARGE_PASTE_TEXT || promptLength > LARGE_EDITOR_TEXT) {
+      input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
+      return
+    }
+
     const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
     if (inserted) return
 

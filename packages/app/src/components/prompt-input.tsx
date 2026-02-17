@@ -87,6 +87,8 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
+const HAS_MEANINGFUL_TEXT = /[^\s\u200B\u00A0]/
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
@@ -331,7 +333,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const clearEditor = () => {
-    editorRef.innerHTML = ""
+    editorRef.replaceChildren()
   }
 
   const setEditorText = (text: string) => {
@@ -608,12 +610,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const parseFromDOM = (): Prompt => {
+    const normalizeText = (text: string) => {
+      if (!text) return ""
+      if (!text.includes("\r") && !text.includes("\u200B")) return text
+      return text.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+    }
+
+    const parseTextOnly = (): Prompt | undefined => {
+      const children = editorRef.childNodes
+      if (children.length === 0) return [...DEFAULT_PROMPT]
+
+      let content = ""
+
+      for (let i = 0; i < children.length; i++) {
+        const node = children[i]!
+        if (node.nodeType === Node.TEXT_NODE) {
+          content += node.textContent ?? ""
+          continue
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return
+        }
+
+        const el = node as HTMLElement
+        if (el.dataset.type === "file" || el.dataset.type === "agent") {
+          return
+        }
+
+        if (el.tagName === "BR") {
+          content += "\n"
+          continue
+        }
+
+        return
+      }
+
+      const normalized = normalizeText(content)
+      if (!normalized) return [...DEFAULT_PROMPT]
+      return [{ type: "text", content: normalized, start: 0, end: normalized.length }]
+    }
+
+    const fast = parseTextOnly()
+    if (fast) return fast
+
     const parts: Prompt = []
     let position = 0
     let buffer = ""
 
     const flushText = () => {
-      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+      const content = normalizeText(buffer)
       buffer = ""
       if (!content) return
       parts.push({ type: "text", content, start: position, end: position + content.length })
@@ -667,19 +713,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
 
-      for (const child of Array.from(el.childNodes)) {
-        visit(child)
+      const children = el.childNodes
+      for (let i = 0; i < children.length; i++) {
+        visit(children[i]!)
       }
     }
 
-    const children = Array.from(editorRef.childNodes)
-    children.forEach((child, index) => {
+    const children = editorRef.childNodes
+    for (let index = 0; index < children.length; index++) {
+      const child = children[index]!
       const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
       visit(child)
-      if (isBlock && index < children.length - 1) {
-        buffer += "\n"
-      }
-    })
+      if (isBlock && index < children.length - 1) buffer += "\n"
+    }
 
     flushText()
 
@@ -687,14 +733,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return parts
   }
 
+  const sliceContent = (parts: Prompt, start: number, end: number) => {
+    if (end <= start) return ""
+    let out = ""
+    for (const part of parts) {
+      if (!("content" in part)) continue
+      if (part.end <= start) continue
+      if (part.start >= end) break
+      const a = Math.max(0, start - part.start)
+      const b = Math.min(part.content.length, end - part.start)
+      if (b > a) out += part.content.slice(a, b)
+    }
+    return out
+  }
+
   const handleInput = () => {
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
-    const trimmed = rawText.replace(/\u200B/g, "").trim()
+    const length = promptLength(rawParts)
+    const cursor = Math.max(0, Math.min(cursorPosition, length))
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
+    const hasText = rawParts.some((part) => part.type === "text" && HAS_MEANINGFUL_TEXT.test(part.content))
+    const shouldReset = !hasText && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
@@ -710,8 +771,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
-      const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
+      const tail = sliceContent(rawParts, Math.max(0, cursor - 512), cursor)
+      const atMatch = tail.match(/@(\S*)$/)
+      const slashText = cursor === length && length <= 256 ? sliceContent(rawParts, 0, length) : ""
+      const slashMatch = slashText ? slashText.match(/^\/(\S*)$/) : null
 
       if (atMatch) {
         atOnInput(atMatch[1])
@@ -729,7 +792,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     resetHistoryNavigation()
 
     mirror.input = true
-    prompt.set([...rawParts, ...images], cursorPosition)
+    prompt.set([...rawParts, ...images], cursor)
     queueScroll()
   }
 
@@ -738,12 +801,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!selection || selection.rangeCount === 0) return
 
     const cursorPosition = getCursorPosition(editorRef)
-    const currentPrompt = prompt.current()
-    const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
-    const textBeforeCursor = rawText.substring(0, cursorPosition)
-    const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
     if (part.type === "file" || part.type === "agent") {
+      const currentPrompt = prompt.current()
+      const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
+      const textBeforeCursor = rawText.substring(0, cursorPosition)
+      const atMatch = textBeforeCursor.match(/@(\S*)$/)
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)

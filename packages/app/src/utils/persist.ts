@@ -12,6 +12,7 @@ type PersistTarget = {
   key: string
   legacy?: string[]
   migrate?: (value: unknown) => unknown
+  writeDelay?: number
 }
 
 const LEGACY_STORAGE = "default.dat"
@@ -296,6 +297,94 @@ function localStorageDirect(): SyncStorage {
   }
 }
 
+function createDelayedSyncStorage(storage: SyncStorage, delay: number): SyncStorage {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const pending = new Map<string, string | null>()
+
+  const flush = (key: string) => {
+    const value = pending.get(key)
+    if (value === undefined) return
+    pending.delete(key)
+    timers.delete(key)
+
+    if (value === null) {
+      storage.removeItem(key)
+      return
+    }
+
+    storage.setItem(key, value)
+  }
+
+  const schedule = (key: string) => {
+    const timer = timers.get(key)
+    if (timer) clearTimeout(timer)
+    timers.set(
+      key,
+      setTimeout(() => flush(key), delay),
+    )
+  }
+
+  return {
+    getItem: (key) => {
+      if (pending.has(key)) return pending.get(key) ?? null
+      return storage.getItem(key)
+    },
+    setItem: (key, value) => {
+      pending.set(key, value)
+      schedule(key)
+    },
+    removeItem: (key) => {
+      pending.set(key, null)
+      schedule(key)
+    },
+  }
+}
+
+function createDelayedAsyncStorage(storage: AsyncStorage, delay: number): AsyncStorage {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const pending = new Map<string, string | null>()
+
+  const flush = async (key: string) => {
+    const value = pending.get(key)
+    if (value === undefined) return
+    pending.delete(key)
+    timers.delete(key)
+
+    if (value === null) {
+      await storage.removeItem(key)
+      return
+    }
+
+    await storage.setItem(key, value)
+  }
+
+  const schedule = (key: string) => {
+    const timer = timers.get(key)
+    if (timer) clearTimeout(timer)
+    timers.set(
+      key,
+      setTimeout(() => {
+        void flush(key)
+      }, delay),
+    )
+  }
+
+  return {
+    getItem: async (key) => {
+      if (pending.has(key)) return pending.get(key) ?? null
+      return storage.getItem(key)
+    },
+    setItem: async (key, value) => {
+      pending.set(key, value)
+      schedule(key)
+    },
+    removeItem: async (key) => {
+      pending.set(key, null)
+      schedule(key)
+    },
+  }
+}
+
 export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
@@ -339,6 +428,7 @@ export function persisted<T>(
 ): PersistedWithReady<T> {
   const platform = usePlatform()
   const config: PersistTarget = typeof target === "string" ? { key: target } : target
+  const writeDelay = Math.max(0, config.writeDelay ?? 0)
 
   const defaults = snapshot(store[0])
   const legacy = config.legacy ?? []
@@ -447,7 +537,13 @@ export function persisted<T>(
     return api
   })()
 
-  const [state, setState, init] = makePersisted(store, { name: config.key, storage })
+  const delayedStorage = (() => {
+    if (writeDelay === 0) return storage
+    if (isDesktop) return createDelayedAsyncStorage(storage as AsyncStorage, writeDelay)
+    return createDelayedSyncStorage(storage as SyncStorage, writeDelay)
+  })()
+
+  const [state, setState, init] = makePersisted(store, { name: config.key, storage: delayedStorage })
 
   const isAsync = init instanceof Promise
   const [ready] = createResource(
