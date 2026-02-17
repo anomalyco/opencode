@@ -346,7 +346,7 @@ export function SessionHeader() {
       <Show when={rightMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
               <StatusPopover />
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
@@ -552,7 +552,8 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
+              <div class="flex items-center gap-1">
+                <div class="hidden md:flex items-center gap-3 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
@@ -585,7 +586,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+                <div class="hidden md:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -615,7 +616,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div class="hidden md:block shrink-0">
+                <div class="hidden md:block shrink-0">
                 <div
                   aria-hidden={!view().reviewPanel.opened()}
                   class="overflow-hidden transition-[width,margin-left] duration-200 ease-out motion-reduce:transition-none"
@@ -659,6 +660,7 @@ export function SessionHeader() {
                     </TooltipKeybind>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </Portal>
