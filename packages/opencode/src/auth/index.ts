@@ -2,7 +2,7 @@ import path from "path"
 import { Global } from "../global"
 import z from "zod"
 
-export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
+export const OAUTH_DUMMY_KEY = "ohmycode-oauth-dummy-key"
 
 export namespace Auth {
   export const Oauth = z
@@ -35,16 +35,10 @@ export namespace Auth {
   export type Info = z.infer<typeof Info>
 
   const filepath = path.join(Global.Path.data, "auth.json")
+  const legacyFilepath = path.join(Global.Path.legacy.data, "auth.json")
 
-  export async function get(providerID: string) {
-    const auth = await all()
-    return auth[providerID]
-  }
-
-  export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
-    return Object.entries(data).reduce(
+  function parse(input: Record<string, unknown>) {
+    return Object.entries(input).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
         if (!parsed.success) return acc
@@ -55,15 +49,43 @@ export namespace Auth {
     )
   }
 
+  async function local() {
+    return parse(
+      await Bun.file(filepath)
+        .json()
+        .catch(() => ({}) as Record<string, unknown>),
+    )
+  }
+
+  async function legacy() {
+    return parse(
+      await Bun.file(legacyFilepath)
+        .json()
+        .catch(() => ({}) as Record<string, unknown>),
+    )
+  }
+
+  export async function get(providerID: string) {
+    const auth = await all()
+    return auth[providerID]
+  }
+
+  export async function all(): Promise<Record<string, Info>> {
+    return {
+      ...(await legacy()),
+      ...(await local()),
+    }
+  }
+
   export async function set(key: string, info: Info) {
     const file = Bun.file(filepath)
-    const data = await all()
+    const data = await local()
     await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(key: string) {
     const file = Bun.file(filepath)
-    const data = await all()
+    const data = await local()
     delete data[key]
     await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
   }

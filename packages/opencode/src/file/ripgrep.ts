@@ -293,7 +293,7 @@ export namespace Ripgrep {
 
     const root: Node = { name: "", children: new Map() }
     for (const file of files) {
-      if (file.includes(".opencode")) continue
+      if (file.includes(".opencode") || file.includes(".ohmycode")) continue
       const parts = file.split(path.sep)
       if (parts.length < 2) continue
       let node = root

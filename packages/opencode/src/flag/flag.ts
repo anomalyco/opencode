@@ -1,18 +1,24 @@
+function env(key: string) {
+  if (!key.startsWith("OPENCODE_")) return process.env[key]
+  const suffix = key.slice("OPENCODE_".length)
+  return process.env[`OHMYCODE_${suffix}`] ?? process.env[key]
+}
+
 function truthy(key: string) {
-  const value = process.env[key]?.toLowerCase()
+  const value = env(key)?.toLowerCase()
   return value === "true" || value === "1"
 }
 
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
-  export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
-  export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
+  export const OPENCODE_GIT_BASH_PATH = env("OPENCODE_GIT_BASH_PATH")
+  export const OPENCODE_CONFIG = env("OPENCODE_CONFIG")
   export declare const OPENCODE_CONFIG_DIR: string | undefined
-  export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
+  export const OPENCODE_CONFIG_CONTENT = env("OPENCODE_CONFIG_CONTENT")
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("OPENCODE_DISABLE_TERMINAL_TITLE")
-  export const OPENCODE_PERMISSION = process.env["OPENCODE_PERMISSION"]
+  export const OPENCODE_PERMISSION = env("OPENCODE_PERMISSION")
   export const OPENCODE_DISABLE_DEFAULT_PLUGINS = truthy("OPENCODE_DISABLE_DEFAULT_PLUGINS")
   export const OPENCODE_DISABLE_LSP_DOWNLOAD = truthy("OPENCODE_DISABLE_LSP_DOWNLOAD")
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
@@ -26,10 +32,10 @@ export namespace Flag {
   export const OPENCODE_DISABLE_EXTERNAL_SKILLS =
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS || truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS")
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
-  export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
+  export const OPENCODE_FAKE_VCS = env("OPENCODE_FAKE_VCS")
   export declare const OPENCODE_CLIENT: string
-  export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
-  export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+  export const OPENCODE_SERVER_PASSWORD = env("OPENCODE_SERVER_PASSWORD")
+  export const OPENCODE_SERVER_USERNAME = env("OPENCODE_SERVER_USERNAME")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
@@ -38,7 +44,7 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
 
-  const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
+  const copy = env("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
     copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const OPENCODE_ENABLE_EXA =
@@ -51,11 +57,11 @@ export namespace Flag {
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("OPENCODE_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("OPENCODE_EXPERIMENTAL_MARKDOWN")
-  export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
-  export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
+  export const OPENCODE_MODELS_URL = env("OPENCODE_MODELS_URL")
+  export const OPENCODE_MODELS_PATH = env("OPENCODE_MODELS_PATH")
 
   function number(key: string) {
-    const value = process.env[key]
+    const value = env(key)
     if (!value) return undefined
     const parsed = Number(value)
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
@@ -78,7 +84,7 @@ Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
 // because external tooling may set this env var at runtime
 Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
   get() {
-    return process.env["OPENCODE_CONFIG_DIR"]
+    return env("OPENCODE_CONFIG_DIR")
   },
   enumerable: true,
   configurable: false,
@@ -89,7 +95,7 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 // because some commands override the client at runtime
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
-    return process.env["OPENCODE_CLIENT"] ?? "cli"
+    return env("OPENCODE_CLIENT") ?? "cli"
   },
   enumerable: true,
   configurable: false,

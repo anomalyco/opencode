@@ -58,6 +58,7 @@ export namespace Installation {
   }
 
   export async function method() {
+    if (process.execPath.includes(path.join(".ohmycode", "bin"))) return "curl"
     if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
     if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
@@ -81,15 +82,15 @@ export namespace Installation {
       },
       {
         name: "brew" as const,
-        command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
+        command: () => $`brew list --formula`.throws(false).quiet().text(),
       },
       {
         name: "scoop" as const,
-        command: () => $`scoop list opencode`.throws(false).quiet().text(),
+        command: () => $`scoop list`.throws(false).quiet().text(),
       },
       {
         name: "choco" as const,
-        command: () => $`choco list --limit-output opencode`.throws(false).quiet().text(),
+        command: () => $`choco list --limit-output`.throws(false).quiet().text(),
       },
     ]
 
@@ -103,9 +104,11 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-      if (output.includes(installedName)) {
+      const installedNames =
+        check.name === "brew" || check.name === "choco" || check.name === "scoop"
+          ? ["ohmycode", "opencode"]
+          : ["ohmycode-ai", "opencode-ai"]
+      if (installedNames.some((name) => output.includes(name))) {
         return check.name
       }
     }
@@ -121,11 +124,13 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
+    const ohmycode = await $`brew list --formula ohmycode`.throws(false).quiet().text()
+    if (ohmycode.includes("ohmycode")) return "ohmycode"
     const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
-    return "opencode"
+    return "ohmycode"
   }
 
   export async function upgrade(method: Method, target: string) {
@@ -138,13 +143,13 @@ export namespace Installation {
         })
         break
       case "npm":
-        cmd = $`npm install -g opencode-ai@${target}`
+        cmd = $`npm install -g ohmycode-ai@${target}`
         break
       case "pnpm":
-        cmd = $`pnpm install -g opencode-ai@${target}`
+        cmd = $`pnpm install -g ohmycode-ai@${target}`
         break
       case "bun":
-        cmd = $`bun install -g opencode-ai@${target}`
+        cmd = $`bun install -g ohmycode-ai@${target}`
         break
       case "brew": {
         const formula = await getBrewFormula()
@@ -165,10 +170,10 @@ export namespace Installation {
         break
       }
       case "choco":
-        cmd = $`echo Y | choco upgrade opencode --version=${target}`
+        cmd = $`echo Y | choco upgrade ohmycode --version=${target}`
         break
       case "scoop":
-        cmd = $`scoop install opencode@${target}`
+        cmd = $`scoop install ohmycode@${target}`
         break
       default:
         throw new Error(`Unknown method: ${method}`)
@@ -191,7 +196,7 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
-  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
+  export const USER_AGENT = `ohmycode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
@@ -205,10 +210,13 @@ export namespace Installation {
         if (!version) throw new Error(`Could not detect version for tap formula: ${formula}`)
         return version
       }
-      return fetch("https://formulae.brew.sh/api/formula/opencode.json")
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
+      const formulaName = formula.includes("/") ? formula.split("/").at(-1)! : formula
+      return fetch(`https://formulae.brew.sh/api/formula/${formulaName}.json`)
+        .then(async (res) => {
+          if (res.ok) return res.json()
+          const fallback = await fetch("https://formulae.brew.sh/api/formula/opencode.json")
+          if (!fallback.ok) throw new Error(fallback.statusText)
+          return fallback.json()
         })
         .then((data: any) => data.versions.stable)
     }
@@ -220,33 +228,47 @@ export namespace Installation {
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
       const channel = CHANNEL
-      return fetch(`${registry}/opencode-ai/${channel}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
+      return fetch(`${registry}/ohmycode-ai/${channel}`)
+        .then(async (res) => {
+          if (res.ok) return res.json()
+          const fallback = await fetch(`${registry}/opencode-ai/${channel}`)
+          if (!fallback.ok) throw new Error(fallback.statusText)
+          return fallback.json()
         })
         .then((data: any) => data.version)
     }
 
     if (detectedMethod === "choco") {
       return fetch(
-        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
+        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27ohmycode%27%20and%20IsLatestVersion&$select=Version",
         { headers: { Accept: "application/json;odata=verbose" } },
       )
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
+        .then(async (res) => {
+          if (res.ok) return res.json()
+          const fallback = await fetch(
+            "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
+            { headers: { Accept: "application/json;odata=verbose" } },
+          )
+          if (!fallback.ok) throw new Error(fallback.statusText)
+          return fallback.json()
         })
         .then((data: any) => data.d.results[0].Version)
     }
 
     if (detectedMethod === "scoop") {
-      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
+      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/ohmycode.json", {
         headers: { Accept: "application/json" },
       })
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
+        .then(async (res) => {
+          if (res.ok) return res.json()
+          const fallback = await fetch(
+            "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json",
+            {
+              headers: { Accept: "application/json" },
+            },
+          )
+          if (!fallback.ok) throw new Error(fallback.statusText)
+          return fallback.json()
         })
         .then((data: any) => data.version)
     }

@@ -46,7 +46,7 @@ process.on("uncaughtException", (e) => {
 
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("ohmycode")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
@@ -73,14 +73,15 @@ const cli = yargs(hideBin(process.argv))
     })
 
     process.env.AGENT = "1"
+    process.env.OHMYCODE = "1"
     process.env.OPENCODE = "1"
 
-    Log.Default.info("opencode", {
+    Log.Default.info("ohmycode", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
+    const marker = path.join(Global.Path.data, "ohmycode.db")
     if (!(await Bun.file(marker).exists())) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)

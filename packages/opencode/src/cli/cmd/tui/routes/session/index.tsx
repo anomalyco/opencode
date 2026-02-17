@@ -231,7 +231,7 @@ export function Session() {
       [
         ``,
         `  █▀▀█  ${UI.Style.TEXT_DIM}${title}${UI.Style.TEXT_NORMAL}`,
-        `  █  █  ${UI.Style.TEXT_DIM}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  █  █  ${UI.Style.TEXT_DIM}ohmycode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         `  ▀▀▀▀  `,
       ].join("\n"),
     )

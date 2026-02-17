@@ -23,16 +23,18 @@ process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtur
 // This prevents tests from picking up real user configs/skills from ~/.claude/skills
 const testHome = path.join(dir, "home")
 await fs.mkdir(testHome, { recursive: true })
+process.env["OHMYCODE_TEST_HOME"] = testHome
 process.env["OPENCODE_TEST_HOME"] = testHome
 
 // Set test managed config directory to isolate tests from system managed settings
 const testManagedConfigDir = path.join(dir, "managed")
+process.env["OHMYCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
 process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
 
 // Write the cache version file to prevent global/index.ts from clearing the cache
-const cacheDir = path.join(dir, "cache", "opencode")
+const cacheDir = path.join(dir, "cache", "ohmycode")
 await fs.mkdir(cacheDir, { recursive: true })
-await fs.writeFile(path.join(cacheDir, "version"), "14")
+await fs.writeFile(path.join(cacheDir, "version"), "21")
 
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]

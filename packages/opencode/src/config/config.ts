@@ -43,15 +43,20 @@ export namespace Config {
   function getManagedConfigDir(): string {
     switch (process.platform) {
       case "darwin":
-        return "/Library/Application Support/opencode"
+        return "/Library/Application Support/ohmycode"
       case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "ohmycode")
       default:
-        return "/etc/opencode"
+        return "/etc/ohmycode"
     }
   }
 
-  const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || getManagedConfigDir()
+  const managedConfigDir =
+    process.env.OHMYCODE_TEST_MANAGED_CONFIG_DIR ||
+    process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR ||
+    getManagedConfigDir()
+  const PROJECT_CONFIG_FILES = ["ohmycode.jsonc", "ohmycode.json", "opencode.jsonc", "opencode.json"] as const
+  const CONTEXT_DIR_NAMES = [".ohmycode", ".opencode"] as const
 
   // Custom merge function that concatenates array fields instead of replacing them
   function merge(target: Info, source: Info): Info {
@@ -70,10 +75,10 @@ export namespace Config {
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
     // 1) Remote .well-known/opencode (org defaults)
-    // 2) Global config (~/.config/opencode/opencode.json{,c})
+    // 2) Global config (~/.config/ohmycode/ohmycode.json{,c})
     // 3) Custom config (OPENCODE_CONFIG)
-    // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
+    // 4) Project config (ohmycode.json{,c}; legacy opencode.json{,c})
+    // 5) .ohmycode directories (.ohmycode/agents/, .ohmycode/commands/, .ohmycode/plugins/, .ohmycode/ohmycode.json{,c})
     // 6) Inline config (OPENCODE_CONFIG_CONTENT)
     // Managed config directory is enterprise-only and always overrides everything above.
     let result: Info = {}
@@ -109,7 +114,7 @@ export namespace Config {
 
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      for (const file of PROJECT_CONFIG_FILES) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
           result = merge(result, await loadFile(resolved))
@@ -123,27 +128,27 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      // Only scan project .opencode/ directories when project discovery is enabled
+      // Only scan project .ohmycode/.opencode directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".opencode"],
+              targets: CONTEXT_DIR_NAMES as unknown as string[],
               start: Instance.directory,
               stop: Instance.worktree,
             }),
           )
         : []),
-      // Always scan ~/.opencode/ (user home directory)
+      // Always scan ~/.ohmycode/ and ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: CONTEXT_DIR_NAMES as unknown as string[],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
       )),
     ]
 
-    // .opencode directory config overrides (project and global) config sources.
+    // .ohmycode/.opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
       directories.push(Flag.OPENCODE_CONFIG_DIR)
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
@@ -152,8 +157,8 @@ export namespace Config {
     const deps = []
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+      if (dir.endsWith(".ohmycode") || dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        for (const file of PROJECT_CONFIG_FILES) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = merge(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -187,7 +192,7 @@ export namespace Config {
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedConfigDir)) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      for (const file of PROJECT_CONFIG_FILES) {
         result = merge(result, await loadFile(path.join(managedConfigDir, file)))
       }
     }
@@ -359,7 +364,14 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const patterns = [
+        "/.ohmycode/command/",
+        "/.ohmycode/commands/",
+        "/.opencode/command/",
+        "/.opencode/commands/",
+        "/command/",
+        "/commands/",
+      ]
       const file = rel(item, patterns) ?? path.basename(item)
       const name = trim(file)
 
@@ -399,7 +411,14 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const patterns = [
+        "/.ohmycode/agent/",
+        "/.ohmycode/agents/",
+        "/.opencode/agent/",
+        "/.opencode/agents/",
+        "/agent/",
+        "/agents/",
+      ]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 
@@ -937,7 +956,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: ohmycode.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -1206,6 +1225,8 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "ohmycode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "ohmycode.jsonc"))),
     )
 
     const legacy = path.join(Global.Path.config, "config")
@@ -1375,8 +1396,8 @@ export namespace Config {
   }
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-      path.join(Global.Path.config, file),
+    const candidates = ["ohmycode.jsonc", "ohmycode.json", "opencode.jsonc", "opencode.json", "config.json"].map(
+      (file) => path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file

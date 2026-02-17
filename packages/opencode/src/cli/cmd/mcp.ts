@@ -84,7 +84,7 @@ export const McpListCommand = cmd({
 
         if (servers.length === 0) {
           prompts.log.warn("No MCP servers configured")
-          prompts.outro("Add servers with: opencode mcp add")
+          prompts.outro("Add servers with: ohmycode mcp add")
           return
         }
 
@@ -161,7 +161,7 @@ export const McpAuthCommand = cmd({
 
         if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-capable MCP servers configured")
-          prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in opencode.json:")
+          prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in ohmycode.json:")
           prompts.log.info(`
   "mcp": {
     "my-server": {
@@ -380,11 +380,21 @@ export const McpLogoutCommand = cmd({
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
+  // Check for existing config files (prefer .jsonc over .json, check .ohmycode/.opencode subdirectories too)
+  const candidates = [
+    path.join(baseDir, "ohmycode.jsonc"),
+    path.join(baseDir, "ohmycode.json"),
+    path.join(baseDir, "opencode.jsonc"),
+    path.join(baseDir, "opencode.json"),
+  ]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
+    candidates.push(
+      path.join(baseDir, ".ohmycode", "ohmycode.jsonc"),
+      path.join(baseDir, ".ohmycode", "ohmycode.json"),
+      path.join(baseDir, ".opencode", "opencode.jsonc"),
+      path.join(baseDir, ".opencode", "opencode.json"),
+    )
   }
 
   for (const candidate of candidates) {
@@ -393,7 +403,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
     }
   }
 
-  // Default to opencode.json if none exist
+  // Default to ohmycode.jsonc if none exist
   return candidates[0]
 }
 
@@ -482,7 +492,7 @@ export const McpAddCommand = cmd({
         if (type === "local") {
           const command = await prompts.text({
             message: "Enter command to run",
-            placeholder: "e.g., opencode x @modelcontextprotocol/server-filesystem",
+            placeholder: "e.g., ohmycode x @modelcontextprotocol/server-filesystem",
             validate: (x) => (x && x.length > 0 ? undefined : "Required"),
           })
           if (prompts.isCancel(command)) throw new UI.CancelledError()
@@ -663,7 +673,7 @@ export const McpDebugCommand = cmd({
               params: {
                 protocolVersion: "2024-11-05",
                 capabilities: {},
-                clientInfo: { name: "opencode-debug", version: Installation.VERSION },
+                clientInfo: { name: "ohmycode-debug", version: Installation.VERSION },
               },
               id: 1,
             }),
@@ -704,7 +714,7 @@ export const McpDebugCommand = cmd({
 
             try {
               const client = new Client({
-                name: "opencode-debug",
+                name: "ohmycode-debug",
                 version: Installation.VERSION,
               })
               await client.connect(transport)

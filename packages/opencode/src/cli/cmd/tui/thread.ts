@@ -43,12 +43,12 @@ function createEventSource(client: RpcClient): EventSource {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start ohmycode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start ohmycode in",
       })
       .option("model", {
         type: "string",
@@ -154,7 +154,7 @@ export const TuiThreadCommand = cmd({
         url = server.url
       } else {
         // Use direct RPC communication (no HTTP)
-        url = "http://opencode.internal"
+        url = "http://ohmycode.internal"
         customFetch = createWorkerFetch(client)
         events = createEventSource(client)
       }

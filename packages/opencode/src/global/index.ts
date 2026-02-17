@@ -3,18 +3,24 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
+const app = "ohmycode"
+const legacy = "opencode"
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
+const legacyData = path.join(xdgData!, legacy)
+const legacyCache = path.join(xdgCache!, legacy)
+const legacyConfig = path.join(xdgConfig!, legacy)
+const legacyState = path.join(xdgState!, legacy)
+
 export namespace Global {
   export const Path = {
-    // Allow override via OPENCODE_TEST_HOME for test isolation
+    // Allow override via OHMYCODE_TEST_HOME for test isolation
     get home() {
-      return process.env.OPENCODE_TEST_HOME || os.homedir()
+      return process.env.OHMYCODE_TEST_HOME || process.env.OPENCODE_TEST_HOME || os.homedir()
     },
     data,
     bin: path.join(data, "bin"),
@@ -22,6 +28,12 @@ export namespace Global {
     cache,
     config,
     state,
+    legacy: {
+      data: legacyData,
+      cache: legacyCache,
+      config: legacyConfig,
+      state: legacyState,
+    },
   }
 }
 

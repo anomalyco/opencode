@@ -262,7 +262,7 @@
       "name": "opencode",
       "version": "1.2.5",
       "bin": {
-        "opencode": "./bin/opencode",
+        "ohmycode": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",

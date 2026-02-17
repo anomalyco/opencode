@@ -29,6 +29,35 @@ export namespace McpAuth {
   export type Entry = z.infer<typeof Entry>
 
   const filepath = path.join(Global.Path.data, "mcp-auth.json")
+  const legacyFilepath = path.join(Global.Path.legacy.data, "mcp-auth.json")
+
+  function parse(input: Record<string, unknown>) {
+    return Object.entries(input).reduce(
+      (acc, [key, value]) => {
+        const parsed = Entry.safeParse(value)
+        if (!parsed.success) return acc
+        acc[key] = parsed.data
+        return acc
+      },
+      {} as Record<string, Entry>,
+    )
+  }
+
+  async function local() {
+    return parse(
+      await Bun.file(filepath)
+        .json()
+        .catch(() => ({}) as Record<string, unknown>),
+    )
+  }
+
+  async function legacy() {
+    return parse(
+      await Bun.file(legacyFilepath)
+        .json()
+        .catch(() => ({}) as Record<string, unknown>),
+    )
+  }
 
   export async function get(mcpName: string): Promise<Entry | undefined> {
     const data = await all()
@@ -53,13 +82,15 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    return {
+      ...(await legacy()),
+      ...(await local()),
+    }
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
     const file = Bun.file(filepath)
-    const data = await all()
+    const data = await local()
     // Always update serverUrl if provided
     if (serverUrl) {
       entry.serverUrl = serverUrl
@@ -69,7 +100,7 @@ export namespace McpAuth {
 
   export async function remove(mcpName: string): Promise<void> {
     const file = Bun.file(filepath)
-    const data = await all()
+    const data = await local()
     delete data[mcpName]
     await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
