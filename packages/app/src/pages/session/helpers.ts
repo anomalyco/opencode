@@ -1,4 +1,3 @@
-import type { CommandOption } from "@/context/command"
 import { batch } from "solid-js"
 
 export const focusTerminalById = (id: string) => {
@@ -34,10 +33,6 @@ export const createOpenReviewFile = (input: {
       input.loadFile(path)
     })
   }
-}
-
-export const combineCommandSections = (sections: readonly (readonly CommandOption[])[]) => {
-  return sections.flatMap((section) => section)
 }
 
 export const getTabReorderIndex = (tabs: readonly string[], from: string, to: string) => {
