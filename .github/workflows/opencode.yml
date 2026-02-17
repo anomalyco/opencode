@@ -9,6 +9,7 @@ on:
 jobs:
   opencode:
     if: |
+      github.repository == 'anomalyco/opencode' &&
       contains(github.event.comment.body, ' /oc') ||
       startsWith(github.event.comment.body, '/oc') ||
       contains(github.event.comment.body, ' /opencode') ||

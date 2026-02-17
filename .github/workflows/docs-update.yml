@@ -10,7 +10,7 @@ env:
 
 jobs:
   update-docs:
-    if: github.repository == 'sst/opencode'
+    if: github.repository == 'anomalyco/opencode'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write

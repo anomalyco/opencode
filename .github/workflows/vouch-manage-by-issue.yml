@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   manage:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

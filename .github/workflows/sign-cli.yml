@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   sign-cli:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
         with:

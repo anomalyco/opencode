@@ -32,8 +32,8 @@ permissions:
 
 jobs:
   version:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
         with:
@@ -59,9 +59,9 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
 
   build-cli:
+    if: github.repository == 'anomalyco/opencode'
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -87,6 +87,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
 
   build-tauri:
+    if: github.repository == 'anomalyco/opencode'
     needs:
       - build-cli
       - version
@@ -203,6 +204,7 @@ jobs:
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
 
   publish:
+    if: github.repository == 'anomalyco/opencode'
     needs:
       - version
       - build-cli

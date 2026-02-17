@@ -7,6 +7,7 @@ on:
 jobs:
   check-standards:
     if: |
+      github.repository == 'anomalyco/opencode' &&
       github.event.pull_request.user.login != 'actions-user' &&
       github.event.pull_request.user.login != 'opencode' &&
       github.event.pull_request.user.login != 'rekram1-node' &&

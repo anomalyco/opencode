@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 jobs:
   unit:
+    if: github.repository == 'anomalyco/opencode'
     name: unit (linux)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
@@ -31,6 +32,7 @@ jobs:
         run: bun turbo test
 
   e2e:
+    if: github.repository == 'anomalyco/opencode'
     name: e2e (${{ matrix.settings.name }})
     needs: unit
     strategy:
@@ -80,12 +82,12 @@ jobs:
             packages/app/e2e/playwright-report
 
   required:
+    if: github.repository == 'anomalyco/opencode' && always()
     name: test (linux)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       - unit
       - e2e
-    if: always()
     steps:
       - name: Verify upstream test jobs passed
         run: |
