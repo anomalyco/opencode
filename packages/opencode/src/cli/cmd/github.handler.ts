@@ -526,9 +526,9 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
                 })
               }
 
-              const callbackUrl = `http://localhost:${server.port}/callback`
+              const callbackUrl: string = `http://localhost:${server.port}/callback`
               const manifestWithRedirect = { ...manifest, redirect_url: callbackUrl }
-              const manifestJson = JSON.stringify(manifestWithRedirect)
+              const manifestJson: string = JSON.stringify(manifestWithRedirect)
               return new Response(buildManifestFormHTML(ghesUrl, manifestJson), {
                 headers: { "Content-Type": "text/html" },
               })
