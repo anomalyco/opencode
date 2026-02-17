@@ -11,8 +11,10 @@ module Log (
     -- * Environment
     Logger,
     newLogger,
+    newLoggerWithLevel,
     closeLogger,
     withLogger,
+    withLoggerLevel,
 
     -- * Logging functions
     logInfo,
@@ -41,8 +43,12 @@ data Logger = Logger
 Logs to stdout in JSON format
 -}
 newLogger :: Text -> IO Logger
-newLogger appName = do
-    handleScribe <- mkHandleScribeWithFormatter jsonFormat ColorIfTerminal stdout (permitItem DebugS) V2
+newLogger appName = newLoggerWithLevel appName DebugS
+
+-- | Create a new logger with a minimum severity level
+newLoggerWithLevel :: Text -> Severity -> IO Logger
+newLoggerWithLevel appName level = do
+    handleScribe <- mkHandleScribeWithFormatter jsonFormat ColorIfTerminal stdout (permitItem level) V2
     le <- initLogEnv (Namespace [appName]) "production"
     le' <- registerScribe "stdout" handleScribe defaultScribeSettings le
     pure
@@ -59,6 +65,10 @@ closeLogger lg = closeScribes (lgEnv lg) >> pure ()
 -- | Bracket for logger lifecycle
 withLogger :: Text -> (Logger -> IO a) -> IO a
 withLogger appName = bracket (newLogger appName) closeLogger
+
+-- | Bracket for logger lifecycle with minimum severity level
+withLoggerLevel :: Text -> Severity -> (Logger -> IO a) -> IO a
+withLoggerLevel appName level = bracket (newLoggerWithLevel appName level) closeLogger
 
 -- | Log at INFO level with payload
 logInfo :: (LogItem a) => Logger -> Text -> a -> IO ()

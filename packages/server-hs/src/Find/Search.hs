@@ -9,6 +9,7 @@ module Find.Search
 import Data.Aeson (Value, object, (.=))
 import Data.Text (Text)
 import Data.Text qualified as T
+import System.Directory (findExecutable)
 import System.Exit (ExitCode(..))
 import System.Process (readProcessWithExitCode)
 
@@ -24,10 +25,14 @@ findSymbol root query = do
 
 findFile :: FilePath -> Text -> IO [Value]
 findFile root pattern = do
-  (code, out, _) <- readProcessWithExitCode "fd" ["--type", "f", "--glob", T.unpack pattern, root] ""
-  case code of
-    ExitSuccess -> pure $ map toValue $ mapMaybe parseFdLine (T.lines (T.pack out))
-    _ -> pure []
+  exe <- findExecutable "fd"
+  case exe of
+    Nothing -> pure []
+    Just _ -> do
+      (code, out, _) <- readProcessWithExitCode "fd" ["--type", "f", "--glob", T.unpack pattern, root] ""
+      case code of
+        ExitSuccess -> pure $ map toValue $ mapMaybe parseFdLine (T.lines (T.pack out))
+        _ -> pure []
   where
     mapMaybe f = foldr (\x acc -> case f x of
         Nothing -> acc

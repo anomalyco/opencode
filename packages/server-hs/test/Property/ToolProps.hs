@@ -3,7 +3,8 @@
 -- | Tool execution property tests
 module Property.ToolProps where
 
-import Data.Aeson (object, (.=))
+import Data.Aeson (Value (..), decode, encode, object, (.=))
+import Data.Aeson.Key qualified as Key
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -76,6 +77,27 @@ prop_writeTool = property $ do
     assert $ not (toIsError output)
     assert exists
 
+prop_writeReadToolRoundtrip :: Property
+prop_writeReadToolRoundtrip = property $ do
+    content <- forAll $ Gen.text (Range.linear 1 200) Gen.unicode
+    filename <- forAll $ Gen.text (Range.linear 1 20) Gen.alphaNum
+    result <- evalIO $ withTempDir $ \tmpDir -> do
+        let path = tmpDir </> T.unpack filename
+        let writeInput =
+                object
+                    [ "filePath" .= path
+                    , "content" .= content
+                    ]
+        _ <- execute (testContext tmpDir) "write" writeInput
+        let readInput =
+                object
+                    [ "filePath" .= path
+                    , "offset" .= (1 :: Int)
+                    , "limit" .= (1000 :: Int)
+                    ]
+        execute (testContext tmpDir) "read" readInput
+    assert $ T.isInfixOf content (toOutput result)
+
 -- | Property: edit tool modifies file
 prop_editTool :: Property
 prop_editTool = property $ do
@@ -106,6 +128,38 @@ prop_editTool = property $ do
     assert $ not (toIsError output)
     assert $ T.isInfixOf newText editedContent
     assert $ not (T.isInfixOf "OLDTEXT_" editedContent)
+
+prop_editToolMissingOldString :: Property
+prop_editToolMissingOldString = property $ do
+    content <- forAll $ Gen.text (Range.linear 1 50) Gen.alphaNum
+    result <- evalIO $ withTempDir $ \tmpDir -> do
+        let path = tmpDir </> "test.txt"
+        TIO.writeFile path content
+        let input =
+                object
+                    [ "filePath" .= path
+                    , "oldString" .= ("missing" :: Text)
+                    , "newString" .= ("new" :: Text)
+                    , "replaceAll" .= False
+                    ]
+        execute (testContext tmpDir) "edit" input
+    assert $ toIsError result
+
+prop_editToolMultipleMatchesError :: Property
+prop_editToolMultipleMatchesError = property $ do
+    let content = "dup dup"
+    result <- evalIO $ withTempDir $ \tmpDir -> do
+        let path = tmpDir </> "test.txt"
+        TIO.writeFile path content
+        let input =
+                object
+                    [ "filePath" .= path
+                    , "oldString" .= ("dup" :: Text)
+                    , "newString" .= ("new" :: Text)
+                    , "replaceAll" .= False
+                    ]
+        execute (testContext tmpDir) "edit" input
+    assert $ toIsError result
 
 -- | Property: bash tool executes commands
 prop_bashTool :: Property
@@ -139,9 +193,32 @@ prop_bashToolUsesWorkdir = property $ do
     assert $ not (toIsError result)
     assert $ T.isInfixOf (T.pack dir) (toOutput result)
 
+prop_toolOutputJsonRoundtrip :: Property
+prop_toolOutputJsonRoundtrip = property $ do
+    title <- forAll genText
+    output <- forAll genText
+    isErr <- forAll Gen.bool
+    meta <- forAll genMaybeValue
+    let out = ToolOutput title output isErr meta
+    case decode (encode out) of
+        Nothing -> failure
+        Just out' -> out' === out
+
 -- Generators
 genText :: Gen Text
 genText = Gen.text (Range.linear 0 100) Gen.alphaNum
+
+genMaybeValue :: Gen (Maybe Value)
+genMaybeValue =
+    Gen.choice
+        [ pure Nothing
+        , Just <$> (object <$> Gen.list (Range.linear 0 3) genPair)
+        ]
+  where
+    genPair = do
+        key <- genText
+        val <- genText
+        pure (Key.fromText key .= val)
 
 -- Test tree
 tests :: TestTree
@@ -150,7 +227,11 @@ tests =
         "Tool Property Tests"
         [ testProperty "read tool" prop_readTool
         , testProperty "write tool" prop_writeTool
+        , testProperty "write/read roundtrip" prop_writeReadToolRoundtrip
         , testProperty "edit tool" prop_editTool
+        , testProperty "edit missing oldString" prop_editToolMissingOldString
+        , testProperty "edit multiple matches error" prop_editToolMultipleMatchesError
         , testProperty "bash tool" prop_bashTool
         , testProperty "bash tool uses workdir" prop_bashToolUsesWorkdir
+        , testProperty "tool output JSON roundtrip" prop_toolOutputJsonRoundtrip
         ]

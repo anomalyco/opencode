@@ -15,27 +15,30 @@ library
     Config.Config
     Config.Types
     Experimental.Worktree
-    Formatter.Status
     Find.Parse
     Find.Search
+    Formatter.Status
+    Global.Event
     Handlers
+    Health.Build
     LLM.Anthropic
     LLM.OpenRouter
     LLM.Types
     Log
     Lsp.Store
-    Health.Build
-    Path.Build
     Message.Parts
     Message.Todo
     Message.Types
+    Path.Build
     Project.Build
     Project.Discovery
+    Prompt.Async
     Provider.OAuth
     Provider.Provider
     Provider.Types
     Proxy.Proxy
     Proxy.Types
+    Pty.Connect
     Pty.Parse
     Pty.Pty
     Pty.Types
@@ -62,6 +65,7 @@ library
   build-depends:
     , aeson               >=2.0
     , base                >=4.17 && <5
+    , base64-bytestring   >=1.2
     , bytestring          >=0.11
     , case-insensitive    >=1.2
     , containers          >=0.6
@@ -133,8 +137,9 @@ test-suite opencode-server-test
     Property.ConfigProps
     Property.DiffProps
     Property.ExperimentalProps
-    Property.FormatterProps
     Property.FindParseProps
+    Property.FormatterProps
+    Property.HandlerProps
     Property.HealthProps
     Property.LLMProps
     Property.LspProps
@@ -143,8 +148,9 @@ test-suite opencode-server-test
     Property.OAuthProps
     Property.OpenApiProps
     Property.PathProps
-    Property.ProjectProps
     Property.ProjectDiscoveryProps
+    Property.ProjectProps
+    Property.PromptAsyncProps
     Property.ProviderProps
     Property.PtyProps
     Property.RequestProps
@@ -164,6 +170,7 @@ test-suite opencode-server-test
   build-depends:
     , aeson                 >=2.0
     , base                  >=4.17 && <5
+    , base64-bytestring     >=1.2
     , bytestring            >=0.11
     , containers            >=0.6
     , directory             >=1.3
@@ -175,16 +182,21 @@ test-suite opencode-server-test
     , http-client
     , http-client-tls
     , http-types
+    , katip                 >=0.8
     , opencode-server
     , process
     , regex-pcre            >=0.95
+    , servant               >=0.20
+    , servant-server        >=0.20
     , stm                   >=2.5
     , tasty                 >=1.5
     , tasty-hedgehog        >=1.4
     , tasty-hspec           >=1.2
     , temporary             >=1.3
     , text                  >=2.0
+    , transformers          >=0.6
     , unordered-containers  >=0.2
+    , wai                   >=3.2
 
   default-extensions:
     DataKinds

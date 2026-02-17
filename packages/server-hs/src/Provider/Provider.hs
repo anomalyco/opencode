@@ -23,9 +23,12 @@ module Provider.Provider (
 ) where
 
 import Control.Exception qualified
-import Data.Aeson (Value)
+import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson.KeyMap qualified as KM
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as T
+import System.Environment (lookupEnv)
 
 import Provider.Types
 import Storage.Storage qualified as Storage
@@ -149,22 +152,54 @@ authStatus storage = do
 -- | Check auth for a single provider
 checkAuth :: Storage.StorageConfig -> Provider -> IO ProviderAuth
 checkAuth storage provider = do
-    -- Check if we have stored auth
-    hasAuth <-
+    stored <-
         Control.Exception.catch
-            ((Storage.read storage ["auth", providerId provider] :: IO Value) >> pure True)
-            (\(Storage.NotFoundError _) -> pure False)
+            (Just <$> (Storage.read storage ["auth", providerId provider] :: IO Value))
+            (\(Storage.NotFoundError _) -> pure Nothing)
+    envAuth <- anyM hasEnv (providerEnv provider)
+    let storedMethod = stored >>= extractMethod
+    let hasAuth = stored /= Nothing || envAuth
+    let method =
+            case storedMethod of
+                Just m -> Just m
+                Nothing ->
+                    if stored /= Nothing
+                        then Just "api_key"
+                        else
+                            if envAuth
+                                then Just "env"
+                                else Nothing
     pure $
         ProviderAuth
             { paProviderID = providerId provider
             , paAuthenticated = hasAuth
-            , paMethod = if hasAuth then Just "api_key" else Nothing
+            , paMethod = method
             }
+
+extractMethod :: Value -> Maybe Text
+extractMethod (Object obj) = case KM.lookup "method" obj of
+    Just (String t) -> Just t
+    _ -> Nothing
+extractMethod _ = Nothing
+
+hasEnv :: Text -> IO Bool
+hasEnv key = do
+    val <- lookupEnv (T.unpack key)
+    pure $ case val of
+        Nothing -> False
+        Just "" -> False
+        Just _ -> True
+
+anyM :: (a -> IO Bool) -> [a] -> IO Bool
+anyM _ [] = pure False
+anyM f (x : xs) = do
+    ok <- f x
+    if ok then pure True else anyM f xs
 
 -- | Set auth for a provider
 setAuth :: Storage.StorageConfig -> Text -> Text -> IO ()
 setAuth storage providerID token =
-    Storage.write storage ["auth", providerID] (Map.singleton ("token" :: Text) token)
+    Storage.write storage ["auth", providerID] (object ["token" .= token, "method" .= ("api_key" :: Text)])
 
 -- | Remove auth for a provider
 removeAuth :: Storage.StorageConfig -> Text -> IO ()

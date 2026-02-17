@@ -4,10 +4,16 @@
 module Formatter.Status (
     FormatterStatus (..),
     statusFor,
+    statusForConfig,
     baseFormatters,
+    formattersFor,
 ) where
 
+import Config.Config qualified as Config
+import Config.Types qualified as CT
 import Data.Aeson (ToJSON (..), object, (.=))
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import System.Directory (findExecutable)
@@ -34,7 +40,12 @@ instance ToJSON FormatterStatus where
             ]
 
 statusFor :: FilePath -> IO [FormatterStatus]
-statusFor dir = mapM (toStatus dir) baseFormatters
+statusFor dir = do
+    cfg <- Config.get dir
+    statusForConfig dir cfg
+
+statusForConfig :: FilePath -> CT.Config -> IO [FormatterStatus]
+statusForConfig dir cfg = mapM (toStatus dir) (formattersFor cfg)
 
 toStatus :: FilePath -> FormatterInfo -> IO FormatterStatus
 toStatus dir info = do
@@ -45,6 +56,39 @@ toStatus dir info = do
             , fsExtensions = fiExtensions info
             , fsEnabled = enabled
             }
+
+formattersFor :: CT.Config -> [FormatterInfo]
+formattersFor cfg = case CT.cfgFormatter cfg of
+    Just CT.FormatterDisabled -> []
+    Just (CT.FormatterConfig entries) -> Map.elems (applyEntries entries baseMap)
+    Nothing -> baseFormatters
+  where
+    baseMap = Map.fromList (map (\info -> (fiName info, info)) baseFormatters)
+    applyEntries entries base = foldl applyEntry base (Map.toList entries)
+    applyEntry acc (name, entry)
+        | CT.feDisabled entry == Just True = Map.delete name acc
+        | otherwise = case Map.lookup name acc of
+            Just info ->
+                let updated =
+                        info
+                            { fiExtensions = fromMaybe (fiExtensions info) (CT.feExtensions entry)
+                            , fiEnabled = if hasCommand entry then const (pure True) else fiEnabled info
+                            }
+                 in Map.insert name updated acc
+            Nothing -> case CT.feCommand entry of
+                Just cmd
+                    | not (null cmd) ->
+                        let info =
+                                FormatterInfo
+                                    { fiName = name
+                                    , fiExtensions = fromMaybe [] (CT.feExtensions entry)
+                                    , fiEnabled = const (pure True)
+                                    }
+                         in Map.insert name info acc
+                _ -> acc
+    hasCommand entry = case CT.feCommand entry of
+        Just cmd -> not (null cmd)
+        Nothing -> False
 
 baseFormatters :: [FormatterInfo]
 baseFormatters =

@@ -46,6 +46,14 @@ prop_configJsonRoundtrip = property $ do
         Nothing -> failure
         Just cfg' -> cfg === cfg'
 
+prop_formatterDisabledJson :: Property
+prop_formatterDisabledJson = property $ do
+    let cfg = defaultConfig{cfgFormatter = Just FormatterDisabled}
+    let json = encode cfg
+    case decode json of
+        Nothing -> failure
+        Just cfg' -> cfgFormatter cfg' === Just FormatterDisabled
+
 -- Generators
 genText :: Gen Text
 genText = Gen.text (Range.linear 0 50) Gen.alphaNum
@@ -100,6 +108,31 @@ genPermissionConfig =
   where
     genPermissionEntry = (,) <$> genText <*> pure Null
 
+genSkillsConfig :: Gen SkillsConfig
+genSkillsConfig =
+    SkillsConfig
+        <$> Gen.maybe (Gen.list (Range.linear 0 5) genText)
+        <*> Gen.maybe (Gen.list (Range.linear 0 5) genText)
+
+genFormatterEntry :: Gen FormatterEntry
+genFormatterEntry =
+    FormatterEntry
+        <$> Gen.maybe genBool
+        <*> Gen.maybe (Gen.list (Range.linear 0 5) genText)
+        <*> Gen.maybe (Map.fromList <$> Gen.list (Range.linear 0 5) genEnvEntry)
+        <*> Gen.maybe (Gen.list (Range.linear 0 5) genText)
+  where
+    genEnvEntry = (,) <$> genText <*> genText
+
+genFormatterConfig :: Gen FormatterConfig
+genFormatterConfig =
+    Gen.choice
+        [ pure FormatterDisabled
+        , FormatterConfig . Map.fromList <$> Gen.list (Range.linear 0 5) genFormatterEntryPair
+        ]
+  where
+    genFormatterEntryPair = (,) <$> genText <*> genFormatterEntry
+
 genConfig :: Gen Config
 genConfig =
     Config
@@ -109,6 +142,8 @@ genConfig =
         <*> Gen.maybe (pure Map.empty)
         <*> Gen.maybe (pure Map.empty)
         <*> Gen.maybe genPermissionConfig
+        <*> Gen.maybe genSkillsConfig
+        <*> Gen.maybe genFormatterConfig
         <*> genMaybeText
         <*> genMaybeText
         <*> genMaybeText
@@ -124,4 +159,5 @@ tests =
         , testProperty "merge left-biased" prop_mergeLeftBiased
         , testProperty "merge idempotent" prop_mergeIdempotent
         , testProperty "config JSON roundtrip" prop_configJsonRoundtrip
+        , testProperty "formatter disabled JSON" prop_formatterDisabledJson
         ]

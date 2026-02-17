@@ -43,6 +43,26 @@ prop_parseRenamePath = property $ do
         [s] -> VcsStatus.fsPath s === newPath
         _ -> failure
 
+prop_parseCountMatchesLines :: Property
+prop_parseCountMatchesLines = property $ do
+    count <- forAll $ Gen.int (Range.linear 1 20)
+    let lines' = replicate count "?? file.txt"
+    let input = T.intercalate "\n" lines'
+    let result = VcsStatus.parsePorcelain input
+    length result === count
+
+prop_statusInAllowedSet :: Property
+prop_statusInAllowedSet = property $ do
+    code <- forAll $ Gen.element ["??", "U ", "A ", "D ", "R ", "C ", "M ", "XY"]
+    let input = code <> " file.txt"
+    let result = VcsStatus.parsePorcelain input
+    let allowed = ["untracked", "unmerged", "added", "deleted", "renamed", "copied", "modified", "unknown"]
+    assert $ all (\status -> VcsStatus.fsStatus status `elem` allowed) result
+
+prop_parsePorcelainEmpty :: Property
+prop_parsePorcelainEmpty = property $ do
+    VcsStatus.parsePorcelain "" === []
+
 genStatus :: Gen Text
 genStatus = Gen.element ["??", " M", "M ", "A ", " D", "R ", "C ", "U "]
 
@@ -58,4 +78,7 @@ tests =
         "VCS Status Property Tests"
         [ testProperty "parse status mapping" prop_parseStatusMapping
         , testProperty "parse rename path" prop_parseRenamePath
+        , testProperty "parse count matches lines" prop_parseCountMatchesLines
+        , testProperty "status in allowed set" prop_statusInAllowedSet
+        , testProperty "parse empty" prop_parsePorcelainEmpty
         ]

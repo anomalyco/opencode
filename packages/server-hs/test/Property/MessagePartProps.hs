@@ -47,6 +47,33 @@ prop_findPart = property $ do
     let allParts = part : parts
     Parts.findPart pid allParts === Just part
 
+prop_updateMissingPart :: Property
+prop_updateMissingPart = property $ do
+    pid <- forAll genNonEmptyText
+    otherPid <- forAll genNonEmptyText
+    part <- forAll (genPart otherPid)
+    patch <- forAll genPatch
+    Parts.updatePart pid patch [part] === Nothing
+
+prop_deleteMissingPart :: Property
+prop_deleteMissingPart = property $ do
+    pid <- forAll genNonEmptyText
+    otherPid <- forAll genNonEmptyText
+    part <- forAll (genPart otherPid)
+    Parts.deletePart pid [part] === Nothing
+
+prop_updatePreservesOtherParts :: Property
+prop_updatePreservesOtherParts = property $ do
+    pid <- forAll genNonEmptyText
+    otherPid <- forAll (Gen.filter (/= pid) genNonEmptyText)
+    part <- forAll (genPart pid)
+    other <- forAll (genPart otherPid)
+    patch <- forAll genPatch
+    case Parts.updatePart pid patch [part, other] of
+        Nothing -> failure
+        Just updated -> do
+            Parts.findPart otherPid updated === Just other
+
 genText :: Gen Text
 genText = Gen.text (Range.linear 0 50) Gen.alphaNum
 
@@ -79,4 +106,7 @@ tests =
         [ testProperty "updatePart merges patch" prop_updatePart
         , testProperty "deletePart removes part" prop_deletePart
         , testProperty "findPart locates part" prop_findPart
+        , testProperty "update missing part" prop_updateMissingPart
+        , testProperty "delete missing part" prop_deleteMissingPart
+        , testProperty "update preserves other parts" prop_updatePreservesOtherParts
         ]

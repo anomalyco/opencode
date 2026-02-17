@@ -5,16 +5,19 @@ import Property.BusProps qualified as BusProps
 import Property.ConfigProps qualified as ConfigProps
 import Property.DiffProps qualified as DiffProps
 import Property.ExperimentalProps qualified as ExperimentalProps
-import Property.FormatterProps qualified as FormatterProps
 import Property.FindParseProps qualified as FindParseProps
+import Property.FormatterProps qualified as FormatterProps
+import Property.HandlerProps qualified as HandlerProps
 import Property.HealthProps qualified as HealthProps
 import Property.LLMProps qualified as LLMProps
 import Property.LspProps qualified as LspProps
 import Property.MessagePartProps qualified as MessagePartProps
 import Property.MessageProps qualified as MessageProps
 import Property.OAuthProps qualified as OAuthProps
-import Property.ProjectProps qualified as ProjectProps
+import Property.PathProps qualified as PathProps
 import Property.ProjectDiscoveryProps qualified as ProjectDiscoveryProps
+import Property.ProjectProps qualified as ProjectProps
+import Property.PromptAsyncProps qualified as PromptAsyncProps
 import Property.ProviderProps qualified as ProviderProps
 import Property.PtyProps qualified as PtyProps
 import Property.RequestProps qualified as RequestProps
@@ -26,7 +29,6 @@ import Property.TodoProps qualified as TodoProps
 import Property.ToolProps qualified as ToolProps
 import Property.TuiProps qualified as TuiProps
 import Property.VcsStatusProps qualified as VcsStatusProps
-import Property.PathProps qualified as PathProps
 import Test.Tasty
 import Test.Tasty.Hspec
 import Unit.ApiSpec qualified as ApiSpec
@@ -46,6 +48,7 @@ main = do
                 , FormatterProps.tests
                 , FindParseProps.tests
                 , ExperimentalProps.tests
+                , HandlerProps.tests
                 , HealthProps.tests
                 , PathProps.tests
                 , SessionProps.tests
@@ -62,6 +65,7 @@ main = do
                 , ProjectProps.tests
                 , ProjectDiscoveryProps.tests
                 , RequestProps.tests
+                , PromptAsyncProps.tests
                 , TodoProps.tests
                 , VcsStatusProps.tests
                 , TuiProps.tests

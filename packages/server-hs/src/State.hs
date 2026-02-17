@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Bus.Bus qualified as Bus
 import Data.Text qualified as Text
 import Log qualified
+import Prompt.Async (PromptAsyncJob)
 import Proxy.Proxy qualified as Proxy
 import Proxy.Types (defaultProxyConfig)
 import Pty.Pty qualified as Pty
@@ -29,6 +30,7 @@ data AppState = AppState
     , stPtyManager :: Pty.PtyManager -- PTY session manager
     , stProxy :: Maybe Proxy.ProxyServer -- MITM proxy for LLM traffic
     , stLogger :: Log.Logger -- Structured logger
+    , stPromptAsyncQueue :: TQueue PromptAsyncJob -- prompt_async worker queue
     }
 
 -- | Initialize a new state
@@ -37,6 +39,7 @@ initialState storageDir projectID directory logger = do
     bus <- Bus.newBus
     eventChan <- newBroadcastTChanIO
     ptyManager <- Pty.newManager (Text.unpack directory)
+    promptQueue <- newTQueueIO
 
     -- Start MITM proxy for LLM traffic surveillance
     let proxyLogDir = storageDir <> "/proxy"
@@ -57,4 +60,5 @@ initialState storageDir projectID directory logger = do
             , stPtyManager = ptyManager
             , stProxy = Just proxy
             , stLogger = logger
+            , stPromptAsyncQueue = promptQueue
             }

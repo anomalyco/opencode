@@ -14,15 +14,17 @@ import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString qualified as BS
+import Data.ByteString.Base64 qualified as B64
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
+import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Servant
-import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory, listDirectory, makeAbsolute, getHomeDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory, getHomeDirectory, listDirectory, makeAbsolute)
 import System.FilePath ((</>))
 
 import Agent.Agent qualified as Agent
@@ -33,16 +35,19 @@ import Config.Config qualified as Config
 import Experimental.Worktree qualified as Worktree
 import Find.Search qualified as FindSearch
 import Formatter.Status qualified as Formatter
+import Health.Build qualified as HealthBuild
 import Katip qualified
-import LLM.OpenRouter qualified as LLM
+import LLM.Anthropic qualified as Anthropic
+import LLM.OpenRouter qualified as OpenRouter
+import LLM.Types qualified as LLMTypes
 import Log qualified
 import Lsp.Store qualified as LspStore
 import Message.Parts qualified as Parts
 import Message.Todo qualified as Todo
+import Path.Build qualified as PathBuild
 import Project.Build qualified as ProjectBuild
 import Project.Discovery qualified as ProjectDiscovery
-import Health.Build qualified as HealthBuild
-import Path.Build qualified as PathBuild
+import Prompt.Async qualified as PromptAsync
 import Provider.OAuth qualified as OAuth
 import Provider.Provider qualified as Provider
 import Provider.Types qualified as PT
@@ -168,12 +173,13 @@ pathHandler st = liftIO $ do
     cfg <- Config.globalConfigPath
     let workdir = unpack (stDirectory st)
     let stateDir = workdir </> ".opencode" </> "state"
-    return $ PathBuild.buildPath
-        (pack home)
-        (pack stateDir)
-        (pack cfg)
-        (pack workdir)
-        (pack cwd)
+    return $
+        PathBuild.buildPath
+            (pack home)
+            (pack stateDir)
+            (pack cfg)
+            (pack workdir)
+            (pack cwd)
 
 globalConfigHandler :: Handler Value
 globalConfigHandler = liftIO $ do
@@ -217,9 +223,15 @@ providerListHandler _st = liftIO $ do
     toJSON = Data.Aeson.toJSON
 
 providerAuthHandler :: AppState -> Handler Value
-providerAuthHandler st = liftIO $ do
-    auths <- Provider.authStatus (stStorage st)
-    return $ Data.Aeson.toJSON auths
+providerAuthHandler _st = liftIO $ do
+    providers <- Provider.list
+    let entries = map (\p -> (PT.providerId p, map toMethod (PT.providerAuth p))) providers
+    return $ object (map (\(pid, methods) -> K.fromText pid .= methods) entries)
+  where
+    toMethod method =
+        let mtype = if PT.amType method == "oauth" then "oauth" else "api" :: Text
+            label = if mtype == "oauth" then "OAuth" else "API key" :: Text
+         in object ["type" .= mtype, "label" .= label]
 
 providerHandler :: Handler [Value]
 providerHandler = liftIO $ do
@@ -538,6 +550,10 @@ sessionMessageListHandler st sid _mLimit = liftIO $ do
 
 sessionMessageCreateHandler :: AppState -> Text -> CreateMessageInput -> Handler Message
 sessionMessageCreateHandler st sid input = liftIO $ do
+    createMessageIO st sid input
+
+createMessageIO :: AppState -> Text -> CreateMessageInput -> IO Message
+createMessageIO st sid input = do
     let lg = Log.withNS (stLogger st) "message"
 
     now <- getCurrentTime
@@ -628,19 +644,19 @@ sessionMessageCreateHandler st sid input = liftIO $ do
                         Bus.publish (stBus st) "message.part.updated" (object ["part" .= errPart])
                         completeMessage st sid aMsgId t
                     Just key -> do
-                        client <- LLM.newClient (pack key)
+                        client <- OpenRouter.newClient (pack key)
                         textRef <- newTVarIO ("" :: Text)
 
                         let req =
-                                LLM.ChatRequest
-                                    { LLM.crModel = "anthropic/claude-opus-4.5"
-                                    , LLM.crMessages = [LLM.Message LLM.User userText]
-                                    , LLM.crMaxTokens = Just 4096
-                                    , LLM.crTemperature = Nothing
-                                    , LLM.crStream = True
+                                OpenRouter.ChatRequest
+                                    { OpenRouter.crModel = "anthropic/claude-opus-4.5"
+                                    , OpenRouter.crMessages = [OpenRouter.Message OpenRouter.User userText]
+                                    , OpenRouter.crMaxTokens = Just 4096
+                                    , OpenRouter.crTemperature = Nothing
+                                    , OpenRouter.crStream = True
                                     }
 
-                        result <- LLM.chatStream client req $ \delta -> do
+                        result <- OpenRouter.chatStream client req $ \delta -> do
                             -- Accumulate text
                             atomically $ modifyTVar' textRef (<> delta)
                             fullText <- readTVarIO textRef
@@ -690,25 +706,7 @@ sessionMessageGetHandler st sid msgId = do
         Just msg -> return msg
 
 sessionMessagePartDeleteHandler :: AppState -> Text -> Text -> Text -> Handler Bool
-sessionMessagePartDeleteHandler st sid msgId partId = liftIO $ do
-    let key = ["message", sid, msgId]
-    result <-
-        (Just <$> Storage.read (stStorage st) key)
-            `catch` \(Storage.NotFoundError _) -> return Nothing
-    case result of
-        Nothing -> return False
-        Just msg -> do
-            let updated = Parts.deletePart partId (msgParts msg)
-            case updated of
-                Nothing -> return False
-                Just parts -> do
-                    let next = msg{msgParts = parts}
-                    Storage.write (stStorage st) key next
-                    Bus.publish (stBus st) "message.part.removed" (object ["sessionID" .= sid, "messageID" .= msgId, "partID" .= partId])
-                    return True
-
-sessionMessagePartUpdateHandler :: AppState -> Text -> Text -> Text -> Value -> Handler Value
-sessionMessagePartUpdateHandler st sid msgId partId input = do
+sessionMessagePartDeleteHandler st sid msgId partId = do
     let key = ["message", sid, msgId]
     result <-
         liftIO $
@@ -717,7 +715,35 @@ sessionMessagePartUpdateHandler st sid msgId partId input = do
     case result of
         Nothing -> throwError err404
         Just msg -> do
-            let updated = Parts.updatePart partId input (msgParts msg)
+            let updated = Parts.deletePart partId (msgParts msg)
+            case updated of
+                Nothing -> throwError err404
+                Just parts -> do
+                    let next = msg{msgParts = parts}
+                    liftIO $ Storage.write (stStorage st) key next
+                    liftIO $ Bus.publish (stBus st) "message.part.removed" (object ["sessionID" .= sid, "messageID" .= msgId, "partID" .= partId])
+                    return True
+
+sessionMessagePartUpdateHandler :: AppState -> Text -> Text -> Text -> Value -> Handler Value
+sessionMessagePartUpdateHandler st sid msgId partId input = do
+    let key = ["message", sid, msgId]
+    let bodySession = extractText input "sessionID"
+    let bodyMessage = extractText input "messageID"
+    let bodyPart = extractText input "id"
+    case (bodySession, bodyMessage, bodyPart) of
+        (Just s, Just m, Just p) -> do
+            if s /= sid || m /= msgId || p /= partId
+                then throwError err400
+                else pure ()
+        _ -> throwError err400
+    result <-
+        liftIO $
+            (Just <$> Storage.read (stStorage st) key)
+                `catch` \(Storage.NotFoundError _) -> return Nothing
+    case result of
+        Nothing -> throwError err404
+        Just msg -> do
+            let updated = replacePart partId input (msgParts msg)
             case updated of
                 Nothing -> throwError err404
                 Just parts -> do
@@ -727,16 +753,72 @@ sessionMessagePartUpdateHandler st sid msgId partId input = do
                     case mpart of
                         Nothing -> throwError err404
                         Just part -> do
-                            liftIO $ Bus.publish (stBus st) "message.part.updated" (object ["sessionID" .= sid, "messageID" .= msgId, "part" .= part])
+                            liftIO $ Bus.publish (stBus st) "message.part.updated" (object ["part" .= part])
                             return part
+  where
+    replacePart pid part parts =
+        if any (\p -> partKey p == Just pid) parts
+            then Just (map (\p -> if partKey p == Just pid then part else p) parts)
+            else Nothing
+    partKey (Object obj) = case KM.lookup "id" obj of
+        Just (String t) -> Just t
+        _ -> case KM.lookup "partID" obj of
+            Just (String t) -> Just t
+            _ -> Nothing
+    partKey _ = Nothing
 
 sessionPromptAsyncHandler :: AppState -> Text -> CreateMessageInput -> Handler Value
 sessionPromptAsyncHandler st sid input = liftIO $ do
     reqId <- RequestStore.generateId
-    let payload = object ["requestID" .= reqId, "sessionID" .= sid, "parts" .= cmiParts input]
-    Storage.write (stStorage st) ["prompt_async", sid, reqId] payload
-    Bus.publish (stBus st) "prompt.async" payload
+    let job = PromptAsync.PromptAsyncJob reqId sid input
+    let payload = PromptAsync.queuedPayload sid reqId input
+    Storage.write (stStorage st) (PromptAsync.promptAsyncKey sid reqId) payload
+    appendPromptAsyncIndex (stStorage st) sid reqId
+    atomically $ writeTQueue (stPromptAsyncQueue st) job
+    Bus.publish (stBus st) "prompt.async.queued" payload
     return $ object ["requestID" .= reqId, "queued" .= True]
+
+startPromptAsyncWorker :: AppState -> IO ()
+startPromptAsyncWorker st = do
+    _ <- forkIO $ promptAsyncLoop st
+    pure ()
+
+promptAsyncLoop :: AppState -> IO ()
+promptAsyncLoop st = do
+    job <- atomically $ readTQueue (stPromptAsyncQueue st)
+    processPromptAsync st job
+    promptAsyncLoop st
+
+processPromptAsync :: AppState -> PromptAsync.PromptAsyncJob -> IO ()
+processPromptAsync st job = do
+    let sid = PromptAsync.pajSessionId job
+    let reqId = PromptAsync.pajRequestId job
+    let started = PromptAsync.startedPayload sid reqId
+    Storage.write (stStorage st) (PromptAsync.promptAsyncKey sid reqId) started
+    Bus.publish (stBus st) "prompt.async.started" started
+    result <-
+        (Just <$> createMessageIO st sid (PromptAsync.pajInput job))
+            `catch` \(err :: SomeException) -> do
+                let payload = PromptAsync.failedPayload sid reqId (T.pack (show err))
+                Storage.write (stStorage st) (PromptAsync.promptAsyncKey sid reqId) payload
+                Bus.publish (stBus st) "prompt.async.failed" payload
+                pure Nothing
+    case result of
+        Nothing -> pure ()
+        Just msg -> do
+            let mid = msgId (msgInfo msg)
+            let payload = PromptAsync.completedPayload sid reqId mid
+            Storage.write (stStorage st) (PromptAsync.promptAsyncKey sid reqId) payload
+            Bus.publish (stBus st) "prompt.async.completed" payload
+
+appendPromptAsyncIndex :: Storage.StorageConfig -> Text -> Text -> IO ()
+appendPromptAsyncIndex storage sid reqId = do
+    result <- (Just <$> Storage.read storage (PromptAsync.promptAsyncIndexKey sid)) `catch` \(Storage.NotFoundError _) -> pure Nothing
+    let next =
+            case result of
+                Just ids -> if reqId `elem` ids then ids else ids ++ [reqId]
+                Nothing -> [reqId]
+    Storage.write storage (PromptAsync.promptAsyncIndexKey sid) next
 
 -- | Extract text content from user message parts
 extractUserText :: [Value] -> Text
@@ -818,8 +900,17 @@ fileListHandler mDir path = liftIO $ do
 fileReadHandler :: Maybe Text -> Text -> Handler FileContent
 fileReadHandler mDir path = liftIO $ do
     fullPath <- resolvePath mDir path
-    content <- TIO.readFile fullPath
-    return $ FileContent ContentTypeText content
+    bytes <- BS.readFile fullPath
+    case (hasNull bytes, TE.decodeUtf8' bytes) of
+        (True, _) -> return $ FileContent ContentTypeBinary (encodeBase64 bytes)
+        (False, Left _) -> return $ FileContent ContentTypeBinary (encodeBase64 bytes)
+        (False, Right text) -> return $ FileContent ContentTypeText text
+
+hasNull :: BS.ByteString -> Bool
+hasNull = BS.any (== 0)
+
+encodeBase64 :: BS.ByteString -> Text
+encodeBase64 = TE.decodeUtf8 . B64.encode
 
 -- * Stubs
 
@@ -827,8 +918,11 @@ lspHandler :: AppState -> Handler [Value]
 lspHandler st = liftIO $ do
     LspStore.getDiagnostics (stStorage st)
 
-vcsHandler :: Handler VcsInfo
-vcsHandler = return $ VcsInfo (Just "main")
+vcsHandler :: AppState -> Handler VcsInfo
+vcsHandler st = liftIO $ do
+    let root = unpack (stDirectory st)
+    branchName <- VcsStatus.loadBranch root
+    return $ VcsInfo branchName
 
 permissionHandler :: AppState -> Handler [Value]
 permissionHandler st = liftIO $ do
@@ -1079,32 +1173,69 @@ ptyChangesHandler st ptyId = liftIO $ do
 -- | Simple chat completion handler for testing LLM integration
 chatHandler :: AppState -> ChatInput -> Handler Value
 chatHandler _st input = liftIO $ do
-    -- Get API key from environment
-    apiKey <- lookupEnv "OPENROUTER_API_KEY"
-    case apiKey of
-        Nothing -> return $ object ["error" .= ("OPENROUTER_API_KEY not set" :: Text)]
-        Just key -> do
-            client <- LLM.newClient (pack key)
-            let model = fromMaybe "anthropic/claude-sonnet-4" (ciModel input)
-                req =
-                    LLM.ChatRequest
-                        { LLM.crModel = model
-                        , LLM.crMessages = [LLM.Message LLM.User (ciMessage input)]
-                        , LLM.crMaxTokens = Just 1024
-                        , LLM.crTemperature = Nothing
-                        , LLM.crStream = False
-                        }
-            result <- LLM.chat client req
-            case result of
-                Left err -> return $ object ["error" .= err]
-                Right resp -> do
-                    let content = case LLM.respChoices resp of
-                            (c : _) -> LLM.msgContent (LLM.choiceMessage c)
-                            [] -> ""
-                    return $
-                        object
-                            [ "id" .= LLM.respId resp
-                            , "model" .= LLM.respModel resp
-                            , "content" .= content
-                            , "usage" .= LLM.respUsage resp
-                            ]
+    let model = fromMaybe "anthropic/claude-sonnet-4-20250514" (ciModel input)
+    case "anthropic/" `T.isPrefixOf` model of
+        True -> do
+            apiKey <- lookupEnv "ANTHROPIC_API_KEY"
+            case apiKey of
+                Nothing -> return $ object ["error" .= ("ANTHROPIC_API_KEY not set" :: Text)]
+                Just key -> do
+                    client <- Anthropic.newClient (pack key)
+                    let request =
+                            LLMTypes.ChatRequest
+                                { LLMTypes.crModel = dropPrefix "anthropic/" model
+                                , LLMTypes.crMessages = [LLMTypes.Message LLMTypes.User (LLMTypes.SimpleContent (ciMessage input))]
+                                , LLMTypes.crMaxTokens = 1024
+                                , LLMTypes.crSystem = Nothing
+                                , LLMTypes.crTemperature = Nothing
+                                , LLMTypes.crTools = Nothing
+                                , LLMTypes.crStream = False
+                                }
+                    result <- Anthropic.chat client request
+                    case result of
+                        Left err -> return $ object ["error" .= err]
+                        Right resp -> do
+                            let content = case LLMTypes.respContent resp of
+                                    (LLMTypes.TextBlock t : _) -> t
+                                    _ -> ""
+                            return $
+                                object
+                                    [ "id" .= LLMTypes.respId resp
+                                    , "model" .= LLMTypes.respModel resp
+                                    , "content" .= content
+                                    , "usage" .= LLMTypes.respUsage resp
+                                    ]
+        False -> do
+            apiKey <- lookupEnv "OPENROUTER_API_KEY"
+            case apiKey of
+                Nothing -> return $ object ["error" .= ("OPENROUTER_API_KEY not set" :: Text)]
+                Just key -> do
+                    client <- OpenRouter.newClient (pack key)
+                    let request =
+                            OpenRouter.ChatRequest
+                                { OpenRouter.crModel = dropPrefix "openrouter/" model
+                                , OpenRouter.crMessages = [OpenRouter.Message OpenRouter.User (ciMessage input)]
+                                , OpenRouter.crMaxTokens = Just 1024
+                                , OpenRouter.crTemperature = Nothing
+                                , OpenRouter.crStream = False
+                                }
+                    result <- OpenRouter.chat client request
+                    case result of
+                        Left err -> return $ object ["error" .= err]
+                        Right resp -> do
+                            let content = case OpenRouter.respChoices resp of
+                                    (c : _) -> OpenRouter.msgContent (OpenRouter.choiceMessage c)
+                                    [] -> ""
+                            return $
+                                object
+                                    [ "id" .= OpenRouter.respId resp
+                                    , "model" .= OpenRouter.respModel resp
+                                    , "content" .= content
+                                    , "usage" .= OpenRouter.respUsage resp
+                                    ]
+
+dropPrefix :: Text -> Text -> Text
+dropPrefix prefix value =
+    case prefix `T.isPrefixOf` value of
+        True -> T.drop (T.length prefix) value
+        False -> value

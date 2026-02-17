@@ -3,12 +3,14 @@
 module Vcs.Status (
     FileStatus (..),
     parsePorcelain,
+    loadBranch,
     loadStatus,
 ) where
 
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Text (Text)
 import Data.Text qualified as T
+import System.Directory (findExecutable)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 
@@ -52,7 +54,42 @@ parsePorcelain input =
 
 loadStatus :: FilePath -> IO [FileStatus]
 loadStatus root = do
-    (code, out, _) <- readProcessWithExitCode "git" ["-C", root, "status", "--porcelain"] ""
+    exe <- findExecutable "git"
+    case exe of
+        Nothing -> pure []
+        Just _ -> do
+            (code, out, _) <- readProcessWithExitCode "git" ["-C", root, "status", "--porcelain"] ""
+            case code of
+                ExitSuccess -> pure (parsePorcelain (T.pack out))
+                _ -> pure []
+
+loadBranch :: FilePath -> IO (Maybe Text)
+loadBranch root = do
+    exe <- findExecutable "git"
+    case exe of
+        Nothing -> pure Nothing
+        Just _ -> do
+            result <- readBranch root
+            case result of
+                Just name -> pure (Just name)
+                Nothing -> do
+                    (code, out, _) <- readProcessWithExitCode "git" ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"] ""
+                    case code of
+                        ExitSuccess -> do
+                            let name = T.strip (T.pack out)
+                            case name of
+                                "" -> pure Nothing
+                                "HEAD" -> pure Nothing
+                                _ -> pure (Just name)
+                        _ -> pure Nothing
+
+readBranch :: FilePath -> IO (Maybe Text)
+readBranch root = do
+    (code, out, _) <- readProcessWithExitCode "git" ["-C", root, "symbolic-ref", "--short", "HEAD"] ""
     case code of
-        ExitSuccess -> pure (parsePorcelain (T.pack out))
-        _ -> pure []
+        ExitSuccess -> do
+            let name = T.strip (T.pack out)
+            case name of
+                "" -> pure Nothing
+                _ -> pure (Just name)
+        _ -> pure Nothing

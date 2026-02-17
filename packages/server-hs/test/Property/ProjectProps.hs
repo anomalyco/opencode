@@ -22,9 +22,19 @@ prop_projectFromDirUsesBase = property $ do
             wt === T.pack dir
             nm === Just base
 
+prop_projectFromDirDefault :: Property
+prop_projectFromDirDefault = property $ do
+    let dir = "/"
+    let project = ProjectBuild.projectFromDir dir
+    case project of
+        Project pid _ nm -> do
+            pid === "proj_default"
+            nm === Nothing
+
 tests :: TestTree
 tests =
     testGroup
         "Project Property Tests"
         [ testProperty "projectFromDir uses base name" prop_projectFromDirUsesBase
+        , testProperty "projectFromDir default" prop_projectFromDirDefault
         ]

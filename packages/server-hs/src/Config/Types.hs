@@ -12,9 +12,14 @@ module Config.Types (
     ProviderConfig (..),
     AgentConfig (..),
     PermissionConfig (..),
+    SkillsConfig (..),
+    FormatterEntry (..),
+    FormatterConfig (..),
 ) where
 
 import Data.Aeson
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -134,6 +139,75 @@ instance ToJSON PermissionConfig where
 instance FromJSON PermissionConfig where
     parseJSON v = PermissionConfig <$> parseJSON v
 
+-- | Skills configuration
+data SkillsConfig = SkillsConfig
+    { scPaths :: Maybe [Text]
+    , scUrls :: Maybe [Text]
+    }
+    deriving (Show, Eq, Generic)
+
+instance ToJSON SkillsConfig where
+    toJSON sc =
+        object
+            [ "paths" .= scPaths sc
+            , "urls" .= scUrls sc
+            ]
+
+instance FromJSON SkillsConfig where
+    parseJSON = withObject "SkillsConfig" $ \v ->
+        SkillsConfig
+            <$> v .:? "paths"
+            <*> v .:? "urls"
+
+data FormatterEntry = FormatterEntry
+    { feDisabled :: Maybe Bool
+    , feCommand :: Maybe [Text]
+    , feEnvironment :: Maybe (Map.Map Text Text)
+    , feExtensions :: Maybe [Text]
+    }
+    deriving (Show, Eq, Generic)
+
+instance ToJSON FormatterEntry where
+    toJSON fe =
+        object
+            [ "disabled" .= feDisabled fe
+            , "command" .= feCommand fe
+            , "environment" .= feEnvironment fe
+            , "extensions" .= feExtensions fe
+            ]
+
+instance FromJSON FormatterEntry where
+    parseJSON = withObject "FormatterEntry" $ \v ->
+        FormatterEntry
+            <$> v .:? "disabled"
+            <*> v .:? "command"
+            <*> v .:? "environment"
+            <*> v .:? "extensions"
+
+data FormatterConfig
+    = FormatterDisabled
+    | FormatterConfig (Map.Map Text FormatterEntry)
+    deriving (Show, Eq, Generic)
+
+instance ToJSON FormatterConfig where
+    toJSON FormatterDisabled = Bool False
+    toJSON (FormatterConfig entries) = toJSON entries
+
+instance FromJSON FormatterConfig where
+    parseJSON v = case v of
+        Bool False -> pure FormatterDisabled
+        Object obj -> FormatterConfig <$> parseFormatterEntries obj
+        _ -> fail "invalid formatter config"
+      where
+        parseFormatterEntries obj =
+            Map.fromList
+                <$> traverse
+                    ( \(k, val) -> do
+                        entry <- parseJSON val
+                        pure (Key.toText k, entry)
+                    )
+                    (KM.toList obj)
+
 -- | Full config
 data Config = Config
     { cfgKeybinds :: Maybe KeybindsConfig
@@ -142,6 +216,8 @@ data Config = Config
     , cfgProvider :: Maybe (Map.Map Text ProviderConfig)
     , cfgAgent :: Maybe (Map.Map Text AgentConfig)
     , cfgPermission :: Maybe PermissionConfig
+    , cfgSkills :: Maybe SkillsConfig
+    , cfgFormatter :: Maybe FormatterConfig
     , cfgModel :: Maybe Text
     , cfgShare :: Maybe Text -- "auto" | "manual" | "disabled"
     , cfgTheme :: Maybe Text
@@ -159,6 +235,8 @@ instance ToJSON Config where
             , "provider" .= cfgProvider c
             , "agent" .= cfgAgent c
             , "permission" .= cfgPermission c
+            , "skills" .= cfgSkills c
+            , "formatter" .= cfgFormatter c
             , "model" .= cfgModel c
             , "share" .= cfgShare c
             , "theme" .= cfgTheme c
@@ -175,6 +253,8 @@ instance FromJSON Config where
             <*> v .:? "provider"
             <*> v .:? "agent"
             <*> v .:? "permission"
+            <*> v .:? "skills"
+            <*> v .:? "formatter"
             <*> v .:? "model"
             <*> v .:? "share"
             <*> v .:? "theme"

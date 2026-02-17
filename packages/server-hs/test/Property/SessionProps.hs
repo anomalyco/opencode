@@ -108,6 +108,20 @@ prop_listReturnsCreated = property $ do
     -- Should find all created sessions
     length sessions === count
 
+prop_listContainsCreatedId :: Property
+prop_listContainsCreatedId = property $ do
+    (created, sessions) <- evalIO $ withTestContext $ \ctx -> do
+        session <-
+            Session.create
+                ctx
+                ST.CreateSessionInput
+                    { ST.csiTitle = Just "test"
+                    , ST.csiParentID = Nothing
+                    }
+        allSessions <- Session.list ctx Nothing Nothing
+        pure (session, allSessions)
+    assert $ any (\s -> ST.sessionId s == ST.sessionId created) sessions
+
 prop_updateSummaryShareRevert :: Property
 prop_updateSummaryShareRevert = property $ do
     msgId <- forAll $ Gen.text (Range.linear 3 20) Gen.alphaNum
@@ -153,5 +167,6 @@ tests =
         , testProperty "get non-existent" prop_getNonExistent
         , testProperty "delete removes" prop_deleteRemoves
         , testProperty "list returns created" prop_listReturnsCreated
+        , testProperty "list contains created id" prop_listContainsCreatedId
         , testProperty "update summary/share/revert" prop_updateSummaryShareRevert
         ]

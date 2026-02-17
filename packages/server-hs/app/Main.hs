@@ -5,22 +5,22 @@ module Main where
 import Api
 import Bus.Bus qualified as Bus
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Concurrent.STM
 import Control.Exception (SomeException, try)
 import Control.Monad (void)
-import Data.Aeson (encode, object)
+import Data.Aeson (object)
 import Data.ByteString qualified as BS
-import Data.ByteString.Builder (lazyByteString, string8)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Global.Event (globalEventHandler)
 import Handlers
 import Katip qualified
 import Log qualified
-import Network.HTTP.Types (methodOptions, status200, status400)
-import Network.Wai (Middleware, mapResponseHeaders, requestMethod, responseLBS, responseStream)
+import Network.HTTP.Types (methodOptions, status200)
+import Network.Wai (Middleware, mapResponseHeaders, requestMethod, responseLBS)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Handler.WebSockets (websocketsOr)
 import Network.WebSockets (PendingConnection, acceptRequest, defaultConnectionOptions, pendingRequest, receiveData, requestPath, sendBinaryData)
+import Pty.Connect (ptyConnectHandler)
 import Pty.Pty qualified as Pty
 import Servant
 import State
@@ -40,49 +40,6 @@ enableCors app req respond' =
         , ("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
         , ("Access-Control-Allow-Headers", "Authorization, Content-Type, x-opencode-directory")
         ]
-
--- | SSE Handler
-globalEventHandler :: AppState -> Tagged Handler Application
-globalEventHandler state = Tagged $ \_ respond' -> do
-    chan <- atomically $ dupTChan (stEventChan state)
-
-    respond'
-        $ responseStream
-            status200
-            [("Content-Type", "text/event-stream"), ("Cache-Control", "no-cache")]
-        $ \send flush -> do
-            send $ string8 "data: {\"type\":\"server.connected\",\"properties\":{}}\n\n"
-            flush
-
-            let loop = do
-                    val <- atomically $ readTChan chan
-                    send $ string8 "data: "
-                    send $ lazyByteString (encode val)
-                    send $ string8 "\n\n"
-                    flush
-                    loop
-            loop
-
--- | PTY Connect Handler (WebSocket)
-ptyConnectHandler :: AppState -> T.Text -> Tagged Handler Application
-ptyConnectHandler st ptyId = Tagged $ \_req respond' -> do
-    -- Check if PTY exists
-    mInfo <- Pty.get (stPtyManager st) ptyId
-    case mInfo of
-        Nothing ->
-            respond' $
-                responseLBS
-                    status400
-                    [("Content-Type", "text/plain")]
-                    "PTY not found"
-        Just _ -> do
-            -- This handler is for non-WebSocket requests to the endpoint
-            -- The actual WebSocket handling is done by the middleware
-            respond' $
-                responseLBS
-                    status400
-                    [("Content-Type", "text/plain")]
-                    "WebSocket upgrade required"
 
 -- | WebSocket application for PTY connections
 ptyWebSocketApp :: AppState -> PendingConnection -> IO ()
@@ -124,8 +81,8 @@ ptyWebSocketApp st pending = do
 -- | Server Wiring
 server :: AppState -> Server OpencodeAPI
 server st =
-  healthHandler st
-    :<|> pathHandler st
+    healthHandler st
+        :<|> pathHandler st
         :<|> globalConfigHandler
         :<|> projectListHandler st
         :<|> projectGetHandler st
@@ -168,7 +125,7 @@ server st =
         :<|> sessionMessagePartUpdateHandler st
         :<|> sessionPromptAsyncHandler st
         :<|> lspHandler st
-        :<|> vcsHandler
+        :<|> vcsHandler st
         :<|> permissionHandler st
         :<|> permissionReplyHandler st
         :<|> questionHandler st
@@ -230,6 +187,7 @@ main = Log.withLogger "opencode" $ \logger -> do
     let projectID = "proj_default"
 
     state <- initialState storageDir (T.pack projectID) (T.pack cwd) logger
+    startPromptAsyncWorker state
 
     -- Heartbeat
     _ <- forkIO $ do

@@ -2,6 +2,7 @@
 
 module Property.TuiProps where
 
+import Data.Aeson (object, (.=))
 import Data.Text (Text)
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
@@ -49,6 +50,25 @@ prop_submitPrompt = property $ do
     submitted === text
     remaining === ""
 
+prop_submitStoresLast :: Property
+prop_submitStoresLast = property $ do
+    text <- forAll genText
+    result <- evalIO $ withStore $ \store -> do
+        _ <- TuiStore.appendPrompt store text
+        _ <- TuiStore.submitPrompt store
+        Storage.read store ["tui", "submitted"]
+    result === object ["prompt" .= text]
+
+prop_setLastRoundtrip :: Property
+prop_setLastRoundtrip = property $ do
+    key <- forAll genText
+    val <- forAll genText
+    result <- evalIO $ withStore $ \store -> do
+        let payload = object ["key" .= key, "value" .= val]
+        TuiStore.setLast store payload
+        TuiStore.getLast store
+    result === Just (object ["key" .= key, "value" .= val])
+
 genText :: Gen Text
 genText = Gen.text (Range.linear 0 50) Gen.alphaNum
 
@@ -59,4 +79,6 @@ tests =
         [ testProperty "append prompt" prop_appendPrompt
         , testProperty "clear prompt" prop_clearPrompt
         , testProperty "submit prompt" prop_submitPrompt
+        , testProperty "set/get last" prop_setLastRoundtrip
+        , testProperty "submit stores last" prop_submitStoresLast
         ]

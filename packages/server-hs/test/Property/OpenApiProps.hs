@@ -9,6 +9,7 @@ import ApiCompatibilitySpec (Endpoint (..), haskellEndpoints)
 import Data.Aeson
 import Data.ByteString.Lazy qualified as BSL
 import Data.HashMap.Strict qualified as HM
+import Data.List (nub)
 import Data.Text qualified as T
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
@@ -170,6 +171,21 @@ prop_extractPathParams = property $ do
             rest = map (T.takeWhile (/= '}')) (drop 1 parts)
          in filter (not . T.null) rest
 
+prop_noQueryInPaths :: Property
+prop_noQueryInPaths = property $ do
+    endpoint <- forAll $ Gen.element haskellEndpoints
+    assert $ not ("?" `T.isInfixOf` path endpoint)
+
+prop_methodUppercase :: Property
+prop_methodUppercase = property $ do
+    endpoint <- forAll $ Gen.element haskellEndpoints
+    method endpoint === T.toUpper (method endpoint)
+
+prop_uniqueMethodPaths :: Property
+prop_uniqueMethodPaths = property $ do
+    let entries = map (\ep -> (method ep, path ep)) haskellEndpoints
+    length entries === length (nub entries)
+
 -- | Run all property tests
 runPropertyTests :: IO Bool
 runPropertyTests = do
@@ -183,6 +199,9 @@ runPropertyTests = do
                 [ ("validPaths", prop_validPaths)
                 , ("validMethods", prop_validMethods)
                 , ("extractPathParams", prop_extractPathParams)
+                , ("noQueryInPaths", prop_noQueryInPaths)
+                , ("methodUppercase", prop_methodUppercase)
+                , ("uniqueMethodPaths", prop_uniqueMethodPaths)
                 ]
 
     return result1

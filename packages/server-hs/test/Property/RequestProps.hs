@@ -32,10 +32,28 @@ prop_requestRoundtrip = property $ do
         RequestStore.listRequests store kind
     assert $ value `elem` result
 
+prop_requestEmptyList :: Property
+prop_requestEmptyList = property $ do
+    kind <- forAll genText
+    result <- evalIO $ withStore $ \store ->
+        RequestStore.listRequests store kind
+    result === []
+
 prop_generateIdPrefix :: Property
 prop_generateIdPrefix = property $ do
     reqId <- evalIO RequestStore.generateId
     assert $ "req_" `T.isPrefixOf` reqId
+
+prop_generateIdUnique :: Property
+prop_generateIdUnique = property $ do
+    a <- evalIO RequestStore.generateId
+    b <- evalIO RequestStore.generateId
+    a /== b
+
+prop_generateIdNonEmpty :: Property
+prop_generateIdNonEmpty = property $ do
+    reqId <- evalIO RequestStore.generateId
+    assert $ T.length reqId > 4
 
 genText :: Gen Text
 genText = Gen.text (Range.linear 1 10) Gen.alphaNum
@@ -50,5 +68,8 @@ tests =
     testGroup
         "Request Store Property Tests"
         [ testProperty "request roundtrip" prop_requestRoundtrip
+        , testProperty "request list empty" prop_requestEmptyList
         , testProperty "generate id prefix" prop_generateIdPrefix
+        , testProperty "generate id unique" prop_generateIdUnique
+        , testProperty "generate id non-empty" prop_generateIdNonEmpty
         ]

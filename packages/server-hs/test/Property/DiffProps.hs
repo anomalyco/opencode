@@ -33,6 +33,13 @@ prop_parseNumstatBinary = property $ do
     ST.ssDeletions summary === 0
     ST.ssFiles summary === Just files
 
+prop_parseNumstatEmpty :: Property
+prop_parseNumstatEmpty = property $ do
+    let summary = Diff.parseNumstat ""
+    ST.ssAdditions summary === 0
+    ST.ssDeletions summary === 0
+    ST.ssFiles summary === Just 0
+
 genEntry :: Gen (Int, Int)
 genEntry = do
     adds <- Gen.int (Range.linear 0 1000)
@@ -45,4 +52,5 @@ tests =
         "Diff Property Tests"
         [ testProperty "parse numstat totals" prop_parseNumstatTotals
         , testProperty "parse numstat binary" prop_parseNumstatBinary
+        , testProperty "parse numstat empty" prop_parseNumstatEmpty
         ]

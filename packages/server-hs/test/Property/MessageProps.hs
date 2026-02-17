@@ -5,6 +5,8 @@ module Property.MessageProps where
 
 import Api (Message (..), MessageInfo (..), SessionTime (..))
 import Data.Aeson (Value (..), decode, encode, object, (.=))
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
 import Data.Text (Text)
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
@@ -50,6 +52,17 @@ prop_messageMultipleParts = property $ do
     case decode json of
         Nothing -> failure
         Just msg' -> msg === msg'
+
+prop_messageJsonKeys :: Property
+prop_messageJsonKeys = property $ do
+    msg <- forAll genMessage
+    let json = encode msg
+    case decode json :: Maybe Value of
+        Nothing -> failure
+        Just (Object obj) -> do
+            assert $ KM.member (Key.fromText "info") obj
+            assert $ KM.member (Key.fromText "parts") obj
+        _ -> failure
 
 -- Generators
 genText :: Gen Text
@@ -100,4 +113,5 @@ tests =
         , testProperty "Message round-trip" prop_messageRoundtrip
         , testProperty "Message with empty parts" prop_messageEmptyParts
         , testProperty "Message with multiple parts" prop_messageMultipleParts
+        , testProperty "Message JSON keys" prop_messageJsonKeys
         ]

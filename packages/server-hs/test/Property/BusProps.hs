@@ -86,14 +86,35 @@ prop_multipleSubscribers = property $ do
         -- Publish one event
         Bus.publish bus eventType Null
 
-        threadDelay 5000
-
-        -- Read all results
-        mapM (atomically . readTVar) vars
+        waitForAll vars (50 :: Int)
 
     -- All subscribers should have received the event
     all (\r -> length r == 1) results === True
     all (\r -> case r of [x] -> x == eventType; _ -> False) results === True
+  where
+    waitForAll vars attempts = do
+        results <- mapM (atomically . readTVar) vars
+        if all (\r -> length r == 1) results
+            then pure results
+            else do
+                if attempts <= 0
+                    then pure results
+                    else do
+                        threadDelay 1000
+                        waitForAll vars (attempts - 1)
+
+prop_subscribeAllOrder :: Property
+prop_subscribeAllOrder = property $ do
+    eventTypes <- forAll $ Gen.list (Range.linear 1 5) genEventType
+    received <- evalIO $ do
+        bus <- Bus.newBus
+        receivedVar <- newTVarIO []
+        void $ Bus.subscribeAll bus $ \event ->
+            atomically $ modifyTVar' receivedVar (Bus.beType event :)
+        mapM_ (\et -> Bus.publish bus et Null) eventTypes
+        threadDelay 10000
+        atomically $ readTVar receivedVar
+    reverse received === eventTypes
 
 -- Generators
 genEventType :: Gen Text
@@ -117,4 +138,5 @@ tests =
         [ testProperty "publish/subscribe" prop_publishSubscribe
         , testProperty "subscribeAll receives all" prop_subscribeAll
         , testProperty "multiple subscribers" prop_multipleSubscribers
+        , testProperty "subscribeAll order" prop_subscribeAllOrder
         ]

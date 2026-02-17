@@ -92,6 +92,32 @@ prop_removeDeletes = property $ do
     genKeyPart = Gen.text (Range.linear 1 20) Gen.alphaNum
     genTestValue = Gen.text (Range.linear 0 100) Gen.alphaNum
 
+prop_removeListEmpty :: Property
+prop_removeListEmpty = property $ do
+    prefix <- forAll $ Gen.text (Range.linear 1 10) Gen.alphaNum
+    val <- forAll genTestValue
+    keys <- evalIO $ withTempStorage $ \storage -> do
+        Storage.write storage [prefix, "a"] (val :: Text)
+        Storage.remove storage [prefix, "a"]
+        Storage.list storage [prefix]
+    keys === []
+  where
+    genTestValue = Gen.text (Range.linear 0 100) Gen.alphaNum
+
+prop_listRespectsPrefix :: Property
+prop_listRespectsPrefix = property $ do
+    prefix <- forAll $ Gen.text (Range.linear 1 10) Gen.alphaNum
+    key1 <- forAll $ Gen.text (Range.linear 1 10) Gen.alphaNum
+    key2 <- forAll $ Gen.text (Range.linear 1 10) Gen.alphaNum
+    val <- forAll genTestValue
+    keys <- evalIO $ withTempStorage $ \storage -> do
+        Storage.write storage [prefix, key1] (val :: Text)
+        Storage.write storage [prefix, key2] (val :: Text)
+        Storage.list storage [prefix]
+    assert $ all (\k -> take 1 k == [prefix]) keys
+  where
+    genTestValue = Gen.text (Range.linear 0 100) Gen.alphaNum
+
 -- Helper functions
 
 withTempStorage :: (Storage.StorageConfig -> IO a) -> IO a
@@ -110,4 +136,6 @@ tests =
         , testProperty "update modifies value" prop_updateModifies
         , testProperty "list with prefix" prop_listWithPrefix
         , testProperty "remove deletes value" prop_removeDeletes
+        , testProperty "remove leaves no keys" prop_removeListEmpty
+        , testProperty "list respects prefix" prop_listRespectsPrefix
         ]
