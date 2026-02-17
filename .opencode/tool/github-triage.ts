@@ -76,7 +76,7 @@ export default tool({
           ? "thdxr"
           : args.assignee
 
-    if (args.assignee === "jlongster") {
+    if (args.assignee === "jlongster" && assignee === "thdxr") {
       results.push("Remapped assignee: jlongster -> thdxr (jlongster not assignable yet)")
     }
 
