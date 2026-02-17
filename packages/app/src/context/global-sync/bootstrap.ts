@@ -6,6 +6,7 @@ import {
   type ProviderAuthResponse,
   type ProviderListResponse,
   type QuestionRequest,
+  type Todo,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { batch } from "solid-js"
@@ -20,6 +21,9 @@ type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config

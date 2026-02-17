@@ -5,7 +5,6 @@ import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore, produce } from "solid-js/store"
-import { SessionContextUsage } from "@/components/session-context-usage"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -20,6 +19,7 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
@@ -91,6 +91,7 @@ export default function Page() {
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
+  const globalSync = useGlobalSync()
   const terminal = useTerminal()
   const dialog = useDialog()
   const codeComponent = useCodeComponent()
@@ -232,7 +233,7 @@ export default function Page() {
     })
   }
 
-  const isDesktop = createMediaQuery("(min-width: 1024px)")
+  const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -556,13 +557,11 @@ export default function Page() {
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
-    expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
-    promptHeight: 0,
   })
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
@@ -653,6 +652,7 @@ export default function Page() {
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
+  let dockHeight = 0
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
 
@@ -675,7 +675,8 @@ export default function Page() {
     sdk.directory
     const id = params.id
     if (!id) return
-    sync.session.sync(id)
+    void sync.session.sync(id)
+    void sync.session.todo(id)
   })
 
   createEffect(() => {
@@ -728,13 +729,17 @@ export default function Page() {
   )
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
+  const todos = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    return globalSync.data.session_todo[id] ?? []
+  })
 
   createEffect(
     on(
       sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("expanded", {})
         setStore("changes", "session")
         setUi("autoCreated", false)
       },
@@ -752,12 +757,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  createEffect(() => {
-    const id = lastUserMessage()?.id
-    if (!id) return
-    setStore("expanded", id, status().type !== "idle")
-  })
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -813,8 +812,8 @@ export default function Page() {
       return
     }
 
-    // Don't autofocus chat if terminal panel is open
-    if (view().terminal.opened()) return
+    // Don't autofocus chat if desktop terminal panel is open
+    if (isDesktop() && view().terminal.opened()) return
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
     if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
@@ -931,10 +930,8 @@ export default function Page() {
     status,
     userMessages,
     visibleUserMessages,
-    activeMessage,
     showAllFiles,
     navigateMessageByOffset,
-    setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
     focusInput,
@@ -960,7 +957,6 @@ export default function Page() {
       onSelect={(option) => option && setStore("changes", option)}
       variant="ghost"
       size="large"
-      triggerStyle={{ "font-size": "var(--font-size-large)" }}
     />
   )
 
@@ -1448,12 +1444,12 @@ export default function Page() {
     ({ height }) => {
       const next = Math.ceil(height)
 
-      if (next === store.promptHeight) return
+      if (next === dockHeight) return
 
       const el = scroller
       const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
 
-      setStore("promptHeight", next)
+      dockHeight = next
 
       if (stick && el) {
         requestAnimationFrame(() => {
@@ -1551,13 +1547,7 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div
-        class="flex-1 min-h-0 flex"
-        classList={{
-          "flex-col": !isDesktop(),
-          "flex-row": isDesktop(),
-        }}
-      >
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
           mobileTab={store.mobileTab}
@@ -1572,12 +1562,11 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 pt-2 md:pt-3": true,
+            "flex-1": true,
             "md:flex-none": desktopSidePanelOpen(),
           }}
           style={{
             width: sessionPanelWidth(),
-            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
@@ -1589,7 +1578,7 @@ export default function Page() {
                     mobileFallback={reviewContent({
                       diffStyle: "unified",
                       classes: {
-                        root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                        root: "pb-8",
                         header: "px-4",
                         container: "px-4",
                       },
@@ -1654,8 +1643,6 @@ export default function Page() {
                       navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
                     }}
                     lastUserMessageID={lastUserMessage()?.id}
-                    expanded={store.expanded}
-                    onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
                   />
                 </Show>
               </Match>
@@ -1686,6 +1673,7 @@ export default function Page() {
             questionRequest={questionRequest}
             permissionRequest={permRequest}
             blocked={blocked()}
+            todos={todos()}
             promptReady={prompt.ready()}
             handoffPrompt={handoff.session.get(sessionKey())?.prompt}
             t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
@@ -1758,7 +1746,7 @@ export default function Page() {
       </div>
 
       <TerminalPanel
-        open={view().terminal.opened()}
+        open={isDesktop() && view().terminal.opened()}
         height={layout.terminal.height()}
         resize={layout.terminal.resize}
         close={view().terminal.close}
