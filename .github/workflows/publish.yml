@@ -152,22 +152,15 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Cache apt packages
+      - name: Setup apt dependencies
         if: contains(matrix.settings.host, 'ubuntu')
-        uses: actions/cache@v4
+        uses: ./.github/actions/setup-apt
         with:
-          path: ~/apt-cache
-          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml') }}
-          restore-keys: |
+          archives-dir: ${{ runner.temp }}/apt-cache
+          cache-key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml', '.github/actions/setup-apt/action.yml') }}
+          cache-restore-keys: |
             ${{ runner.os }}-${{ matrix.settings.target }}-apt-
-
-      - name: install dependencies (ubuntu only)
-        if: contains(matrix.settings.host, 'ubuntu')
-        run: |
-          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-          sudo chmod -R a+rw ~/apt-cache
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -283,18 +276,18 @@ jobs:
           name: opencode-cli
           path: packages/opencode/dist
 
-      - name: Cache apt packages (AUR)
-        uses: actions/cache@v4
+      - name: Setup apt dependencies (AUR)
+        uses: ./.github/actions/setup-apt
         with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
-          restore-keys: |
+          archives-dir: ${{ runner.temp }}/apt-cache
+          cache-key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml', '.github/actions/setup-apt/action.yml') }}
+          cache-restore-keys: |
             ${{ runner.os }}-apt-aur-
+          # makepkg is a recommended dep of pacman-package-manager, not included with --no-install-recommends
+          packages: pacman-package-manager makepkg
 
       - name: Setup SSH for AUR
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa

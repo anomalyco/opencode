@@ -1,0 +1,47 @@
+name: "Setup Apt"
+description: "Cache apt archives and install packages"
+inputs:
+  archives-dir:
+    description: "Directory used for apt archives cache"
+    required: true
+  cache-key:
+    description: "Cache key for apt archives"
+    required: true
+  cache-restore-keys:
+    description: "Optional restore keys for apt archives cache"
+    required: false
+    default: ""
+  packages:
+    description: "Space-separated apt packages to install"
+    required: true
+  install-options:
+    description: "Additional apt-get install options"
+    required: false
+    default: "--no-install-recommends"
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare apt archives dir
+      run: |
+        mkdir -p "${{ inputs.archives-dir }}"
+        chmod -R a+rw "${{ inputs.archives-dir }}"
+      shell: bash
+
+    - name: Cache apt archives
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.archives-dir }}
+        key: ${{ inputs.cache-key }}
+        restore-keys: ${{ inputs.cache-restore-keys }}
+
+    - name: Install apt packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ${{ inputs.install-options }} -o dir::cache::archives="${{ inputs.archives-dir }}" ${{ inputs.packages }}
+      shell: bash
+
+    - name: Restore apt archives permissions
+      if: ${{ always() }}
+      run: |
+        sudo chmod -R a+rw "${{ inputs.archives-dir }}"
+      shell: bash
