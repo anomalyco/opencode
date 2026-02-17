@@ -314,9 +314,7 @@ export const AuthLoginCommand = cmd({
           existingProviders: providers,
           disabled,
           enabled,
-          providerNames: Object.fromEntries(
-            Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name]),
-          ),
+          providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
         })
         let provider = await prompts.autocomplete({
           message: "Select provider",
