@@ -353,7 +353,7 @@ export function SessionHeader() {
                   <Show
                     when={canOpen()}
                     fallback={
-                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
                           class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
@@ -369,7 +369,7 @@ export function SessionHeader() {
                     }
                   >
                     <div class="flex items-center">
-                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
                           class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
@@ -381,7 +381,7 @@ export function SessionHeader() {
                           </div>
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
-                        <div class="self-stretch w-px bg-border-base/70" />
+                        <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
                           gutter={6}
                           placement="bottom-end"

@@ -196,7 +196,7 @@ export function StatusPopover() {
       triggerProps={{
         variant: "ghost",
         class:
-          "rounded-md h-[24px] pr-3 pl-0.5 gap-2 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
+          "rounded-md h-[24px] pr-3 pl-0.5 gap-2 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
         style: { scale: 1 },
       }}
       trigger={
