@@ -219,6 +219,21 @@ export function MessageTimeline(props: {
                 <Show when={props.sessionID}>
                   {(id) => (
                     <div class="shrink-0 flex items-center gap-3">
+                      <Show when={props.parentID}>
+                        <Tooltip value="Navigate to parent" placement="top">
+                          <IconButton
+                            tabIndex={-1}
+                            icon="arrow-up"
+                            variant="ghost"
+                            onClick={props.onNavigateParent}
+                            aria-label="Navigate to parent"
+                            class="size-5"
+                          />
+                        </Tooltip>
+                        <Tooltip value="Subagent" placement="top">
+                          <Icon name="brain" class="text-text-weak mr-1" />
+                        </Tooltip>
+                      </Show>
                       <SessionContextUsage placement="bottom" />
                       <DropdownMenu
                         gutter={4}

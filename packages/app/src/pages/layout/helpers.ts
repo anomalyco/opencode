@@ -42,6 +42,10 @@ export const childMapByParent = (sessions: Session[]) => {
   return map
 }
 
+export const getChildSessions = (sessions: Session[], parentID: string): Session[] => {
+  return sessions.filter((s) => s.parentID === parentID).sort(sortSessions(Date.now()))
+}
+
 export function getDraggableId(event: unknown): string | undefined {
   if (typeof event !== "object" || event === null) return undefined
   if (!("draggable" in event)) return undefined
