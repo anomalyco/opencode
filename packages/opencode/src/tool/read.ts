@@ -1,6 +1,7 @@
 import z from "zod"
 import * as fs from "fs"
 import * as path from "path"
+import { createInterface } from "readline"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -137,25 +138,49 @@ export const ReadTool = Tool.define("read", {
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
+    const stream = fs.createReadStream(filepath, { encoding: "utf8" })
+    const rl = createInterface({
+      input: stream,
+      // Note: we use the crlfDelay option to recognize all instances of CR LF
+      // ('\r\n') in file as a single line break.
+      crlfDelay: Infinity,
+    })
+
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset ?? 1
     const start = offset - 1
-    const lines = await file.text().then((text) => text.split("\n"))
-    if (start >= lines.length) throw new Error(`Offset ${offset} is out of range for this file (${lines.length} lines)`)
-
     const raw: string[] = []
     let bytes = 0
+    let lines = 0
     let truncatedByBytes = false
-    for (let i = start; i < Math.min(lines.length, start + limit); i++) {
-      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
-        break
+    let hasMoreLines = false
+    try {
+      for await (const text of rl) {
+        lines += 1
+        if (lines <= start) continue
+
+        if (raw.length >= limit) {
+          hasMoreLines = true
+          break
+        }
+
+        const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + "..." : text
+        const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
+        if (bytes + size > MAX_BYTES) {
+          truncatedByBytes = true
+          hasMoreLines = true
+          break
+        }
+
+        raw.push(line)
+        bytes += size
       }
-      raw.push(line)
-      bytes += size
+    } finally {
+      rl.close()
+      stream.destroy()
     }
+
+    if (lines < offset) throw new Error(`Offset ${offset} is out of range for this file (${lines} lines)`)
 
     const content = raw.map((line, index) => {
       return `${index + offset}: ${line}`
@@ -165,9 +190,8 @@ export const ReadTool = Tool.define("read", {
     let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
     output += content.join("\n")
 
-    const totalLines = lines.length
+    const totalLines = lines
     const lastReadLine = offset + raw.length - 1
-    const hasMoreLines = totalLines > lastReadLine
     const truncated = hasMoreLines || truncatedByBytes
 
     if (truncatedByBytes) {
