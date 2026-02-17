@@ -135,7 +135,7 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, file)
+    const isBinary = await isBinaryFile(filepath, stat.size)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const stream = fs.createReadStream(filepath, { encoding: "utf8" })
@@ -223,7 +223,7 @@ export const ReadTool = Tool.define("read", {
   },
 })
 
-async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
   // binary check for common non-text extensions
   switch (ext) {
@@ -260,22 +260,25 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
       break
   }
 
-  const stat = await file.stat()
-  const fileSize = stat.size
   if (fileSize === 0) return false
 
-  const bufferSize = Math.min(4096, fileSize)
-  const buffer = await file.arrayBuffer()
-  if (buffer.byteLength === 0) return false
-  const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+  const fh = await fs.promises.open(filepath, "r")
+  try {
+    const sampleSize = Math.min(4096, fileSize)
+    const bytes = Buffer.alloc(sampleSize)
+    const result = await fh.read(bytes, 0, sampleSize, 0)
+    if (result.bytesRead === 0) return false
 
-  let nonPrintableCount = 0
-  for (let i = 0; i < bytes.length; i++) {
-    if (bytes[i] === 0) return true
-    if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
-      nonPrintableCount++
+    let nonPrintableCount = 0
+    for (let i = 0; i < result.bytesRead; i++) {
+      if (bytes[i] === 0) return true
+      if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
+        nonPrintableCount++
+      }
     }
+    // If >30% non-printable characters, consider it binary
+    return nonPrintableCount / result.bytesRead > 0.3
+  } finally {
+    await fh.close()
   }
-  // If >30% non-printable characters, consider it binary
-  return nonPrintableCount / bytes.length > 0.3
 }
