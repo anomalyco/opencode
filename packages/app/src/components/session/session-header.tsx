@@ -383,7 +383,7 @@ export function SessionHeader() {
                         </Button>
                         <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
-                          gutter={6}
+                          gutter={4}
                           placement="bottom-end"
                           open={menu.open}
                           onOpenChange={(open) => setMenu("open", open)}
@@ -392,7 +392,7 @@ export function SessionHeader() {
                             as={IconButton}
                             icon="chevron-down"
                             variant="ghost"
-                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-hover"
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
@@ -458,7 +458,7 @@ export function SessionHeader() {
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
-                    gutter={6}
+                    gutter={4}
                     placement="bottom-end"
                     shift={-64}
                     class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
