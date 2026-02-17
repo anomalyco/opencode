@@ -102,8 +102,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     let attempt: AbortController | undefined
     const HEARTBEAT_TIMEOUT_MS = 15_000
+    let lastEventAt = Date.now()
     let heartbeat: ReturnType<typeof setTimeout> | undefined
     const resetHeartbeat = () => {
+      lastEventAt = Date.now()
       if (heartbeat) clearTimeout(heartbeat)
       heartbeat = setTimeout(() => {
         attempt?.abort()
@@ -118,6 +120,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     void (async () => {
       while (!abort.signal.aborted) {
         attempt = new AbortController()
+        lastEventAt = Date.now()
         const onAbort = () => {
           attempt?.abort()
         }
@@ -182,6 +185,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const onVisibility = () => {
       if (typeof document === "undefined") return
       if (document.visibilityState !== "visible") return
+      if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
       attempt?.abort()
     }
     if (typeof document !== "undefined") {

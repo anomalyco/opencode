@@ -116,7 +116,7 @@ export async function bootstrapDirectory(input: {
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
 }) {
-  input.setStore("status", "loading")
+  if (input.store.status !== "complete") input.setStore("status", "loading")
 
   const blockingRequests = {
     project: () => input.sdk.project.current().then((x) => input.setStore("project", x.data!.id)),
