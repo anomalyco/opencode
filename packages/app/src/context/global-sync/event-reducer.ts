@@ -20,7 +20,7 @@ export function applyGlobalEvent(input: {
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
   refresh: () => void
 }) {
-  if (input.event.type === "global.disposed") {
+  if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
     input.refresh()
     return
   }
