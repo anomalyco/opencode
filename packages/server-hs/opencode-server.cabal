@@ -115,7 +115,10 @@ test-suite opencode-server-test
     Property.MessageProps
     Property.LLMProps
     Property.ProviderProps
+    Property.OpenApiProps
     Unit.ApiSpec
+    ApiCompatibilitySpec
+    Integration.ApiComplianceTest
   hs-source-dirs:   test
   default-language: GHC2021
   ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
@@ -128,6 +131,7 @@ test-suite opencode-server-test
     tasty >= 1.5,
     tasty-hedgehog >= 1.4,
     tasty-hspec >= 1.2,
+    hspec-hedgehog >= 0.1,
     aeson >= 2.0,
     text >= 2.0,
     bytestring >= 0.11,
@@ -139,7 +143,9 @@ test-suite opencode-server-test
     http-client,
     http-client-tls,
     http-types,
-    process
+    process,
+    unordered-containers >= 0.2,
+    regex-pcre >= 0.95
   default-extensions:
     DataKinds
     TypeOperators
