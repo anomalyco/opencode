@@ -28,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
   "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+  "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
+  "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
@@ -80,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "أسئلة",
 
   "ui.common.add": "إضافة",
+  "ui.common.back": "رجوع",
   "ui.common.cancel": "إلغاء",
   "ui.common.confirm": "تأكيد",
   "ui.common.dismiss": "رفض",
@@ -95,6 +98,7 @@ export const dict = {
   "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
   "ui.message.copied": "تم النسخ!",
+  "ui.message.interrupted": "تمت المقاطعة",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
@@ -105,6 +109,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} أجيب",
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم يتم الرد)",
-  "ui.question.multiHint": "(حدد كل ما ينطبق)",
+  "ui.question.multiHint": "حدد كل ما ينطبق",
+  "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
 }

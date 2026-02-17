@@ -32,6 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
+  "ui.sessionTurn.error.addCredits": "新增點數",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
@@ -84,6 +86,7 @@ export const dict = {
   "ui.common.question.other": "個問題",
 
   "ui.common.add": "新增",
+  "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "忽略",
@@ -99,6 +102,7 @@ export const dict = {
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
   "ui.message.copied": "已複製！",
+  "ui.message.interrupted": "已中斷",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
@@ -109,6 +113,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(無答案)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(可多選)",
+  "ui.question.multiHint": "可多選",
+  "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
 } satisfies Partial<Record<Keys, string>>

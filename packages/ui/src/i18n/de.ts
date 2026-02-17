@@ -31,6 +31,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "erneuter Versuch",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
+  "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
 
   "ui.sessionTurn.status.delegating": "Arbeit delegieren",
   "ui.sessionTurn.status.planning": "Nächste Schritte planen",
@@ -83,6 +85,7 @@ export const dict = {
   "ui.common.question.other": "Fragen",
 
   "ui.common.add": "Hinzufügen",
+  "ui.common.back": "Zurück",
   "ui.common.cancel": "Abbrechen",
   "ui.common.confirm": "Bestätigen",
   "ui.common.dismiss": "Verwerfen",
@@ -98,6 +101,7 @@ export const dict = {
   "ui.message.collapse": "Nachricht reduzieren",
   "ui.message.copy": "Kopieren",
   "ui.message.copied": "Kopiert!",
+  "ui.message.interrupted": "Unterbrochen",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",
@@ -108,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} beantwortet",
   "ui.question.answer.none": "(keine Antwort)",
   "ui.question.review.notAnswered": "(nicht beantwortet)",
-  "ui.question.multiHint": "(alle zutreffenden auswählen)",
+  "ui.question.multiHint": "Alle zutreffenden auswählen",
+  "ui.question.singleHint": "Eine Antwort auswählen",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
 } satisfies Partial<Record<Keys, string>>
