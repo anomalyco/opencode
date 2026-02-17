@@ -228,10 +228,11 @@ export function MessageTimeline(props: {
                             onClick={props.onNavigateParent}
                             aria-label="Navigate to parent"
                             class="size-5"
+                            data-testid="navigate-parent-button"
                           />
                         </Tooltip>
                         <Tooltip value="Subagent" placement="top">
-                          <Icon name="brain" class="text-text-weak mr-1" />
+                          <Icon name="brain" class="text-text-weak mr-1" data-testid="subagent-indicator" />
                         </Tooltip>
                       </Show>
                       <SessionContextUsage placement="bottom" />
