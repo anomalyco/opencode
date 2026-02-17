@@ -13,6 +13,7 @@ import { InstructionPrompt } from "../session/instruction"
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
+const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -161,7 +162,7 @@ export const ReadTool = Tool.define("read", {
 
         if (raw.length >= limit) {
           hasMoreLines = true
-          break
+          continue
         }
 
         const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + "..." : text
@@ -194,12 +195,13 @@ export const ReadTool = Tool.define("read", {
 
     const totalLines = lines
     const lastReadLine = offset + raw.length - 1
+    const nextOffset = lastReadLine + 1
     const truncated = hasMoreLines || truncatedByBytes
 
     if (truncatedByBytes) {
-      output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
+      output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${offset}-${lastReadLine}. Use offset=${nextOffset} to continue.)`
     } else if (hasMoreLines) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+      output += `\n\n(Showing lines ${offset}-${lastReadLine} of ${totalLines}. Use offset=${nextOffset} to continue.)`
     } else {
       output += `\n\n(End of file - total ${totalLines} lines)`
     }
