@@ -745,6 +745,11 @@
     align-items: center;
     gap: 8px;
     justify-content: flex-end;
+
+    [data-component="button"] {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
   }
 }
 
@@ -755,6 +760,22 @@
   gap: 0;
   min-height: 0;
   max-height: var(--question-prompt-max-height, 100dvh);
+
+  &[data-permission="true"] {
+    [data-slot="question-options"] {
+      code {
+        font-size: 14px;
+        line-height: var(--line-height-large);
+      }
+    }
+
+    [data-slot="question-footer-actions"] {
+      [data-component="button"] {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+    }
+  }
 
   [data-slot="question-body"] {
     display: flex;
