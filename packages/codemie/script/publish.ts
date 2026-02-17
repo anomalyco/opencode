@@ -28,9 +28,7 @@ await $`cp -r ./bin ${wrapperDir}/bin`
 await $`cp ./script/postinstall.mjs ${wrapperDir}/postinstall.mjs`
 
 // Write LICENSE
-await Bun.file(`${wrapperDir}/LICENSE`).write(
-  "Apache-2.0\n\nSee https://www.apache.org/licenses/LICENSE-2.0\n",
-)
+await Bun.file(`${wrapperDir}/LICENSE`).write("Apache-2.0\n\nSee https://www.apache.org/licenses/LICENSE-2.0\n")
 
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
