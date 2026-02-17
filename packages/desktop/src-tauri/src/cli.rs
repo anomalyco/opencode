@@ -308,7 +308,7 @@ pub fn spawn_command(
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-il", "-c", &line]);
+        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
@@ -317,9 +317,12 @@ pub fn spawn_command(
         cmd
     };
 
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
 
     let mut wrap = CommandWrap::from(cmd);
 
@@ -360,6 +363,7 @@ pub fn spawn_command(
     }
 
     tokio::spawn(async move {
+        let mut kill_open = true;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),
@@ -368,8 +372,11 @@ pub fn spawn_command(
             }
 
             tokio::select! {
-                _ = kill_rx.recv() => {
-                    let _ = child.start_kill();
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {}
             }

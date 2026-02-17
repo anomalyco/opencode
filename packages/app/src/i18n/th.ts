@@ -223,6 +223,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "ป้อนคำสั่งเชลล์...",
   "prompt.placeholder.normal": 'ถามอะไรก็ได้... "{{example}}"',
+  "prompt.placeholder.simple": "ถามอะไรก็ได้...",
   "prompt.placeholder.summarizeComments": "สรุปความคิดเห็น…",
   "prompt.placeholder.summarizeComment": "สรุปความคิดเห็น…",
   "prompt.mode.shell": "เชลล์",
@@ -501,6 +502,9 @@ export const dict = {
   "session.messages.jumpToLatest": "ไปที่ล่าสุด",
 
   "session.context.addToContext": "เพิ่ม {{selection}} ไปยังบริบท",
+  "session.todo.title": "สิ่งที่ต้องทำ",
+  "session.todo.collapse": "ย่อ",
+  "session.todo.expand": "ขยาย",
 
   "session.new.worktree.main": "สาขาหลัก",
   "session.new.worktree.mainWithBranch": "สาขาหลัก ({{branch}})",
