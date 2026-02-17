@@ -181,6 +181,8 @@
     border-collapse: collapse;
     margin: 1.5rem 0;
     font-size: var(--font-size-base);
+    display: block;
+    overflow-x: auto;
   }
 
   th,
@@ -206,4 +208,9 @@
     margin: 1.5rem 0;
     display: block;
   }
+}
+
+[data-component="markdown"] a.external-link:hover > code {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

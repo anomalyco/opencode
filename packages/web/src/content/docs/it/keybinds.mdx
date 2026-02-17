@@ -1,0 +1,192 @@
+---
+title: Scorciatoie
+description: Personalizza le scorciatoie da tastiera.
+---
+
+OpenCode ha una lista di scorciatoie che puoi personalizzare tramite la configurazione di OpenCode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## Tasto leader
+
+OpenCode usa un tasto `leader` per la maggior parte delle scorciatoie. Questo evita conflitti nel terminale.
+
+Per impostazione predefinita, `ctrl+x` e il tasto leader e la maggior parte delle azioni richiede di premere prima il leader e poi la scorciatoia. Per esempio, per avviare una nuova sessione premi `ctrl+x` e poi `n`.
+
+Non sei obbligato a usare un tasto leader per le scorciatoie, ma lo consigliamo.
+
+---
+
+## Disabilitare una scorciatoia
+
+Puoi disabilitare una scorciatoia aggiungendo la chiave nella configurazione con valore "none".
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## Scorciatoie del prompt desktop
+
+Il campo di input del prompt nell'app desktop di OpenCode supporta scorciatoie comuni in stile Readline/Emacs per modificare il testo. Sono integrate e al momento non configurabili tramite `opencode.json`.
+
+| Scorciatoia | Azione                                     |
+| ----------- | ------------------------------------------ |
+| `ctrl+a`    | Vai all'inizio della riga corrente         |
+| `ctrl+e`    | Vai alla fine della riga corrente          |
+| `ctrl+b`    | Sposta il cursore indietro di un carattere |
+| `ctrl+f`    | Sposta il cursore avanti di un carattere   |
+| `alt+b`     | Sposta il cursore indietro di una parola   |
+| `alt+f`     | Sposta il cursore avanti di una parola     |
+| `ctrl+d`    | Elimina il carattere sotto il cursore      |
+| `ctrl+k`    | Elimina fino alla fine della riga          |
+| `ctrl+u`    | Elimina fino all'inizio della riga         |
+| `ctrl+w`    | Elimina la parola precedente               |
+| `alt+d`     | Elimina la parola successiva               |
+| `ctrl+t`    | Scambia i caratteri                        |
+| `ctrl+g`    | Annulla popover / interrompe la risposta   |
+
+---
+
+## Shift+Enter
+
+Alcuni terminali non inviano di default i tasti modificatori insieme a Invio. Potrebbe essere necessario configurare il terminale per inviare `Shift+Enter` come sequenza di escape.
+
+### Windows Terminal
+
+Apri il tuo `settings.json` in:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+Aggiungi questo all'array `actions` a livello root:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Aggiungi questo all'array `keybindings` a livello root:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Salva il file e riavvia Windows Terminal oppure apri una nuova scheda.

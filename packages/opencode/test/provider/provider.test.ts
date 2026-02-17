@@ -1,26 +1,5 @@
-import { test, expect, mock } from "bun:test"
+import { test, expect } from "bun:test"
 import path from "path"
-
-// Mock BunProc and default plugins to prevent actual installations during tests
-mock.module("../../src/bun/index", () => ({
-  BunProc: {
-    install: async (pkg: string, _version?: string) => {
-      // Return package name without version for mocking
-      const lastAtIndex = pkg.lastIndexOf("@")
-      return lastAtIndex > 0 ? pkg.substring(0, lastAtIndex) : pkg
-    },
-    run: async () => {
-      throw new Error("BunProc.run should not be called in tests")
-    },
-    which: () => process.execPath,
-    InstallFailedError: class extends Error {},
-  },
-}))
-
-const mockPlugin = () => ({})
-mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
-mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
-mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
@@ -2145,6 +2124,97 @@ test("custom model with variants enabled and disabled", async () => {
       expect(model.variants!["low"].disabled).toBeUndefined()
       expect(model.variants!["medium"].disabled).toBeUndefined()
       expect(model.variants!["custom"].disabled).toBeUndefined()
+    },
+  })
+})
+
+test("Google Vertex: retains baseURL for custom proxy", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "vertex-proxy": {
+              name: "Vertex Proxy",
+              npm: "@ai-sdk/google-vertex",
+              api: "https://my-proxy.com/v1",
+              env: ["GOOGLE_APPLICATION_CREDENTIALS"], // Mock env var requirement
+              models: {
+                "gemini-pro": {
+                  name: "Gemini Pro",
+                  tool_call: true,
+                },
+              },
+              options: {
+                project: "test-project",
+                location: "us-central1",
+                baseURL: "https://my-proxy.com/v1", // Should be retained
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["vertex-proxy"]).toBeDefined()
+      expect(providers["vertex-proxy"].options.baseURL).toBe("https://my-proxy.com/v1")
+    },
+  })
+})
+
+test("Google Vertex: supports OpenAI compatible models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "vertex-openai": {
+              name: "Vertex OpenAI",
+              npm: "@ai-sdk/google-vertex",
+              env: ["GOOGLE_APPLICATION_CREDENTIALS"],
+              models: {
+                "gpt-4": {
+                  name: "GPT-4",
+                  provider: {
+                    npm: "@ai-sdk/openai-compatible",
+                    api: "https://api.openai.com/v1",
+                  },
+                },
+              },
+              options: {
+                project: "test-project",
+                location: "us-central1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["vertex-openai"].models["gpt-4"]
+
+      expect(model).toBeDefined()
+      expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
     },
   })
 })

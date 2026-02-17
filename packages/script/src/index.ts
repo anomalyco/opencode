@@ -70,8 +70,8 @@ export const Script = {
   get preview() {
     return IS_PREVIEW
   },
-  get release() {
-    return env.OPENCODE_RELEASE
+  get release(): boolean {
+    return !!env.OPENCODE_RELEASE
   },
   get team() {
     return team
