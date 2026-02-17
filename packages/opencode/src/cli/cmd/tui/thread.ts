@@ -46,12 +46,12 @@ function createEventSource(client: RpcClient): EventSource {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opensec tui",
+  describe: "start opencode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opensec in",
+        describe: "path to start opencode in",
       })
       .option("model", {
         type: "string",

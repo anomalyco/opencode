@@ -115,7 +115,7 @@ export namespace AppleContainer {
     const inputPort = typeof input.network.port === "number" ? input.network.port : 0
     const port = inputPort === 0 ? await random() : inputPort
     const mdns = input.network.mdns === true
-    const mdnsDomain = input.network.mdnsDomain || "opensec.local"
+    const mdnsDomain = input.network.mdnsDomain || "opencode.local"
     const cors = Array.isArray(input.network.cors) ? input.network.cors : input.network.cors ? [input.network.cors] : []
     const launch = serve({
       port,
@@ -137,7 +137,7 @@ export namespace AppleContainer {
 
     await bootstrap(image)
 
-    const name = `opensec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const name = `opencode-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const cmd = run({
       name,
       image,
@@ -152,7 +152,7 @@ export namespace AppleContainer {
     if (created.code !== 0) {
       throw new Error(
         [
-          "Failed to start OpenSec inside Apple container.",
+          "Failed to start OpenCode inside Apple container.",
           detail(created),
           "Set OPENCODE_DISABLE_APPLE_CONTAINER=1 to use the local server.",
         ].join("\n"),
@@ -183,7 +183,7 @@ export namespace AppleContainer {
     const logs = await exec(["container", "logs", "-n", "50", id])
     throw new Error(
       [
-        `OpenSec server did not become healthy at ${url}${HEALTH}.`,
+        `OpenCode server did not become healthy at ${url}${HEALTH}.`,
         logs.code === 0 ? `Container logs:\n${detail(logs)}` : "Failed to read container logs.",
         "Set OPENCODE_DISABLE_APPLE_CONTAINER=1 to use the local server.",
       ].join("\n"),
@@ -272,28 +272,28 @@ async function linux() {
   if (Installation.isLocal()) {
     throw new Error(
       [
-        "Apple container mode requires a release build to fetch a Linux OpenSec binary.",
-        "Set OPENCODE_APPLE_CONTAINER_BINARY to a Linux opensec binary path or set OPENCODE_DISABLE_APPLE_CONTAINER=1.",
+        "Apple container mode requires a release build to fetch a Linux OpenCode binary.",
+        "Set OPENCODE_APPLE_CONTAINER_BINARY to a Linux opencode binary path or set OPENCODE_DISABLE_APPLE_CONTAINER=1.",
       ].join("\n"),
     )
   }
 
   const version = Installation.VERSION
-  const target = path.join(Global.Path.bin, `opensec-linux-arm64-v${version}`)
+  const target = path.join(Global.Path.bin, `opencode-linux-arm64-v${version}`)
   if (await Bun.file(target).exists()) return target
 
   if (!Bun.which("tar")) {
-    throw new Error("`tar` is required to extract the Linux OpenSec binary.")
+    throw new Error("`tar` is required to extract the Linux OpenCode binary.")
   }
 
   const dir = await fs.mkdtemp(path.join(Global.Path.cache, "apple-container-"))
   await using cleanup = defer(async () => fs.rm(dir, { recursive: true, force: true }))
-  const archive = path.join(dir, "opensec-linux-arm64.tar.gz")
+  const archive = path.join(dir, "opencode-linux-arm64.tar.gz")
   const url = `https://github.com/anomalyco/opencode/releases/download/v${version}/opencode-linux-arm64.tar.gz`
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(
-      [`Failed to download Linux OpenSec binary for v${version}.`, `URL: ${url}`, `Status: ${response.status}`].join(
+      [`Failed to download Linux OpenCode binary for v${version}.`, `URL: ${url}`, `Status: ${response.status}`].join(
         "\n",
       ),
     )
@@ -303,12 +303,12 @@ async function linux() {
 
   const extracted = await exec(["tar", "-xzf", archive, "-C", dir])
   if (extracted.code !== 0) {
-    throw new Error(["Failed to extract Linux OpenSec binary.", detail(extracted)].join("\n"))
+    throw new Error(["Failed to extract Linux OpenCode binary.", detail(extracted)].join("\n"))
   }
 
   const source = path.join(dir, "opencode")
   if (!(await Bun.file(source).exists())) {
-    throw new Error(`Extracted archive for v${version} did not contain the opensec binary.`)
+    throw new Error(`Extracted archive for v${version} did not contain the opencode binary.`)
   }
 
   await fs.copyFile(source, target)
@@ -334,7 +334,7 @@ function env() {
 function auth() {
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opensec"
+  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
   return {
     Authorization: `Basic ${btoa(`${username}:${password}`)}`,
   }
