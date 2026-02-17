@@ -102,6 +102,10 @@ export function SettingsPopup() {
   const addUser = async () => {
     const value = email().trim()
     if (!value) return
+    if (value.includes("@") && !value.endsWith("@later.com")) {
+      showToast({ variant: "error", title: "Invalid email", description: "Only @later.com emails are allowed." })
+      return
+    }
     const username = value.replace(/@later\.com$/i, "")
     const current = accessList() || []
     if (current.includes(username)) {
@@ -177,7 +181,7 @@ export function SettingsPopup() {
             <TextField
               value={email()}
               onInput={(event) => setEmail(event.currentTarget.value)}
-              placeholder="Username"
+              placeholder="Email"
               class="flex-1 min-w-0"
             />
             <Button variant="secondary" class="h-[28px] shrink-0" onClick={addUser}>
