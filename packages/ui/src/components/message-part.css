@@ -119,6 +119,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 10px;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
@@ -128,6 +129,11 @@
       display: inline-flex;
       width: fit-content;
     }
+  }
+
+  [data-slot="user-message-meta"] {
+    user-select: none;
+    text-align: right;
   }
 
   [data-slot="user-message-copy-wrapper"][data-interrupted] {

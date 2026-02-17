@@ -534,6 +534,27 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
+  const stamp = createMemo(() => {
+    const created = props.message.time?.created
+    if (typeof created !== "number") return ""
+    const date = new Date(created)
+    const hours = date.getHours()
+    const hour12 = hours % 12 || 12
+    const minute = String(date.getMinutes()).padStart(2, "0")
+    return `${hour12}:${minute} ${hours < 12 ? "AM" : "PM"}`
+  })
+
+  const meta = createMemo(() => {
+    const agent = props.message.agent
+    const items = [
+      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      props.message.model?.providerID,
+      props.message.model?.modelID,
+      stamp(),
+    ]
+    return items.filter((x) => !!x).join(" \u00B7 ")
+  })
+
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
@@ -589,6 +610,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             <Show when={props.interrupted}>
               <span data-slot="user-message-interrupted" class="text-13-regular text-text-weak cursor-default">
                 {i18n.t("ui.message.interrupted")}
+              </span>
+            </Show>
+            <Show when={meta()}>
+              <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                {meta()}
               </span>
             </Show>
             <Tooltip
