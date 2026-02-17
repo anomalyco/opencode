@@ -211,34 +211,36 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      const meta = part.state.status === "completed" ? part.state.metadata : undefined
-      if (meta?.cleanContext && meta?.sessionID) {
-        const selectedModel = local.model.current()
-        if (!selectedModel) {
-          toast.show({ variant: "warning", message: "Select a model before switching to clean context", duration: 3000 })
-        } else {
-          local.agent.set("build")
-          sdk.client.session
-            .prompt({
-              sessionID: meta.sessionID as string,
-              ...selectedModel,
-              messageID: Identifier.ascending("message"),
-              agent: "build",
-              model: selectedModel,
-              parts: [
-                {
-                  id: Identifier.ascending("part"),
-                  type: "text" as const,
-                  text: `The plan at ${meta.plan} has been approved, you can now edit files. Execute the plan`,
-                },
-              ],
-            })
-            .catch(() => {})
-          navigate({ type: "session", sessionID: meta.sessionID as string })
-        }
-      } else {
+      const meta = part.state.metadata
+      if (!meta?.cleanContext || !meta?.sessionID) {
         local.agent.set("build")
+        lastSwitch = part.id
+        return
       }
+      const model = local.model.current()
+      if (!model) {
+        toast.show({ variant: "warning", message: "Select a model before switching to clean context", duration: 3000 })
+        lastSwitch = part.id
+        return
+      }
+      local.agent.set("build")
+      sdk.client.session
+        .prompt({
+          sessionID: meta.sessionID,
+          ...model,
+          messageID: Identifier.ascending("message"),
+          agent: "build",
+          model,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text" as const,
+              text: `The plan at ${meta.plan} has been approved, you can now edit files. Execute the plan`,
+            },
+          ],
+        })
+        .catch(() => {})
+      navigate({ type: "session", sessionID: meta.sessionID })
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")
