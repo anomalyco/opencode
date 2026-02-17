@@ -1,6 +1,6 @@
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
@@ -116,31 +116,46 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
-function createPromptActions(
-  setStore: SetStoreFunction<{
+function createPromptActions(input: {
+  draft: {
     prompt: Prompt
     cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
+  }
+  setDraft: SetStoreFunction<{
+    prompt: Prompt
+    cursor?: number
+  }>
+  schedule: VoidFunction
+}) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
+      const samePrompt = isPromptEqual(input.draft.prompt, prompt)
+      const sameCursor = cursorPosition === undefined || input.draft.cursor === cursorPosition
+      if (samePrompt && sameCursor) return
+
+      const next = samePrompt ? input.draft.prompt : clonePrompt(prompt)
       batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+        if (!samePrompt) input.setDraft("prompt", next)
+        if (cursorPosition !== undefined && input.draft.cursor !== cursorPosition)
+          input.setDraft("cursor", cursorPosition)
       })
+      input.schedule()
     },
     reset() {
+      const samePrompt = isPromptEqual(input.draft.prompt, DEFAULT_PROMPT)
+      const sameCursor = input.draft.cursor === 0
+      if (samePrompt && sameCursor) return
+
       batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
+        input.setDraft("prompt", clonePrompt(DEFAULT_PROMPT))
+        input.setDraft("cursor", 0)
       })
+      input.schedule()
     },
   }
 }
+
+const PERSIST_DEBOUNCE_MS = 250
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
@@ -172,13 +187,108 @@ function createPromptSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const actions = createPromptActions(setStore)
+  const [draft, setDraft] = createStore<{
+    prompt: Prompt
+    cursor?: number
+  }>({
+    prompt: clonePrompt(store.prompt),
+    cursor: store.cursor,
+  })
+
+  const persistState = {
+    dirty: false,
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+    idle: undefined as number | undefined,
+  }
+
+  const flush = () => {
+    const timer = persistState.timer
+    if (timer) {
+      clearTimeout(timer)
+      persistState.timer = undefined
+    }
+
+    const idle = persistState.idle
+    if (idle !== undefined) {
+      if (typeof globalThis.cancelIdleCallback === "function") {
+        globalThis.cancelIdleCallback(idle)
+      }
+      persistState.idle = undefined
+    }
+
+    if (!persistState.dirty) return
+    persistState.dirty = false
+
+    if (isPromptEqual(store.prompt, draft.prompt) && store.cursor === draft.cursor) return
+    const next = clonePrompt(draft.prompt)
+    batch(() => {
+      setStore("prompt", next)
+      setStore("cursor", draft.cursor)
+    })
+  }
+
+  const schedule = () => {
+    persistState.dirty = true
+    if (persistState.timer || persistState.idle !== undefined) return
+
+    persistState.timer = setTimeout(() => {
+      persistState.timer = undefined
+
+      if (typeof globalThis.requestIdleCallback !== "function") {
+        flush()
+        return
+      }
+
+      persistState.idle = globalThis.requestIdleCallback(
+        () => {
+          persistState.idle = undefined
+          flush()
+        },
+        { timeout: PERSIST_DEBOUNCE_MS },
+      )
+    }, PERSIST_DEBOUNCE_MS)
+  }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (persistState.dirty) return
+    if (isPromptEqual(draft.prompt, store.prompt) && draft.cursor === store.cursor) return
+
+    batch(() => {
+      setDraft("prompt", clonePrompt(store.prompt))
+      setDraft("cursor", store.cursor)
+    })
+  })
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    const handlePagehide = () => flush()
+    const handleVisibility = () => {
+      if (document.visibilityState !== "hidden") return
+      flush()
+    }
+
+    window.addEventListener("pagehide", handlePagehide)
+    document.addEventListener("visibilitychange", handleVisibility)
+
+    onCleanup(() => {
+      window.removeEventListener("pagehide", handlePagehide)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    })
+  }
+
+  onCleanup(() => flush())
+
+  const actions = createPromptActions({
+    draft,
+    setDraft,
+    schedule,
+  })
 
   return {
     ready,
-    current: createMemo(() => store.prompt),
-    cursor: createMemo(() => store.cursor),
-    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
+    current: createMemo(() => draft.prompt),
+    cursor: createMemo(() => draft.cursor),
+    dirty: createMemo(() => !isPromptEqual(draft.prompt, DEFAULT_PROMPT)),
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {

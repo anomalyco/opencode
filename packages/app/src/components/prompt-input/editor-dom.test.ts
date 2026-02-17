@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createTextFragment, getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./editor-dom"
+import {
+  createTextFragment,
+  getCursorPosition,
+  getNodeLength,
+  getSelectionOffsets,
+  getTextLength,
+  setCursorPosition,
+} from "./editor-dom"
 
 describe("prompt-input editor dom", () => {
   test("createTextFragment preserves newlines with consecutive br nodes", () => {
@@ -72,6 +79,84 @@ describe("prompt-input editor dom", () => {
     setCursorPosition(container, 3)
     expect(getCursorPosition(container)).toBe(3)
 
+    container.remove()
+  })
+
+  test("getCursorPosition handles element container offsets", () => {
+    const container = document.createElement("div")
+    container.appendChild(document.createTextNode("a"))
+    container.appendChild(document.createElement("br"))
+    container.appendChild(document.createTextNode("b"))
+    document.body.appendChild(container)
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(container, 2)
+    range.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    expect(getCursorPosition(container)).toBe(2)
+
+    container.remove()
+  })
+
+  test("getCursorPosition ignores zero width chars in offset", () => {
+    const container = document.createElement("div")
+    const text = document.createTextNode("a\u200Bb")
+    container.appendChild(text)
+    document.body.appendChild(container)
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(text, 2)
+    range.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    expect(getCursorPosition(container)).toBe(1)
+
+    container.remove()
+  })
+
+  test("getSelectionOffsets reads selection start and end", () => {
+    const container = document.createElement("div")
+    const text = document.createTextNode("abcdef")
+    container.appendChild(text)
+    document.body.appendChild(container)
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(text, 1)
+    range.setEnd(text, 4)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    expect(getSelectionOffsets(container)).toEqual({ start: 1, end: 4 })
+
+    container.remove()
+  })
+
+  test("getSelectionOffsets returns undefined for external selection", () => {
+    const container = document.createElement("div")
+    container.appendChild(document.createTextNode("inside"))
+    document.body.appendChild(container)
+
+    const outside = document.createElement("div")
+    const text = document.createTextNode("outside")
+    outside.appendChild(text)
+    document.body.appendChild(outside)
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 3)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    expect(getSelectionOffsets(container)).toBeUndefined()
+
+    outside.remove()
     container.remove()
   })
 })

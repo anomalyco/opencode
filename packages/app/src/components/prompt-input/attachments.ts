@@ -13,6 +13,8 @@ type PromptAttachmentsInput = {
   isFocused: () => boolean
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
+  setPlainTextPaste?: (value: string | null) => void
+  tryFastPlainTextPaste?: (value: string) => boolean
   focusEditor: () => void
   addPart: (part: ContentPart) => void
   readClipboardImage?: () => Promise<File | null>
@@ -56,6 +58,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     event.preventDefault()
     event.stopPropagation()
+    input.setPlainTextPaste?.(null)
 
     const items = Array.from(clipboardData.items)
     const fileItems = items.filter((item) => item.kind === "file")
@@ -89,8 +92,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     if (!plainText) return
+    if (input.tryFastPlainTextPaste?.(plainText)) return
+
+    input.setPlainTextPaste?.(plainText)
+
     const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
     if (inserted) return
+
+    input.setPlainTextPaste?.(null)
 
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }

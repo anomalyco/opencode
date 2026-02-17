@@ -35,7 +35,13 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+import {
+  createTextFragment,
+  getCursorPosition,
+  getSelectionOffsets,
+  setCursorPosition,
+  setRangeEdge,
+} from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import {
   canNavigateHistoryAtCursor,
@@ -87,6 +93,35 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
+const LARGE_PASTE_FAST_PATH = 4 * 1024
+
+const normalizeText = (text: string) => {
+  if (!text.includes("\r") && !text.includes("\u200B")) return text
+
+  let next = text
+  if (next.includes("\r")) {
+    next = next.replace(/\r\n?/g, "\n")
+  }
+  if (next.includes("\u200B")) {
+    next = next.replace(/\u200B/g, "")
+  }
+  return next
+}
+
+const promptText = (parts: Prompt) => {
+  let text = ""
+  for (const part of parts) {
+    if (!("content" in part)) continue
+    text += part.content
+  }
+  return text
+}
+
+const textPrompt = (text: string): Prompt => {
+  if (!text) return [{ type: "text", content: "", start: 0, end: 0 }]
+  return [{ type: "text", content: text, start: 0, end: text.length }]
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
@@ -108,6 +143,63 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashPopoverRef!: HTMLDivElement
 
   const mirror = { input: false }
+  const paste = {
+    active: false,
+    text: "",
+    source: "",
+    start: 0,
+    end: 0,
+  }
+
+  const clearPlainTextPaste = () => {
+    paste.active = false
+    paste.text = ""
+    paste.source = ""
+    paste.start = 0
+    paste.end = 0
+  }
+
+  const setPlainTextPaste = (value: string | null) => {
+    if (!value || value.length < LARGE_PASTE_FAST_PATH) {
+      clearPlainTextPaste()
+      return false
+    }
+
+    const selection = getSelectionOffsets(editorRef)
+    if (!selection) {
+      clearPlainTextPaste()
+      return false
+    }
+
+    const parts = prompt.current().filter((part) => part.type !== "image")
+    if (parts.some((part) => part.type !== "text")) {
+      clearPlainTextPaste()
+      return false
+    }
+
+    paste.active = true
+    paste.text = value
+    paste.source = promptText(parts)
+    paste.start = selection.start
+    paste.end = selection.end
+    return true
+  }
+
+  const tryFastPlainTextPaste = (value: string) => {
+    if (!setPlainTextPaste(value)) return false
+
+    const source = paste.source
+    const start = Math.max(0, Math.min(source.length, paste.start))
+    const end = Math.max(start, Math.min(source.length, paste.end))
+    const inserted = normalizeText(value)
+    const nextText = source.slice(0, start) + inserted + source.slice(end)
+    const cursorPosition = start + inserted.length
+
+    setEditorText(nextText)
+    setCursorPosition(editorRef, cursorPosition)
+    handleInput()
+    return true
+  }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -510,24 +602,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return pill
   }
 
-  const isNormalizedEditor = () =>
-    Array.from(editorRef.childNodes).every((node) => {
+  const isNormalizedEditor = () => {
+    let node = editorRef.firstChild
+
+    while (node) {
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent ?? ""
-        if (!text.includes("\u200B")) return true
+        if (!text.includes("\u200B")) {
+          node = node.nextSibling
+          continue
+        }
+
         if (text !== "\u200B") return false
 
         const prev = node.previousSibling
         const next = node.nextSibling
         const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
-        return !!prevIsBr && !next
+        if (!prevIsBr || !!next) return false
+
+        node = node.nextSibling
+        continue
       }
+
       if (node.nodeType !== Node.ELEMENT_NODE) return false
       const el = node as HTMLElement
-      if (el.dataset.type === "file") return true
-      if (el.dataset.type === "agent") return true
-      return el.tagName === "BR"
-    })
+      if (el.dataset.type === "file" || el.dataset.type === "agent" || el.tagName === "BR") {
+        node = node.nextSibling
+        continue
+      }
+
+      return false
+    }
+
+    return true
+  }
 
   const renderEditor = (parts: Prompt) => {
     clearEditor()
@@ -613,8 +721,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     let buffer = ""
 
     const flushText = () => {
-      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+      let content = buffer
       buffer = ""
+
+      if (content.includes("\r")) {
+        content = content.replace(/\r\n?/g, "\n")
+      }
+
+      if (content.includes("\u200B")) {
+        content = content.replace(/\u200B/g, "")
+      }
+
       if (!content) return
       parts.push({ type: "text", content, start: position, end: position + content.length })
       position += content.length
@@ -667,19 +784,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
 
-      for (const child of Array.from(el.childNodes)) {
+      let child = el.firstChild
+      while (child) {
         visit(child)
+        child = child.nextSibling
       }
     }
 
-    const children = Array.from(editorRef.childNodes)
-    children.forEach((child, index) => {
-      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
+    const count = editorRef.childNodes.length
+    for (let index = 0; index < count; index++) {
+      const child = editorRef.childNodes[index]
+      if (!child) continue
+
+      const tag = child.nodeType === Node.ELEMENT_NODE ? (child as HTMLElement).tagName : undefined
+      const isBlock = tag === "DIV" || tag === "P"
       visit(child)
-      if (isBlock && index < children.length - 1) {
+      if (isBlock && index < count - 1) {
         buffer += "\n"
       }
-    })
+    }
 
     flushText()
 
@@ -688,10 +811,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleInput = () => {
-    const rawParts = parseFromDOM()
     const images = imageAttachments()
-    const cursorPosition = getCursorPosition(editorRef)
-    const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
+    const fast = (() => {
+      if (!paste.active) return
+
+      const source = paste.source
+      const start = Math.max(0, Math.min(source.length, paste.start))
+      const end = Math.max(start, Math.min(source.length, paste.end))
+      const inserted = normalizeText(paste.text)
+      const rawText = source.slice(0, start) + inserted + source.slice(end)
+      const cursorPosition = start + inserted.length
+      clearPlainTextPaste()
+      return {
+        rawParts: textPrompt(rawText),
+        rawText,
+        cursorPosition,
+      }
+    })()
+
+    const rawParts = fast?.rawParts ?? parseFromDOM()
+    const cursorPosition = fast?.cursorPosition ?? getCursorPosition(editorRef)
+    const rawText = fast?.rawText ?? promptText(rawParts)
     const trimmed = rawText.replace(/\u200B/g, "").trim()
     const hasNonText = rawParts.some((part) => part.type !== "text")
     const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
@@ -728,12 +868,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     resetHistoryNavigation()
 
+    const nextParts = [...rawParts, ...images]
+    const current = prompt.current()
+    const cursor = prompt.cursor()
+    if (isPromptEqual(nextParts, current) && cursor === cursorPosition) {
+      queueScroll()
+      return
+    }
+
     mirror.input = true
-    prompt.set([...rawParts, ...images], cursorPosition)
+    prompt.set(nextParts, cursorPosition)
     queueScroll()
   }
 
   const addPart = (part: ContentPart) => {
+    clearPlainTextPaste()
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) return
 
@@ -828,6 +977,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     isFocused,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
+    setPlainTextPaste,
+    tryFastPlainTextPaste,
     focusEditor: () => {
       editorRef.focus()
       setCursorPosition(editorRef, promptLength(prompt.current()))
