@@ -223,6 +223,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "輸入 shell 命令...",
   "prompt.placeholder.normal": '隨便問點什麼... "{{example}}"',
+  "prompt.placeholder.simple": "隨便問點什麼...",
   "prompt.placeholder.summarizeComments": "摘要評論…",
   "prompt.placeholder.summarizeComment": "摘要這則評論…",
   "prompt.mode.shell": "Shell",
@@ -497,6 +498,9 @@ export const dict = {
 
   "session.messages.jumpToLatest": "跳到最新",
   "session.context.addToContext": "將 {{selection}} 新增到上下文",
+  "session.todo.title": "待辦事項",
+  "session.todo.collapse": "折疊",
+  "session.todo.expand": "展開",
 
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支 ({{branch}})",

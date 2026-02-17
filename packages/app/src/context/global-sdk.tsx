@@ -2,8 +2,13 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
+import z from "zod"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
+
+const abortError = z.object({
+  name: z.literal("AbortError"),
+})
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -93,12 +98,35 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     let streamErrorLogged = false
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+    const aborted = (error: unknown) => abortError.safeParse(error).success
+
+    let attempt: AbortController | undefined
+    const HEARTBEAT_TIMEOUT_MS = 15_000
+    let heartbeat: ReturnType<typeof setTimeout> | undefined
+    const resetHeartbeat = () => {
+      if (heartbeat) clearTimeout(heartbeat)
+      heartbeat = setTimeout(() => {
+        attempt?.abort()
+      }, HEARTBEAT_TIMEOUT_MS)
+    }
+    const clearHeartbeat = () => {
+      if (!heartbeat) return
+      clearTimeout(heartbeat)
+      heartbeat = undefined
+    }
 
     void (async () => {
       while (!abort.signal.aborted) {
+        attempt = new AbortController()
+        const onAbort = () => {
+          attempt?.abort()
+        }
+        abort.signal.addEventListener("abort", onAbort)
         try {
           const events = await eventSdk.global.event({
+            signal: attempt.signal,
             onSseError: (error) => {
+              if (aborted(error)) return
               if (streamErrorLogged) return
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
@@ -109,7 +137,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             },
           })
           let yielded = Date.now()
+          resetHeartbeat()
           for await (const event of events.stream) {
+            resetHeartbeat()
             streamErrorLogged = false
             const directory = event.directory ?? "global"
             const payload = event.payload
@@ -130,7 +160,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             await wait(0)
           }
         } catch (error) {
-          if (!streamErrorLogged) {
+          if (!aborted(error) && !streamErrorLogged) {
             streamErrorLogged = true
             console.error("[global-sdk] event stream failed", {
               url: server.url,
@@ -138,6 +168,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               error,
             })
           }
+        } finally {
+          abort.signal.removeEventListener("abort", onAbort)
+          attempt = undefined
+          clearHeartbeat()
         }
 
         if (abort.signal.aborted) return
@@ -145,7 +179,19 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     })().finally(flush)
 
+    const onVisibility = () => {
+      if (typeof document === "undefined") return
+      if (document.visibilityState !== "visible") return
+      attempt?.abort()
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility)
+    }
+
     onCleanup(() => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility)
+      }
       abort.abort()
       flush()
     })

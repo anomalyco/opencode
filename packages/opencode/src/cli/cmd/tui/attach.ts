@@ -1,4 +1,5 @@
 import { cmd } from "../cmd"
+import { UI } from "@/cli/ui"
 import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 
@@ -16,10 +17,19 @@ export const AttachCommand = cmd({
         type: "string",
         description: "directory to run in",
       })
+      .option("continue", {
+        alias: ["c"],
+        describe: "continue the last session",
+        type: "boolean",
+      })
       .option("session", {
         alias: ["s"],
         type: "string",
         describe: "session id to continue",
+      })
+      .option("fork", {
+        type: "boolean",
+        describe: "fork the session when continuing (use with --continue or --session)",
       })
       .option("password", {
         alias: ["p"],
@@ -30,6 +40,12 @@ export const AttachCommand = cmd({
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
+
+      if (args.fork && !args.continue && !args.session) {
+        UI.error("--fork requires --continue or --session")
+        process.exitCode = 1
+        return
+      }
 
       const directory = (() => {
         if (!args.dir) return undefined
@@ -49,7 +65,11 @@ export const AttachCommand = cmd({
       })()
       await tui({
         url: args.url,
-        args: { sessionID: args.session },
+        args: {
+          continue: args.continue,
+          sessionID: args.session,
+          fork: args.fork,
+        },
         directory,
         headers,
       })
