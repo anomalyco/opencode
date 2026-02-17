@@ -108,6 +108,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashPopoverRef!: HTMLDivElement
 
   const mirror = { input: false }
+  const inset = 44
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -117,7 +118,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const range = selection.getRangeAt(0)
     if (!editorRef.contains(range.startContainer)) return
 
-    const rect = range.getBoundingClientRect()
+    const cursor = getCursorPosition(editorRef)
+    const length = promptLength(prompt.current().filter((part) => part.type !== "image"))
+    if (cursor >= length) {
+      container.scrollTop = container.scrollHeight
+      return
+    }
+
+    const rect = range.getClientRects().item(0) ?? range.getBoundingClientRect()
     if (!rect.height) return
 
     const containerRect = container.getBoundingClientRect()
@@ -130,8 +138,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (bottom > container.scrollTop + container.clientHeight - padding) {
-      container.scrollTop = bottom - container.clientHeight + padding
+    if (bottom > container.scrollTop + container.clientHeight - inset) {
+      container.scrollTop = bottom - container.clientHeight + inset
     }
   }
 
@@ -1059,8 +1067,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
-          class="relative max-h-[240px] overflow-y-auto"
-          ref={(el) => (scrollRef = el)}
+          class="relative"
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
@@ -1074,40 +1081,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div
-            data-component="prompt-input"
-            ref={(el) => {
-              editorRef = el
-              props.ref?.(el)
-            }}
-            role="textbox"
-            aria-multiline="true"
-            aria-label={placeholder()}
-            contenteditable="true"
-            autocapitalize="off"
-            autocorrect="off"
-            spellcheck={false}
-            onInput={handleInput}
-            onPaste={handlePaste}
-            onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => setComposing(false)}
-            onKeyDown={handleKeyDown}
-            classList={{
-              "select-text": true,
-              "w-full pl-3 pr-2 pt-2 pb-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&_[data-type=file]]:text-syntax-property": true,
-              "[&_[data-type=agent]]:text-syntax-type": true,
-              "font-mono!": store.mode === "shell",
-            }}
-          />
-          <Show when={!prompt.dirty()}>
+          <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
             <div
-              class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-              classList={{ "font-mono!": store.mode === "shell" }}
-            >
-              {placeholder()}
-            </div>
-          </Show>
+              data-component="prompt-input"
+              ref={(el) => {
+                editorRef = el
+                props.ref?.(el)
+              }}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={placeholder()}
+              contenteditable="true"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck={false}
+              onInput={handleInput}
+              onPaste={handlePaste}
+              onCompositionStart={() => setComposing(true)}
+              onCompositionEnd={() => setComposing(false)}
+              onKeyDown={handleKeyDown}
+              classList={{
+                "select-text": true,
+                "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "[&_[data-type=file]]:text-syntax-property": true,
+                "[&_[data-type=agent]]:text-syntax-type": true,
+                "font-mono!": store.mode === "shell",
+              }}
+            />
+            <Show when={!prompt.dirty()}>
+              <div
+                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                classList={{ "font-mono!": store.mode === "shell" }}
+              >
+                {placeholder()}
+              </div>
+            </Show>
+          </div>
 
           <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
             <input
