@@ -47,7 +47,7 @@ export function SessionHeaderActions() {
 
   const publish = async () => {
     try {
-      const res = await fetch("/api/auth/deploy-token", { credentials: "include" })
+      const res = await fetch("/auth/deploy-token", { credentials: "include" })
       if (!res.ok) {
         showToast({ variant: "error", title: "Publish failed", description: "Could not get deploy token. Please log in again." })
         return
