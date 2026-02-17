@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like } from "../storage/db"
+import { Database, NotFoundError, eq, and, gte, isNull, desc, like, sql } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -26,6 +26,11 @@ import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+
+function likePathPrefix(worktree: string): string {
+  const escaped = worktree.replace(/\^/g, "^^").replace(/%/g, "^%").replace(/_/g, "^_")
+  return path.join(escaped, "%")
+}
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -515,6 +520,13 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
+    const worktree = Instance.worktree
+    if (worktree !== "/") {
+      conditions.push(
+        sql`(${SessionTable.directory} = ${worktree} OR ${SessionTable.directory} LIKE ${likePathPrefix(worktree)} ESCAPE '^')`,
+      )
+    }
+
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
@@ -546,12 +558,18 @@ export namespace Session {
 
   export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
+    const conditions = [
+      eq(SessionTable.project_id, project.id),
+      eq(SessionTable.parent_id, parentID),
+    ]
+    const worktree = Instance.worktree
+    if (worktree !== "/") {
+      conditions.push(
+        sql`(${SessionTable.directory} = ${worktree} OR ${SessionTable.directory} LIKE ${likePathPrefix(worktree)} ESCAPE '^')`,
+      )
+    }
     const rows = Database.use((db) =>
-      db
-        .select()
-        .from(SessionTable)
-        .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
-        .all(),
+      db.select().from(SessionTable).where(and(...conditions)).all(),
     )
     return rows.map(fromRow)
   })
