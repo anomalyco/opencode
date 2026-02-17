@@ -317,9 +317,12 @@ pub fn spawn_command(
         cmd
     };
 
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
 
     let mut wrap = CommandWrap::from(cmd);
 

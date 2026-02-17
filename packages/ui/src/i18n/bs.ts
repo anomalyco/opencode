@@ -86,6 +86,7 @@ export const dict = {
   "ui.common.question.other": "pitanja",
 
   "ui.common.add": "Dodaj",
+  "ui.common.back": "Nazad",
   "ui.common.cancel": "Otkaži",
   "ui.common.confirm": "Potvrdi",
   "ui.common.dismiss": "Odbaci",
@@ -100,7 +101,10 @@ export const dict = {
   "ui.message.expand": "Proširi poruku",
   "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
+  "ui.message.copyMessage": "Kopiraj poruku",
+  "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
+  "ui.message.interrupted": "Prekinuto",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",
@@ -111,6 +115,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} odgovoreno",
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
-  "ui.question.multiHint": "(odaberi sve što važi)",
+  "ui.question.multiHint": "Odaberi sve što važi",
+  "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
 } satisfies Partial<Record<Keys, string>>

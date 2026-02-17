@@ -223,6 +223,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "Введите команду оболочки...",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
+  "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
   "prompt.placeholder.summarizeComment": "Суммировать комментарий…",
   "prompt.mode.shell": "Оболочка",
@@ -504,6 +505,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Перейти к последнему",
 
   "session.context.addToContext": "Добавить {{selection}} в контекст",
+  "session.todo.title": "Задачи",
+  "session.todo.collapse": "Свернуть",
+  "session.todo.expand": "Развернуть",
 
   "session.new.worktree.main": "Основная ветка",
   "session.new.worktree.mainWithBranch": "Основная ветка ({{branch}})",
