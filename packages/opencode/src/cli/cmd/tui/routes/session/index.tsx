@@ -78,6 +78,7 @@ import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
+import { Identifier } from "@/id/id"
 
 addDefaultParsers(parsers.parsers)
 
@@ -210,7 +211,34 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      local.agent.set("build")
+      const meta = part.state.status === "completed" ? part.state.metadata : undefined
+      if (meta?.cleanContext && meta?.sessionID) {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({ variant: "warning", message: "Select a model before switching to clean context", duration: 3000 })
+        } else {
+          local.agent.set("build")
+          sdk.client.session
+            .prompt({
+              sessionID: meta.sessionID as string,
+              ...selectedModel,
+              messageID: Identifier.ascending("message"),
+              agent: "build",
+              model: selectedModel,
+              parts: [
+                {
+                  id: Identifier.ascending("part"),
+                  type: "text" as const,
+                  text: `The plan at ${meta.plan} has been approved, you can now edit files. Execute the plan`,
+                },
+              ],
+            })
+            .catch(() => {})
+          navigate({ type: "session", sessionID: meta.sessionID as string })
+        }
+      } else {
+        local.agent.set("build")
+      }
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")

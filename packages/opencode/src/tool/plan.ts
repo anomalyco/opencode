@@ -7,6 +7,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { Global } from "../global"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
 
@@ -32,6 +33,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
           custom: false,
           options: [
             { label: "Yes", description: "Switch to build agent and start implementing the plan" },
+            { label: "Clean context", description: "Start a new session and implement the plan with a fresh context" },
             { label: "No", description: "Stay with plan agent to continue refining the plan" },
           ],
         },
@@ -41,6 +43,27 @@ export const PlanExitTool = Tool.define("plan_exit", {
 
     const answer = answers[0]?.[0]
     if (answer === "No") throw new Question.RejectedError()
+
+    if (answer === "Clean context") {
+      const newSession = await Session.create({
+        permission: [
+          {
+            permission: "external_directory",
+            pattern: path.join(Global.Path.data, "plans", "*"),
+            action: "allow" as const,
+          },
+        ],
+      })
+      return {
+        title: "Switching to build agent (clean context)",
+        output: "User approved switching to build agent with clean context. A new session has been created.",
+        metadata: {
+          cleanContext: true,
+          sessionID: newSession.id,
+          plan,
+        },
+      }
+    }
 
     const model = await getLastModel(ctx.sessionID)
 
@@ -67,7 +90,11 @@ export const PlanExitTool = Tool.define("plan_exit", {
     return {
       title: "Switching to build agent",
       output: "User approved switching to build agent. Wait for further instructions.",
-      metadata: {},
+      metadata: {
+        cleanContext: false,
+        sessionID: "",
+        plan: "",
+      },
     }
   },
 })
