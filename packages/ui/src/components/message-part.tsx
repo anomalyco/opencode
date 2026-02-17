@@ -117,6 +117,7 @@ function createThrottledValue(getValue: () => string) {
   createEffect(() => {
     const next = getValue()
     const now = Date.now()
+
     const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
     if (remaining <= 0) {
       if (timeout) {
@@ -250,6 +251,126 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
+function renderable(part: PartType) {
+  if (part.type === "tool") {
+    if (HIDDEN_TOOLS.has(part.tool)) return false
+    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    return true
+  }
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
+  return !!PART_MAPPING[part.type]
+}
+
+export function AssistantParts(props: {
+  messages: AssistantMessage[]
+  showAssistantCopyPartID?: string | null
+  working?: boolean
+}) {
+  const data = useData()
+  const emptyParts: PartType[] = []
+
+  const grouped = createMemo(() => {
+    const keys: string[] = []
+    const items: Record<
+      string,
+      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] }
+    > = {}
+    const push = (
+      key: string,
+      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] },
+    ) => {
+      keys.push(key)
+      items[key] = item
+    }
+
+    const parts = props.messages.flatMap((message) =>
+      list(data.store.part?.[message.id], emptyParts)
+        .filter(renderable)
+        .map((part) => ({ message, part })),
+    )
+
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.part.id}`, {
+        type: "context",
+        parts: parts
+          .slice(start, end + 1)
+          .map((x) => x.part)
+          .filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((item, index) => {
+      if (isContextGroupTool(item.part)) {
+        if (start < 0) start = index
+        return
+      }
+
+      flush(index - 1)
+      push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
+    })
+
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
+
+  const last = createMemo(() => grouped().keys.at(-1))
+
+  return (
+    <For each={grouped().keys}>
+      {(key) => {
+        const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
+        const tail = createMemo(() => last() === key)
+        return (
+          <>
+            <Show when={ctx()}>
+              {(entry) => <ContextToolGroup parts={entry().parts} busy={props.working && tail()} />}
+            </Show>
+            <Show when={part()}>
+              {(entry) => (
+                <Part
+                  part={entry().part}
+                  message={entry().message}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                />
+              )}
+            </Show>
+          </>
+        )
+      }}
+    </For>
+  )
+}
 
 function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
@@ -390,6 +511,8 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
+      if (!renderable(part)) return
+
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
         return
@@ -408,31 +531,43 @@ export function AssistantMessageDisplay(props: {
     <For each={grouped().keys}>
       {(key) => {
         const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
         return (
-          <Show when={item()}>
-            {(value) => {
-              const entry = value()
-              if (entry.type === "context") return <ContextToolGroup parts={entry.parts} />
-              return (
+          <>
+            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
+            <Show when={part()}>
+              {(entry) => (
                 <Part
-                  part={entry.part}
+                  part={entry().part}
                   message={props.message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                 />
-              )
-            }}
-          </Show>
+              )}
+            </Show>
+          </>
         )
       }}
     </For>
   )
 }
 
-function ContextToolGroup(props: { parts: ToolPart[] }) {
+function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  const pending = createMemo(() =>
-    props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
+  const pending = createMemo(
+    () =>
+      !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
   const details = createMemo(() => summary().join(", "))
@@ -445,7 +580,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
             when={pending()}
             fallback={
               <span data-slot="context-tool-group-title">
-                <span data-slot="context-tool-group-label">Gathered context</span>
+                <span data-slot="context-tool-group-label">{i18n.t("ui.sessionTurn.status.gatheredContext")}</span>
                 <Show when={details().length}>
                   <span data-slot="context-tool-group-summary">{details()}</span>
                 </Show>
