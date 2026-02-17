@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { children, createSignal, Match, onMount, splitProps, Switch, type JSX } from "solid-js"
+import { createSignal, Match, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
@@ -8,6 +8,7 @@ export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   contentClass?: string
   contentStyle?: JSX.CSSProperties
   inactive?: boolean
+  forceOpen?: boolean
 }
 
 export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
@@ -32,41 +33,33 @@ export function TooltipKeybind(props: TooltipKeybindProps) {
 
 export function Tooltip(props: TooltipProps) {
   const [open, setOpen] = createSignal(false)
-  const [local, others] = splitProps(props, ["children", "class", "contentClass", "contentStyle", "inactive"])
-
-  const c = children(() => local.children)
-
-  onMount(() => {
-    const childElements = c()
-    if (childElements instanceof HTMLElement) {
-      childElements.addEventListener("focus", () => setOpen(true))
-      childElements.addEventListener("blur", () => setOpen(false))
-    } else if (Array.isArray(childElements)) {
-      for (const child of childElements) {
-        if (child instanceof HTMLElement) {
-          child.addEventListener("focus", () => setOpen(true))
-          child.addEventListener("blur", () => setOpen(false))
-        }
-      }
-    }
-  })
+  const [local, others] = splitProps(props, [
+    "children",
+    "class",
+    "contentClass",
+    "contentStyle",
+    "inactive",
+    "forceOpen",
+    "value",
+  ])
 
   return (
     <Switch>
       <Match when={local.inactive}>{local.children}</Match>
       <Match when={true}>
-        <KobalteTooltip forceMount gutter={4} {...others} open={open()} onOpenChange={setOpen}>
+        <KobalteTooltip gutter={4} {...others} open={local.forceOpen || open()} onOpenChange={setOpen}>
           <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
-            {c()}
+            {local.children}
           </KobalteTooltip.Trigger>
           <KobalteTooltip.Portal>
             <KobalteTooltip.Content
               data-component="tooltip"
               data-placement={props.placement}
+              data-force-open={local.forceOpen}
               class={local.contentClass}
               style={local.contentStyle}
             >
-              {others.value}
+              {local.value}
               {/* <KobalteTooltip.Arrow data-slot="tooltip-arrow" /> */}
             </KobalteTooltip.Content>
           </KobalteTooltip.Portal>

@@ -158,18 +158,34 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
     }
 
+    // Build per-file metadata for UI rendering (used for both permission and result)
+    const files = fileChanges.map((change) => ({
+      filePath: change.filePath,
+      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
+      type: change.type,
+      diff: change.diff,
+      before: change.oldContent,
+      after: change.newContent,
+      additions: change.additions,
+      deletions: change.deletions,
+      movePath: change.movePath,
+    }))
+
     // Check permissions if needed
+    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath))
     await ctx.ask({
       permission: "edit",
-      patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
+      patterns: relativePaths,
       always: ["*"],
       metadata: {
+        filepath: relativePaths.join(", "),
         diff: totalDiff,
+        files,
       },
     })
 
     // Apply the changes
-    const changedFiles: string[] = []
+    const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
     for (const change of fileChanges) {
       const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
@@ -178,12 +194,12 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           // Create parent directories (recursive: true is safe on existing/root dirs)
           await fs.mkdir(path.dirname(change.filePath), { recursive: true })
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "add" })
           break
 
         case "update":
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "change" })
           break
 
         case "move":
@@ -192,13 +208,14 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             await fs.mkdir(path.dirname(change.movePath), { recursive: true })
             await fs.writeFile(change.movePath, change.newContent, "utf-8")
             await fs.unlink(change.filePath)
-            changedFiles.push(change.movePath)
+            updates.push({ file: change.filePath, event: "unlink" })
+            updates.push({ file: change.movePath, event: "add" })
           }
           break
 
         case "delete":
           await fs.unlink(change.filePath)
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "unlink" })
           break
       }
 
@@ -210,8 +227,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     // Publish file change events
-    for (const filePath of changedFiles) {
-      await Bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
+    for (const update of updates) {
+      await Bus.publish(FileWatcher.Event.Updated, update)
     }
 
     // Notify LSP of file changes and collect diagnostics
@@ -250,19 +267,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
-
-    // Build per-file metadata for UI rendering
-    const files = fileChanges.map((change) => ({
-      filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
-      type: change.type,
-      diff: change.diff,
-      before: change.oldContent,
-      after: change.newContent,
-      additions: change.additions,
-      deletions: change.deletions,
-      movePath: change.movePath,
-    }))
 
     return {
       title: output,

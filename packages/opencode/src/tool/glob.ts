@@ -38,6 +38,7 @@ export const GlobTool = Tool.define("glob", {
     for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
+      signal: ctx.abort,
     })) {
       if (files.length >= limit) {
         truncated = true
@@ -61,7 +62,9 @@ export const GlobTool = Tool.define("glob", {
       output.push(...files.map((f) => f.path))
       if (truncated) {
         output.push("")
-        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
+        output.push(
+          `(Results are truncated: showing first ${limit} results. Consider using a more specific path or pattern.)`,
+        )
       }
     }
 

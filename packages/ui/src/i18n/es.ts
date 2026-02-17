@@ -1,9 +1,25 @@
 export const dict = {
   "ui.sessionReview.title": "Cambios de la sesión",
+  "ui.sessionReview.title.lastTurn": "Cambios del último turno",
   "ui.sessionReview.diffStyle.unified": "Unificado",
   "ui.sessionReview.diffStyle.split": "Dividido",
   "ui.sessionReview.expandAll": "Expandir todo",
   "ui.sessionReview.collapseAll": "Colapsar todo",
+  "ui.sessionReview.change.added": "Añadido",
+  "ui.sessionReview.change.removed": "Eliminado",
+  "ui.sessionReview.change.modified": "Modificado",
+  "ui.sessionReview.image.loading": "Cargando...",
+  "ui.sessionReview.image.placeholder": "Imagen",
+  "ui.sessionReview.largeDiff.title": "Diff demasiado grande para renderizar",
+  "ui.sessionReview.largeDiff.meta": "Límite: {{lines}} líneas / {{limit}}. Actual: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Renderizar de todos modos",
+
+  "ui.lineComment.label.prefix": "Comentar en ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Comentando en ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Añadir comentario",
+  "ui.lineComment.submit": "Comentar",
 
   "ui.sessionTurn.steps.show": "Mostrar pasos",
   "ui.sessionTurn.steps.hide": "Ocultar pasos",
@@ -12,6 +28,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "reintentando",
   "ui.sessionTurn.retry.inSeconds": "en {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Límite de uso gratuito excedido",
+  "ui.sessionTurn.error.addCredits": "Añadir créditos",
 
   "ui.sessionTurn.status.delegating": "Delegando trabajo",
   "ui.sessionTurn.status.planning": "Planificando siguientes pasos",
@@ -33,17 +51,20 @@ export const dict = {
 
   "ui.list.loading": "Cargando",
   "ui.list.empty": "Sin resultados",
+  "ui.list.clearFilter": "Borrar filtro",
   "ui.list.emptyWithFilter.prefix": "Sin resultados para",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nuevo mensaje",
 
   "ui.textField.copyToClipboard": "Copiar al portapapeles",
+  "ui.textField.copyLink": "Copiar enlace",
   "ui.textField.copied": "Copiado",
 
   "ui.imagePreview.alt": "Vista previa de imagen",
 
   "ui.tool.read": "Leer",
+  "ui.tool.loaded": "Cargado",
   "ui.tool.list": "Listar",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -64,6 +85,7 @@ export const dict = {
   "ui.common.cancel": "Cancelar",
   "ui.common.confirm": "Confirmar",
   "ui.common.dismiss": "Descartar",
+  "ui.common.close": "Cerrar",
   "ui.common.next": "Siguiente",
   "ui.common.submit": "Enviar",
 

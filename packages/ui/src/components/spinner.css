@@ -1,5 +1,5 @@
 [data-component="spinner"] {
-  color: var(--text-base);
+  color: inherit;
   flex-shrink: 0;
   width: 18px;
   aspect-ratio: 1;

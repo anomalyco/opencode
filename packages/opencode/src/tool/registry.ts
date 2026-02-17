@@ -16,7 +16,7 @@ import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
-import { type ToolDefinition } from "@opencode-ai/plugin"
+import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
@@ -35,18 +35,15 @@ export namespace ToolRegistry {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
-    for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({
-        cwd: dir,
-        absolute: true,
-        followSymlinks: true,
-        dot: true,
-      })) {
-        const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
-        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-        }
+    const matches = await Config.directories().then((dirs) =>
+      dirs.flatMap((dir) => [...glob.scanSync({ cwd: dir, absolute: true, followSymlinks: true, dot: true })]),
+    )
+    if (matches.length) await Config.waitForDependencies()
+    for (const match of matches) {
+      const namespace = path.basename(match, path.extname(match))
+      const mod = await import(match)
+      for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
       }
     }
 
@@ -67,7 +64,12 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
+          const pluginCtx = {
+            ...ctx,
+            directory: Instance.directory,
+            worktree: Instance.worktree,
+          } as unknown as PluginToolContext
+          const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
@@ -92,10 +94,11 @@ export namespace ToolRegistry {
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
+    const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
     return [
       InvalidTool,
-      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
+      ...(question ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
@@ -105,7 +108,7 @@ export namespace ToolRegistry {
       TaskTool,
       WebFetchTool,
       TodoWriteTool,
-      TodoReadTool,
+      // TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
@@ -147,9 +150,17 @@ export namespace ToolRegistry {
         })
         .map(async (t) => {
           using _ = log.time(t.id)
+          const tool = await t.init({ agent })
+          const output = {
+            description: tool.description,
+            parameters: tool.parameters,
+          }
+          await Plugin.trigger("tool.definition", { toolID: t.id }, output)
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...tool,
+            description: output.description,
+            parameters: output.parameters,
           }
         }),
     )

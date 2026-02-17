@@ -1,10 +1,25 @@
 export const dict = {
   "ui.sessionReview.title": "Sessionsændringer",
+  "ui.sessionReview.title.lastTurn": "Ændringer fra sidste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Opdelt",
   "ui.sessionReview.expandAll": "Udvid alle",
   "ui.sessionReview.collapseAll": "Skjul alle",
 
+  "ui.sessionReview.change.added": "Tilføjet",
+  "ui.sessionReview.change.removed": "Fjernet",
+  "ui.sessionReview.change.modified": "Ændret",
+  "ui.sessionReview.image.loading": "Indlæser...",
+  "ui.sessionReview.image.placeholder": "Billede",
+  "ui.sessionReview.largeDiff.title": "Diff er for stor til at blive vist",
+  "ui.sessionReview.largeDiff.meta": "Grænse: {{lines}} linjer / {{limit}}. Nuværende: {{current}}.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Vis alligevel",
+  "ui.lineComment.label.prefix": "Kommenter på ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Tilføj kommentar",
+  "ui.lineComment.submit": "Kommenter",
   "ui.sessionTurn.steps.show": "Vis trin",
   "ui.sessionTurn.steps.hide": "Skjul trin",
   "ui.sessionTurn.summary.response": "Svar",
@@ -12,6 +27,8 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "prøver igen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
+  "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",
@@ -33,25 +50,28 @@ export const dict = {
 
   "ui.list.loading": "Indlæser",
   "ui.list.empty": "Ingen resultater",
+  "ui.list.clearFilter": "Ryd filter",
   "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Ny besked",
 
   "ui.textField.copyToClipboard": "Kopier til udklipsholder",
+  "ui.textField.copyLink": "Kopier link",
   "ui.textField.copied": "Kopieret",
 
   "ui.imagePreview.alt": "Billedforhåndsvisning",
 
   "ui.tool.read": "Læs",
+  "ui.tool.loaded": "Indlæst",
   "ui.tool.list": "Liste",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhentning",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
-  "ui.tool.todos": "To-dos",
-  "ui.tool.todos.read": "Læs to-dos",
+  "ui.tool.todos": "Opgaver",
+  "ui.tool.todos.read": "Læs opgaver",
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
 
@@ -64,6 +84,7 @@ export const dict = {
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
+  "ui.common.close": "Luk",
   "ui.common.next": "Næste",
   "ui.common.submit": "Indsend",
 
@@ -80,7 +101,7 @@ export const dict = {
   "ui.patch.action.deleted": "Slettet",
   "ui.patch.action.created": "Oprettet",
   "ui.patch.action.moved": "Flyttet",
-  "ui.patch.action.patched": "Patched",
+  "ui.patch.action.patched": "Patchet",
 
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",

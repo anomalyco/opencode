@@ -144,11 +144,58 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZEN_BLACK": {
+    "ZEN_BLACK_LIMITS": {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_BLACK_PRICE": {
+      "plan100": string
+      "plan20": string
+      "plan200": string
+      "product": string
+      "type": "sst.sst.Linkable"
+    }
     "ZEN_MODELS1": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS10": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS11": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS12": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS13": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS14": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS15": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS16": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS17": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS18": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS19": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -156,7 +203,51 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS20": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS21": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS22": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS23": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS24": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS25": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS26": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS27": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS28": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS29": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS3": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS30": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -177,6 +268,10 @@ declare module "sst" {
       "value": string
     }
     "ZEN_MODELS8": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS9": {
       "type": "sst.sst.Secret"
       "value": string
     }

@@ -10,7 +10,7 @@ export namespace Question {
 
   export const Option = z
     .object({
-      label: z.string().max(30).describe("Display text (1-5 words, concise)"),
+      label: z.string().describe("Display text (1-5 words, concise)"),
       description: z.string().describe("Explanation of choice"),
     })
     .meta({
@@ -21,7 +21,7 @@ export namespace Question {
   export const Info = z
     .object({
       question: z.string().describe("Complete question"),
-      header: z.string().max(30).describe("Very short label (max 30 chars)"),
+      header: z.string().describe("Very short label (max 30 chars)"),
       options: z.array(Option).describe("Available choices"),
       multiple: z.boolean().optional().describe("Allow selecting multiple choices"),
       custom: z.boolean().optional().describe("Allow typing a custom answer (default: true)"),
