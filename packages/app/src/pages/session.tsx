@@ -23,7 +23,6 @@ import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { usePermission } from "@/context/permission"
 import { SessionHeader, NewSessionView } from "@/components/session"
-import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 import { createOpenReviewFile } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
@@ -108,46 +107,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  if (import.meta.env.DEV) {
-    createEffect(
-      on(
-        () => [params.dir, params.id] as const,
-        ([dir, id], prev) => {
-          if (!id) return
-          navParams({ dir, from: prev?.[1], to: id })
-        },
-      ),
-    )
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!prompt.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:prompt-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!terminal.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:terminal-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!file.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:file-view-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (sync.data.message[id] === undefined) return
-      navMark({ dir: params.dir, to: id, name: "session:data-ready" })
-    })
-  }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
@@ -1140,11 +1099,6 @@ export default function Page() {
                     anchor={anchor}
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}
-                    onFirstTurnMount={() => {
-                      const id = params.id
-                      if (!id) return
-                      navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
-                    }}
                     lastUserMessageID={lastUserMessage()?.id}
                   />
                 </Show>
