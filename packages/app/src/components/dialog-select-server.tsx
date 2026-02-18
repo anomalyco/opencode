@@ -214,7 +214,7 @@ export function DialogSelectServer() {
     })
   }
 
-  const replaceServer = (original: ServerConnection.Http, next: ServerConnection.HttpBase) => {
+  const replaceServer = (original: ServerConnection.Http, next: string) => {
     const active = server.url
     const newConn = server.add(next)
     if (!newConn) return
@@ -274,7 +274,7 @@ export function DialogSelectServer() {
     if (!persist && store.status[value.http.url]?.healthy === false) return
     dialog.close()
     if (persist) {
-      server.add(value.http)
+      server.add(value.http.url)
       navigate("/")
       return
     }
@@ -347,7 +347,7 @@ export function DialogSelectServer() {
       return
     }
 
-    replaceServer(original, { url: normalized })
+    replaceServer(original, normalized)
 
     resetEdit()
   }
@@ -447,7 +447,7 @@ export function DialogSelectServer() {
                     }
                   >
                     <ServerRow
-                      url={i.http.url}
+                      conn={i}
                       status={store.status[i.http.url]}
                       dimmed={store.status[i.http.url]?.healthy === false}
                       class="flex items-center gap-3 px-4 min-w-0 flex-1"
@@ -466,18 +466,18 @@ export function DialogSelectServer() {
                         <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
                       </Show>
 
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                          onClick={(e: MouseEvent) => e.stopPropagation()}
-                          onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content class="mt-1">
-                            <Show when={i.type === "http"}>
+                      <Show when={i.type === "http"}>
+                        <DropdownMenu>
+                          <DropdownMenu.Trigger
+                            as={IconButton}
+                            icon="dot-grid"
+                            variant="ghost"
+                            class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                            onClick={(e: MouseEvent) => e.stopPropagation()}
+                            onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                          />
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content class="mt-1">
                               <DropdownMenu.Item
                                 onSelect={() => {
                                   setStore("editServer", {
@@ -490,31 +490,33 @@ export function DialogSelectServer() {
                               >
                                 <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canDefault() && defaultUrl() !== i.http.url}>
-                              <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
+                              <Show when={canDefault() && defaultUrl() !== i.http.url && i.type === "http"}>
+                                <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.default")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <Show when={canDefault() && defaultUrl() === i.http.url}>
+                                <DropdownMenu.Item onSelect={() => setDefault(null)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.defaultRemove")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                onSelect={() => handleRemove(ServerConnection.key(i))}
+                                class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                              >
                                 <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.default")}
+                                  {language.t("dialog.server.menu.delete")}
                                 </DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canDefault() && defaultUrl() === i.http.url}>
-                              <DropdownMenu.Item onSelect={() => setDefault(null)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.defaultRemove")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              onSelect={() => handleRemove(ServerConnection.key(i))}
-                              class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu>
+                      </Show>
                     </div>
                   </Show>
                 </div>

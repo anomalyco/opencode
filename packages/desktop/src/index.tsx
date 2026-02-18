@@ -23,7 +23,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
-import { type Accessor, createResource, createSignal, type JSX, onCleanup, onMount, Show } from "solid-js"
+import { type Accessor, createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -449,6 +449,7 @@ render(() => {
           {(data) => {
             const [servers] = createStore<Array<ServerConnection.Sidecar>>([
               {
+                displayName: "Local Server",
                 type: "sidecar",
                 variant: "base",
                 http: {

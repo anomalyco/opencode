@@ -24,6 +24,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     })()
 
+    const currentServer = server.current
+    if (!currentServer) throw new Error("No server available")
+
     const eventSdk = createSdkForServer({
       signal: abort.signal,
       fetch: eventFetch,

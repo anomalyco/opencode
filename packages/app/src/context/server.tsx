@@ -94,19 +94,23 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
-        list: [] as (string | ServerConnection.HttpBase)[],
+        list: [] as string[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
 
-    const allServers = (): Array<ServerConnection.Any> => [
-      ...(props.servers ?? []),
-      ...store.list.map((value) => ({
-        type: "http" as const,
-        http: typeof value === "string" ? { url: value } : value,
-      })),
-    ]
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const list = [
+        ...(props.servers ?? []),
+        ...store.list.map((value) => ({
+          type: "http" as const,
+          http: typeof value === "string" ? { url: value } : value,
+        })),
+      ]
+      console.log([...list])
+      return list
+    })
 
     const [state, setState] = createStore({
       active: ServerConnection.key({ type: "http", http: { url: props.defaultUrl } }),
@@ -146,13 +150,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       setState("active", url)
     }
 
-    function add(input: ServerConnection.HttpBase) {
-      const url = normalizeServerUrl(input.url)
+    function add(input: string) {
+      const url = normalizeServerUrl(input)
       if (!url) return
       return batch(() => {
-        const http: ServerConnection.HttpBase = { ...input, url }
+        const http: ServerConnection.HttpBase = { url }
         if (!store.list.includes(url)) {
-          setStore("list", store.list.length, http)
+          setStore("list", store.list.length, url)
         }
         const conn: ServerConnection.Http = { type: "http", http }
         setState("active", ServerConnection.key(conn))
@@ -193,7 +197,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
-    const current = createMemo(() => allServers().find((s) => s.http.url === state.active))
+    const current = createMemo(() => allServers().find((s) => s.http.url === state.active) ?? allServers()[0])
 
     return {
       ready: isReady,
@@ -209,7 +213,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         return allServers()
       },
       get current() {
-        return current()!
+        return current()
       },
       get http() {
         const c = current()

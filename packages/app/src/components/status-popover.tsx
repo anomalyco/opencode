@@ -166,8 +166,8 @@ export function StatusPopover() {
     const current = server.current
     const list = server.list
     if (!current) return list
-    if (!list.includes(current)) return [current, ...list]
-    return [current, ...list.filter((item) => item !== current)]
+    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
+    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
   const health = useServerHealth(servers, fetcher)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.url, health))
@@ -267,7 +267,7 @@ export function StatusPopover() {
                         }}
                       >
                         <ServerRow
-                          url={s.http.url}
+                          conn={s}
                           status={health[s.http.url]}
                           dimmed={isBlocked()}
                           class="flex items-center gap-2 w-full min-w-0"
