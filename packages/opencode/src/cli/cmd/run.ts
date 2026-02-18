@@ -74,13 +74,6 @@ function fallback(part: ToolPart) {
   })
 }
 
-function errored(part: ToolPart) {
-  inline({
-    icon: "✗",
-    title: `${part.tool} failed`,
-  })
-}
-
 function glob(info: ToolProps<typeof GlobTool>) {
   const root = info.input.path ?? ""
   const title = `Glob "${info.input.pattern}"`
@@ -469,7 +462,10 @@ export const RunCommand = cmd({
                 tool(part)
                 continue
               }
-              errored(part)
+              inline({
+                icon: "✗",
+                title: `${part.tool} failed`,
+              })
               UI.error(part.state.error)
             }
 
