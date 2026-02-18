@@ -282,7 +282,7 @@
     }
 
     [data-slot="tabs-trigger-wrapper"] {
-      height: 26px;
+      height: 24px;
       border-radius: 6px;
       color: var(--text-weak);
 
