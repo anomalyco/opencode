@@ -42,6 +42,14 @@
     padding-right: 1px;
   }
 
+  [data-slot="session-review-actions"] [data-component="radio-group"] {
+    [data-slot="radio-group-wrapper"],
+    [data-slot="radio-group-indicator"],
+    [data-slot="radio-group-item-control"] {
+      border-radius: 6px;
+    }
+  }
+
   [data-component="sticky-accordion-header"] {
     top: 40px;
   }
