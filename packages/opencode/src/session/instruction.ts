@@ -45,6 +45,11 @@ export namespace InstructionPrompt {
   const state = Instance.state(() => {
     return {
       claims: new Map<string, Set<string>>(),
+      // Cache instruction file contents within a session to avoid re-reading
+      // from disk on every LLM call. This ensures the system prompt stays
+      // byte-identical across calls, enabling prefix caching for providers
+      // like DeepInfra that use automatic prefix matching.
+      systemCache: undefined as string[] | undefined,
     }
   })
 
@@ -66,6 +71,14 @@ export namespace InstructionPrompt {
 
   export function clear(messageID: string) {
     state().claims.delete(messageID)
+  }
+
+  /**
+   * Invalidate the cached system instructions. Call this when instruction
+   * files may have changed (e.g. after a tool writes to AGENTS.md).
+   */
+  export function invalidateSystemCache() {
+    state().systemCache = undefined
   }
 
   export async function systemPaths() {
@@ -116,6 +129,12 @@ export namespace InstructionPrompt {
   }
 
   export async function system() {
+    // Return cached result if available to keep the system prompt
+    // byte-identical across calls within a session. This is critical
+    // for automatic prefix caching (used by DeepInfra, OpenAI, etc.)
+    const cached = state().systemCache
+    if (cached) return cached
+
     const config = await Config.get()
     const paths = await systemPaths()
 
@@ -141,7 +160,9 @@ export namespace InstructionPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
 
-    return Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    const result = await Promise.all([...files, ...fetches]).then((r) => r.filter(Boolean))
+    state().systemCache = result
+    return result
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
