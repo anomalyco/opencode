@@ -51,6 +51,9 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { createPromptPair } from "./prompt-input/autocomplete-pair"
+import { createModelAutocomplete, createAutocompleteSettings } from "./prompt-input/autocomplete-model"
+import { GhostText } from "./prompt-input/ghost-text"
 
 interface PromptInputProps {
   class?: string
@@ -654,14 +657,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const hasNonText = rawParts.some((part) => part.type !== "text")
     const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
 
-    console.log("[DEBUG handleInput]", {
-      rawText,
-      trimmed,
-      shouldReset,
-      rawPartsLength: rawParts.length,
-      imagesLength: images.length,
-    })
-
     if (shouldReset) {
       closePopover()
       resetHistoryNavigation()
@@ -695,13 +690,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     resetHistoryNavigation()
 
     mirror.input = true
-    console.log("[DEBUG handleInput] calling prompt.set", {
-      rawParts,
-      images,
-      cursorPosition,
-    })
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
+
+    // Schedule model prediction after user stops typing (500ms debounce)
+    schedulePrediction()
   }
 
   const addPart = (part: ContentPart) => {
@@ -807,6 +800,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
+  const { handlePairKeyDown } = createPromptPair({
+    editor: () => editorRef,
+    addPart,
+  })
+
+  const { settings: autocompleteSettings } = createAutocompleteSettings()
+
+  const { ghostText, schedulePrediction, handleGhostKeyDown } = createModelAutocomplete({
+    enabled: () => autocompleteSettings.enabled,
+    predictionModel: () => autocompleteSettings.model,
+    getCurrentPromptText: () =>
+      prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join(""),
+    addPart,
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
@@ -844,6 +855,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }
         }
       }
+    }
+
+    // Ghost text: Tab accepts, Escape dismisses, any key dismisses
+    // Must check before popover Tab handling so Tab can accept ghost text
+    if (ghostText()) {
+      handleGhostKeyDown(event)
+      // If Tab was consumed by ghost text, stop here
+      if (event.defaultPrevented) return
+    }
+
+    // Pair auto-completion - call before other key logic
+    // The pair handler skips when metaKey/ctrlKey/altKey are held or IME is composing
+    // It does NOT interfere with @, /, or ! triggers (those are not pair chars)
+    if (!store.popover && store.mode !== "shell" && !isImeComposing(event)) {
+      if (handlePairKeyDown(event)) return
     }
 
     if (event.key === "!" && store.mode === "normal") {
@@ -1043,7 +1069,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
-              "font-mono!": store.mode === "shell",
+              "font-mono!": true,
             }}
           />
           <Show when={!prompt.dirty()}>
@@ -1052,6 +1078,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
+        <GhostText text={ghostText()} />
         <div class="relative p-3 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0 flex-1">
             <Switch>
