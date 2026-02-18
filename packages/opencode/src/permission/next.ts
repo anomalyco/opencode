@@ -45,7 +45,15 @@ export namespace PermissionNext {
 
   export function fromConfig(permission: Config.Permission) {
     const ruleset: Ruleset = []
-    for (const [key, value] of Object.entries(permission)) {
+    // Process wildcard permission keys first so that specific tool rules
+    // (like "bash") always appear later and win via findLast.
+    // This prevents key ordering issues from mergeDeep where "*" can end up
+    // after specific tools in the object.
+    // See: https://github.com/anomalyco/opencode/issues/8832
+    const entries = Object.entries(permission)
+    const wildcards = entries.filter(([key]) => key.includes("*"))
+    const rest = entries.filter(([key]) => !key.includes("*"))
+    for (const [key, value] of [...wildcards, ...rest]) {
       if (typeof value === "string") {
         ruleset.push({
           permission: key,

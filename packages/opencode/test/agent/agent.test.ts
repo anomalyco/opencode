@@ -652,6 +652,19 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
+test("root-level permission config is respected", () => {
+  // https://github.com/anomalyco/opencode/issues/8832
+  // User has { "permission": { "*": "ask", "bash": { "*": "ask", "ls *": "allow" } } }
+  // After config merging, key order may put "*" after "bash", so { *, *, ask }
+  // ends up after { bash, ls *, allow } in the ruleset. The specific bash rule
+  // should still win over the catch-all "*" rule.
+  const ruleset = PermissionNext.fromConfig({
+    bash: { "*": "ask", "ls *": "allow" },
+    "*": "ask",
+  })
+  expect(PermissionNext.evaluate("bash", "ls -la", ruleset).action).toBe("allow")
+})
+
 test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
