@@ -157,7 +157,7 @@
     flex-grow: 1;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     min-width: 0;
   }
 
