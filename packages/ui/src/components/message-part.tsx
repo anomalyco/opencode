@@ -50,6 +50,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
   range: {
@@ -865,6 +866,27 @@ export interface ToolProps {
   locked?: boolean
 }
 
+/**
+ * A scrollable tool output container that auto-scrolls to the bottom
+ * while the tool is running (tail -f effect). Respects user scroll —
+ * if the user scrolls up, auto-scroll pauses until they scroll back down.
+ */
+function ScrollableToolOutput(props: { children: JSX.Element; status?: string }) {
+  const autoScroll = createAutoScroll({
+    working: () => props.status !== "completed" && props.status !== "error",
+  })
+  return (
+    <div
+      ref={autoScroll.scrollRef}
+      onScroll={autoScroll.handleScroll}
+      data-component="tool-output"
+      data-scrollable
+    >
+      <div ref={autoScroll.contentRef}>{props.children}</div>
+    </div>
+  )
+}
+
 export type ToolComponent = Component<ToolProps>
 
 const state: Record<
@@ -1205,9 +1227,9 @@ ToolRegistry.register({
       >
         <Show when={props.output}>
           {(output) => (
-            <div data-component="tool-output" data-scrollable>
+            <ScrollableToolOutput status={props.status}>
               <Markdown text={output()} />
-            </div>
+            </ScrollableToolOutput>
           )}
         </Show>
       </BasicTool>
@@ -1231,9 +1253,9 @@ ToolRegistry.register({
       >
         <Show when={props.output}>
           {(output) => (
-            <div data-component="tool-output" data-scrollable>
+            <ScrollableToolOutput status={props.status}>
               <Markdown text={output()} />
-            </div>
+            </ScrollableToolOutput>
           )}
         </Show>
       </BasicTool>
@@ -1260,9 +1282,9 @@ ToolRegistry.register({
       >
         <Show when={props.output}>
           {(output) => (
-            <div data-component="tool-output" data-scrollable>
+            <ScrollableToolOutput status={props.status}>
               <Markdown text={output()} />
-            </div>
+            </ScrollableToolOutput>
           )}
         </Show>
       </BasicTool>
@@ -1412,6 +1434,9 @@ ToolRegistry.register({
       return `$ ${cmd}${out ? "\n\n" + out : ""}`
     })
     const [copied, setCopied] = createSignal(false)
+    const autoScroll = createAutoScroll({
+      working: () => props.status !== "completed" && props.status !== "error",
+    })
 
     const handleCopy = async () => {
       const content = text()
@@ -1447,8 +1472,8 @@ ToolRegistry.register({
               />
             </Tooltip>
           </div>
-          <div data-slot="bash-scroll" data-scrollable>
-            <pre data-slot="bash-pre">
+          <div ref={autoScroll.scrollRef} onScroll={autoScroll.handleScroll} data-slot="bash-scroll" data-scrollable>
+            <pre ref={autoScroll.contentRef} data-slot="bash-pre">
               <code>{text()}</code>
             </pre>
           </div>

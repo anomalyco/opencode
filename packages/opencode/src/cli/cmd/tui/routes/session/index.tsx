@@ -1656,7 +1656,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
+    return ["…", ...lines().slice(-10)].join("\n")
   })
 
   const workdirDisplay = createMemo(() => {
