@@ -72,6 +72,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Bytt til forrige agent",
   "command.model.variant.cycle": "Bytt tenkeinnsats",
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
+  "command.prompt.mode.shell": "Bytt til Shell-modus",
+  "command.prompt.mode.normal": "Bytt til Prompt-modus",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
   "command.workspace.toggle": "Veksle arbeidsområder",
@@ -226,9 +228,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Skriv inn shell-kommando...",
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
+  "prompt.placeholder.simple": "Spør om hva som helst...",
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
   "prompt.placeholder.summarizeComment": "Oppsummer kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "ESC for å avslutte",
 
   "prompt.example.1": "Fiks en TODO i kodebasen",
@@ -506,6 +510,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Hopp til nyeste",
 
   "session.context.addToContext": "Legg til {{selection}} i kontekst",
+  "session.todo.title": "Oppgaver",
+  "session.todo.collapse": "Skjul",
+  "session.todo.expand": "Utvid",
 
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",

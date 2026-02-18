@@ -33,7 +33,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",
-  "ui.sessionTurn.status.gatheringContext": "컨텍스트 수집 중",
+  "ui.sessionTurn.status.gatheringContext": "탐색 중...",
+  "ui.sessionTurn.status.gatheredContext": "탐색됨",
   "ui.sessionTurn.status.searchingCodebase": "코드베이스 검색 중",
   "ui.sessionTurn.status.searchingWeb": "웹 검색 중",
   "ui.sessionTurn.status.makingEdits": "편집 수행 중",
@@ -82,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "질문",
 
   "ui.common.add": "추가",
+  "ui.common.back": "뒤로",
   "ui.common.cancel": "취소",
   "ui.common.confirm": "확인",
   "ui.common.dismiss": "닫기",
@@ -96,7 +98,10 @@ export const dict = {
   "ui.message.expand": "메시지 펼치기",
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
+  "ui.message.copyMessage": "메시지 복사",
+  "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
+  "ui.message.interrupted": "중단됨",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",
@@ -107,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}}개 답변됨",
   "ui.question.answer.none": "(답변 없음)",
   "ui.question.review.notAnswered": "(답변되지 않음)",
-  "ui.question.multiHint": "(해당하는 항목 모두 선택)",
+  "ui.question.multiHint": "해당하는 항목 모두 선택",
+  "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력...",
 }
