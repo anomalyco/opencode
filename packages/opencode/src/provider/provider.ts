@@ -41,6 +41,7 @@ import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { LiteLLM } from "./litellm"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -589,6 +590,68 @@ export namespace Provider {
         },
       }
     },
+    litellm: async (provider) => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["litellm"]
+
+      const baseURL =
+        providerConfig?.options?.baseURL ??
+        Env.get("LITELLM_HOST") ??
+        Env.get("LITELLM_BASE_URL") ??
+        "http://localhost:4000"
+
+      const apiKey = await (async () => {
+        if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
+        const envKey = Env.get("LITELLM_API_KEY")
+        if (envKey) return envKey
+        const auth = await Auth.get("litellm")
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      const customHeaders = iife(() => {
+        const raw = Env.get("LITELLM_CUSTOM_HEADERS")
+        if (!raw) return {}
+        try {
+          return JSON.parse(raw) as Record<string, string>
+        } catch {
+          return {}
+        }
+      })
+
+      const timeout = Number(Env.get("LITELLM_TIMEOUT") ?? "5000")
+
+      const discovered = await LiteLLM.discover(baseURL, {
+        apiKey,
+        headers: customHeaders,
+        timeout,
+      })
+
+      if (discovered) {
+        // Inject discovered models; user config models take precedence
+        for (const [modelID, model] of Object.entries(discovered)) {
+          if (!provider.models[modelID]) {
+            provider.models[modelID] = model
+          }
+        }
+      }
+
+      const hasModels = Object.keys(provider.models).length > 0
+      if (!hasModels) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL,
+          apiKey,
+          litellmProxy: true,
+          ...customHeaders,
+        },
+        async getModel(sdk: any, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -792,6 +855,18 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Seed LiteLLM provider when env vars exist but no entry in database
+    if (!database["litellm"] && (Env.get("LITELLM_API_KEY") || Env.get("LITELLM_HOST") || Env.get("LITELLM_BASE_URL"))) {
+      database["litellm"] = {
+        id: "litellm",
+        name: "LiteLLM",
+        env: ["LITELLM_API_KEY"],
+        options: {},
+        source: "custom",
+        models: {},
       }
     }
 
