@@ -22,6 +22,7 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
+    cleanup?: () => Promise<void>
   }
 
   type RootFunction = (file: string) => Promise<string | undefined>
@@ -1129,7 +1130,22 @@ export namespace LSPServer {
 
   export const JDTLS: Info = {
     id: "jdtls",
-    root: NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"]),
+    root: async (file) => {
+      const subproject =
+        (await NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"])(file)) ??
+        Instance.directory
+
+      // Walk up from subproject looking for Gradle workspace root
+      let dir = subproject
+      while (dir !== path.dirname(dir) && dir.startsWith(Instance.worktree)) {
+        for (const marker of ["settings.gradle", "settings.gradle.kts"]) {
+          if (await pathExists(path.join(dir, marker))) return dir
+        }
+        dir = path.dirname(dir)
+      }
+
+      return subproject
+    },
     extensions: [".java"],
     async spawn(root) {
       const java = Bun.which("java")
@@ -1224,6 +1240,9 @@ export namespace LSPServer {
             cwd: root,
           },
         ),
+        async cleanup() {
+          await fs.rm(dataDir, { recursive: true, force: true }).catch(() => {})
+        },
       }
     },
   }
