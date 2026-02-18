@@ -213,6 +213,12 @@
     justify-content: flex-end;
   }
 
+  [data-slot="session-review-change-group"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   [data-slot="session-review-change"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
