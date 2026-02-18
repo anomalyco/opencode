@@ -64,20 +64,24 @@ export namespace LLM {
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = []
-    system.push(
-      [
-        // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
-        ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
-      ]
-        .filter((x) => x)
-        .join("\n"),
-    )
+    const system: string[] = []
+
+    const staticPrompt = [
+      ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+    ]
+      .filter((x) => x)
+      .join("\n")
+
+    if (staticPrompt) system.push(staticPrompt)
+
+    const dynamicPrompt = [
+      ...input.system,
+      ...(input.user.system ? [input.user.system] : []),
+    ]
+      .filter((x) => x)
+      .join("\n")
+
+    if (dynamicPrompt) system.push(dynamicPrompt)
 
     const header = system[0]
     const original = clone(system)
@@ -89,7 +93,6 @@ export namespace LLM {
     if (system.length === 0) {
       system.push(...original)
     }
-    // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
       system.length = 0
@@ -153,12 +156,6 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
-    // Add a dummy tool that is never called to satisfy this validation.
-    // This is enabled for:
-    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
     const isLiteLLMProxy =
       provider.options?.["litellmProxy"] === true ||
       input.model.providerID.toLowerCase().includes("litellm") ||
@@ -241,7 +238,6 @@ export namespace LLM {
           {
             async transformParams(args) {
               if (args.type === "stream") {
-                // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
@@ -269,8 +265,6 @@ export namespace LLM {
     return input.tools
   }
 
-  // Check if messages contain any tool-call content
-  // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
   export function hasToolCalls(messages: ModelMessage[]): boolean {
     for (const msg of messages) {
       if (!Array.isArray(msg.content)) continue
