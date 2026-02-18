@@ -257,6 +257,10 @@
         color: var(--text-strong);
       }
 
+      &:active:not(:disabled) {
+        background-color: var(--surface-raised-base-active);
+      }
+
       &:has([data-selected]) {
         background-color: var(--surface-raised-base-active);
         color: var(--text-strong);
