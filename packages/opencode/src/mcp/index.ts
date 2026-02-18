@@ -27,6 +27,7 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const clean = (input: string) => input.replace(/[^a-zA-Z0-9_-]/g, "_")
 
   export const Resource = z
     .object({
@@ -223,8 +224,8 @@ export namespace MCP {
     const commands: Record<string, PromptInfo & { client: string }> = {}
 
     for (const prompt of prompts.prompts) {
-      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedClientName = clean(clientName)
+      const sanitizedPromptName = clean(prompt.name)
       const key = sanitizedClientName + ":" + sanitizedPromptName
 
       commands[key] = { ...prompt, client: clientName }
@@ -245,8 +246,8 @@ export namespace MCP {
     const commands: Record<string, ResourceInfo & { client: string }> = {}
 
     for (const resource of resources.resources) {
-      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const sanitizedResourceName = resource.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedClientName = clean(clientName)
+      const sanitizedResourceName = clean(resource.name)
       const key = sanitizedClientName + ":" + sanitizedResourceName
 
       commands[key] = { ...resource, client: clientName }
@@ -563,8 +564,31 @@ export namespace MCP {
     s.status[name] = { status: "disabled" }
   }
 
-  export async function tools() {
+  export function aliases(input: Array<{ client: string; name: string }>) {
+    const result: Record<string, string> = {}
+    const blocked = new Set<string>()
+    for (const item of input) {
+      const client = clean(item.client)
+      const name = clean(item.name)
+      const key = client + "_" + name
+      if (blocked.has(name)) {
+        continue
+      }
+      if (!result[name]) {
+        result[name] = key
+        continue
+      }
+      if (result[name] !== key) {
+        delete result[name]
+        blocked.add(name)
+      }
+    }
+    return result
+  }
+
+  export async function toolsWithAliases() {
     const result: Record<string, Tool> = {}
+    const names: Array<{ client: string; name: string }> = []
     const s = await state()
     const cfg = await Config.get()
     const config = cfg.mcp ?? {}
@@ -597,12 +621,20 @@ export namespace MCP {
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
       for (const mcpTool of toolsResult.tools) {
-        const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-        const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+        const sanitizedClientName = clean(clientName)
+        const sanitizedToolName = clean(mcpTool.name)
         result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        names.push({ client: clientName, name: mcpTool.name })
       }
     }
-    return result
+    return {
+      tools: result,
+      aliases: aliases(names),
+    }
+  }
+
+  export async function tools() {
+    return toolsWithAliases().then((item) => item.tools)
   }
 
   export async function prompts() {

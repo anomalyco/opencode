@@ -827,7 +827,8 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
+    const mcp = await MCP.toolsWithAliases()
+    for (const [key, item] of Object.entries(mcp.tools)) {
       const execute = item.execute
       if (!execute) continue
 
@@ -914,8 +915,19 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
+    mergeToolAliases(tools, mcp.aliases)
 
     return tools
+  }
+
+  /** @internal Exported for testing */
+  export function mergeToolAliases(tools: Record<string, AITool>, aliases: Record<string, string>) {
+    for (const [alias, target] of Object.entries(aliases)) {
+      if (tools[alias]) continue
+      const match = tools[target]
+      if (!match) continue
+      tools[alias] = match
+    }
   }
 
   /** @internal Exported for testing */
