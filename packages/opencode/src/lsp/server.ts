@@ -50,6 +50,20 @@ export namespace LSPServer {
     }
   }
 
+  const MarkerRoot = (patterns: string[]): RootFunction => {
+    return async (file) => {
+      const files = Filesystem.up({
+        targets: patterns,
+        start: path.dirname(file),
+        stop: Instance.directory,
+      })
+      const first = await files.next()
+      await files.return()
+      if (!first.value) return undefined
+      return path.dirname(first.value)
+    }
+  }
+
   export interface Info {
     id: string
     extensions: string[]
@@ -1129,7 +1143,15 @@ export namespace LSPServer {
 
   export const JDTLS: Info = {
     id: "jdtls",
-    root: NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"]),
+    root: async (file) => {
+      const settingsRoot = await MarkerRoot(["settings.gradle.kts", "settings.gradle"])(file)
+      if (settingsRoot) return settingsRoot
+
+      const wrapperRoot = await MarkerRoot(["gradlew", "gradlew.bat"])(file)
+      if (wrapperRoot) return wrapperRoot
+
+      return NearestRoot(["build.gradle.kts", "build.gradle", "pom.xml", ".project", ".classpath"])(file)
+    },
     extensions: [".java"],
     async spawn(root) {
       const java = Bun.which("java")
