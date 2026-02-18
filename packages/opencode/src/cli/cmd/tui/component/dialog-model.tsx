@@ -7,6 +7,27 @@ import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
+import type { Provider } from "@opencode-ai/sdk/v2"
+
+function pickLatest(models: [string, Provider["models"][string]][]) {
+  const picks: Record<string, [string, Provider["models"][string]]> = {}
+  for (const item of models) {
+    const model = item[0]
+    const info = item[1]
+    const key = info.family ?? model
+    const prev = picks[key]
+    if (!prev) {
+      picks[key] = item
+      continue
+    }
+    if (info.release_date !== prev[1].release_date) {
+      if (info.release_date > prev[1].release_date) picks[key] = item
+      continue
+    }
+    if (model > prev[0]) picks[key] = item
+  }
+  return Object.values(picks)
+}
 
 export function useConnected() {
   const sync = useSync()
@@ -21,6 +42,7 @@ export function DialogModel(props: { providerID?: string }) {
   const dialog = useDialog()
   const keybind = useKeybind()
   const [query, setQuery] = createSignal("")
+  const [all, setAll] = createSignal(false)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -72,8 +94,8 @@ export function DialogModel(props: { providerID?: string }) {
         (provider) => provider.id !== "opencode",
         (provider) => provider.name,
       ),
-      flatMap((provider) =>
-        pipe(
+      flatMap((provider) => {
+        const items = pipe(
           provider.models,
           entries(),
           filter(([_, info]) => info.status !== "deprecated"),
@@ -104,8 +126,9 @@ export function DialogModel(props: { providerID?: string }) {
             (x) => x.footer !== "Free",
             (x) => x.title,
           ),
-        ),
-      ),
+        )
+        return items
+      }),
     )
 
     const popularProviders = !connected()
@@ -152,6 +175,13 @@ export function DialogModel(props: { providerID?: string }) {
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          keybind: keybind.all.model_show_all_toggle?.[0],
+          title: all() ? "Show latest only" : "Show all models",
+          onTrigger: () => {
+            setAll((value) => !value)
           },
         },
       ]}
