@@ -59,7 +59,7 @@ if (platformDirs.length === 0) {
 
 for (const platformDir of platformDirs) {
   // Rename: opencode-darwin-arm64 → codemie-darwin-arm64
-  const newName = platformDir.replace(/^opencode-/, "codemie-")
+  const newName = platformDir.replace(/^opencode-/, "codemie-opencode-")
   const srcDir = path.join(opencodeDistDir, platformDir)
   const destDir = path.join(dir, "dist", newName)
 
@@ -86,7 +86,7 @@ for (const platformDir of platformDirs) {
   const pkgJsonPath = path.join(destDir, "package.json")
   if (fs.existsSync(pkgJsonPath)) {
     const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"))
-    pkgJson.name = "@codemieai/" + pkgJson.name.replace(/^opencode-/, "codemie-")
+    pkgJson.name = "@codemieai/" + pkgJson.name.replace(/^opencode-/, "codemie-opencode-")
     fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2))
   }
 }

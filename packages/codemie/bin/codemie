@@ -44,7 +44,7 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "codemie-" + platform + "-" + arch
+const base = "codemie-opencode-" + platform + "-" + arch
 const binary = platform === "windows" ? "codemie.exe" : "codemie"
 
 const scope = "@codemieai"
