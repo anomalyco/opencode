@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { extractResponseText } from "../../src/cli/cmd/github"
+import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 
 // Helper to create minimal valid parts
@@ -157,5 +157,38 @@ describe("extractResponseText", () => {
   test("prefers text over tools when both present", () => {
     const parts = [createToolPart("read", "src/file.ts"), createTextPart("Here's what I found")]
     expect(extractResponseText(parts)).toBe("Here's what I found")
+  })
+})
+
+describe("formatPromptTooLargeError", () => {
+  test("formats error without files", () => {
+    const result = formatPromptTooLargeError([])
+    expect(result).toBe("PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.")
+  })
+
+  test("formats error with files", () => {
+    const files = [
+      { filename: "screenshot.png", content: "a".repeat(400 * 1024) }, // 400 KB
+      { filename: "diagram.png", content: "b".repeat(200 * 1024) }, // 200 KB
+    ]
+    const result = formatPromptTooLargeError(files)
+
+    expect(result).toStartWith("PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.")
+    expect(result).toInclude("Files in prompt:")
+    expect(result).toInclude("screenshot.png (400 KB)")
+    expect(result).toInclude("diagram.png (200 KB)")
+  })
+
+  test("lists all files when multiple present", () => {
+    const files = [
+      { filename: "img1.png", content: "x".repeat(4 * 1024) },
+      { filename: "img2.jpg", content: "y".repeat(8 * 1024) },
+      { filename: "img3.gif", content: "z".repeat(12 * 1024) },
+    ]
+    const result = formatPromptTooLargeError(files)
+
+    expect(result).toInclude("img1.png (4 KB)")
+    expect(result).toInclude("img2.jpg (8 KB)")
+    expect(result).toInclude("img3.gif (12 KB)")
   })
 })
