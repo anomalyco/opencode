@@ -86,7 +86,7 @@ for (const platformDir of platformDirs) {
   const pkgJsonPath = path.join(destDir, "package.json")
   if (fs.existsSync(pkgJsonPath)) {
     const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"))
-    pkgJson.name = pkgJson.name.replace(/^opencode-/, "codemie-")
+    pkgJson.name = "@codemieai/" + pkgJson.name.replace(/^opencode-/, "codemie-")
     fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2))
   }
 }

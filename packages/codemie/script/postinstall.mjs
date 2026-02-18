@@ -49,7 +49,7 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `codemie-${platform}-${arch}`
+  const packageName = `@codemieai/codemie-${platform}-${arch}`
   const binaryName = platform === "windows" ? "codemie.exe" : "codemie"
 
   try {

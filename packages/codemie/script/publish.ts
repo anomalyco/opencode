@@ -8,9 +8,11 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const binaries: Record<string, string> = {}
+const distDirs: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const distPkg = await Bun.file(`./dist/${filepath}`).json()
   binaries[distPkg.name] = distPkg.version
+  distDirs[distPkg.name] = `./dist/${filepath.replace("/package.json", "")}`
 }
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
@@ -51,11 +53,12 @@ await Bun.file(`${wrapperDir}/package.json`).write(
 
 // Publish platform packages
 const tasks = Object.entries(binaries).map(async ([name]) => {
+  const pkgDir = distDirs[name]
   if (process.platform !== "win32") {
-    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
+    await $`chmod -R 755 .`.cwd(pkgDir)
   }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
+  await $`bun pm pack`.cwd(pkgDir)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir)
 })
 await Promise.all(tasks)
 
