@@ -319,385 +319,387 @@ export const SessionReview = (props: SessionReviewProps) => {
       </div>
       <div data-slot="session-review-container" class={props.classes?.container}>
         <Show when={hasDiffs()} fallback={props.empty}>
-          <Accordion multiple value={open()} onChange={handleChange}>
-            <For each={props.diffs}>
-              {(diff) => {
-                let wrapper: HTMLDivElement | undefined
+          <div data-slot="session-review-diffs-group">
+            <Accordion multiple value={open()} onChange={handleChange}>
+              <For each={props.diffs}>
+                {(diff) => {
+                  let wrapper: HTMLDivElement | undefined
 
-                const expanded = createMemo(() => open().includes(diff.file))
-                const [force, setForce] = createSignal(false)
+                  const expanded = createMemo(() => open().includes(diff.file))
+                  const [force, setForce] = createSignal(false)
 
-                const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === diff.file))
-                const commentedLines = createMemo(() => comments().map((c) => c.selection))
+                  const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === diff.file))
+                  const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
-                const afterText = () => (typeof diff.after === "string" ? diff.after : "")
-                const changedLines = () => diff.additions + diff.deletions
+                  const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
+                  const afterText = () => (typeof diff.after === "string" ? diff.after : "")
+                  const changedLines = () => diff.additions + diff.deletions
 
-                const tooLarge = createMemo(() => {
-                  if (!expanded()) return false
-                  if (force()) return false
-                  if (isImageFile(diff.file)) return false
-                  return changedLines() > MAX_DIFF_CHANGED_LINES
-                })
+                  const tooLarge = createMemo(() => {
+                    if (!expanded()) return false
+                    if (force()) return false
+                    if (isImageFile(diff.file)) return false
+                    return changedLines() > MAX_DIFF_CHANGED_LINES
+                  })
 
-                const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
-                const isDeleted = () =>
-                  diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
-                const isImage = () => isImageFile(diff.file)
-                const isAudio = () => isAudioFile(diff.file)
+                  const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                  const isDeleted = () =>
+                    diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                  const isImage = () => isImageFile(diff.file)
+                  const isAudio = () => isAudioFile(diff.file)
 
-                const diffImageSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
-                const [imageSrc, setImageSrc] = createSignal<string | undefined>(diffImageSrc)
-                const [imageStatus, setImageStatus] = createSignal<"idle" | "loading" | "error">("idle")
+                  const diffImageSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
+                  const [imageSrc, setImageSrc] = createSignal<string | undefined>(diffImageSrc)
+                  const [imageStatus, setImageStatus] = createSignal<"idle" | "loading" | "error">("idle")
 
-                const diffAudioSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
-                const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc)
-                const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
-                const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
+                  const diffAudioSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
+                  const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc)
+                  const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
+                  const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
 
-                const selectedLines = createMemo(() => {
-                  const current = selection()
-                  if (!current || current.file !== diff.file) return null
-                  return current.range
-                })
+                  const selectedLines = createMemo(() => {
+                    const current = selection()
+                    if (!current || current.file !== diff.file) return null
+                    return current.range
+                  })
 
-                const draftRange = createMemo(() => {
-                  const current = commenting()
-                  if (!current || current.file !== diff.file) return null
-                  return current.range
-                })
+                  const draftRange = createMemo(() => {
+                    const current = commenting()
+                    if (!current || current.file !== diff.file) return null
+                    return current.range
+                  })
 
-                const [draft, setDraft] = createSignal("")
-                const [positions, setPositions] = createSignal<Record<string, number>>({})
-                const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+                  const [draft, setDraft] = createSignal("")
+                  const [positions, setPositions] = createSignal<Record<string, number>>({})
+                  const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
-                const getRoot = () => {
-                  const el = wrapper
-                  if (!el) return
+                  const getRoot = () => {
+                    const el = wrapper
+                    if (!el) return
 
-                  const host = el.querySelector("diffs-container")
-                  if (!(host instanceof HTMLElement)) return
-                  return host.shadowRoot ?? undefined
-                }
-
-                const updateAnchors = () => {
-                  const el = wrapper
-                  if (!el) return
-
-                  const root = getRoot()
-                  if (!root) return
-
-                  const next: Record<string, number> = {}
-                  for (const item of comments()) {
-                    const marker = findMarker(root, item.selection)
-                    if (!marker) continue
-                    next[item.id] = markerTop(el, marker)
-                  }
-                  setPositions(next)
-
-                  const range = draftRange()
-                  if (!range) {
-                    setDraftTop(undefined)
-                    return
+                    const host = el.querySelector("diffs-container")
+                    if (!(host instanceof HTMLElement)) return
+                    return host.shadowRoot ?? undefined
                   }
 
-                  const marker = findMarker(root, range)
-                  if (!marker) {
-                    setDraftTop(undefined)
-                    return
+                  const updateAnchors = () => {
+                    const el = wrapper
+                    if (!el) return
+
+                    const root = getRoot()
+                    if (!root) return
+
+                    const next: Record<string, number> = {}
+                    for (const item of comments()) {
+                      const marker = findMarker(root, item.selection)
+                      if (!marker) continue
+                      next[item.id] = markerTop(el, marker)
+                    }
+                    setPositions(next)
+
+                    const range = draftRange()
+                    if (!range) {
+                      setDraftTop(undefined)
+                      return
+                    }
+
+                    const marker = findMarker(root, range)
+                    if (!marker) {
+                      setDraftTop(undefined)
+                      return
+                    }
+
+                    setDraftTop(markerTop(el, marker))
                   }
 
-                  setDraftTop(markerTop(el, marker))
-                }
+                  const scheduleAnchors = () => {
+                    requestAnimationFrame(updateAnchors)
+                  }
 
-                const scheduleAnchors = () => {
-                  requestAnimationFrame(updateAnchors)
-                }
+                  createEffect(() => {
+                    comments()
+                    scheduleAnchors()
+                  })
 
-                createEffect(() => {
-                  comments()
-                  scheduleAnchors()
-                })
+                  createEffect(() => {
+                    const range = draftRange()
+                    if (!range) return
+                    setDraft("")
+                    scheduleAnchors()
+                  })
 
-                createEffect(() => {
-                  const range = draftRange()
-                  if (!range) return
-                  setDraft("")
-                  scheduleAnchors()
-                })
+                  createEffect(() => {
+                    if (!open().includes(diff.file)) return
+                    if (!isImage()) return
+                    if (imageSrc()) return
+                    if (imageStatus() !== "idle") return
+                    if (isDeleted()) return
 
-                createEffect(() => {
-                  if (!open().includes(diff.file)) return
-                  if (!isImage()) return
-                  if (imageSrc()) return
-                  if (imageStatus() !== "idle") return
-                  if (isDeleted()) return
+                    const reader = props.readFile
+                    if (!reader) return
 
-                  const reader = props.readFile
-                  if (!reader) return
-
-                  setImageStatus("loading")
-                  reader(diff.file)
-                    .then((result) => {
-                      const src = dataUrl(result)
-                      if (!src) {
+                    setImageStatus("loading")
+                    reader(diff.file)
+                      .then((result) => {
+                        const src = dataUrl(result)
+                        if (!src) {
+                          setImageStatus("error")
+                          return
+                        }
+                        setImageSrc(src)
+                        setImageStatus("idle")
+                      })
+                      .catch(() => {
                         setImageStatus("error")
-                        return
-                      }
-                      setImageSrc(src)
-                      setImageStatus("idle")
-                    })
-                    .catch(() => {
-                      setImageStatus("error")
-                    })
-                })
+                      })
+                  })
 
-                createEffect(() => {
-                  if (!open().includes(diff.file)) return
-                  if (!isAudio()) return
-                  if (audioSrc()) return
-                  if (audioStatus() !== "idle") return
+                  createEffect(() => {
+                    if (!open().includes(diff.file)) return
+                    if (!isAudio()) return
+                    if (audioSrc()) return
+                    if (audioStatus() !== "idle") return
 
-                  const reader = props.readFile
-                  if (!reader) return
+                    const reader = props.readFile
+                    if (!reader) return
 
-                  setAudioStatus("loading")
-                  reader(diff.file)
-                    .then((result) => {
-                      const src = dataUrl(result)
-                      if (!src) {
+                    setAudioStatus("loading")
+                    reader(diff.file)
+                      .then((result) => {
+                        const src = dataUrl(result)
+                        if (!src) {
+                          setAudioStatus("error")
+                          return
+                        }
+                        setAudioMime(normalizeMimeType(result?.mimeType))
+                        setAudioSrc(src)
+                        setAudioStatus("idle")
+                      })
+                      .catch(() => {
                         setAudioStatus("error")
-                        return
-                      }
-                      setAudioMime(normalizeMimeType(result?.mimeType))
-                      setAudioSrc(src)
-                      setAudioStatus("idle")
-                    })
-                    .catch(() => {
-                      setAudioStatus("error")
-                    })
-                })
+                      })
+                  })
 
-                const handleLineSelected = (range: SelectedLineRange | null) => {
-                  if (!props.onLineComment) return
+                  const handleLineSelected = (range: SelectedLineRange | null) => {
+                    if (!props.onLineComment) return
 
-                  if (!range) {
-                    setSelection(null)
-                    return
+                    if (!range) {
+                      setSelection(null)
+                      return
+                    }
+
+                    setSelection({ file: diff.file, range })
                   }
 
-                  setSelection({ file: diff.file, range })
-                }
+                  const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
+                    if (!props.onLineComment) return
 
-                const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
-                  if (!props.onLineComment) return
+                    if (!range) {
+                      setCommenting(null)
+                      return
+                    }
 
-                  if (!range) {
-                    setCommenting(null)
-                    return
+                    setSelection({ file: diff.file, range })
+                    setCommenting({ file: diff.file, range })
                   }
 
-                  setSelection({ file: diff.file, range })
-                  setCommenting({ file: diff.file, range })
-                }
+                  const openComment = (comment: SessionReviewComment) => {
+                    setOpened({ file: comment.file, id: comment.id })
+                    setSelection({ file: comment.file, range: comment.selection })
+                  }
 
-                const openComment = (comment: SessionReviewComment) => {
-                  setOpened({ file: comment.file, id: comment.id })
-                  setSelection({ file: comment.file, range: comment.selection })
-                }
+                  const isCommentOpen = (comment: SessionReviewComment) => {
+                    const current = opened()
+                    if (!current) return false
+                    return current.file === comment.file && current.id === comment.id
+                  }
 
-                const isCommentOpen = (comment: SessionReviewComment) => {
-                  const current = opened()
-                  if (!current) return false
-                  return current.file === comment.file && current.id === comment.id
-                }
-
-                return (
-                  <Accordion.Item
-                    value={diff.file}
-                    id={diffId(diff.file)}
-                    data-file={diff.file}
-                    data-slot="session-review-accordion-item"
-                    data-selected={props.focusedFile === diff.file ? "" : undefined}
-                  >
-                    <StickyAccordionHeader>
-                      <Accordion.Trigger>
-                        <div data-slot="session-review-trigger-content">
-                          <div data-slot="session-review-file-info">
-                            <FileIcon node={{ path: diff.file, type: "file" }} />
-                            <div data-slot="session-review-file-name-container">
-                              <Show when={diff.file.includes("/")}>
-                                <span data-slot="session-review-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
-                              </Show>
-                              <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
-                              <Show when={props.onViewFile}>
-                                <button
-                                  data-slot="session-review-view-button"
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    props.onViewFile?.(diff.file)
-                                  }}
-                                >
-                                  <Icon name="eye" size="small" />
-                                </button>
-                              </Show>
+                  return (
+                    <Accordion.Item
+                      value={diff.file}
+                      id={diffId(diff.file)}
+                      data-file={diff.file}
+                      data-slot="session-review-accordion-item"
+                      data-selected={props.focusedFile === diff.file ? "" : undefined}
+                    >
+                      <StickyAccordionHeader>
+                        <Accordion.Trigger>
+                          <div data-slot="session-review-trigger-content">
+                            <div data-slot="session-review-file-info">
+                              <FileIcon node={{ path: diff.file, type: "file" }} />
+                              <div data-slot="session-review-file-name-container">
+                                <Show when={diff.file.includes("/")}>
+                                  <span data-slot="session-review-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
+                                </Show>
+                                <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
+                                <Show when={props.onViewFile}>
+                                  <button
+                                    data-slot="session-review-view-button"
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      props.onViewFile?.(diff.file)
+                                    }}
+                                  >
+                                    <Icon name="eye" size="small" />
+                                  </button>
+                                </Show>
+                              </div>
+                            </div>
+                            <div data-slot="session-review-trigger-actions">
+                              <Switch>
+                                <Match when={isAdded()}>
+                                  <span data-slot="session-review-change" data-type="added">
+                                    {i18n.t("ui.sessionReview.change.added")}
+                                  </span>
+                                </Match>
+                                <Match when={isDeleted()}>
+                                  <span data-slot="session-review-change" data-type="removed">
+                                    {i18n.t("ui.sessionReview.change.removed")}
+                                  </span>
+                                </Match>
+                                <Match when={isImage()}>
+                                  <span data-slot="session-review-change" data-type="modified">
+                                    {i18n.t("ui.sessionReview.change.modified")}
+                                  </span>
+                                </Match>
+                                <Match when={true}>
+                                  <DiffChanges changes={diff} />
+                                </Match>
+                              </Switch>
+                              <Icon name="chevron-grabber-vertical" size="small" />
                             </div>
                           </div>
-                          <div data-slot="session-review-trigger-actions">
+                        </Accordion.Trigger>
+                      </StickyAccordionHeader>
+                      <Accordion.Content data-slot="session-review-accordion-content">
+                        <div
+                          data-slot="session-review-diff-wrapper"
+                          ref={(el) => {
+                            wrapper = el
+                            anchors.set(diff.file, el)
+                            scheduleAnchors()
+                          }}
+                        >
+                          <Show when={expanded()}>
                             <Switch>
-                              <Match when={isAdded()}>
-                                <span data-slot="session-review-change" data-type="added">
-                                  {i18n.t("ui.sessionReview.change.added")}
-                                </span>
-                              </Match>
-                              <Match when={isDeleted()}>
-                                <span data-slot="session-review-change" data-type="removed">
-                                  {i18n.t("ui.sessionReview.change.removed")}
-                                </span>
-                              </Match>
-                              <Match when={isImage()}>
-                                <span data-slot="session-review-change" data-type="modified">
-                                  {i18n.t("ui.sessionReview.change.modified")}
-                                </span>
-                              </Match>
-                              <Match when={true}>
-                                <DiffChanges changes={diff} />
-                              </Match>
-                            </Switch>
-                            <Icon name="chevron-grabber-vertical" size="small" />
-                          </div>
-                        </div>
-                      </Accordion.Trigger>
-                    </StickyAccordionHeader>
-                    <Accordion.Content data-slot="session-review-accordion-content">
-                      <div
-                        data-slot="session-review-diff-wrapper"
-                        ref={(el) => {
-                          wrapper = el
-                          anchors.set(diff.file, el)
-                          scheduleAnchors()
-                        }}
-                      >
-                        <Show when={expanded()}>
-                          <Switch>
-                            <Match when={isImage() && imageSrc()}>
-                              <div data-slot="session-review-image-container">
-                                <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
-                              </div>
-                            </Match>
-                            <Match when={isImage() && isDeleted()}>
-                              <div data-slot="session-review-image-container" data-removed>
-                                <span data-slot="session-review-image-placeholder">
-                                  {i18n.t("ui.sessionReview.change.removed")}
-                                </span>
-                              </div>
-                            </Match>
-                            <Match when={isImage() && !imageSrc()}>
-                              <div data-slot="session-review-image-container">
-                                <span data-slot="session-review-image-placeholder">
-                                  {imageStatus() === "loading"
-                                    ? i18n.t("ui.sessionReview.image.loading")
-                                    : i18n.t("ui.sessionReview.image.placeholder")}
-                                </span>
-                              </div>
-                            </Match>
-                            <Match when={!isImage() && tooLarge()}>
-                              <div data-slot="session-review-large-diff">
-                                <div data-slot="session-review-large-diff-title">
-                                  {i18n.t("ui.sessionReview.largeDiff.title")}
+                              <Match when={isImage() && imageSrc()}>
+                                <div data-slot="session-review-image-container">
+                                  <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
                                 </div>
-                                <div data-slot="session-review-large-diff-meta">
-                                  {i18n.t("ui.sessionReview.largeDiff.meta", {
-                                    limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
-                                    current: changedLines().toLocaleString(),
-                                  })}
+                              </Match>
+                              <Match when={isImage() && isDeleted()}>
+                                <div data-slot="session-review-image-container" data-removed>
+                                  <span data-slot="session-review-image-placeholder">
+                                    {i18n.t("ui.sessionReview.change.removed")}
+                                  </span>
                                 </div>
-                                <div data-slot="session-review-large-diff-actions">
-                                  <Button size="normal" variant="secondary" onClick={() => setForce(true)}>
-                                    {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
-                                  </Button>
+                              </Match>
+                              <Match when={isImage() && !imageSrc()}>
+                                <div data-slot="session-review-image-container">
+                                  <span data-slot="session-review-image-placeholder">
+                                    {imageStatus() === "loading"
+                                      ? i18n.t("ui.sessionReview.image.loading")
+                                      : i18n.t("ui.sessionReview.image.placeholder")}
+                                  </span>
                                 </div>
-                              </div>
-                            </Match>
-                            <Match when={!isImage()}>
-                              <Dynamic
-                                component={diffComponent}
-                                preloadedDiff={diff.preloaded}
-                                diffStyle={diffStyle()}
-                                onRendered={() => {
-                                  props.onDiffRendered?.()
-                                  scheduleAnchors()
-                                }}
-                                enableLineSelection={props.onLineComment != null}
-                                onLineSelected={handleLineSelected}
-                                onLineSelectionEnd={handleLineSelectionEnd}
-                                selectedLines={selectedLines()}
-                                commentedLines={commentedLines()}
-                                before={{
-                                  name: diff.file!,
-                                  contents: typeof diff.before === "string" ? diff.before : "",
-                                }}
-                                after={{
-                                  name: diff.file!,
-                                  contents: typeof diff.after === "string" ? diff.after : "",
-                                }}
-                              />
-                            </Match>
-                          </Switch>
-
-                          <For each={comments()}>
-                            {(comment) => (
-                              <LineComment
-                                id={comment.id}
-                                top={positions()[comment.id]}
-                                onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
-                                onClick={() => {
-                                  if (isCommentOpen(comment)) {
-                                    setOpened(null)
-                                    return
-                                  }
-
-                                  openComment(comment)
-                                }}
-                                open={isCommentOpen(comment)}
-                                comment={comment.comment}
-                                selection={selectionLabel(comment.selection)}
-                              />
-                            )}
-                          </For>
-
-                          <Show when={draftRange()}>
-                            {(range) => (
-                              <Show when={draftTop() !== undefined}>
-                                <LineCommentEditor
-                                  top={draftTop()}
-                                  value={draft()}
-                                  selection={selectionLabel(range())}
-                                  onInput={setDraft}
-                                  onCancel={() => setCommenting(null)}
-                                  onSubmit={(comment) => {
-                                    props.onLineComment?.({
-                                      file: diff.file,
-                                      selection: range(),
-                                      comment,
-                                      preview: selectionPreview(diff, range()),
-                                    })
-                                    setCommenting(null)
+                              </Match>
+                              <Match when={!isImage() && tooLarge()}>
+                                <div data-slot="session-review-large-diff">
+                                  <div data-slot="session-review-large-diff-title">
+                                    {i18n.t("ui.sessionReview.largeDiff.title")}
+                                  </div>
+                                  <div data-slot="session-review-large-diff-meta">
+                                    {i18n.t("ui.sessionReview.largeDiff.meta", {
+                                      limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
+                                      current: changedLines().toLocaleString(),
+                                    })}
+                                  </div>
+                                  <div data-slot="session-review-large-diff-actions">
+                                    <Button size="normal" variant="secondary" onClick={() => setForce(true)}>
+                                      {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </Match>
+                              <Match when={!isImage()}>
+                                <Dynamic
+                                  component={diffComponent}
+                                  preloadedDiff={diff.preloaded}
+                                  diffStyle={diffStyle()}
+                                  onRendered={() => {
+                                    props.onDiffRendered?.()
+                                    scheduleAnchors()
+                                  }}
+                                  enableLineSelection={props.onLineComment != null}
+                                  onLineSelected={handleLineSelected}
+                                  onLineSelectionEnd={handleLineSelectionEnd}
+                                  selectedLines={selectedLines()}
+                                  commentedLines={commentedLines()}
+                                  before={{
+                                    name: diff.file!,
+                                    contents: typeof diff.before === "string" ? diff.before : "",
+                                  }}
+                                  after={{
+                                    name: diff.file!,
+                                    contents: typeof diff.after === "string" ? diff.after : "",
                                   }}
                                 />
-                              </Show>
-                            )}
+                              </Match>
+                            </Switch>
+
+                            <For each={comments()}>
+                              {(comment) => (
+                                <LineComment
+                                  id={comment.id}
+                                  top={positions()[comment.id]}
+                                  onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
+                                  onClick={() => {
+                                    if (isCommentOpen(comment)) {
+                                      setOpened(null)
+                                      return
+                                    }
+
+                                    openComment(comment)
+                                  }}
+                                  open={isCommentOpen(comment)}
+                                  comment={comment.comment}
+                                  selection={selectionLabel(comment.selection)}
+                                />
+                              )}
+                            </For>
+
+                            <Show when={draftRange()}>
+                              {(range) => (
+                                <Show when={draftTop() !== undefined}>
+                                  <LineCommentEditor
+                                    top={draftTop()}
+                                    value={draft()}
+                                    selection={selectionLabel(range())}
+                                    onInput={setDraft}
+                                    onCancel={() => setCommenting(null)}
+                                    onSubmit={(comment) => {
+                                      props.onLineComment?.({
+                                        file: diff.file,
+                                        selection: range(),
+                                        comment,
+                                        preview: selectionPreview(diff, range()),
+                                      })
+                                      setCommenting(null)
+                                    }}
+                                  />
+                                </Show>
+                              )}
+                            </Show>
                           </Show>
-                        </Show>
-                      </div>
-                    </Accordion.Content>
-                  </Accordion.Item>
-                )
-              }}
-            </For>
-          </Accordion>
+                        </div>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  )
+                }}
+              </For>
+            </Accordion>
+          </div>
         </Show>
       </div>
     </div>
