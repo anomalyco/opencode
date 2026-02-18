@@ -449,7 +449,7 @@ export function SessionHeader() {
                     triggerProps={{
                       variant: "ghost",
                       class:
-                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
+                        "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
                       classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
@@ -522,7 +522,7 @@ export function SessionHeader() {
                       <IconButton
                         icon={share.state.copied ? "check" : "link"}
                         variant="ghost"
-                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
+                        class="rounded-l-none h-[24px] border border-border-weak-base bg-surface-panel shadow-none"
                         onClick={() => share.copyLink((error) => showRequestError(language, error))}
                         disabled={share.state.unshare}
                         aria-label={
