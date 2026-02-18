@@ -7,7 +7,6 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
-import { stat } from "fs/promises"
 import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
@@ -322,8 +321,8 @@ export const RunCommand = cmd({
           process.exit(1)
         }
 
-        const s = await stat(resolvedPath)
-        const mime = s.isDirectory() ? "application/x-directory" : "text/plain"
+        const isDir = await Filesystem.isDir(resolvedPath)
+        const mime = isDir ? "application/x-directory" : "text/plain"
 
         files.push({
           type: "file",
