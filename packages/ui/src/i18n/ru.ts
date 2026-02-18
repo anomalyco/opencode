@@ -32,7 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",
-  "ui.sessionTurn.status.gatheringContext": "Сбор контекста",
+  "ui.sessionTurn.status.gatheringContext": "Исследование...",
+  "ui.sessionTurn.status.gatheredContext": "Исследовано",
   "ui.sessionTurn.status.searchingCodebase": "Поиск в кодовой базе",
   "ui.sessionTurn.status.searchingWeb": "Поиск в интернете",
   "ui.sessionTurn.status.makingEdits": "Внесение изменений",
@@ -81,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "вопросов",
 
   "ui.common.add": "Добавить",
+  "ui.common.back": "Назад",
   "ui.common.cancel": "Отмена",
   "ui.common.confirm": "Подтвердить",
   "ui.common.dismiss": "Закрыть",
@@ -95,7 +97,10 @@ export const dict = {
   "ui.message.expand": "Развернуть сообщение",
   "ui.message.collapse": "Свернуть сообщение",
   "ui.message.copy": "Копировать",
+  "ui.message.copyMessage": "Копировать сообщение",
+  "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
+  "ui.message.interrupted": "Прервано",
   "ui.message.attachment.alt": "вложение",
 
   "ui.patch.action.deleted": "Удалено",
@@ -106,6 +111,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} отвечено",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
-  "ui.question.multiHint": "(выберите все подходящие)",
+  "ui.question.multiHint": "Выберите все подходящие",
+  "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
 }
