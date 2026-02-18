@@ -18,12 +18,13 @@ export namespace Filesystem {
     }
   }
 
+  export function stat(p: string): ReturnType<typeof statSync> | undefined {
+    return statSync(p, { throwIfNoEntry: false }) ?? undefined
+  }
+
   export async function size(p: string): Promise<number> {
-    try {
-      return statSync(p).size
-    } catch {
-      return 0
-    }
+    const s = stat(p)?.size ?? 0
+    return typeof s === "bigint" ? Number(s) : s
   }
 
   export async function readText(p: string): Promise<string> {
