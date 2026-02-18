@@ -589,6 +589,12 @@ export namespace Provider {
         },
       }
     },
+    ionos: async () => {
+      return {
+        autoload: false,
+        options: {},
+      }
+    },
   }
 
   export const Model = z
@@ -780,6 +786,162 @@ export namespace Provider {
     log.info("init")
 
     const configProviders = Object.entries(config.provider ?? {})
+
+    // Add IONOS AI Model Hub provider if not already in models.dev
+    if (!database["ionos"]) {
+      const ionosAPI = {
+        npm: "@ai-sdk/openai-compatible",
+        url: "https://openai.inference.de-txl.ionos.com/v1",
+      }
+      const ionosModels: Record<string, Model> = {
+        "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+          id: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+          providerID: "ionos",
+          name: "Meta Llama 3.1 8B",
+          family: "llama",
+          api: { id: "meta-llama/Meta-Llama-3.1-8B-Instruct", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2024-07-23",
+          variants: {},
+        },
+        "meta-llama/Llama-3.3-70B-Instruct": {
+          id: "meta-llama/Llama-3.3-70B-Instruct",
+          providerID: "ionos",
+          name: "Meta Llama 3.3 70B",
+          family: "llama",
+          api: { id: "meta-llama/Llama-3.3-70B-Instruct", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2024-12-09",
+          variants: {},
+        },
+        "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8": {
+          id: "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",
+          providerID: "ionos",
+          name: "Meta Llama 3.1 405B",
+          family: "llama",
+          api: { id: "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2024-07-23",
+          variants: {},
+        },
+        "mistralai/Mistral-Nemo-Instruct-2407": {
+          id: "mistralai/Mistral-Nemo-Instruct-2407",
+          providerID: "ionos",
+          name: "Mistral Nemo 12B",
+          family: "mistral",
+          api: { id: "mistralai/Mistral-Nemo-Instruct-2407", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2024-07-18",
+          variants: {},
+        },
+        "mistralai/Mistral-Small-24B-Instruct": {
+          id: "mistralai/Mistral-Small-24B-Instruct",
+          providerID: "ionos",
+          name: "Mistral Small 24B",
+          family: "mistral",
+          api: { id: "mistralai/Mistral-Small-24B-Instruct", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2025-06-25",
+          variants: {},
+        },
+        "openGPT-X/Teuken-7B-instruct-commercial": {
+          id: "openGPT-X/Teuken-7B-instruct-commercial",
+          providerID: "ionos",
+          name: "openGPT-X Teuken 7B",
+          family: "teuken",
+          api: { id: "openGPT-X/Teuken-7B-instruct-commercial", ...ionosAPI },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 8000, output: 4096 },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: false,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          release_date: "2024-11-26",
+          variants: {},
+        },
+      }
+      database["ionos"] = {
+        id: "ionos",
+        name: "IONOS AI Model Hub",
+        source: "custom",
+        env: ["IONOS_API_TOKEN"],
+        options: {},
+        models: ionosModels,
+      }
+    }
 
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
