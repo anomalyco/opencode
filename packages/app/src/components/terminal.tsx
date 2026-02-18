@@ -442,8 +442,8 @@ export const Terminal = (props: TerminalProps) => {
       url.searchParams.set("directory", sdk.directory)
       url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      url.username = server.http?.username ?? ""
-      url.password = server.http?.password ?? ""
+      url.username = server.current?.http.username ?? ""
+      url.password = server.current?.http.password ?? ""
       const socket = new WebSocket(url)
       socket.binaryType = "arraybuffer"
       ws = socket

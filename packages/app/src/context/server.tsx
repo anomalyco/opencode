@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
@@ -113,7 +113,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     })
 
     const [state, setState] = createStore({
-      active: ServerConnection.key({ type: "http", http: { url: props.defaultUrl } }),
+      active: ServerConnection.key({
+        type: "http",
+        http: { url: props.defaultUrl },
+      }),
       healthy: undefined as boolean | undefined,
     })
 
@@ -197,7 +200,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
-    const current = createMemo(() => allServers().find((s) => s.http.url === state.active) ?? allServers()[0])
+    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
+      () => allServers().find((s) => s.http.url === state.active) ?? allServers()[0],
+    )
 
     return {
       ready: isReady,
@@ -214,10 +219,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       },
       get current() {
         return current()
-      },
-      get http() {
-        const c = current()
-        return c?.http!
       },
       setActive,
       add,

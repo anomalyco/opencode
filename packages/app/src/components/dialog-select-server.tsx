@@ -10,7 +10,6 @@ import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerRow } from "@/components/server/server-row"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
@@ -171,7 +170,6 @@ export function DialogSelectServer() {
   const dialog = useDialog()
   const server = useServer()
   const platform = usePlatform()
-  const globalSDK = useGlobalSDK()
   const language = useLanguage()
   const fetcher = platform.fetch ?? globalThis.fetch
   const { defaultUrl, canDefault, setDefault } = useDefaultServer(platform, language)

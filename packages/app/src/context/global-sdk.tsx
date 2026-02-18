@@ -204,8 +204,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       client: sdk,
       event: emitter,
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
+        const s = server.current
+        if (!s) throw new Error("Server not available")
         return createSdkForServer({
-          server: server.current.http,
+          server: s.http,
           fetch: platform.fetch,
           ...opts,
         })
