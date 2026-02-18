@@ -18,6 +18,10 @@ export namespace Filesystem {
     }
   }
 
+  export function stat(p: string): ReturnType<typeof statSync> | undefined {
+    return statSync(p, { throwIfNoEntry: false }) ?? undefined
+  }
+
   export async function size(p: string): Promise<number> {
     try {
       return statSync(p).size
