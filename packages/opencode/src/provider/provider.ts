@@ -470,17 +470,32 @@ export namespace Provider {
       }
     },
     "google-vertex-anthropic": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
-      const autoload = Boolean(project)
+      const auth = await Auth.get("google-vertex-anthropic")
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") || Env.get("GCP_PROJECT") || Env.get("GCLOUD_PROJECT")
+      const location = Env.get("GOOGLE_CLOUD_LOCATION") || Env.get("VERTEX_LOCATION") || "global"
+
+      const token = Env.get("VERTEX_ANTHROPIC_TOKEN") || (auth?.type === "api" ? auth.key : undefined)
+
+      const autoload = Boolean(project) || Boolean(token)
       if (!autoload) return { autoload: false }
+
+      const options: Record<string, unknown> = { project, location }
+
+      // Skip google-auth-library when a bearer token is provided directly,
+      // matching Claude Code's CLAUDE_CODE_SKIP_VERTEX_AUTH pattern.
+      if (token) {
+        options.googleAuthOptions = {
+          authClient: {
+            getAccessToken: async () => ({ token }),
+            getRequestHeaders: async () => ({ Authorization: `Bearer ${token}` }),
+          },
+        }
+      }
+
       return {
         autoload: true,
-        options: {
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID) {
+        options,
+        async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
