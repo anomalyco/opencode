@@ -19,7 +19,7 @@ export namespace DebugPhase {
     autoConfirm: boolean
   }
 
-  export const VALID_TRANSITIONS: Record<Phase, Phase[]> = {
+  const VALID_TRANSITIONS: Readonly<Record<Phase, readonly Phase[]>> = {
     PLANNING: ["CODING"],
     CODING: ["BREAKPOINTING"],
     BREAKPOINTING: ["DEBUGGING"],
@@ -28,7 +28,7 @@ export namespace DebugPhase {
     CONFIRMING: ["PLANNING"],
   }
 
-  export const PHASE_TOOLS: Record<Phase, string[]> = {
+  const PHASE_TOOLS: Readonly<Record<Phase, readonly string[]>> = {
     PLANNING: ["read", "glob", "grep", "task", "transitionPhase"],
     CODING: ["read", "glob", "grep", "edit", "write", "bash", "apply_patch", "transitionPhase"],
     BREAKPOINTING: [
@@ -54,6 +54,8 @@ export namespace DebugPhase {
     CONFIRMING: ["stopDebugSession", "transitionPhase"],
   }
 
+  // In-memory store keyed by session ID. Callers should invoke clear(sessionID)
+  // when a session ends to prevent unbounded growth in long-running processes.
   const store = new Map<string, State>()
 
   export function create(sessionID: string): State {
@@ -100,7 +102,7 @@ export namespace DebugPhase {
   }
 
   export function toolsForPhase(phase: Phase): string[] {
-    return PHASE_TOOLS[phase]
+    return [...PHASE_TOOLS[phase]]
   }
 
   export function isDebugAgent(agentName: string): boolean {
