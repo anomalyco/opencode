@@ -79,15 +79,17 @@ export const BashTool = Tool.define("bash", async () => {
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
       const tracked = FileTime.tracked(ctx.sessionID)
-      const baseline = new Map(
+      const baseline = new Map<string, number | undefined>(
         await Promise.all(
-          tracked.map(async (file) => [
-            file,
-            await Bun.file(file)
-              .stat()
-              .then((x) => x.mtime.getTime())
-              .catch(() => undefined),
-          ]),
+          tracked.map(
+            async (file): Promise<[string, number | undefined]> => [
+              file,
+              await Bun.file(file)
+                .stat()
+                .then((x) => x.mtime.getTime())
+                .catch(() => undefined),
+            ],
+          ),
         ),
       )
       if (params.timeout !== undefined && params.timeout < 0) {
