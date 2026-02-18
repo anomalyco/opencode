@@ -207,7 +207,47 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS21": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS22": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS23": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS24": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS25": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS26": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS27": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS28": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS29": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS3": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS30": {
       "type": "sst.sst.Secret"
       "value": string
     }

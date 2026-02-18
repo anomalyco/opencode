@@ -1,30 +1,30 @@
 ---
-title: 自定義工具
-description: 建立 LLM 可以在 opencode 中呼叫的工具。
+title: 自訂工具
+description: 建立 LLM 可在 OpenCode 中呼叫的工具。
 ---
 
-自定義工具是您建立的函式，LLM 可以在對話期間呼叫。它們與 opencode 的 [內建工具](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
+自訂工具是您建立的函式，LLM 可以在對話過程中呼叫它們。它們與 OpenCode 的[內建工具](/docs/tools)（如 `read`、`write` 和 `bash`）協同工作。
 
 ---
 
 ## 建立工具
 
-工具定義為 **TypeScript** 或 **JavaScript** 檔案。但是，工具定義可以呼叫用 **任何語言** 編寫的指令碼 - TypeScript 或 JavaScript 僅用於工具定義本身。
+工具以 **TypeScript** 或 **JavaScript** 檔案的形式定義。不過，工具定義可以呼叫**任何語言**編寫的指令碼——TypeScript 或 JavaScript 僅用於工具定義本身。
 
 ---
 
 ### 位置
 
-它們可以定義為：
+工具可以在以下位置定義：
 
-- 透過將它們放在專案的 `.opencode/tools/` 目錄中來本地進行。
-- 或者在全域範圍內，將它們放置在 `~/.config/opencode/tools/` 中。
+- 本地定義：將工具檔案放在專案的 `.opencode/tools/` 目錄中。
+- 全域定義：將工具檔案放在 `~/.config/opencode/tools/` 中。
 
 ---
 
 ### 結構
 
-建立工具的最簡單方法是使用 `tool()` 輔助程式，它提供類型安全和驗證。
+建立工具最簡單的方式是使用 `tool()` 輔助函式，它提供型別安全和參數校驗。
 
 ```ts title=".opencode/tools/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
@@ -41,13 +41,13 @@ export default tool({
 })
 ```
 
-**檔名**成為**工具名稱**。以上建立了一個 `database` 工具。
+**檔案名稱**即為**工具名稱**。上面的範例建立了一個名為 `database` 的工具。
 
 ---
 
-#### 每個檔案多個工具
+#### 單檔案多工具
 
-您也可以從單個檔案匯出多個工具。每個匯出都會成為**一個單獨的工具**，名稱為 **`<filename>_<exportname>`**：
+您也可以從單個檔案中匯出多個工具。每個匯出都會成為**一個獨立的工具**，命名格式為 **`<filename>_<exportname>`**：
 
 ```ts title=".opencode/tools/math.ts"
 import { tool } from "@opencode-ai/plugin"
@@ -75,13 +75,13 @@ export const multiply = tool({
 })
 ```
 
-這將建立兩個工具：`math_add` 和 `math_multiply`。
+這會建立兩個工具：`math_add` 和 `math_multiply`。
 
 ---
 
-### 參數 (Arguments)
+### 參數
 
-您可以使用 `tool.schema`（即 [Zod](https://zod.dev)）來定義參數類型。
+您可以使用 `tool.schema`（即 [Zod](https://zod.dev)）來定義參數型別。
 
 ```ts "tool.schema"
 args: {
@@ -89,7 +89,7 @@ args: {
 }
 ```
 
-您也可以直接匯入 [Zod](https://zod.dev) 並返回一個一般物件：
+您也可以直接匯入 [Zod](https://zod.dev) 並回傳一個普通物件：
 
 ```ts {6}
 import { z } from "zod"
@@ -108,9 +108,9 @@ export default {
 
 ---
 
-### 上下文 (Context)
+### 上下文
 
-工具接收有關當前工作階段的上下文：
+工具會接收當前工作階段的上下文資訊：
 
 ```ts title=".opencode/tools/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
@@ -126,18 +126,18 @@ export default tool({
 })
 ```
 
-使用 `context.directory` 作為工作階段工作目錄。
-使用 `context.worktree` 作為 git 工作樹根。
+使用 `context.directory` 取得工作階段的工作目錄。
+使用 `context.worktree` 取得 git worktree 根目錄。
 
 ---
 
 ## 範例
 
-### 用 Python 編寫一個工具
+### 用 Python 編寫工具
 
-您可以用任何您想要的語言編寫工具。下面是一個使用 Python 將兩個數字相加的範例。
+您可以使用任何語言編寫工具。以下範例展示了如何用 Python 實作兩數相加。
 
-首先，將該工具建立為 Python 指令碼：
+首先，建立一個 Python 指令碼作為工具：
 
 ```python title=".opencode/tools/add.py"
 import sys
@@ -147,7 +147,7 @@ b = int(sys.argv[2])
 print(a + b)
 ```
 
-然後建立呼叫它的工具定義：
+然後建立呼叫該指令碼的工具定義：
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
@@ -167,4 +167,4 @@ export default tool({
 })
 ```
 
-這裡我們使用 [`Bun.$`](https://bun.com/docs/runtime/shell) 公用程式來執行 Python 指令碼。
+這裡我們使用 [`Bun.$`](https://bun.com/docs/runtime/shell) 工具函式來執行 Python 指令碼。

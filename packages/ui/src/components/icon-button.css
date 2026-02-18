@@ -143,3 +143,43 @@
     outline: none;
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="icon-button"][data-icon="stop"] [data-slot="icon-svg"] rect {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: stop-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes stop-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+[data-component="icon-button"].titlebar-icon {
+  width: 32px;
+  height: 24px;
+  aspect-ratio: auto;
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"]:hover:not(:disabled) {
+  background-color: var(--surface-raised-base-active);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] {
+  background-color: var(--surface-base-active);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] [data-slot="icon-svg"] {
+  color: var(--icon-strong-base);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
+  background-color: var(--surface-base-active);
+}
