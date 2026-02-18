@@ -352,6 +352,46 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/workspace/directory",
+      describeRoute({
+        summary: "Add workspace directory",
+        description: "Add an external directory to the current session workspace.",
+        operationId: "session.workspaceDirectory",
+        responses: {
+          200: {
+            description: "Workspace directory added",
+            content: {
+              "application/json": {
+                schema: resolver(Session.WorkspaceDirectoryResult),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Session.addWorkspaceDirectory.schema.shape.sessionID,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          path: Session.addWorkspaceDirectory.schema.shape.path,
+        }),
+      ),
+      async (c) => {
+        const params = c.req.valid("param")
+        const body = c.req.valid("json")
+        const result = await Session.addWorkspaceDirectory({
+          sessionID: params.sessionID,
+          path: body.path,
+        })
+        return c.json(result)
+      },
+    )
+    .post(
       "/:sessionID/abort",
       describeRoute({
         summary: "Abort session",

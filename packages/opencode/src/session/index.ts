@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/util/slug"
 import path from "path"
+import fs from "fs/promises"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -173,6 +174,17 @@ export namespace Session {
     ref: "GlobalSession",
   })
   export type GlobalInfo = z.output<typeof GlobalInfo>
+
+  export const WorkspaceDirectoryResult = z
+    .object({
+      added: z.boolean(),
+      directory: z.string(),
+      glob: z.string(),
+      session: Info,
+    })
+    .meta({
+      ref: "SessionWorkspaceDirectoryResult",
+    })
 
   export const Event = {
     Created: BusEvent.define(
@@ -426,6 +438,63 @@ export namespace Session {
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
       })
+    },
+  )
+
+  export const addWorkspaceDirectory = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      path: z.string(),
+    }),
+    async (input) => {
+      const session = await get(input.sessionID)
+      const expanded =
+        input.path === "~"
+          ? (process.env.HOME ?? input.path)
+          : (input.path.startsWith("~/") || input.path.startsWith("~\\")) && process.env.HOME
+            ? path.join(process.env.HOME, input.path.slice(2))
+            : input.path
+      const target = path.isAbsolute(expanded) ? expanded : path.resolve(Instance.directory, expanded)
+      const stat = await Bun.file(target)
+        .stat()
+        .catch(() => undefined)
+      if (!stat) throw new Error(`Directory not found: ${input.path}`)
+      if (!stat.isDirectory()) throw new Error(`Path is not a directory: ${input.path}`)
+      const directory = await fs.realpath(target)
+      const glob = path.join(directory, "*")
+
+      const rules = session.permission ?? []
+      const exists = rules.some(
+        (rule) => rule.permission === "external_directory" && rule.action === "allow" && rule.pattern === glob,
+      )
+
+      if (exists) {
+        return {
+          added: false,
+          directory,
+          glob,
+          session,
+        }
+      }
+
+      const next = await setPermission({
+        sessionID: input.sessionID,
+        permission: [
+          ...rules,
+          {
+            permission: "external_directory",
+            pattern: glob,
+            action: "allow",
+          },
+        ],
+      })
+
+      return {
+        added: true,
+        directory,
+        glob,
+        session: next,
+      }
     },
   )
 

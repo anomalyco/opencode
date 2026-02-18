@@ -66,6 +66,7 @@ export const FileRoutes = lazy(() =>
           dirs: z.enum(["true", "false"]).optional(),
           type: z.enum(["file", "directory"]).optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
+          sessionID: z.string().optional(),
         }),
       ),
       async (c) => {
@@ -73,11 +74,13 @@ export const FileRoutes = lazy(() =>
         const dirs = c.req.valid("query").dirs
         const type = c.req.valid("query").type
         const limit = c.req.valid("query").limit
+        const sessionID = c.req.valid("query").sessionID
         const results = await File.search({
           query,
           limit: limit ?? 10,
           dirs: dirs !== "false",
           type,
+          sessionID,
         })
         return c.json(results)
       },

@@ -195,7 +195,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
+      sdk.client.find.files({ query, dirs, sessionID: params.id }).then(
         (x) => (x.data ?? []).map(path.normalize),
         () => [],
       )

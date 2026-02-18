@@ -87,6 +87,8 @@ export const dict = {
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
+  "command.session.directory.add": "Add workspace directory",
+  "command.session.directory.add.description": "Allow another directory for this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
@@ -428,6 +430,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+  "toast.session.directory.added.title": "Workspace directory added",
+  "toast.session.directory.added.description": "Added {{directory}} to this session",
+  "toast.session.directory.exists.title": "Workspace directory already added",
+  "toast.session.directory.exists.description": "{{directory}} is already available in this session",
+  "toast.session.directory.failed.title": "Failed to add workspace directory",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
 

@@ -4,7 +4,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"
 import { createStore } from "solid-js/store"
 
-export function DialogTag(props: { onSelect?: (value: string) => void }) {
+export function DialogTag(props: { onSelect?: (value: string) => void; sessionID?: string }) {
   const sdk = useSDK()
   const dialog = useDialog()
 
@@ -17,6 +17,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
     async () => {
       const result = await sdk.client.find.files({
         query: store.filter,
+        sessionID: props.sessionID,
       })
       if (result.error) return []
       const sliced = (result.data ?? []).slice(0, 5)

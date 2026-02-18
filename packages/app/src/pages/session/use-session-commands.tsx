@@ -12,6 +12,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
@@ -287,6 +288,75 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   ])
 
   const sessionActionCommands = createMemo(() => [
+    sessionCommand({
+      id: "session.directory.add",
+      title: language.t("command.session.directory.add"),
+      description: language.t("command.session.directory.add.description"),
+      slash: "add-directory",
+      disabled: !params.id,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+
+        const selected = await new Promise<string | undefined>((resolve) => {
+          const done = (result: string | string[] | null) => {
+            if (Array.isArray(result)) {
+              resolve(result[0])
+              return
+            }
+            resolve(result ?? undefined)
+          }
+          dialog.show(
+            () => <DialogSelectDirectory title={language.t("command.session.directory.add")} onSelect={done} />,
+            () => done(null),
+          )
+        })
+
+        if (!selected) return
+
+        await sdk.client.session
+          .workspaceDirectory({
+            sessionID,
+            path: selected,
+          })
+          .then((res) => {
+            const data = res.data
+            if (!data) {
+              showToast({
+                title: language.t("toast.session.directory.failed.title"),
+                description: language.t("common.requestFailed"),
+                variant: "error",
+              })
+              return
+            }
+
+            if (!data.added) {
+              showToast({
+                title: language.t("toast.session.directory.exists.title"),
+                description: language.t("toast.session.directory.exists.description", {
+                  directory: data.directory,
+                }),
+              })
+              return
+            }
+
+            showToast({
+              title: language.t("toast.session.directory.added.title"),
+              description: language.t("toast.session.directory.added.description", {
+                directory: data.directory,
+              }),
+              variant: "success",
+            })
+          })
+          .catch((error: Error) => {
+            showToast({
+              title: language.t("toast.session.directory.failed.title"),
+              description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+              variant: "error",
+            })
+          })
+      },
+    }),
     sessionCommand({
       id: "session.undo",
       title: language.t("command.session.undo"),
