@@ -37,7 +37,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
-  "ui.sessionTurn.status.gatheringContext": "正在收集上下文",
+  "ui.sessionTurn.status.gatheringContext": "正在探索...",
+  "ui.sessionTurn.status.gatheredContext": "已探索",
   "ui.sessionTurn.status.searchingCodebase": "正在搜尋程式碼庫",
   "ui.sessionTurn.status.searchingWeb": "正在搜尋網頁",
   "ui.sessionTurn.status.makingEdits": "正在修改",
@@ -86,6 +87,7 @@ export const dict = {
   "ui.common.question.other": "個問題",
 
   "ui.common.add": "新增",
+  "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "忽略",
@@ -100,7 +102,10 @@ export const dict = {
   "ui.message.expand": "展開訊息",
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
+  "ui.message.copyMessage": "複製訊息",
+  "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
+  "ui.message.interrupted": "已中斷",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
@@ -111,6 +116,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(無答案)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(可多選)",
+  "ui.question.multiHint": "可多選",
+  "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
 } satisfies Partial<Record<Keys, string>>

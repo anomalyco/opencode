@@ -5,6 +5,7 @@ import type {
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
@@ -41,6 +42,9 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -87,11 +91,26 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    session_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
     reload: undefined,
   })
+
+  const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
+    if (!sessionID) return
+    if (!todos) {
+      setGlobalStore(
+        "session_todo",
+        produce((draft) => {
+          delete draft[sessionID]
+        }),
+      )
+      return
+    }
+    setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
+  }
 
   const updateStats = (activeDirectoryStores: number) => {
     if (!import.meta.env.DEV) return
@@ -278,6 +297,11 @@ function createGlobalSync() {
           setGlobalStore("project", next)
         },
       })
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        for (const directory of Object.keys(children.children)) {
+          queue.push(directory)
+        }
+      }
       return
     }
 
@@ -291,6 +315,7 @@ function createGlobalSync() {
       store,
       setStore,
       push: queue.push,
+      setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
         sdkFor(directory)
@@ -363,6 +388,9 @@ function createGlobalSync() {
     bootstrap,
     updateConfig,
     project: projectApi,
+    todo: {
+      set: setSessionTodo,
+    },
   }
 }
 
