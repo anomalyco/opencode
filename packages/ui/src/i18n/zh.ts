@@ -15,7 +15,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "加载中...",
   "ui.sessionReview.image.placeholder": "图片",
   "ui.sessionReview.largeDiff.title": "差异过大，无法渲染",
-  "ui.sessionReview.largeDiff.meta": "限制：{{lines}} 行 / {{limit}}。当前：{{current}}。",
+  "ui.sessionReview.largeDiff.meta": "限制：{{limit}} 行变更。当前：{{current}} 行变更。",
   "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
 
   "ui.lineComment.label.prefix": "评论 ",

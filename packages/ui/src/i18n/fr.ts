@@ -11,7 +11,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Chargement...",
   "ui.sessionReview.image.placeholder": "Image",
   "ui.sessionReview.largeDiff.title": "Diff trop volumineux pour être affiché",
-  "ui.sessionReview.largeDiff.meta": "Limite : {{lines}} lignes / {{limit}}. Actuel : {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Limite : {{limit}} lignes modifiées. Actuel : {{current}} lignes modifiées.",
   "ui.sessionReview.largeDiff.renderAnyway": "Afficher quand même",
 
   "ui.lineComment.label.prefix": "Commenter sur ",

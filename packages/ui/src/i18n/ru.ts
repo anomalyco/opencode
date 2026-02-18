@@ -12,7 +12,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Загрузка...",
   "ui.sessionReview.image.placeholder": "Изображение",
   "ui.sessionReview.largeDiff.title": "Diff слишком большой для отображения",
-  "ui.sessionReview.largeDiff.meta": "Лимит: {{lines}} строк / {{limit}}. Текущий: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Лимит: {{limit}} изменённых строк. Текущий: {{current}} изменённых строк.",
   "ui.sessionReview.largeDiff.renderAnyway": "Отобразить всё равно",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
