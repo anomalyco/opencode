@@ -30,7 +30,7 @@ export namespace Filesystem {
     return readFile(p, "utf-8")
   }
 
-  export async function readJson<T>(p: string): Promise<T> {
+  export async function readJson<T = any>(p: string): Promise<T> {
     return JSON.parse(await readFile(p, "utf-8"))
   }
 
