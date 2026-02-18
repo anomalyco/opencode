@@ -13,6 +13,8 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_PLAN from "../session/prompt/plan.txt"
+import PROMPT_BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -39,7 +41,9 @@ export namespace Agent {
         })
         .optional(),
       variant: z.string().optional(),
-      prompt: z.string().optional(),
+      prompt: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+      reminder: z.string().optional(),
+      transition: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
     })
@@ -88,6 +92,7 @@ export namespace Agent {
         ),
         mode: "primary",
         native: true,
+        transition: PROMPT_BUILD_SWITCH,
       },
       plan: {
         name: "plan",
@@ -111,6 +116,7 @@ export namespace Agent {
         ),
         mode: "primary",
         native: true,
+        reminder: PROMPT_PLAN,
       },
       general: {
         name: "general",
@@ -219,6 +225,8 @@ export namespace Agent {
       if (value.model) item.model = Provider.parseModel(value.model)
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
+      item.reminder = value.reminder ?? item.reminder
+      item.transition = value.transition ?? item.transition
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP

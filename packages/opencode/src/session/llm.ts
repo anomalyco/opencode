@@ -22,6 +22,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { Wildcard } from "@/util/wildcard"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -42,6 +43,17 @@ export namespace LLM {
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
+
+  function resolve(prompt: Agent.Info["prompt"], model: Provider.Model, isCodex: boolean) {
+    const fallback = () => (isCodex ? [] : SystemPrompt.provider(model))
+    if (!prompt) return fallback()
+    if (typeof prompt === "string") return [prompt]
+    const match = Object.entries(prompt).find(([pattern]) =>
+      pattern.split("|").some((p) => Wildcard.match(model.api.id, p)),
+    )
+    if (match) return [match[1]]
+    return fallback()
+  }
 
   export async function stream(input: StreamInput) {
     const l = log
@@ -69,7 +81,7 @@ export namespace LLM {
       [
         // use agent prompt otherwise provider prompt
         // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+        ...resolve(input.agent.prompt, input.model, isCodex),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message

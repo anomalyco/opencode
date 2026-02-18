@@ -680,7 +680,17 @@ export namespace Config {
         .describe("Default model variant for this agent (applies only when using the agent's configured model)."),
       temperature: z.number().optional(),
       top_p: z.number().optional(),
-      prompt: z.string().optional(),
+      prompt: z
+        .union([z.string(), z.record(z.string(), z.string())])
+        .optional()
+        .describe(
+          "System prompt override. String applies to all models. Object maps model glob patterns to prompts. First match wins.",
+        ),
+      reminder: z.string().optional().describe("Text injected every turn while this agent is active"),
+      transition: z
+        .string()
+        .optional()
+        .describe("Text injected once when switching to this agent from a different agent"),
       tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
@@ -713,6 +723,8 @@ export namespace Config {
         "model",
         "variant",
         "prompt",
+        "reminder",
+        "transition",
         "description",
         "temperature",
         "top_p",
