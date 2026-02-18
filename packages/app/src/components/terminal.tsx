@@ -365,7 +365,7 @@ export const Terminal = (props: TerminalProps) => {
         if (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === "k") {
           event.preventDefault()
           event.stopPropagation()
-          t.clear()
+          if (ws?.readyState === WebSocket.OPEN) ws.send("\f")
           return true
         }
 
