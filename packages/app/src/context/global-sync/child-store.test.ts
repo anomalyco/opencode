@@ -17,8 +17,6 @@ describe("createChildStoreManager", () => {
 
     const manager = createChildStoreManager({
       owner,
-      markStats() {},
-      incrementEvictions() {},
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
