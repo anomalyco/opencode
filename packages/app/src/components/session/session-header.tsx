@@ -304,9 +304,11 @@ export function SessionHeader() {
       <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <button
+            <Button
               type="button"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 h-[24px] pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              variant="ghost"
+              size="small"
+              class="hidden md:flex w-[240px] max-w-full min-w-0 pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -322,7 +324,7 @@ export function SessionHeader() {
                   <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
                 )}
               </Show>
-            </button>
+            </Button>
           </Portal>
         )}
       </Show>
@@ -449,7 +451,7 @@ export function SessionHeader() {
                     triggerProps={{
                       variant: "ghost",
                       class:
-                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
+                        "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
                       classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
@@ -522,7 +524,7 @@ export function SessionHeader() {
                       <IconButton
                         icon={share.state.copied ? "check" : "link"}
                         variant="ghost"
-                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
+                        class="rounded-l-none h-[24px] border border-border-weak-base bg-surface-panel shadow-none"
                         onClick={() => share.copyLink((error) => showRequestError(language, error))}
                         disabled={share.state.unshare}
                         aria-label={
