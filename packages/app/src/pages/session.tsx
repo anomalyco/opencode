@@ -10,18 +10,15 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Mark } from "@opencode-ai/ui/logo"
 
 import { useSync } from "@/context/sync"
-import { useTerminal } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
-import { usePermission } from "@/context/permission"
 import { SessionHeader, NewSessionView } from "@/components/session"
 import { same } from "@/utils/same"
 import { createOpenReviewFile } from "@/pages/session/helpers"
@@ -40,16 +37,13 @@ export default function Page() {
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
-  const terminal = useTerminal()
   const dialog = useDialog()
-  const command = useCommand()
   const language = useLanguage()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
-  const permission = usePermission()
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
@@ -285,7 +279,6 @@ export default function Page() {
     return sync.data.session_diff[id] !== undefined
   })
 
-  const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let dockHeight = 0
@@ -327,8 +320,6 @@ export default function Page() {
     ),
   )
 
-  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
-
   createEffect(
     on(
       sessionKey,
@@ -359,11 +350,6 @@ export default function Page() {
     const lines = content.split("\n").slice(start - 1, end)
     if (lines.length === 0) return undefined
     return lines.slice(0, 2).join("\n")
-  }
-
-  const addSelectionToContext = (path: string, selection: FileSelection) => {
-    const preview = selectionPreview(path, selection)
-    prompt.context.add({ type: "file", path, selection, preview })
   }
 
   const addCommentToContext = (input: {
@@ -457,29 +443,8 @@ export default function Page() {
   const focusInput = () => inputRef?.focus()
 
   useSessionCommands({
-    command,
-    dialog,
-    file,
-    language,
-    local,
-    permission,
-    prompt,
-    sdk,
-    sync,
-    terminal,
-    layout,
-    params,
-    navigate,
-    tabs,
-    view,
-    info,
-    status,
-    userMessages,
-    visibleUserMessages,
-    showAllFiles,
     navigateMessageByOffset,
     setActiveMessage,
-    addSelectionToContext,
     focusInput,
   })
 
