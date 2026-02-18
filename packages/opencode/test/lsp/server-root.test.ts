@@ -13,8 +13,8 @@ describe("lsp.server roots", () => {
     const file = path.join(module, "src/main/java/App.java")
 
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await Bun.write(path.join(root, "settings.gradle.kts"), "")
-    await Bun.write(path.join(module, "build.gradle.kts"), "")
+    await Bun.write(path.join(root, "settings.gradle"), "")
+    await Bun.write(path.join(module, "build.gradle"), "")
     await Bun.write(file, "class App {}")
 
     const result = await Instance.provide({
@@ -33,7 +33,7 @@ describe("lsp.server roots", () => {
 
     await fs.mkdir(path.dirname(file), { recursive: true })
     await Bun.write(path.join(root, "gradlew"), "")
-    await Bun.write(path.join(module, "build.gradle.kts"), "")
+    await Bun.write(path.join(module, "build.gradle"), "")
     await Bun.write(file, "class App {}")
 
     const result = await Instance.provide({
@@ -51,7 +51,7 @@ describe("lsp.server roots", () => {
     const file = path.join(module, "src/main/java/App.java")
 
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await Bun.write(path.join(module, "build.gradle.kts"), "")
+    await Bun.write(path.join(module, "build.gradle"), "")
     await Bun.write(file, "class App {}")
 
     const result = await Instance.provide({
@@ -60,5 +60,24 @@ describe("lsp.server roots", () => {
     })
 
     expect(result).toBe(module)
+  })
+
+  test("jdtls supports kotlin gradle markers", async () => {
+    await using tmp = await tmpdir()
+    const root = tmp.path
+    const module = path.join(root, "services/api")
+    const file = path.join(module, "src/main/java/App.java")
+
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await Bun.write(path.join(root, "settings.gradle.kts"), "")
+    await Bun.write(path.join(module, "build.gradle.kts"), "")
+    await Bun.write(file, "class App {}")
+
+    const result = await Instance.provide({
+      directory: root,
+      fn: () => LSPServer.JDTLS.root(file),
+    })
+
+    expect(result).toBe(root)
   })
 })
