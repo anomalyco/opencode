@@ -2,6 +2,7 @@ import { Server } from "../../server/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
+import { Instance } from "../../project/instance"
 
 export const ServeCommand = cmd({
   command: "serve",
@@ -14,7 +15,13 @@ export const ServeCommand = cmd({
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    const shutdown = async () => {
+      await Promise.race([Instance.disposeAll(), new Promise((resolve) => setTimeout(resolve, 5000))])
+      server.stop(true)
+      process.exit(0)
+    }
+    process.on("SIGTERM", shutdown)
+    process.on("SIGINT", shutdown)
     await new Promise(() => {})
-    await server.stop()
   },
 })

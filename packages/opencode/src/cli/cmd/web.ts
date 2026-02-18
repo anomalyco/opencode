@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
+import { Instance } from "../../project/instance"
 import open from "open"
 import { networkInterfaces } from "os"
 
@@ -75,7 +76,13 @@ export const WebCommand = cmd({
       open(displayUrl).catch(() => {})
     }
 
+    const shutdown = async () => {
+      await Promise.race([Instance.disposeAll(), new Promise((resolve) => setTimeout(resolve, 5000))])
+      server.stop(true)
+      process.exit(0)
+    }
+    process.on("SIGTERM", shutdown)
+    process.on("SIGINT", shutdown)
     await new Promise(() => {})
-    await server.stop()
   },
 })
