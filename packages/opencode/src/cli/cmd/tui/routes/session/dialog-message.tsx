@@ -4,6 +4,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "@tui/ui/toast"
 import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogMessage(props: {
@@ -15,6 +16,7 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const toast = useToast()
 
   return (
     <DialogSelect
@@ -67,7 +69,13 @@ export function DialogMessage(props: {
               return agg
             }, "")
 
-            await Clipboard.copy(text)
+            const ok = await Clipboard.copy(text)
+              .then(() => true)
+              .catch((error) => {
+                toast.error(error)
+                return false
+              })
+            if (!ok) return
             dialog.clear()
           },
         },

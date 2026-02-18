@@ -19,6 +19,26 @@ function writeOsc52(text: string): void {
   process.stdout.write(sequence)
 }
 
+type CopyMethod = {
+  name: string
+  copy: (text: string) => Promise<void>
+}
+
+async function spawnCopy(name: string, cmd: string[], text: string): Promise<void> {
+  const proc = Bun.spawn(cmd, {
+    stdin: "pipe",
+    stdout: "ignore",
+    stderr: "pipe",
+  })
+  proc.stdin.write(text)
+  proc.stdin.end()
+
+  const err = proc.stderr ? await new Response(proc.stderr).text().catch(() => "") : ""
+  const code = await proc.exited
+  if (code === 0) return
+  throw new Error(`${name} exited with code ${code}${err ? `: ${err.trim()}` : ""}`)
+}
+
 export namespace Clipboard {
   export interface Content {
     data: string
@@ -72,88 +92,137 @@ export namespace Clipboard {
     }
   }
 
-  const getCopyMethod = lazy(() => {
+  const getCopyMethods = lazy(() => {
     const os = platform()
+    const list: CopyMethod[] = []
 
     if (os === "darwin" && Bun.which("osascript")) {
-      console.log("clipboard: using osascript")
-      return async (text: string) => {
-        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
-      }
+      console.log("clipboard: enabled osascript")
+      list.push({
+        name: "osascript",
+        copy: async (text: string) => {
+          const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+          const result = await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
+          if (result.exitCode === 0) return
+          throw new Error("osascript failed")
+        },
+      })
     }
 
     if (os === "linux") {
+      const wsl = release().includes("WSL")
+      if (wsl && Bun.which("clip.exe")) {
+        console.log("clipboard: enabled clip.exe")
+        list.push({
+          name: "clip.exe",
+          copy: (text: string) => spawnCopy("clip.exe", ["clip.exe"], text),
+        })
+      }
       if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
-        console.log("clipboard: using wl-copy")
-        return async (text: string) => {
-          const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
-        }
+        console.log("clipboard: enabled wl-copy")
+        list.push({
+          name: "wl-copy",
+          copy: (text: string) => spawnCopy("wl-copy", ["wl-copy"], text),
+        })
       }
       if (Bun.which("xclip")) {
-        console.log("clipboard: using xclip")
-        return async (text: string) => {
-          const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
-            stdin: "pipe",
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
-        }
+        console.log("clipboard: enabled xclip")
+        list.push({
+          name: "xclip",
+          copy: (text: string) => spawnCopy("xclip", ["xclip", "-selection", "clipboard"], text),
+        })
       }
       if (Bun.which("xsel")) {
-        console.log("clipboard: using xsel")
-        return async (text: string) => {
-          const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
-            stdin: "pipe",
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
-        }
+        console.log("clipboard: enabled xsel")
+        list.push({
+          name: "xsel",
+          copy: (text: string) => spawnCopy("xsel", ["xsel", "--clipboard", "--input"], text),
+        })
       }
     }
 
     if (os === "win32") {
-      console.log("clipboard: using powershell")
-      return async (text: string) => {
-        // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
-        const proc = Bun.spawn(
-          [
-            "powershell.exe",
-            "-NonInteractive",
-            "-NoProfile",
-            "-Command",
-            "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
-          ],
-          {
-            stdin: "pipe",
-            stdout: "ignore",
-            stderr: "ignore",
-          },
-        )
-
-        proc.stdin.write(text)
-        proc.stdin.end()
-        await proc.exited.catch(() => {})
+      if (Bun.which("powershell.exe")) {
+        console.log("clipboard: enabled powershell.exe")
+        list.push({
+          name: "powershell.exe",
+          copy: (text: string) =>
+            spawnCopy(
+              "powershell.exe",
+              [
+                "powershell.exe",
+                "-NonInteractive",
+                "-NoProfile",
+                "-Command",
+                "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+              ],
+              text,
+            ),
+        })
+      }
+      if (Bun.which("pwsh.exe")) {
+        console.log("clipboard: enabled pwsh.exe")
+        list.push({
+          name: "pwsh.exe",
+          copy: (text: string) =>
+            spawnCopy(
+              "pwsh.exe",
+              [
+                "pwsh.exe",
+                "-NonInteractive",
+                "-NoProfile",
+                "-Command",
+                "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+              ],
+              text,
+            ),
+        })
+      }
+      if (Bun.which("clip.exe")) {
+        console.log("clipboard: enabled clip.exe")
+        list.push({
+          name: "clip.exe",
+          copy: (text: string) => spawnCopy("clip.exe", ["clip.exe"], text),
+        })
       }
     }
 
-    console.log("clipboard: no native support")
-    return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
-    }
+    list.push({
+      name: "clipboardy",
+      copy: async (text: string) => {
+        await clipboardy.write(text)
+      },
+    })
+
+    console.log(`clipboard: enabled ${list.map((x) => x.name).join(", ")}`)
+    return list
   })
 
   export async function copy(text: string): Promise<void> {
     writeOsc52(text)
-    await getCopyMethod()(text)
+    const os = platform()
+    const list = getCopyMethods()
+    const errs: string[] = []
+
+    for (const method of list) {
+      const err = await method
+        .copy(text)
+        .then(() => undefined)
+        .catch((error) => error)
+      if (!err) return
+      errs.push(err instanceof Error ? `${method.name}: ${err.message}` : `${method.name}: ${String(err)}`)
+    }
+
+    const hint = (() => {
+      if (os === "linux") {
+        return "Install wl-clipboard, xclip, or xsel and verify DISPLAY/WAYLAND_DISPLAY is set."
+      }
+      if (os === "win32") {
+        return "Ensure clip.exe or PowerShell is available and the terminal session can access the Windows clipboard."
+      }
+      return ""
+    })()
+
+    throw new Error(`Failed to copy to clipboard. ${hint} Tried: ${errs.join(" | ")}`.trim())
   }
 }

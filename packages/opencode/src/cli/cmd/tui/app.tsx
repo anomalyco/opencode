@@ -804,9 +804,13 @@ function ErrorComponent(props: {
   issueURL.searchParams.set("opencode-version", Installation.VERSION)
 
   const copyIssueURL = () => {
-    Clipboard.copy(issueURL.toString()).then(() => {
-      setCopied(true)
-    })
+    Clipboard.copy(issueURL.toString())
+      .then(() => {
+        setCopied(true)
+      })
+      .catch((error) => {
+        console.error(`Failed to copy issue URL to clipboard: ${error}`)
+      })
   }
 
   return (
