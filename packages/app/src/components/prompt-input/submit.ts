@@ -8,7 +8,6 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
-import { usePlatform } from "@/context/platform"
 import { type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -56,7 +55,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sdk = useSDK()
   const sync = useSync()
   const globalSync = useGlobalSync()
-  const platform = usePlatform()
   const local = useLocal()
   const prompt = usePrompt()
   const layout = useLayout()
