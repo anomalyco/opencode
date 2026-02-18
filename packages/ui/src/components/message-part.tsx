@@ -672,13 +672,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
-  const provider = createMemo(() => {
-    const id = props.message.model?.providerID
-    if (!id) return ""
-    const match = data.store.provider?.all?.find((p) => p.id === id)
-    return match?.name ?? id
-  })
-
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
     const modelID = props.message.model?.modelID
@@ -699,7 +692,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const metaHead = createMemo(() => {
     const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", provider(), model()]
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
@@ -1055,13 +1048,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
   )
 
-  const provider = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const id = (props.message as AssistantMessage).providerID
-    const match = data.store.provider?.all?.find((p) => p.id === id)
-    return match?.name ?? id
-  })
-
   const model = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
@@ -1076,9 +1062,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (typeof completed !== "number") return ""
     const ms = completed - message.time.created
     if (!(ms >= 0)) return ""
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-    const minutes = Math.floor(ms / 60_000)
-    const seconds = Math.round((ms - minutes * 60_000) / 1000)
+    const total = Math.round(ms / 1000)
+    if (total < 60) return `${total}s`
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
     return `${minutes}m ${seconds}s`
   })
 
@@ -1087,7 +1074,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      provider(),
       model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
