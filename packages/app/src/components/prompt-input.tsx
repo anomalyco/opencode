@@ -403,15 +403,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
-  createEffect(() => {
-    if (!isFocused()) closePopover()
-  })
-
-  // Safety: reset composing state on focus change to prevent stuck state
-  // This handles edge cases where compositionend event may not fire
-  createEffect(() => {
-    if (!isFocused()) setComposing(false)
-  })
+  const handleBlur = () => {
+    closePopover()
+    setComposing(false)
+  }
 
   const agentList = createMemo(() =>
     sync.data.agent
@@ -1118,6 +1113,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onPaste={handlePaste}
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
+              onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
