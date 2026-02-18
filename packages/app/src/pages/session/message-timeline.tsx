@@ -8,6 +8,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -219,6 +220,22 @@ export function MessageTimeline(props: {
                 <Show when={props.sessionID}>
                   {(id) => (
                     <div class="shrink-0 flex items-center gap-3">
+                      <Show when={props.parentID}>
+                        <Tooltip value="Navigate to parent" placement="top">
+                          <IconButton
+                            tabIndex={-1}
+                            icon="arrow-up"
+                            variant="ghost"
+                            onClick={props.onNavigateParent}
+                            aria-label="Navigate to parent"
+                            class="size-5"
+                            data-testid="navigate-parent-button"
+                          />
+                        </Tooltip>
+                        <Tooltip value="Subagent" placement="top">
+                          <Icon name="brain" class="text-text-weak mr-1" data-testid="subagent-indicator" />
+                        </Tooltip>
+                      </Show>
                       <SessionContextUsage placement="bottom" />
                       <DropdownMenu
                         gutter={4}

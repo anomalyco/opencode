@@ -419,3 +419,20 @@ export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
   await expect(menu).toBeVisible()
   return menu
 }
+
+export async function seedMessage(sdk: Parameters<typeof withSession>[0], sessionID: string) {
+  await sdk.session.promptAsync({
+    sessionID,
+    noReply: true,
+    parts: [{ type: "text", text: "e2e seed" }],
+  })
+  await expect
+    .poll(
+      async () => {
+        const messages = await sdk.session.messages({ sessionID, limit: 1 }).then((r) => r.data ?? [])
+        return messages.length
+      },
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(0)
+}

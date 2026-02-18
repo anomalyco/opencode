@@ -1,6 +1,26 @@
 import { describe, expect, test } from "bun:test"
 import { collectOpenProjectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
+import {
+  displayName,
+  errorMessage,
+  getChildSessions,
+  getDraggableId,
+  syncWorkspaceOrder,
+  validateParentIDs,
+  workspaceKey,
+} from "./helpers"
+import type { Session } from "@opencode-ai/sdk/v2/client"
+
+const mockSession = (id: string, overrides?: Partial<Session>): Session => ({
+  id,
+  slug: "",
+  projectID: "",
+  title: "",
+  version: "",
+  directory: "/test",
+  time: { created: Date.now(), updated: Date.now() },
+  ...overrides,
+})
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -88,5 +108,105 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+})
+
+describe("getChildSessions", () => {
+  test("filters by parentID", () => {
+    const sessions: Session[] = [
+      mockSession("child-1", { parentID: "parent-a" }),
+      mockSession("child-2", { parentID: "parent-b" }),
+      mockSession("child-3", { parentID: "parent-a" }),
+      mockSession("root", {}),
+    ]
+
+    const childrenA = getChildSessions(sessions, "parent-a")
+    expect(childrenA.map((s) => s.id)).toEqual(expect.arrayContaining(["child-1", "child-3"]))
+    expect(childrenA).toHaveLength(2)
+
+    const childrenB = getChildSessions(sessions, "parent-b")
+    expect(childrenB).toHaveLength(1)
+    expect(childrenB[0].id).toBe("child-2")
+
+    const childrenNone = getChildSessions(sessions, "non-existent")
+    expect(childrenNone).toHaveLength(0)
+  })
+
+  test("sorts by updated time descending", () => {
+    const now = Date.now()
+    const sessions: Session[] = [
+      mockSession("old", { parentID: "parent", time: { created: now, updated: now - 10000 } }),
+      mockSession("new", { parentID: "parent", time: { created: now, updated: now - 1000 } }),
+      mockSession("mid", { parentID: "parent", time: { created: now, updated: now - 5000 } }),
+    ]
+
+    const children = getChildSessions(sessions, "parent")
+    const ids = children.map((s) => s.id)
+    expect(ids).toContain("mid")
+    expect(ids).toContain("new")
+    expect(ids).toContain("old")
+  })
+
+  test("filters out archived sessions", () => {
+    const sessions: Session[] = [
+      mockSession("active-1", { parentID: "parent" }),
+      mockSession("active-2", { parentID: "parent" }),
+      mockSession("archived-1", {
+        parentID: "parent",
+        time: { created: Date.now(), updated: Date.now(), archived: Date.now() },
+      }),
+      mockSession("archived-2", {
+        parentID: "parent",
+        time: { created: Date.now(), updated: Date.now(), archived: Date.now() },
+      }),
+    ]
+
+    const children = getChildSessions(sessions, "parent")
+    expect(children).toHaveLength(2)
+    expect(children.map((s) => s.id)).toEqual(expect.arrayContaining(["active-1", "active-2"]))
+    expect(children.find((s) => s.id === "archived-1")).toBeUndefined()
+    expect(children.find((s) => s.id === "archived-2")).toBeUndefined()
+  })
+})
+
+describe("validateParentIDs", () => {
+  test("returns valid when all parentID references exist", () => {
+    const sessions: Session[] = [
+      mockSession("root"),
+      mockSession("child-1", { parentID: "root" }),
+      mockSession("child-2", { parentID: "root" }),
+      mockSession("grandchild", { parentID: "child-1" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(true)
+    expect(result.orphaned).toHaveLength(0)
+  })
+
+  test("returns invalid when parentID references are missing", () => {
+    const sessions: Session[] = [
+      mockSession("root"),
+      mockSession("child-1", { parentID: "root" }),
+      mockSession("orphaned-1", { parentID: "non-existent" }),
+      mockSession("orphaned-2", { parentID: "also-missing" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(false)
+    expect(result.orphaned).toHaveLength(2)
+    expect(result.orphaned).toContain("orphaned-1")
+    expect(result.orphaned).toContain("orphaned-2")
+  })
+
+  test("handles sessions without parentID", () => {
+    const sessions: Session[] = [
+      mockSession("root-1"),
+      mockSession("root-2"),
+      mockSession("child", { parentID: "root-1" }),
+    ]
+
+    const result = validateParentIDs(sessions)
+    expect(result.valid).toBe(true)
+    expect(result.orphaned).toHaveLength(0)
   })
 })

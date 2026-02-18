@@ -42,6 +42,24 @@ export const childMapByParent = (sessions: Session[]) => {
   return map
 }
 
+export const getChildSessions = (sessions: Session[], parentID: string): Session[] => {
+  return sessions.filter((s) => s.parentID === parentID && !s.time?.archived).sort(sortSessions(Date.now()))
+}
+
+export const validateParentIDs = (sessions: Session[]): { valid: boolean; orphaned: string[] } => {
+  const sessionIds = new Set(sessions.map((s) => s.id))
+  const orphaned: string[] = []
+
+  for (const session of sessions) {
+    if (session.parentID && !sessionIds.has(session.parentID)) {
+      orphaned.push(session.id)
+      console.warn(`[layout] Session "${session.id}" has missing parentID reference: "${session.parentID}"`)
+    }
+  }
+
+  return { valid: orphaned.length === 0, orphaned }
+}
+
 export function getDraggableId(event: unknown): string | undefined {
   if (typeof event !== "object" || event === null) return undefined
   if (!("draggable" in event)) return undefined

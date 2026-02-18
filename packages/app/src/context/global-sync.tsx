@@ -31,6 +31,7 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { trimSessions } from "./global-sync/session-trim"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { validateParentIDs } from "../pages/layout/helpers"
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
 import { sanitizeProject } from "./global-sync/utils"
@@ -218,7 +219,18 @@ function createGlobalSync() {
           .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         const limit = store.limit
         const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], { limit, permission: store.permission })
+        const seen = new Set<string>()
+        const deduplicated = [...nonArchived, ...childSessions].filter((s) => {
+          if (!s.id) return false
+          if (seen.has(s.id)) {
+            console.warn(`[global-sync] Duplicate session ${s.id} detected in directory "${directory}"`)
+            return false
+          }
+          seen.add(s.id)
+          return true
+        })
+        const sessions = trimSessions(deduplicated, { limit, permission: store.permission })
+        validateParentIDs(sessions)
         setStore(
           "sessionTotal",
           estimateRootSessionTotal({ count: nonArchived.length, limit: x.limit, limited: x.limited }),
