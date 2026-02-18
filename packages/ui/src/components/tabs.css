@@ -274,6 +274,7 @@
       padding-inline: 12px;
       gap: 8px;
       align-items: center;
+      background-color: var(--background-stronger);
     }
 
     [data-slot="tabs-trigger-wrapper"] {
