@@ -1120,7 +1120,6 @@
     color: var(--text-weak);
     padding: 0 10px;
   }
-  }
 
   [data-slot="question-options"] {
     display: flex;
