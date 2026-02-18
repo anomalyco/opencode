@@ -1039,7 +1039,27 @@
   [data-slot="question-content"] {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  [data-slot="question-text"] {
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-strong);
+    padding: 0 10px;
+  }
+
+  [data-slot="question-hint"] {
+    font-family: var(--font-family-sans);
+    font-size: 13px;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--text-weak);
+    padding: 0 10px;
   }
 
   [data-slot="question-options"] {
