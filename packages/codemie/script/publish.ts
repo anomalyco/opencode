@@ -63,6 +63,6 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
 await Promise.all(tasks)
 
 // Publish the wrapper package
-await $`cd ${wrapperDir} && bun pm pack && npm publish *.tgz --access restricted --tag ${Script.channel}`
+await $`cd ${wrapperDir} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
 console.log(`Published ${wrapperName}@${version} with tag ${Script.channel}`)
