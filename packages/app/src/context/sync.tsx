@@ -105,7 +105,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const messagePageSize = 400
+    const messagePageSize = 120
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()

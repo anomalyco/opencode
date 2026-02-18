@@ -1358,82 +1358,21 @@ export default function Page() {
 
   const turnInit = 20
   const turnBatch = 20
-  let turnHandle: number | undefined
-  let turnIdle = false
-
-  function cancelTurnBackfill() {
-    const handle = turnHandle
-    if (handle === undefined) return
-    turnHandle = undefined
-
-    if (turnIdle && window.cancelIdleCallback) {
-      window.cancelIdleCallback(handle)
-      return
-    }
-
-    clearTimeout(handle)
-  }
-
-  function scheduleTurnBackfill() {
-    if (turnHandle !== undefined) return
-    if (store.turnStart <= 0) return
-
-    if (window.requestIdleCallback) {
-      turnIdle = true
-      turnHandle = window.requestIdleCallback(() => {
-        turnHandle = undefined
-        backfillTurns()
-      })
-      return
-    }
-
-    turnIdle = false
-    turnHandle = window.setTimeout(() => {
-      turnHandle = undefined
-      backfillTurns()
-    }, 0)
-  }
-
-  function backfillTurns() {
-    const start = store.turnStart
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    const el = scroller
-    if (!el) {
-      setStore("turnStart", nextStart)
-      scheduleTurnBackfill()
-      return
-    }
-
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-
-    setStore("turnStart", nextStart)
-
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
-    })
-
-    scheduleTurnBackfill()
+  const revealEarlierTurns = (count = turnBatch) => {
+    if (count <= 0) return
+    setStore("turnStart", (value) => Math.max(0, value - count))
   }
 
   createEffect(
     on(
       () => [params.id, messagesReady()] as const,
       ([id, ready]) => {
-        cancelTurnBackfill()
         setStore("turnStart", 0)
         if (!id || !ready) return
 
         const len = visibleUserMessages().length
         const start = len > turnInit ? len - turnInit : 0
         setStore("turnStart", start)
-        scheduleTurnBackfill()
       },
       { defer: true },
     ),
@@ -1473,7 +1412,6 @@ export default function Page() {
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
     setTurnStart: (value) => setStore("turnStart", value),
-    scheduleTurnBackfill,
     autoScroll,
     scroller: () => scroller,
     anchor,
@@ -1538,7 +1476,6 @@ export default function Page() {
   })
 
   onCleanup(() => {
-    cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     scrollSpy.destroy()
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -1624,14 +1561,17 @@ export default function Page() {
                       if (root) scheduleScrollState(root)
                     }}
                     turnStart={store.turnStart}
-                    onRenderEarlier={() => setStore("turnStart", 0)}
+                    onRenderEarlier={() => revealEarlierTurns()}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
+                    onLoadEarlier={async () => {
                       const id = params.id
                       if (!id) return
-                      setStore("turnStart", 0)
-                      sync.session.history.loadMore(id)
+                      const before = visibleUserMessages().length
+                      await sync.session.history.loadMore(id)
+                      const added = Math.max(0, visibleUserMessages().length - before)
+                      if (added <= 0) return
+                      setStore("turnStart", (value) => value + added)
                     }}
                     renderedUserMessages={renderedUserMessages()}
                     anchor={anchor}
