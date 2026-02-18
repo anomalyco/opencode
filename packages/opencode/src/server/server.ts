@@ -515,6 +515,8 @@ export namespace Server {
                   data: JSON.stringify(event),
                 })
                 if (event.type === Bus.InstanceDisposed.type) {
+                  clearInterval(heartbeat)
+                  unsub()
                   stream.close()
                 }
               })
