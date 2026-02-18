@@ -502,7 +502,12 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
-        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+        if (
+          model.api.id.includes("opus-4-6") ||
+          model.api.id.includes("opus-4.6") ||
+          model.api.id.includes("sonnet-4-6") ||
+          model.api.id.includes("sonnet-4.6")
+        ) {
           const efforts = ["low", "medium", "high", "max"]
           return Object.fromEntries(
             efforts.map((effort) => [
@@ -534,7 +539,12 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
-        if (model.api.id.includes("opus-4-6") || model.api.id.includes("opus-4.6")) {
+        if (
+          model.api.id.includes("opus-4-6") ||
+          model.api.id.includes("opus-4.6") ||
+          model.api.id.includes("sonnet-4-6") ||
+          model.api.id.includes("sonnet-4.6")
+        ) {
           const efforts = ["low", "medium", "high", "max"]
           return Object.fromEntries(
             efforts.map((effort) => [
