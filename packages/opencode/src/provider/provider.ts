@@ -666,7 +666,7 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
-  const BEDROCK_1M_MODELS = ["claude-opus-4-6", "claude-sonnet-4-5"]
+  const BEDROCK_1M_MODELS = ["claude-opus-4-6", "claude-sonnet-4-5", "claude-sonnet-4-6"]
   const BEDROCK_1M_BETA = "context-1m-2025-08-07"
 
   function splitBedrock1m(providerID: string, models: Record<string, Model>) {

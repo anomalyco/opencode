@@ -1484,6 +1484,42 @@ test("fromModelsDevProvider splits bedrock sonnet 4.5 into 200K and 1M variants"
   expect(extended.status).toBe("beta")
 })
 
+test("fromModelsDevProvider splits bedrock sonnet 4.6 into 200K and 1M variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    env: [],
+    models: {
+      "us.anthropic.claude-sonnet-4-6-v1:0": {
+        id: "us.anthropic.claude-sonnet-4-6-v1:0",
+        name: "Claude Sonnet 4.6",
+        attachment: true,
+        reasoning: true,
+        tool_call: true,
+        temperature: true,
+        release_date: "2026-02-17",
+        limit: { context: 1_000_000, output: 64_000 },
+        options: {},
+      },
+    },
+  })
+
+  const base = provider.models["us.anthropic.claude-sonnet-4-6-v1:0"]
+  const extended = provider.models["us.anthropic.claude-sonnet-4-6-v1:0-1m"]
+
+  expect(base).toBeDefined()
+  expect(extended).toBeDefined()
+
+  expect(base.name).toContain("(200K)")
+  expect(extended.name).toContain("(1M Experimental)")
+
+  expect(base.limit.context).toBe(200_000)
+  expect(extended.limit.context).toBe(1_000_000)
+
+  expect(extended.options.anthropicBeta).toEqual(["context-1m-2025-08-07"])
+  expect(extended.status).toBe("beta")
+})
+
 test("bedrock custom opus 4.6 model is not auto-split", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
