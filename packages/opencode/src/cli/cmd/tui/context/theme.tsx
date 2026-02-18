@@ -204,6 +204,11 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
       }),
   ) as Partial<ThemeColors>
 
+  const textBg = resolved.backgroundElement?.a === 0 ? resolved.background : resolved.backgroundElement
+  if (resolved.text && textBg) {
+    resolved.text = contrastRatio(resolved.text, textBg) >= 2 ? resolved.text : readableTextColor(textBg)
+  }
+
   // Handle selectedListItemText separately since it's optional
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
@@ -229,6 +234,25 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
   } as Theme
+}
+
+function readableTextColor(bg: RGBA) {
+  const black = RGBA.fromInts(0, 0, 0)
+  const white = RGBA.fromInts(255, 255, 255)
+  return contrastRatio(black, bg) >= contrastRatio(white, bg) ? black : white
+}
+
+function contrastRatio(a: RGBA, b: RGBA) {
+  const x = relativeLuminance(a)
+  const y = relativeLuminance(b)
+  const max = Math.max(x, y)
+  const min = Math.min(x, y)
+  return (max + 0.05) / (min + 0.05)
+}
+
+function relativeLuminance(c: RGBA) {
+  const convert = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * convert(c.r) + 0.7152 * convert(c.g) + 0.0722 * convert(c.b)
 }
 
 function ansiToRgba(code: number): RGBA {
