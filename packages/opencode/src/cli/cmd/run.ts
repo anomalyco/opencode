@@ -74,6 +74,13 @@ function fallback(part: ToolPart) {
   })
 }
 
+function errored(part: ToolPart) {
+  inline({
+    icon: "✗",
+    title: `${part.tool} failed`,
+  })
+}
+
 function glob(info: ToolProps<typeof GlobTool>) {
   const root = info.input.path ?? ""
   const title = `Glob "${info.input.pattern}"`
@@ -458,10 +465,12 @@ export const RunCommand = cmd({
 
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
-              tool(part)
-              if (part.state.status === "error") {
-                UI.error(part.state.error)
+              if (part.state.status === "completed") {
+                tool(part)
+                continue
               }
+              errored(part)
+              UI.error(part.state.error)
             }
 
             if (
