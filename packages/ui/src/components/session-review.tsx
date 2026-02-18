@@ -298,6 +298,7 @@ export const SessionReview = (props: SessionReviewProps) => {
             <RadioGroup
               options={["unified", "split"] as const}
               current={diffStyle()}
+              size="small"
               value={(style) => style}
               label={(style) =>
                 i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
