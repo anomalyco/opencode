@@ -21,11 +21,12 @@ export function serverDisplayName(conn?: ServerConnection.Any) {
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(url: string) {
-  if (!url) return ""
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+function projectsKey(key: ServerConnection.Key) {
+  if (!key) return ""
+  if (key === "sidecar") return "local"
+  const host = key.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-  return url
+  return key
 }
 
 export namespace ServerConnection {
