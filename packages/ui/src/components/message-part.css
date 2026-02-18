@@ -326,8 +326,7 @@
 }
 
 [data-slot="collapsible-content"]:has([data-component="edit-content"]),
-[data-slot="collapsible-content"]:has([data-component="write-content"]),
-[data-slot="collapsible-content"]:has([data-component="apply-patch-files"]) {
+[data-slot="collapsible-content"]:has([data-component="write-content"]) {
   border: 1px solid var(--border-weak-base);
   border-radius: 6px;
   background: transparent;
@@ -1219,21 +1218,31 @@
   }
 }
 
-[data-component="apply-patch-files"] {
-  display: flex;
-  flex-direction: column;
-}
-
-[data-component="apply-patch-file"] {
-  display: flex;
-  flex-direction: column;
-
-  [data-slot="apply-patch-file-header"] {
+[data-component="accordion"][data-scope="apply-patch"] {
+  [data-slot="apply-patch-trigger-content"] {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background-color: transparent;
+    justify-content: space-between;
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
+  }
+
+  [data-slot="apply-patch-file-path"] {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-grow: 1;
+  }
+
+  [data-slot="apply-patch-trigger-actions"] {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
   }
 
   [data-slot="apply-patch-file-action"] {
@@ -1257,26 +1266,23 @@
     }
   }
 
-  [data-slot="apply-patch-file-path"] {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-grow: 1;
-  }
-
   [data-slot="apply-patch-deletion-count"] {
     font-family: var(--font-family-mono);
     font-size: var(--font-size-small);
     color: var(--text-critical-base);
     flex-shrink: 0;
   }
-}
 
-[data-component="apply-patch-file"] + [data-component="apply-patch-file"] {
-  border-top: 1px solid var(--border-weaker-base);
+  [data-slot="apply-patch-file-chevron"] {
+    display: inline-flex;
+    color: var(--icon-weaker);
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="apply-patch-file-chevron"] {
+    transform: rotate(0deg);
+  }
 }
 
 [data-component="apply-patch-file-diff"] {
