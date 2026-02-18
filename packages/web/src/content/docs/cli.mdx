@@ -528,6 +528,10 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+> [!NOTE]
+> On Windows, installs managed by `curl`, `npm`, `pnpm`, `bun`, or `yarn` are upgraded manually to avoid breaking the `opencode` command in `PATH`.  
+> `opencode upgrade` will show the exact package-manager command to run in a fresh terminal.
+
 #### Flags
 
 | Flag       | Short | Description                                                       |

@@ -203,6 +203,27 @@ Here are some common issues and how to resolve them.
 
 ---
 
+### `opencode` is not recognized in PowerShell (Windows)
+
+If PowerShell says `opencode` is not recognized:
+
+1. Open a new PowerShell window and run one of:
+
+   ```powershell
+   npm install -g opencode-ai@latest
+   # or
+   scoop install opencode
+   # or
+   choco install opencode
+   ```
+
+2. Ensure your `PATH` includes `%APPDATA%\npm` (for npm installs).
+3. Do not add temporary npm staging folders like `%APPDATA%\npm\node_modules\.opencode-*` to `PATH`.
+
+`opencode upgrade` now prints a manual Windows-safe upgrade command for npm/curl-style installs to avoid PATH breakage.
+
+---
+
 ### Authentication issues
 
 1. Try re-authenticating with the `/connect` command in the TUI

@@ -58,6 +58,9 @@ mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
 
+> [!NOTE]
+> On Windows PowerShell/CMD, use `npm`, `scoop`, or `choco` installs instead of `curl ... | bash`.
+
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 

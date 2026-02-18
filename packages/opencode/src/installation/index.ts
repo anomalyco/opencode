@@ -16,6 +16,7 @@ export namespace Installation {
   const log = Log.create({ service: "installation" })
 
   export type Method = Awaited<ReturnType<typeof method>>
+  const manual = new Set<Method>(["curl", "npm", "pnpm", "bun", "yarn"])
 
   export const Event = {
     Updated: BusEvent.define(
@@ -120,6 +121,27 @@ export namespace Installation {
     }),
   )
 
+  export function command(method: Method, target: string, platform: NodeJS.Platform = process.platform) {
+    if (platform !== "win32") return
+    if (!manual.has(method)) return
+    if (method === "curl") return `npm install -g opencode-ai@${target}`
+    if (method === "npm") return `npm install -g opencode-ai@${target}`
+    if (method === "pnpm") return `pnpm install -g opencode-ai@${target}`
+    if (method === "bun") return `bun install -g opencode-ai@${target}`
+    if (method === "yarn") return `yarn global add opencode-ai@${target}`
+    return
+  }
+
+  export function warning(method: Method, target: string, platform: NodeJS.Platform = process.platform) {
+    const cmd = command(method, target, platform)
+    if (!cmd) return
+    return [
+      `Windows ${method} upgrades are run manually to avoid breaking the \`opencode\` command in your PATH.`,
+      `Run this in a new terminal: ${cmd}`,
+      "Do not add a temporary npm path like `%APPDATA%\\npm\\node_modules\\.opencode-*` to PATH.",
+    ].join("\n")
+  }
+
   async function getBrewFormula() {
     const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
@@ -129,6 +151,13 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
+    const msg = warning(method, target)
+    if (msg) {
+      throw new UpgradeFailedError({
+        stderr: msg,
+      })
+    }
+
     let cmd
     switch (method) {
       case "curl":
