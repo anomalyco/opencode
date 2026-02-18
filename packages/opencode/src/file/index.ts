@@ -1,7 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { $ } from "bun"
-import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
@@ -241,8 +240,8 @@ export namespace File {
     return mimeType.startsWith("image/")
   }
 
-  async function shouldEncode(file: BunFile): Promise<boolean> {
-    const type = file.type?.toLowerCase()
+  async function shouldEncode(mimeType: string): Promise<boolean> {
+    const type = mimeType.toLowerCase()
     log.info("shouldEncode", { type })
     if (!type) return false
 
@@ -385,7 +384,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
+          const content = await Filesystem.readText(path.join(Instance.directory, filepath))
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -437,10 +436,9 @@ export namespace File {
 
     // Fast path: check extension before any filesystem operations
     if (isImageByExtension(file)) {
-      const bunFile = Bun.file(full)
-      if (await bunFile.exists()) {
-        const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
-        const content = Buffer.from(buffer).toString("base64")
+      if (await Filesystem.exists(full)) {
+        const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
+        const content = buffer.toString("base64")
         const mimeType = getImageMimeType(file)
         return { type: "text", content, mimeType, encoding: "base64" }
       }
@@ -451,29 +449,24 @@ export namespace File {
       return { type: "binary", content: "" }
     }
 
-    const bunFile = Bun.file(full)
-
-    if (!(await bunFile.exists())) {
+    if (!(await Filesystem.exists(full))) {
       return { type: "text", content: "" }
     }
 
-    const encode = await shouldEncode(bunFile)
-    const mimeType = bunFile.type || "application/octet-stream"
+    const mimeType = Filesystem.mimeType(full)
+    const encode = await shouldEncode(mimeType)
 
     if (encode && !isImage(mimeType)) {
       return { type: "binary", content: "", mimeType }
     }
 
     if (encode) {
-      const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
-      const content = Buffer.from(buffer).toString("base64")
+      const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
+      const content = buffer.toString("base64")
       return { type: "text", content, mimeType, encoding: "base64" }
     }
 
-    const content = await bunFile
-      .text()
-      .catch(() => "")
-      .then((x) => x.trim())
+    const content = (await Filesystem.readText(full).catch(() => "")).trim()
 
     if (project.vcs === "git") {
       let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
@@ -497,13 +490,13 @@ export namespace File {
     let ignored = (_: string) => false
     if (project.vcs === "git") {
       const ig = ignore()
-      const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
-      if (await gitignore.exists()) {
-        ig.add(await gitignore.text())
+      const gitignorePath = path.join(Instance.worktree, ".gitignore")
+      if (await Filesystem.exists(gitignorePath)) {
+        ig.add(await Filesystem.readText(gitignorePath))
       }
-      const ignoreFile = Bun.file(path.join(Instance.worktree, ".ignore"))
-      if (await ignoreFile.exists()) {
-        ig.add(await ignoreFile.text())
+      const ignorePath = path.join(Instance.worktree, ".ignore")
+      if (await Filesystem.exists(ignorePath)) {
+        ig.add(await Filesystem.readText(ignorePath))
       }
       ignored = ig.ignores.bind(ig)
     }

@@ -37,7 +37,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
-  "ui.sessionTurn.status.gatheringContext": "Istraživanje...",
+  "ui.sessionTurn.status.gatheringContext": "Istraživanje",
   "ui.sessionTurn.status.gatheredContext": "Istraženo",
   "ui.sessionTurn.status.searchingCodebase": "Pretraživanje baze koda",
   "ui.sessionTurn.status.searchingWeb": "Pretraživanje weba",
