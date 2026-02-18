@@ -46,6 +46,7 @@ export function Home() {
     {
       title: tipsHidden() ? "Show tips" : "Hide tips",
       value: "tips.toggle",
+      search: "toggle tips",
       keybind: "tips_toggle",
       category: "System",
       onSelect: (dialog) => {
