@@ -203,6 +203,108 @@ function touch(key: string, value: Entry) {
   cache.delete(first)
 }
 
+function normalize(text: string) {
+  const ws = /[\t \u00A0\u200B\u3000]/
+
+  const fix = (s: string) => {
+    const strong = (m: string, pre: string, body: string, post: string) => {
+      if (!pre && !post) return m
+      const inner = `${pre}${body}${post}`
+      const trimmed = inner.replace(new RegExp(`^(?:${ws.source})+|(?:${ws.source})+$`, "g"), "")
+      if (!trimmed) return m
+      return `**${trimmed}**`
+    }
+
+    const underline = (m: string, pre: string, body: string, post: string) => {
+      if (!pre && !post) return m
+      const inner = `${pre}${body}${post}`
+      const trimmed = inner.replace(new RegExp(`^(?:${ws.source})+|(?:${ws.source})+$`, "g"), "")
+      if (!trimmed) return m
+      return `__${trimmed}__`
+    }
+
+    return s
+      .replace(/\*\*([\t \u00A0\u200B\u3000]*)([^\n]*?)([\t \u00A0\u200B\u3000]*)\*\*/g, strong)
+      .replace(/__([\t \u00A0\u200B\u3000]*)([^\n]*?)([\t \u00A0\u200B\u3000]*)__/g, underline)
+  }
+
+  const fence = (at: number, line: number) => {
+    const ch = text[at]
+    if (ch !== "`" && ch !== "~") return
+    if (at - line > 3) return
+    for (let k = line; k < at; k++) {
+      if (text[k] !== " ") return
+    }
+
+    let n = 0
+    while (text[at + n] === ch) n++
+    if (n < 3) return
+
+    let i = text.indexOf("\n", at)
+    if (i === -1) return { from: line, to: text.length }
+
+    for (;;) {
+      const next = i + 1
+      if (next >= text.length) return
+
+      let j = next
+      while (j < text.length && j - next <= 3 && text[j] === " ") j++
+
+      let run = 0
+      while (text[j + run] === ch) run++
+      if (run >= n) {
+        const end = text.indexOf("\n", j + run)
+        return { from: line, to: end === -1 ? text.length : end + 1 }
+      }
+
+      i = text.indexOf("\n", next)
+      if (i === -1) return
+    }
+  }
+
+  const code = (at: number) => {
+    if (text[at] !== "`") return
+    let n = 0
+    while (text[at + n] === "`") n++
+    const mark = "`".repeat(n)
+    const end = text.indexOf(mark, at + n)
+    if (end === -1) return
+    return { from: at, to: end + n }
+  }
+
+  let out = ""
+  let from = 0
+  let line = 0
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === "\n") {
+      line = i + 1
+      continue
+    }
+
+    const block = fence(i, line)
+    if (block) {
+      out += fix(text.slice(from, block.from))
+      out += text.slice(block.from, block.to)
+      i = block.to - 1
+      from = block.to
+      line = block.to
+      continue
+    }
+
+    const inline = code(i)
+    if (inline) {
+      out += fix(text.slice(from, inline.from))
+      out += text.slice(inline.from, inline.to)
+      i = inline.to - 1
+      from = inline.to
+    }
+  }
+
+  out += fix(text.slice(from))
+  return out
+}
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
@@ -220,7 +322,9 @@ export function Markdown(
     async (markdown) => {
       if (isServer) return ""
 
-      const hash = checksum(markdown)
+      const normalized = normalize(markdown)
+
+      const hash = checksum(normalized)
       const key = local.cacheKey ?? hash
 
       if (key && hash) {
@@ -231,7 +335,7 @@ export function Markdown(
         }
       }
 
-      const next = await marked.parse(markdown)
+      const next = await marked.parse(normalized)
       const safe = sanitize(next)
       if (key && hash) touch(key, { hash, html: safe })
       return safe

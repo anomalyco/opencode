@@ -1187,9 +1187,11 @@
       flex-direction: column;
       gap: 12px;
       padding: 8px 0;
+      width: 100%;
 
       [data-slot="custom-input"] {
         width: 100%;
+        box-sizing: border-box;
         padding: 10px 14px;
         font-size: 16px;
         border: 2px solid var(--border-default);
@@ -1199,8 +1201,9 @@
         outline: none;
         font-family: var(--font-family-sans);
         line-height: 1.5;
-        resize: vertical;
+        resize: none;
         min-height: 80px;
+        field-sizing: content;
         transition: all 0.2s ease;
 
         &:focus {
