@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { useParams } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -7,8 +7,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTerminal } from "@/context/terminal"
 import { decode64 } from "@/utils/base64"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { SettingsPopup } from "./settings-popup"
-import { CreateDialog } from "./create-dialog"
+import { DialogSelectDirectory } from "./dialog-select-directory"
+import { extractDirectory } from "./session-header-actions-helpers"
 
 function RunIcon() {
   return (
@@ -20,6 +22,7 @@ function RunIcon() {
 
 export function SessionHeaderActions() {
   const params = useParams()
+  const navigate = useNavigate()
   const dialog = useDialog()
   const layout = useLayout()
   const terminal = useTerminal()
@@ -71,7 +74,21 @@ export function SessionHeaderActions() {
       <Button
         variant="secondary"
         class="rounded-sm h-[24px] w-[24px] p-0"
-        onClick={() => dialog.show(() => <CreateDialog />)}
+        onClick={() =>
+          dialog.show(
+            () => (
+              <DialogSelectDirectory
+                onSelect={(result) => {
+                  const dir = extractDirectory(result)
+                  if (dir) {
+                    layout.projects.open(dir)
+                    navigate(`/${base64Encode(dir)}`)
+                  }
+                }}
+              />
+            ),
+          )
+        }
         aria-label="Create"
       >
         <Icon name="plus-small" size="small" class="text-icon-base" />
