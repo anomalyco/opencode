@@ -38,8 +38,22 @@
   [data-slot="session-review-actions"] {
     display: flex;
     align-items: center;
-    column-gap: 16px;
+    column-gap: 12px;
     padding-right: 1px;
+  }
+
+  [data-slot="session-review-actions"] [data-component="radio-group"] {
+    [data-slot="radio-group-wrapper"],
+    [data-slot="radio-group-indicator"],
+    [data-slot="radio-group-item-control"] {
+      border-radius: 6px;
+    }
+
+    [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+      + [data-slot="radio-group-item-label"]:hover
+      [data-slot="radio-group-item-control"] {
+      border-radius: 4px;
+    }
   }
 
   [data-component="sticky-accordion-header"] {

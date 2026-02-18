@@ -501,6 +501,8 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
+            c.header("X-Accel-Buffering", "no")
+            c.header("X-Content-Type-Options", "nosniff")
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({
@@ -517,7 +519,7 @@ export namespace Server {
                 }
               })
 
-              // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+              // Send heartbeat every 10s to prevent stalled proxy streams.
               const heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
@@ -525,7 +527,7 @@ export namespace Server {
                     properties: {},
                   }),
                 })
-              }, 30000)
+              }, 10_000)
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {
