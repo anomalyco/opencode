@@ -26,7 +26,7 @@ export function SessionHeaderActions() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
-  const runCommand = (input: { command: string; args?: string[]; label: string }) => {
+  const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
     if (!params.dir) {
       showToast({
         variant: "error",
@@ -38,15 +38,25 @@ export function SessionHeaderActions() {
 
     const cwd = decode64(params.dir) ?? params.dir
     view().terminal.open()
-    terminal.run({ command: input.command, args: input.args, title: input.label, cwd })
+    terminal.run({ command: input.command, args: input.args, title: input.label, cwd, env: input.env })
   }
 
   const run = () => {
     runCommand({ command: "latervibe", args: ["start", "--wait"], label: "Run" })
   }
 
-  const publish = () => {
-    runCommand({ command: "latervibe", args: ["publish", "--wait"], label: "Publish" })
+  const publish = async () => {
+    try {
+      const res = await fetch("/auth/deploy-token", { credentials: "include" })
+      if (!res.ok) {
+        showToast({ variant: "error", title: "Publish failed", description: "Could not get deploy token. Please log in again." })
+        return
+      }
+      const { token } = await res.json()
+      runCommand({ command: "latervibe", args: ["publish", "--wait"], label: "Publish", env: { LATERVIBE_DEPLOY_TOKEN: token } })
+    } catch {
+      showToast({ variant: "error", title: "Publish failed", description: "Could not get deploy token." })
+    }
   }
 
   return (
