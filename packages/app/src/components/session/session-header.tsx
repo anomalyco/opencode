@@ -257,26 +257,11 @@ export function SessionHeader() {
     ] as const
   })
 
-  const checksReady = createMemo(() => {
-    if (platform.platform !== "desktop") return true
-    if (!platform.checkAppExists) return true
-    const list = apps()
-    return list.every((app) => exists[app.id] !== undefined)
-  })
-
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
-
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    if (!checksReady()) return
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
 
   const openDir = (app: OpenApp) => {
     const directory = projectDirectory()
@@ -398,7 +383,7 @@ export function SessionHeader() {
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
-                                  value={prefs.app}
+                                  value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
                                     setPrefs("app", value as OpenApp)

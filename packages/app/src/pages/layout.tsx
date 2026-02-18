@@ -177,7 +177,12 @@ export default function Layout(props: ParentProps) {
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
-  const clearHoverProjectSoon = () => queueMicrotask(() => setState("hoverProject", undefined))
+  const setHoverProject = (value: string | undefined) => {
+    setState("hoverProject", value)
+    if (value !== undefined) return
+    aim.reset()
+  }
+  const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
   const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
   const hoverProjectData = createMemo(() => {
@@ -188,13 +193,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
-    aim.reset()
-    setState("hoverProject", undefined)
-  })
-
-  createEffect(() => {
-    if (state.hoverProject !== undefined) return
-    aim.reset()
+    setHoverProject(undefined)
   })
 
   const autoselecting = createMemo(() => {
@@ -225,7 +224,7 @@ export default function Layout(props: ParentProps) {
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
     setState("hoverSession", undefined)
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -1490,7 +1489,7 @@ export default function Layout(props: ParentProps) {
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
     setStore("activeProject", id)
   }
 
@@ -1924,7 +1923,7 @@ export default function Layout(props: ParentProps) {
             if (navLeave.current !== undefined) clearTimeout(navLeave.current)
             navLeave.current = window.setTimeout(() => {
               navLeave.current = undefined
-              setState("hoverProject", undefined)
+              setHoverProject(undefined)
               setState("hoverSession", undefined)
             }, 300)
           }}

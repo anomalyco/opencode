@@ -1,4 +1,4 @@
-import { onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -981,7 +981,7 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
-  createEffect(() => {
+  onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
 
