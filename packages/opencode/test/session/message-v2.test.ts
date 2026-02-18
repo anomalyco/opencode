@@ -53,6 +53,26 @@ const model: Provider.Model = {
   release_date: "2026-01-01",
 }
 
+const kimiModel: Provider.Model = {
+  ...model,
+  id: "moonshotai/kimi-k2.5",
+  providerID: "moonshotai",
+  api: {
+    id: "kimi-k2.5",
+    url: "https://api.moonshot.ai/v1",
+    npm: "@ai-sdk/openai-compatible",
+  },
+  capabilities: {
+    ...model.capabilities,
+    attachment: true,
+    reasoning: true,
+    input: {
+      ...model.capabilities.input,
+      image: true,
+    },
+  },
+}
+
 function userInfo(id: string): MessageV2.User {
   return {
     id,
@@ -560,6 +580,218 @@ describe("session.message-v2.toModelMessage", () => {
             toolName: "bash",
             output: { type: "error-text", value: "nope" },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("uses non-empty fallback for kimi tool results with image-only output", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run figma screenshot",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, {
+          providerID: kimiModel.providerID,
+          modelID: kimiModel.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-figma",
+            tool: "figma-desktop_get_screenshot",
+            state: {
+              status: "completed",
+              input: { nodeId: "1:2" },
+              output: "",
+              title: "Screenshot",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "f1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const output = MessageV2.toModelMessages(input, kimiModel)
+    expect(output).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run figma screenshot" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-figma",
+            toolName: "figma-desktop_get_screenshot",
+            input: { nodeId: "1:2" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-figma",
+            toolName: "figma-desktop_get_screenshot",
+            output: { type: "text", value: "[Tool produced non-text output; attachment included separately.]" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,Zm9v", filename: undefined },
+        ],
+      },
+    ])
+  })
+
+  test("does not emit empty kimi tool output when text contains only whitespace", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run figma screenshot",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, {
+          providerID: kimiModel.providerID,
+          modelID: kimiModel.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-figma",
+            tool: "figma-desktop_get_screenshot",
+            state: {
+              status: "completed",
+              input: { nodeId: "1:2" },
+              output: "   ",
+              title: "Screenshot",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "f1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const output = MessageV2.toModelMessages(input, kimiModel)
+    const tool = output.find((item) => item.role === "tool")
+    expect(tool?.role).toBe("tool")
+    expect(Array.isArray(tool?.content)).toBe(true)
+    if (!Array.isArray(tool?.content)) return
+    expect(tool.content[0]).toStrictEqual({
+      type: "tool-result",
+      toolCallId: "call-figma",
+      toolName: "figma-desktop_get_screenshot",
+      output: { type: "text", value: "[Tool produced non-text output; attachment included separately.]" },
+    })
+  })
+
+  test("uses non-empty fallback for empty tool errors", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "error",
+              input: { cmd: "ls" },
+              error: "",
+              time: { start: 0, end: 1 },
+              metadata: {},
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "error-text", value: "[Tool execution failed without details.]" },
           },
         ],
       },

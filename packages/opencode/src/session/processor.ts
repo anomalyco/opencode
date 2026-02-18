@@ -15,9 +15,12 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { ProviderTransform } from "@/provider/transform"
+import { iife } from "@/util/iife"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const TOOL_ERROR_REPEAT_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -34,6 +37,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    const toolErrors = new Map<string, number>()
 
     const result = {
       get message() {
@@ -204,18 +208,37 @@ export namespace SessionProcessor {
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const errorText = iife(() => {
+                      const text = (value.error as any)?.toString?.() ?? ""
+                      if (typeof text === "string" && text.trim()) return text
+                      return ProviderTransform.TOOL_ERROR_FALLBACK_TEXT
+                    })
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: errorText,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
                         },
                       },
                     })
+                    const key = [match.tool, JSON.stringify(value.input ?? match.state.input ?? {}), errorText].join("|")
+                    const count = (toolErrors.get(key) ?? 0) + 1
+                    toolErrors.set(key, count)
+                    if (count >= TOOL_ERROR_REPEAT_THRESHOLD) {
+                      blocked = true
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: input.assistantMessage.id,
+                        sessionID: input.assistantMessage.sessionID,
+                        type: "text",
+                        text: "Stopped auto-retrying after 3 identical tool errors in this session. Verify MCP server response and retry.",
+                        synthetic: true,
+                      })
+                    }
 
                     if (
                       value.error instanceof PermissionNext.RejectedError ||
@@ -345,7 +368,7 @@ export namespace SessionProcessor {
                   })
                   continue
               }
-              if (needsCompaction) break
+              if (needsCompaction || blocked) break
             }
           } catch (e: any) {
             log.error("process", {

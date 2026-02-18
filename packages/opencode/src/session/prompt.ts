@@ -726,6 +726,81 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  type MCPContent =
+    | { type: "text"; text: string }
+    | { type: "image"; mimeType: string; data: string }
+    | {
+        type: "resource"
+        resource: {
+          uri: string
+          text?: string
+          blob?: string
+          mimeType?: string
+        }
+      }
+
+  export function normalizeMcpResultContent(input: { content: MCPContent[]; sessionID: string; messageID: string }) {
+    const text: string[] = []
+    const attachments: MessageV2.FilePart[] = []
+    let hasImage = false
+
+    for (const item of input.content) {
+      if (item.type === "text") {
+        text.push(item.text)
+        continue
+      }
+      if (item.type === "image") {
+        hasImage = true
+        attachments.push({
+          id: Identifier.ascending("part"),
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          type: "file",
+          mime: item.mimeType,
+          url: `data:${item.mimeType};base64,${item.data}`,
+        })
+        continue
+      }
+      if (item.type !== "resource") continue
+
+      if (item.resource.text) {
+        text.push(item.resource.text)
+      }
+      if (item.resource.blob) {
+        if (item.resource.mimeType?.startsWith("image/")) hasImage = true
+        attachments.push({
+          id: Identifier.ascending("part"),
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          type: "file",
+          mime: item.resource.mimeType ?? "application/octet-stream",
+          url: `data:${item.resource.mimeType ?? "application/octet-stream"};base64,${item.resource.blob}`,
+          filename: item.resource.uri,
+        })
+      }
+    }
+
+    return {
+      text,
+      attachments,
+      hasImage,
+    }
+  }
+
+  export function normalizeMcpOutput(input: {
+    model: Provider.Model
+    output: string
+    attachments: MessageV2.FilePart[]
+    isError?: boolean
+  }) {
+    if (input.output.trim()) return input.output
+    if (input.isError) return ProviderTransform.TOOL_ERROR_FALLBACK_TEXT
+    if (ProviderTransform.isKimiK25(input.model) && input.attachments.length > 0) {
+      return ProviderTransform.KIMI_TOOL_RESULT_FALLBACK_TEXT
+    }
+    return input.output
+  }
+
   /** @internal Exported for testing */
   export async function resolveTools(input: {
     agent: Agent.Info
@@ -854,41 +929,49 @@ export namespace SessionPrompt {
           result,
         )
 
-        const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
-
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-            })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
-              attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
-                type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
-              })
-            }
-          }
+        const content = Array.isArray(result.content) ? (result.content as MCPContent[]) : []
+        const normalized = normalizeMcpResultContent({
+          content,
+          sessionID: input.session.id,
+          messageID: input.processor.message.id,
+        })
+        const counts = content.reduce(
+          (acc, item) => {
+            acc[item.type] = (acc[item.type] ?? 0) + 1
+            return acc
+          },
+          {} as Record<string, number>,
+        )
+        const hasText = normalized.text.some((item) => item.trim())
+        const hasImage = normalized.hasImage
+        const argKeys = typeof args === "object" && args !== null ? Object.keys(args as Record<string, unknown>) : []
+        if (Flag.OPENCODE_DEBUG_MCP_PAYLOAD) {
+          log.info("mcp tool response", {
+            tool: key,
+            arg_keys: argKeys,
+            types: counts,
+            has_text: hasText,
+            has_image: hasImage,
+            attachments: normalized.attachments.length,
+            is_error: result.isError === true,
+          })
         }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const truncated = await Truncate.output(normalized.text.join("\n\n"), {}, input.agent)
+        const output = normalizeMcpOutput({
+          model: input.model,
+          output: truncated.content,
+          attachments: normalized.attachments,
+          isError: result.isError === true,
+        })
+        if (Flag.OPENCODE_DEBUG_MCP_PAYLOAD) {
+          log.info("mcp tool output", {
+            tool: key,
+            output_length: output.length,
+            output_kind: normalized.attachments.length > 0 ? "text+attachments" : "text",
+          })
+        }
+
         const metadata = {
           ...(result.metadata ?? {}),
           truncated: truncated.truncated,
@@ -898,8 +981,8 @@ export namespace SessionPrompt {
         return {
           title: "",
           metadata,
-          output: truncated.content,
-          attachments,
+          output,
+          attachments: normalized.attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }

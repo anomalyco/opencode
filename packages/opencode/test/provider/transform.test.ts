@@ -1022,6 +1022,103 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   })
 })
 
+describe("ProviderTransform.message - kimi empty tool result normalization", () => {
+  const kimiModel = {
+    id: "moonshotai/kimi-k2.5",
+    providerID: "moonshotai",
+    api: {
+      id: "kimi-k2.5",
+      url: "https://api.moonshot.ai/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Kimi K2.5",
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: { field: "reasoning_content" },
+    },
+    cost: {
+      input: 0.6,
+      output: 3,
+      cache: { read: 0.1, write: 0 },
+    },
+    limit: {
+      context: 262144,
+      output: 262144,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-01-01",
+  } as any
+
+  test("rewrites empty tool result text for kimi", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "figma-desktop_get_screenshot",
+            output: { type: "text", value: "" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiModel, {})
+    expect(result[0]?.content?.[0]).toEqual({
+      type: "tool-result",
+      toolCallId: "call-1",
+      toolName: "figma-desktop_get_screenshot",
+      output: { type: "text", value: "[Tool produced non-text output; attachment included separately.]" },
+    })
+  })
+
+  test("does not rewrite empty tool result text for non-kimi openai-compatible models", () => {
+    const model = {
+      ...kimiModel,
+      id: "custom-provider/qwen-plus",
+      providerID: "custom-provider",
+      api: {
+        id: "qwen-plus",
+        url: "https://example.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...kimiModel.capabilities,
+        interleaved: false,
+      },
+    }
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "figma-desktop_get_screenshot",
+            output: { type: "text", value: "" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model as any, {})
+    expect(result[0]?.content?.[0]).toEqual({
+      type: "tool-result",
+      toolCallId: "call-1",
+      toolName: "figma-desktop_get_screenshot",
+      output: { type: "text", value: "" },
+    })
+  })
+})
+
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
   const openaiModel = {
     id: "openai/gpt-5",

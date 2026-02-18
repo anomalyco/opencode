@@ -511,6 +511,7 @@ export namespace MessageV2 {
       }
       return false
     })()
+    const kimiK25 = ProviderTransform.isKimiK25(model)
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
@@ -617,7 +618,10 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              let outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              if (kimiK25 && outputText.trim() === "") {
+                outputText = ProviderTransform.KIMI_TOOL_RESULT_FALLBACK_TEXT
+              }
               const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
@@ -649,14 +653,19 @@ export namespace MessageV2 {
               })
             }
             if (part.state.status === "error")
-              assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
-                state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
-                errorText: part.state.error,
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
-              })
+              // Some providers reject empty tool error strings.
+              // Keep historical sessions replayable by always emitting non-empty text.
+              {
+                const errorText = part.state.error.trim() ? part.state.error : ProviderTransform.TOOL_ERROR_FALLBACK_TEXT
+                assistantMessage.parts.push({
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-error",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  errorText,
+                  ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                })
+              }
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
             if (part.state.status === "pending" || part.state.status === "running")

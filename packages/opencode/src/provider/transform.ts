@@ -19,6 +19,14 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  export const KIMI_TOOL_RESULT_FALLBACK_TEXT = "[Tool produced non-text output; attachment included separately.]"
+  export const TOOL_ERROR_FALLBACK_TEXT = "[Tool execution failed without details.]"
+
+  export function isKimiK25(model: Pick<Provider.Model, "api" | "id">) {
+    if (model.api.npm !== "@ai-sdk/openai-compatible") return false
+    const id = `${model.id} ${model.api.id}`.toLowerCase()
+    return ["kimi-k2.5", "kimi-k2p5", "kimi-k2-5", "k2p5"].some((part) => id.includes(part))
+  }
 
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
@@ -49,6 +57,27 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    if (isKimiK25(model)) {
+      msgs = msgs.map((msg) => {
+        if (msg.role !== "tool" || !Array.isArray(msg.content)) return msg
+        return {
+          ...msg,
+          content: msg.content.map((part) => {
+            if (part.type !== "tool-result") return part
+            if (part.output.type !== "text") return part
+            if (part.output.value.trim()) return part
+            return {
+              ...part,
+              output: {
+                ...part.output,
+                value: KIMI_TOOL_RESULT_FALLBACK_TEXT,
+              },
+            }
+          }),
+        }
+      })
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic") {

@@ -250,6 +250,16 @@ To resolve this:
 
 ---
 
+### "Text content is empty" (Kimi + MCP screenshot)
+
+If you see a `"Text content is empty"` error while using Kimi k2.5 with an MCP screenshot tool, it usually means the tool returned image data without text and the provider rejected an empty tool-result text payload.
+
+OpenCode now recovers automatically by normalizing image-only MCP tool results to include a minimal non-empty text stub. A single failure should not poison the session, and follow-up tool calls should continue working.
+
+If you still encounter repeated failures, retry the tool call once and check your MCP server health/logs.
+
+---
+
 ### AI_APICallError and provider package issues
 
 If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
