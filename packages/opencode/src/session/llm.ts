@@ -180,21 +180,51 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        const name = failed.toolCall.toolName
+        // try lowercase first
+        if (name !== name.toLowerCase() && tools[name.toLowerCase()]) {
           l.info("repairing tool call", {
-            tool: failed.toolCall.toolName,
-            repaired: lower,
+            tool: name,
+            repaired: name.toLowerCase(),
           })
-          return {
-            ...failed.toolCall,
-            toolName: lower,
+          return { ...failed.toolCall, toolName: name.toLowerCase() }
+        }
+        // try stripping underscores/hyphens and case-insensitive match
+        // handles todo_write -> todowrite, Web_Fetch -> webfetch, etc.
+        const normalized = name.replace(/[-_]/g, "").toLowerCase()
+        for (const toolName of Object.keys(tools)) {
+          if (toolName.toLowerCase() === normalized) {
+            l.info("repairing tool call", {
+              tool: name,
+              repaired: toolName,
+            })
+            return { ...failed.toolCall, toolName }
           }
+        }
+        // try alias lookup (config overrides builtins)
+        const builtinAliases: Record<string, string> = {
+          search: "grep",
+          find: "glob",
+          cat: "read",
+          run: "bash",
+          shell: "bash",
+          todo: "todowrite",
+          fetch: "webfetch",
+        }
+        const userAliases = cfg.experimental?.tool_aliases ?? {}
+        const aliases = { ...builtinAliases, ...userAliases }
+        const aliasTarget = aliases[name] ?? aliases[name.toLowerCase()] ?? aliases[normalized]
+        if (aliasTarget && tools[aliasTarget]) {
+          l.info("repairing tool call via alias", {
+            tool: name,
+            alias: aliasTarget,
+          })
+          return { ...failed.toolCall, toolName: aliasTarget }
         }
         return {
           ...failed.toolCall,
           input: JSON.stringify({
-            tool: failed.toolCall.toolName,
+            tool: name,
             error: failed.error.message,
           }),
           toolName: "invalid",

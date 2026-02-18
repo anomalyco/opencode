@@ -1190,6 +1190,10 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          tool_aliases: z
+            .record(z.string(), z.string())
+            .optional()
+            .describe("Map of alias → canonical tool name for repairing miscalled tools"),
         })
         .optional(),
     })
