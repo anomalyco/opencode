@@ -840,6 +840,14 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case e instanceof Error && e.name === "StreamIdleTimeoutError":
+        return new MessageV2.APIError(
+          {
+            message: e.message,
+            isRetryable: true,
+          },
+          { cause: e },
+        ).toObject()
       case APICallError.isInstance(e):
         const parsed = ProviderError.parseAPICallError({
           providerID: ctx.providerID,

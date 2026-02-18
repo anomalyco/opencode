@@ -10,6 +10,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { abortAfterAny } from "@/util/abort"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -118,11 +119,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const messageID = Identifier.ascending("message")
 
+      // Subagent timeout: 10 minutes default to prevent indefinite hangs
+      const SUBAGENT_TIMEOUT_MS = 10 * 60 * 1000
+      const timeout = abortAfterAny(SUBAGENT_TIMEOUT_MS, ctx.abort)
       function cancel() {
         SessionPrompt.cancel(session.id)
       }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      timeout.signal.addEventListener("abort", cancel)
+      using _ = defer(() => {
+        timeout.signal.removeEventListener("abort", cancel)
+        timeout.clearTimeout()
+      })
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
       const result = await SessionPrompt.prompt({

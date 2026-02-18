@@ -18,7 +18,39 @@ import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const MAX_RETRY_ATTEMPTS = 10
+  const STREAM_IDLE_TIMEOUT_MS = 120_000 // 2 minutes with no stream chunk
   const log = Log.create({ service: "session.processor" })
+
+  class StreamIdleTimeoutError extends Error {
+    readonly isRetryable = true
+    constructor(ms: number) {
+      super(`Stream idle for ${ms}ms with no data received`)
+      this.name = "StreamIdleTimeoutError"
+    }
+  }
+
+  async function* withIdleTimeout<T>(stream: AsyncIterable<T>, ms: number, signal: AbortSignal): AsyncGenerator<T> {
+    const iterator = stream[Symbol.asyncIterator]()
+    while (true) {
+      const result = await Promise.race([
+        iterator.next(),
+        new Promise<never>((_, reject) => {
+          const timer = setTimeout(() => reject(new StreamIdleTimeoutError(ms)), ms)
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer)
+              reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+            },
+            { once: true },
+          )
+        }),
+      ])
+      if (result.done) return
+      yield result.value
+    }
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -52,7 +84,7 @@ export namespace SessionProcessor {
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
-            for await (const value of stream.fullStream) {
+            for await (const value of withIdleTimeout(stream.fullStream, STREAM_IDLE_TIMEOUT_MS, input.abort)) {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
@@ -357,7 +389,7 @@ export namespace SessionProcessor {
               // TODO: Handle context overflow error
             }
             const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
+            if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
               attempt++
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
@@ -368,6 +400,9 @@ export namespace SessionProcessor {
               })
               await SessionRetry.sleep(delay, input.abort).catch(() => {})
               continue
+            }
+            if (retry !== undefined) {
+              log.error("max retries exceeded", { attempt, message: retry })
             }
             input.assistantMessage.error = error
             Bus.publish(Session.Event.Error, {
