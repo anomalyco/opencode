@@ -137,7 +137,12 @@ export const rpc = {
   async shutdown() {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
-    await Instance.disposeAll()
+    await Promise.race([
+      Instance.disposeAll(),
+      new Promise((resolve) => {
+        setTimeout(resolve, 5000)
+      }),
+    ])
     if (server) server.stop(true)
   },
 }
