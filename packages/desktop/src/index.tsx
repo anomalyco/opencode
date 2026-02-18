@@ -6,7 +6,7 @@ import {
   handleNotificationClick,
   type Platform,
   PlatformProvider,
-  type ServerConnection,
+  ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -31,7 +31,6 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { createStore } from "solid-js/store"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
@@ -447,18 +446,16 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            const servers: Array<ServerConnection.Sidecar> = [
-              {
-                displayName: "Local Server",
-                type: "sidecar",
-                variant: "base",
-                http: {
-                  url: data().url,
-                  username: "opencode",
-                  password: data().password ?? undefined,
-                },
+            const server: ServerConnection.Sidecar = {
+              displayName: "Local Server",
+              type: "sidecar",
+              variant: "base",
+              http: {
+                url: data().url,
+                username: "opencode",
+                password: data().password ?? undefined,
               },
-            ]
+            }
 
             function Inner() {
               const cmd = useCommand()
@@ -469,7 +466,7 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultUrl={data().url} servers={servers}>
+              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]}>
                 <Inner />
               </AppInterface>
             )
