@@ -180,7 +180,7 @@ export namespace LSPServer {
         if (!response.ok) return
 
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
-        await Filesystem.write(zipPath, await response.text())
+        if (response.body) await Filesystem.writeStream(zipPath, response.body)
 
         const ok = await Archive.extractZip(zipPath, Global.Path.bin)
           .then(() => true)
@@ -584,7 +584,7 @@ export namespace LSPServer {
           const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
-          await Filesystem.write(zipPath, await response.text())
+          if (response.body) await Filesystem.writeStream(zipPath, response.body)
 
           const ok = await Archive.extractZip(zipPath, Global.Path.bin)
             .then(() => true)
@@ -692,7 +692,7 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Filesystem.write(tempPath, await downloadResponse.text())
+        if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         if (ext === "zip") {
           const ok = await Archive.extractZip(tempPath, Global.Path.bin)
@@ -1443,7 +1443,7 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Filesystem.write(tempPath, await downloadResponse.text())
+        if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         // Unlike zls which is a single self-contained binary,
         // lua-language-server needs supporting files (meta/, locale/, etc.)
@@ -1694,7 +1694,7 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Filesystem.write(tempPath, await downloadResponse.text())
+        if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         const ok = await Archive.extractZip(tempPath, Global.Path.bin)
           .then(() => true)
@@ -1784,7 +1784,7 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Filesystem.write(tempPath, await downloadResponse.text())
+        if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         if (ext === "zip") {
           const ok = await Archive.extractZip(tempPath, Global.Path.bin)
@@ -1990,7 +1990,7 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Filesystem.write(tempPath, await downloadResponse.text())
+        if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         if (ext === "zip") {
           const ok = await Archive.extractZip(tempPath, Global.Path.bin)
