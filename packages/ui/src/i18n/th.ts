@@ -34,7 +34,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",
-  "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ...",
+  "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ",
   "ui.sessionTurn.status.gatheredContext": "สำรวจแล้ว",
   "ui.sessionTurn.status.searchingCodebase": "กำลังค้นหาโค้ดเบส",
   "ui.sessionTurn.status.searchingWeb": "กำลังค้นหาบนเว็บ",

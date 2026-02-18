@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -72,7 +72,6 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
   onRegisterMessage: (el: HTMLDivElement, id: string) => void
   onUnregisterMessage: (id: string) => void
-  onFirstTurnMount?: () => void
   lastUserMessageID?: string
 }) {
   let touchGesture: number | undefined
@@ -516,37 +515,31 @@ export function MessageTimeline(props: {
               </div>
             </Show>
             <For each={props.renderedUserMessages}>
-              {(message) => {
-                if (import.meta.env.DEV && props.onFirstTurnMount) {
-                  onMount(() => props.onFirstTurnMount?.())
-                }
-
-                return (
-                  <div
-                    id={props.anchor(message.id)}
-                    data-message-id={message.id}
-                    ref={(el) => {
-                      props.onRegisterMessage(el, message.id)
-                      onCleanup(() => props.onUnregisterMessage(message.id))
+              {(message) => (
+                <div
+                  id={props.anchor(message.id)}
+                  data-message-id={message.id}
+                  ref={(el) => {
+                    props.onRegisterMessage(el, message.id)
+                    onCleanup(() => props.onUnregisterMessage(message.id))
+                  }}
+                  classList={{
+                    "min-w-0 w-full max-w-full": true,
+                    "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                  }}
+                >
+                  <SessionTurn
+                    sessionID={sessionID() ?? ""}
+                    messageID={message.id}
+                    lastUserMessageID={props.lastUserMessageID}
+                    classes={{
+                      root: "min-w-0 w-full relative",
+                      content: "flex flex-col justify-between !overflow-visible",
+                      container: "w-full px-4 md:px-6",
                     }}
-                    classList={{
-                      "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-                    }}
-                  >
-                    <SessionTurn
-                      sessionID={sessionID() ?? ""}
-                      messageID={message.id}
-                      lastUserMessageID={props.lastUserMessageID}
-                      classes={{
-                        root: "min-w-0 w-full relative",
-                        content: "flex flex-col justify-between !overflow-visible",
-                        container: "w-full px-4 md:px-6",
-                      }}
-                    />
-                  </div>
-                )
-              }}
+                  />
+                </div>
+              )}
             </For>
           </div>
         </div>
