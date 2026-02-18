@@ -48,6 +48,12 @@
     [data-slot="radio-group-item-control"] {
       border-radius: 6px;
     }
+
+    [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+      + [data-slot="radio-group-item-label"]:hover
+      [data-slot="radio-group-item-control"] {
+      border-radius: 4px;
+    }
   }
 
   [data-component="sticky-accordion-header"] {
