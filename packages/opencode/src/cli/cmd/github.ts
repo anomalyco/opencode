@@ -174,6 +174,18 @@ export function extractResponseText(parts: MessageV2.Part[]): string | null {
   throw new Error("Failed to parse response: no parts returned")
 }
 
+/**
+ * Formats a PROMPT_TOO_LARGE error message with details about files in the prompt.
+ * Content is base64 encoded, so we calculate original size by multiplying by 0.75.
+ */
+export function formatPromptTooLargeError(files: { filename: string; content: string }[]): string {
+  const fileDetails =
+    files.length > 0
+      ? `\n\nFiles in prompt:\n${files.map((f) => `  - ${f.filename} (${((f.content.length * 0.75) / 1024).toFixed(0)} KB)`).join("\n")}`
+      : ""
+  return `PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.${fileDetails}`
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -803,6 +815,7 @@ export const GithubRunCommand = cmd({
             replacement,
           })
         }
+
         return { userPrompt: prompt, promptFiles: imgData }
       }
 
@@ -910,10 +923,15 @@ export const GithubRunCommand = cmd({
 
         // result should always be assistant just satisfying type checker
         if (result.info.role === "assistant" && result.info.error) {
-          console.error("Agent error:", result.info.error)
-          throw new Error(
-            `${result.info.error.name}: ${"message" in result.info.error ? result.info.error.message : ""}`,
-          )
+          const err = result.info.error
+          console.error("Agent error:", err)
+
+          if (err.name === "ContextOverflowError") {
+            throw new Error(formatPromptTooLargeError(files))
+          }
+
+          const errorMsg = err.data?.message || ""
+          throw new Error(`${err.name}: ${errorMsg}`)
         }
 
         const text = extractResponseText(result.parts)
@@ -939,10 +957,15 @@ export const GithubRunCommand = cmd({
         })
 
         if (summary.info.role === "assistant" && summary.info.error) {
-          console.error("Summary agent error:", summary.info.error)
-          throw new Error(
-            `${summary.info.error.name}: ${"message" in summary.info.error ? summary.info.error.message : ""}`,
-          )
+          const err = summary.info.error
+          console.error("Summary agent error:", err)
+
+          if (err.name === "ContextOverflowError") {
+            throw new Error(formatPromptTooLargeError(files))
+          }
+
+          const errorMsg = err.data?.message || ""
+          throw new Error(`${err.name}: ${errorMsg}`)
         }
 
         const summaryText = extractResponseText(summary.parts)
