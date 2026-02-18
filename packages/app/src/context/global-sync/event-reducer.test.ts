@@ -116,6 +116,20 @@ describe("applyGlobalEvent", () => {
 
     expect(refreshCount).toBe(1)
   })
+
+  test("handles server.connected by triggering refresh", () => {
+    let refreshCount = 0
+    applyGlobalEvent({
+      event: { type: "server.connected" },
+      project: [],
+      refresh: () => {
+        refreshCount += 1
+      },
+      setGlobalProject() {},
+    })
+
+    expect(refreshCount).toBe(1)
+  })
 })
 
 describe("applyDirectoryEvent", () => {

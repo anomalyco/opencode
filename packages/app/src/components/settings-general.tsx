@@ -431,7 +431,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
             const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
             const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
@@ -457,7 +457,7 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
-        </Show>
+        </Show>*/}
 
         <UpdatesSection />
 
