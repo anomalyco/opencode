@@ -9,7 +9,6 @@ use std::os::unix::process::ExitStatusExt;
 use std::sync::Arc;
 use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, BufReader},
@@ -20,7 +19,6 @@ use tokio::{
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
-use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -202,16 +200,8 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn is_wsl_enabled(app: &tauri::AppHandle) -> bool {
-    let Ok(store) = app.store(SETTINGS_STORE) else {
-        return false;
-    };
-
-    store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
+    false
 }
 
 fn shell_escape(input: &str) -> String {
