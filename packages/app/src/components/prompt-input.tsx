@@ -1375,8 +1375,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       name={mode === "shell" ? "console" : "prompt"}
                       class="size-[18px]"
                       classList={{
-                        "text-icon-strong-base": mode === "shell" && store.mode === "shell",
-                        "text-icon-interactive-base": mode === "normal" && store.mode === "normal",
+                        "text-icon-strong-base": store.mode === mode,
                         "text-icon-weak": store.mode !== mode,
                       }}
                     />

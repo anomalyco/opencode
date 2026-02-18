@@ -1,14 +1,15 @@
-import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
+import { showToast } from "@opencode-ai/ui/toast"
+import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
+import { type ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { SerializeAddon } from "@/addons/serialize"
+import { matchKeybind, parseKeybind } from "@/context/command"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
-import { parseKeybind, matchKeybind } from "@/context/command"
-import { SerializeAddon } from "@/addons/serialize"
-import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
-import { useLanguage } from "@/context/language"
-import { showToast } from "@opencode-ai/ui/toast"
+import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -106,8 +107,14 @@ const useTerminalUiBindings = (input: {
   input.container.addEventListener("pointerdown", input.handlePointerDown)
   input.cleanups.push(() => input.container.removeEventListener("pointerdown", input.handlePointerDown))
 
-  input.container.addEventListener("click", input.handleLinkClick, { capture: true })
-  input.cleanups.push(() => input.container.removeEventListener("click", input.handleLinkClick, { capture: true }))
+  input.container.addEventListener("click", input.handleLinkClick, {
+    capture: true,
+  })
+  input.cleanups.push(() =>
+    input.container.removeEventListener("click", input.handleLinkClick, {
+      capture: true,
+    }),
+  )
 
   input.term.textarea?.addEventListener("focus", handleTextareaFocus)
   input.term.textarea?.addEventListener("blur", handleTextareaBlur)
@@ -148,6 +155,7 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
+  const server = useServer()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
   let ws: WebSocket | undefined
@@ -372,7 +380,13 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
-      useTerminalUiBindings({ container, term: t, cleanups, handlePointerDown, handleLinkClick })
+      useTerminalUiBindings({
+        container,
+        term: t,
+        cleanups,
+        handlePointerDown,
+        handleLinkClick,
+      })
 
       focusTerminal()
 
@@ -428,10 +442,8 @@ export const Terminal = (props: TerminalProps) => {
       url.searchParams.set("directory", sdk.directory)
       url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      if (window.__OPENCODE__?.serverPassword) {
-        url.username = "opencode"
-        url.password = window.__OPENCODE__?.serverPassword
-      }
+      url.username = server.current?.http.username ?? ""
+      url.password = server.current?.http.password ?? ""
       const socket = new WebSocket(url)
       socket.binaryType = "arraybuffer"
       ws = socket
