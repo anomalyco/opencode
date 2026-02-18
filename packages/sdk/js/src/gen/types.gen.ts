@@ -795,6 +795,10 @@ export type KeybindsConfig = {
    */
   scrollbar_toggle?: string
   /**
+   * Toggle footer status bar visibility
+   */
+  footer_toggle?: string
+  /**
    * Toggle username visibility
    */
   username_toggle?: string

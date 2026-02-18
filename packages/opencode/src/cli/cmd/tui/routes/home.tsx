@@ -36,6 +36,7 @@ export function Home() {
 
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
+  const footerVisible = createMemo(() => kv.get("footer_visible", true))
   const showTips = createMemo(() => {
     // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
@@ -117,29 +118,31 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
-        <text fg={theme.textMuted}>{directory()}</text>
-        <box gap={1} flexDirection="row" flexShrink={0}>
-          <Show when={mcp()}>
-            <text fg={theme.text}>
-              <Switch>
-                <Match when={mcpError()}>
-                  <span style={{ fg: theme.error }}>⊙ </span>
-                </Match>
-                <Match when={true}>
-                  <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
-                </Match>
-              </Switch>
-              {connectedMcpCount()} MCP
-            </text>
-            <text fg={theme.textMuted}>/status</text>
-          </Show>
+      <Show when={footerVisible()}>
+        <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
+          <text fg={theme.textMuted}>{directory()}</text>
+          <box gap={1} flexDirection="row" flexShrink={0}>
+            <Show when={mcp()}>
+              <text fg={theme.text}>
+                <Switch>
+                  <Match when={mcpError()}>
+                    <span style={{ fg: theme.error }}>⊙ </span>
+                  </Match>
+                  <Match when={true}>
+                    <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
+                  </Match>
+                </Switch>
+                {connectedMcpCount()} MCP
+              </text>
+              <text fg={theme.textMuted}>/status</text>
+            </Show>
+          </box>
+          <box flexGrow={1} />
+          <box flexShrink={0}>
+            <text fg={theme.textMuted}>{Installation.VERSION}</text>
+          </box>
         </box>
-        <box flexGrow={1} />
-        <box flexShrink={0}>
-          <text fg={theme.textMuted}>{Installation.VERSION}</text>
-        </box>
-      </box>
+      </Show>
     </>
   )
 }

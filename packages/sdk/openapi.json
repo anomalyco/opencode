@@ -8599,6 +8599,11 @@
             "default": "none",
             "type": "string"
           },
+          "footer_toggle": {
+            "description": "Toggle footer status bar visibility",
+            "default": "none",
+            "type": "string"
+          },
           "username_toggle": {
             "description": "Toggle username visibility",
             "default": "none",

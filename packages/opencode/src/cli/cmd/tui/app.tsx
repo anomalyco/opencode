@@ -251,6 +251,7 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [footerVisible, setFooterVisible] = kv.signal("footer_visible", true)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -550,6 +551,16 @@ function App() {
         dialog.replace(() => <DialogHelp />)
       },
       category: "System",
+    },
+    {
+      title: footerVisible() ? "Hide footer" : "Show footer",
+      value: "footer.toggle",
+      keybind: "footer_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setFooterVisible((prev) => !prev)
+        dialog.clear()
+      },
     },
     {
       title: "Open docs",

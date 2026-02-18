@@ -152,6 +152,7 @@ export function Session() {
   const [showHeader, setShowHeader] = kv.signal("header_visible", true)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const footerVisible = createMemo(() => kv.get("footer_visible", true))
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -1122,6 +1123,9 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+          </Show>
+          <Show when={footerVisible()}>
+            <Footer />
           </Show>
           <Toast />
         </box>
