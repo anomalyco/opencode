@@ -39,6 +39,7 @@ import { Accordion } from "./accordion"
 import { Button } from "./button"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
+import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
@@ -1661,34 +1662,37 @@ ToolRegistry.register({
                     <Accordion.Header>
                       <Accordion.Trigger>
                         <div data-slot="apply-patch-trigger-content">
-                          <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+                          <div data-slot="apply-patch-file-info">
+                            <FileIcon node={{ path: file.relativePath, type: "file" }} />
+                            <div data-slot="apply-patch-file-name-container">
+                              <Show when={file.relativePath.includes("/")}>
+                                <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
+                              </Show>
+                              <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
+                            </div>
+                          </div>
                           <div data-slot="apply-patch-trigger-actions">
                             <Switch>
-                              <Match when={file.type === "delete"}>
-                                <span data-slot="apply-patch-file-action" data-type="delete">
-                                  {i18n.t("ui.patch.action.deleted")}
-                                </span>
-                              </Match>
                               <Match when={file.type === "add"}>
-                                <span data-slot="apply-patch-file-action" data-type="add">
+                                <span data-slot="apply-patch-change" data-type="added">
                                   {i18n.t("ui.patch.action.created")}
                                 </span>
                               </Match>
+                              <Match when={file.type === "delete"}>
+                                <span data-slot="apply-patch-change" data-type="removed">
+                                  {i18n.t("ui.patch.action.deleted")}
+                                </span>
+                              </Match>
                               <Match when={file.type === "move"}>
-                                <span data-slot="apply-patch-file-action" data-type="move">
+                                <span data-slot="apply-patch-change" data-type="modified">
                                   {i18n.t("ui.patch.action.moved")}
                                 </span>
                               </Match>
+                              <Match when={true}>
+                                <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                              </Match>
                             </Switch>
-                            <Show when={file.type !== "delete"}>
-                              <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
-                            </Show>
-                            <Show when={file.type === "delete"}>
-                              <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
-                            </Show>
-                            <span data-slot="apply-patch-file-chevron">
-                              <Icon name="chevron-down" size="small" />
-                            </span>
+                            <Icon name="chevron-grabber-vertical" size="small" />
                           </div>
                         </div>
                       </Accordion.Trigger>

@@ -1219,69 +1219,70 @@
 }
 
 [data-component="accordion"][data-scope="apply-patch"] {
+  [data-slot="accordion-trigger"] {
+    background-color: var(--background-stronger) !important;
+  }
+
   [data-slot="apply-patch-trigger-content"] {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    min-width: 0;
-    gap: 12px;
+    gap: 20px;
   }
 
-  [data-slot="apply-patch-file-path"] {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  [data-slot="apply-patch-file-info"] {
     flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  [data-slot="apply-patch-file-name-container"] {
+    display: flex;
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  [data-slot="apply-patch-directory"] {
+    color: var(--text-base);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
+
+  [data-slot="apply-patch-filename"] {
+    color: var(--text-strong);
+    flex-shrink: 0;
   }
 
   [data-slot="apply-patch-trigger-actions"] {
     flex-shrink: 0;
-    display: inline-flex;
+    display: flex;
+    gap: 16px;
     align-items: center;
-    gap: 10px;
+    justify-content: flex-end;
   }
 
-  [data-slot="apply-patch-file-action"] {
+  [data-slot="apply-patch-change"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    color: var(--text-base);
-    flex-shrink: 0;
-
-    &[data-type="delete"] {
-      color: var(--text-critical-base);
-    }
-
-    &[data-type="add"] {
-      color: var(--text-success-base);
-    }
-
-    &[data-type="move"] {
-      color: var(--text-warning-base);
-    }
   }
 
-  [data-slot="apply-patch-deletion-count"] {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-small);
-    color: var(--text-critical-base);
-    flex-shrink: 0;
+  [data-slot="apply-patch-change"][data-type="added"] {
+    color: var(--icon-diff-add-base);
   }
 
-  [data-slot="apply-patch-file-chevron"] {
-    display: inline-flex;
-    color: var(--icon-weaker);
-    transform: rotate(-90deg);
-    transition: transform 0.15s ease;
+  [data-slot="apply-patch-change"][data-type="removed"] {
+    color: var(--icon-diff-delete-base);
   }
 
-  [data-slot="accordion-item"][data-expanded] [data-slot="apply-patch-file-chevron"] {
-    transform: rotate(0deg);
+  [data-slot="apply-patch-change"][data-type="modified"] {
+    color: var(--icon-diff-modified-base);
   }
 }
 
