@@ -286,12 +286,7 @@ export const SessionReview = (props: SessionReviewProps) => {
         [props.class ?? ""]: !!props.class,
       }}
     >
-      <div
-        data-slot="session-review-header"
-        classList={{
-          [props.classes?.header ?? ""]: !!props.classes?.header,
-        }}
-      >
+      <div data-slot="session-review-header" class={props.classes?.header}>
         <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
@@ -322,12 +317,7 @@ export const SessionReview = (props: SessionReviewProps) => {
           {props.actions}
         </div>
       </div>
-      <div
-        data-slot="session-review-container"
-        classList={{
-          [props.classes?.container ?? ""]: !!props.classes?.container,
-        }}
-      >
+      <div data-slot="session-review-container" class={props.classes?.container}>
         <Show when={hasDiffs()} fallback={props.empty}>
           <Accordion multiple value={open()} onChange={handleChange}>
             <For each={props.diffs}>
