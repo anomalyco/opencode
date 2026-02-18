@@ -96,6 +96,26 @@ export const BashTool = Tool.define("bash", async () => {
         // Get full command text including redirects if present
         let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
 
+        // Strip leading env variable assignments (e.g. GOFLAGS=-mod=vendor)
+        // so "GOFLAGS=-mod=vendor go test ./..." matches permission rule "go *"
+        // Skip stripping if any assignment contains a command substitution to
+        // prevent smuggling arbitrary execution through env var side effects
+        let lastVarAssign: ReturnType<typeof node.child> = null
+        let safe = true
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i)
+          if (!child || child.type !== "variable_assignment") break
+          if (child.descendantsOfType("command_substitution").length > 0) {
+            safe = false
+            break
+          }
+          lastVarAssign = child
+        }
+        if (lastVarAssign && safe) {
+          const base = node.parent?.type === "redirected_statement" ? node.parent : node
+          commandText = commandText.slice(lastVarAssign.endIndex - base.startIndex).trimStart()
+        }
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)

