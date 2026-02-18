@@ -34,7 +34,7 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 const listServersByHealth = (
   list: ServerConnection.Any[],
   active: ServerConnection.Key | undefined,
-  status: Record<string, ServerHealth | undefined>,
+  status: Record<ServerConnection.Key, ServerHealth | undefined>,
 ) => {
   if (!list.length) return list
   const order = new Map(list.map((url, index) => [url, index] as const))
@@ -54,7 +54,7 @@ const listServersByHealth = (
 }
 
 const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typeof fetch) => {
-  const [status, setStatus] = createStore({} as Record<string, ServerHealth | undefined>)
+  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
     const list = servers()
@@ -63,8 +63,8 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
     const refresh = async () => {
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
-        list.map(async ({ http }) => {
-          results[http.url] = await checkServerHealth(http, fetcher)
+        list.map(async (conn) => {
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
         }),
       )
       if (dead) return
@@ -82,7 +82,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
   return status
 }
 
-const useDefaultServerUrl = (
+const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
   const [url, setUrl] = createSignal<string | undefined>()
@@ -117,7 +117,14 @@ const useDefaultServerUrl = (
     })
   })
 
-  return { url, refresh: () => setTick((value) => value + 1) }
+  return {
+    key: () => {
+      const u = url()
+      if (!u) return
+      return ServerConnection.key({ type: "http", http: { url: u } })
+    },
+    refresh: () => setTick((value) => value + 1),
+  }
 }
 
 const useMcpToggle = (input: {
@@ -172,7 +179,7 @@ export function StatusPopover() {
   const health = useServerHealth(servers, fetcher)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerUrl(platform.getDefaultServerUrl)
+  const defaultServer = useDefaultServerKey(platform.getDefaultServerUrl)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -252,7 +259,8 @@ export function StatusPopover() {
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
                   {(s) => {
-                    const isBlocked = () => health[s.http.url]?.healthy === false
+                    const key = ServerConnection.key(s)
+                    const isBlocked = () => health[key]?.healthy === false
                     return (
                       <button
                         type="button"
@@ -264,20 +272,19 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          console.log("onClick")
-                          server.setActive(ServerConnection.key(s))
+                          server.setActive(key)
                           navigate("/")
                         }}
                       >
                         <ServerRow
                           conn={s}
-                          status={health[s.http.url]}
+                          status={health[key]}
                           dimmed={isBlocked()}
                           class="flex items-center gap-2 w-full min-w-0"
                           nameClass="text-14-regular text-text-base truncate"
                           versionClass="text-12-regular text-text-weak truncate"
                           badge={
-                            <Show when={s.http.url === defaultServer.url()}>
+                            <Show when={key === defaultServer.key()}>
                               <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
                                 {language.t("common.default")}
                               </span>
@@ -285,9 +292,7 @@ export function StatusPopover() {
                           }
                         >
                           <div class="flex-1" />
-                          <Show
-                            when={server.current && ServerConnection.key(s) === ServerConnection.key(server.current)}
-                          >
+                          <Show when={server.current && key === ServerConnection.key(server.current)}>
                             <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                           </Show>
                         </ServerRow>

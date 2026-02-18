@@ -8,6 +8,7 @@ import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
+import { ServerConnection } from "./context/server"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -119,11 +120,12 @@ const defaultUrl = iife(() => {
 })
 
 if (root instanceof HTMLElement) {
+  const server: ServerConnection.Http = { type: "http", http: { url: defaultUrl } }
   render(
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface defaultUrl={defaultUrl} />
+          <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]} />
         </AppBaseProviders>
       </PlatformProvider>
     ),

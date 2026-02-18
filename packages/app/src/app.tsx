@@ -24,7 +24,7 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
-import { normalizeServerUrl, type ServerConnection, ServerProvider, useServer } from "@/context/server"
+import { type ServerConnection, ServerProvider, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -146,11 +146,11 @@ function ServerKey(props: ParentProps) {
 
 export function AppInterface(props: {
   children?: JSX.Element
-  defaultUrl: string
-  servers?: Array<ServerConnection.Ssh | ServerConnection.Sidecar>
+  defaultServer: ServerConnection.Key
+  servers?: Array<ServerConnection.Any>
 }) {
   return (
-    <ServerProvider defaultUrl={props.defaultUrl} servers={props.servers}>
+    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>

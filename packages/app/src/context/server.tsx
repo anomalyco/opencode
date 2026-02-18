@@ -89,7 +89,7 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string; servers?: Array<ServerConnection.Ssh | ServerConnection.Sidecar> }) => {
+  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
@@ -101,23 +101,18 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }),
     )
 
-    const allServers = createMemo((): Array<ServerConnection.Any> => {
-      const list = [
+    const allServers = createMemo(
+      (): Array<ServerConnection.Any> => [
         ...(props.servers ?? []),
         ...store.list.map((value) => ({
           type: "http" as const,
           http: typeof value === "string" ? { url: value } : value,
         })),
-      ]
-      console.log([...list])
-      return list
-    })
+      ],
+    )
 
     const [state, setState] = createStore({
-      active: ServerConnection.key({
-        type: "http",
-        http: { url: props.defaultUrl },
-      }),
+      active: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
 
@@ -149,7 +144,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function setActive(input: ServerConnection.Key) {
-      console.log("setActive", { input })
       if (state.active !== input) setState("active", input)
     }
 
@@ -167,20 +161,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     }
 
-    function remove(input: ServerConnection.Key) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      const list = store.list.filter((x) => x !== url)
-      const next = state.active === url ? (list[0] ?? props.defaultUrl ?? "") : state.active
+    function remove(key: ServerConnection.Key) {
+      const list = store.list.filter((x) => x !== key)
       batch(() => {
         setStore("list", list)
-        setState(
-          "active",
-          ServerConnection.key({
-            type: "http",
-            http: typeof next === "string" ? { url: next } : next,
-          }),
-        )
+        if (state.active === key) {
+          const next = list[0]
+          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+        }
       })
     }
 
@@ -201,7 +189,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
-      () => allServers().find((s) => s.http.url === state.active) ?? allServers()[0],
+      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
 
     return {
