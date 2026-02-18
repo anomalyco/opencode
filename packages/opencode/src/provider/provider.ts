@@ -580,9 +580,8 @@ export namespace Provider {
     },
     kilo: async () => {
       return {
-        autoload: true,
+        autoload: false,
         options: {
-          baseURL: "https://api.kilo.ai/api/gateway",
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
