@@ -1363,7 +1363,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <TooltipKeybind
                     placement="top"
                     gutter={4}
-                    title={language.t(mode === "shell" ? "command.prompt.mode.shell" : "command.prompt.mode.normal")}
+                    title={language.t(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
                     keybind={command.keybind(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
                     class="size-full flex items-center justify-center"
                   >
