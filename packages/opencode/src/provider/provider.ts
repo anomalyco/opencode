@@ -906,6 +906,23 @@ export namespace Provider {
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
+
+      // Skip stored auth if provider already has explicit config with custom baseURL or apiKey
+      const existingProvider = providers[providerID]
+      if (existingProvider) {
+        const hasExplicitBaseURL = existingProvider.options?.baseURL !== undefined
+        const hasExplicitApiKey = existingProvider.options?.apiKey !== undefined
+
+        if (hasExplicitBaseURL || hasExplicitApiKey) {
+          log.info("skipping stored auth for provider with explicit config", {
+            providerID,
+            hasExplicitBaseURL,
+            hasExplicitApiKey
+          })
+          continue
+        }
+      }
+
       if (provider.type === "api") {
         mergeProvider(providerID, {
           source: "api",
@@ -935,10 +952,19 @@ export namespace Provider {
 
       // Load for the main provider if auth exists
       if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        const opts = options ?? {}
-        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
-        mergeProvider(providerID, patch)
+        // Skip plugin auth if provider already has explicit config with custom baseURL or apiKey
+        const existingProvider = providers[providerID]
+        const hasExplicitConfig = existingProvider &&
+          (existingProvider.options?.baseURL !== undefined || existingProvider.options?.apiKey !== undefined)
+
+        if (!hasExplicitConfig) {
+          const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+          const opts = options ?? {}
+          const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+          mergeProvider(providerID, patch)
+        } else {
+          log.info("skipping plugin auth for provider with explicit config", { providerID })
+        }
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
@@ -947,15 +973,24 @@ export namespace Provider {
         if (!disabled.has(enterpriseProviderID)) {
           const enterpriseAuth = await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
-            )
-            const opts = enterpriseOptions ?? {}
-            const patch: Partial<Info> = providers[enterpriseProviderID]
-              ? { options: opts }
-              : { source: "custom", options: opts }
-            mergeProvider(enterpriseProviderID, patch)
+            // Skip plugin auth if provider already has explicit config with custom baseURL or apiKey
+            const existingEnterprise = providers[enterpriseProviderID]
+            const hasExplicitConfig = existingEnterprise &&
+              (existingEnterprise.options?.baseURL !== undefined || existingEnterprise.options?.apiKey !== undefined)
+
+            if (!hasExplicitConfig) {
+              const enterpriseOptions = await plugin.auth.loader(
+                () => Auth.get(enterpriseProviderID) as any,
+                database[enterpriseProviderID],
+              )
+              const opts = enterpriseOptions ?? {}
+              const patch: Partial<Info> = providers[enterpriseProviderID]
+                ? { options: opts }
+                : { source: "custom", options: opts }
+              mergeProvider(enterpriseProviderID, patch)
+            } else {
+              log.info("skipping plugin auth for provider with explicit config", { providerID: enterpriseProviderID })
+            }
           }
         }
       }
