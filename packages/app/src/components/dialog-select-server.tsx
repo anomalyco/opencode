@@ -176,7 +176,7 @@ export function DialogSelectServer() {
   const { previewStatus } = useServerPreview(fetcher)
   let listRoot: HTMLDivElement | undefined
   const [store, setStore] = createStore({
-    status: {} as Record<string, ServerHealth | undefined>,
+    status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
       adding: false,
@@ -213,7 +213,7 @@ export function DialogSelectServer() {
   }
 
   const replaceServer = (original: ServerConnection.Http, next: string) => {
-    const active = server.url
+    const active = server.key
     const newConn = server.add(next)
     if (!newConn) return
 
@@ -230,7 +230,7 @@ export function DialogSelectServer() {
     return [current, ...list.filter((x) => x !== current)]
   })
 
-  const current = createMemo(() => items().find((x) => x.http.url === server.url) ?? items()[0])
+  const current = createMemo(() => items().find((x) => ServerConnection.key(x) === server.key) ?? items()[0])
 
   const sortedItems = createMemo(() => {
     const list = items()
@@ -245,17 +245,17 @@ export function DialogSelectServer() {
     return list.slice().sort((a, b) => {
       if (a === active) return -1
       if (b === active) return 1
-      const diff = rank(store.status[a.http.url]) - rank(store.status[b.http.url])
+      const diff = rank(store.status[ServerConnection.key(a)]) - rank(store.status[ServerConnection.key(b)])
       if (diff !== 0) return diff
       return (order.get(a) ?? 0) - (order.get(b) ?? 0)
     })
   })
 
   async function refreshHealth() {
-    const results: Record<string, ServerHealth> = {}
+    const results: Record<ServerConnection.Key, ServerHealth> = {}
     await Promise.all(
-      items().map(async ({ http }) => {
-        results[http.url] = await checkServerHealth(http, fetcher)
+      items().map(async (conn) => {
+        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
       }),
     )
     setStore("status", reconcile(results))
@@ -268,15 +268,15 @@ export function DialogSelectServer() {
     onCleanup(() => clearInterval(interval))
   })
 
-  async function select(value: ServerConnection.Any, persist?: boolean) {
-    if (!persist && store.status[value.http.url]?.healthy === false) return
+  async function select(conn: ServerConnection.Any, persist?: boolean) {
+    if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
     dialog.close()
     if (persist) {
-      server.add(value.http.url)
+      server.add(conn.http.url)
       navigate("/")
       return
     }
-    server.setActive(ServerConnection.key(value))
+    server.setActive(ServerConnection.key(conn))
     navigate("/")
   }
 
@@ -446,8 +446,8 @@ export function DialogSelectServer() {
                   >
                     <ServerRow
                       conn={i}
-                      status={store.status[i.http.url]}
-                      dimmed={store.status[i.http.url]?.healthy === false}
+                      status={store.status[ServerConnection.key(i)]}
+                      dimmed={store.status[ServerConnection.key(i)]?.healthy === false}
                       class="flex items-center gap-3 px-4 min-w-0 flex-1"
                       badge={
                         <Show when={defaultUrl() === i.http.url}>
@@ -482,13 +482,13 @@ export function DialogSelectServer() {
                                     id: i.http.url,
                                     value: i.http.url,
                                     error: "",
-                                    status: store.status[i.http.url]?.healthy,
+                                    status: store.status[ServerConnection.key(i)]?.healthy,
                                   })
                                 }}
                               >
                                 <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
-                              <Show when={canDefault() && defaultUrl() !== i.http.url && i.type === "http"}>
+                              <Show when={canDefault() && defaultUrl() !== i.http.url}>
                                 <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
                                   <DropdownMenu.ItemLabel>
                                     {language.t("dialog.server.menu.default")}

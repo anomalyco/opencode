@@ -33,7 +33,7 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 
 const listServersByHealth = (
   list: ServerConnection.Any[],
-  active: string | undefined,
+  active: ServerConnection.Key | undefined,
   status: Record<string, ServerHealth | undefined>,
 ) => {
   if (!list.length) return list
@@ -45,9 +45,9 @@ const listServersByHealth = (
   }
 
   return list.slice().sort((a, b) => {
-    if (a.http.url === active) return -1
-    if (b.http.url === active) return 1
-    const diff = rank(status[a.http.url]) - rank(status[b.http.url])
+    if (ServerConnection.key(a) === active) return -1
+    if (ServerConnection.key(b) === active) return 1
+    const diff = rank(status[ServerConnection.key(a)]) - rank(status[ServerConnection.key(b)])
     if (diff !== 0) return diff
     return (order.get(a) ?? 0) - (order.get(b) ?? 0)
   })
@@ -170,7 +170,7 @@ export function StatusPopover() {
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
   const health = useServerHealth(servers, fetcher)
-  const sortedServers = createMemo(() => listServersByHealth(servers(), server.url, health))
+  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const mcp = useMcpToggle({ sync, sdk, language })
   const defaultServer = useDefaultServerUrl(platform.getDefaultServerUrl)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
@@ -264,6 +264,7 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
+                          console.log("onClick")
                           server.setActive(ServerConnection.key(s))
                           navigate("/")
                         }}
@@ -284,7 +285,9 @@ export function StatusPopover() {
                           }
                         >
                           <div class="flex-1" />
-                          <Show when={s.http.url === server.url}>
+                          <Show
+                            when={server.current && ServerConnection.key(s) === ServerConnection.key(server.current)}
+                          >
                             <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                           </Show>
                         </ServerRow>

@@ -15,9 +15,10 @@ export function normalizeServerUrl(input: string) {
   return withProtocol.replace(/\/+$/, "")
 }
 
-export function serverDisplayName(url: string) {
-  if (!url) return ""
-  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+export function serverDisplayName(conn?: ServerConnection.Any) {
+  if (!conn) return ""
+  if (conn.displayName) return conn.displayName
+  return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
 function projectsKey(url: string) {
@@ -148,9 +149,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function setActive(input: ServerConnection.Key) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      setState("active", url)
+      console.log("setActive", { input })
+      if (state.active !== input) setState("active", input)
     }
 
     function add(input: string) {
@@ -208,11 +208,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       ready: isReady,
       healthy,
       isLocal,
-      get url() {
+      get key() {
         return state.active
       },
       get name() {
-        return serverDisplayName(state.active)
+        return serverDisplayName(current())
       },
       get list() {
         return allServers()

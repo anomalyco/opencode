@@ -19,9 +19,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const abort = new AbortController()
 
     const eventFetch = (() => {
-      if (!platform.fetch) return
+      if (!platform.fetch || !server.current) return
       try {
-        const url = new URL(server.url)
+        const url = new URL(server.current.http.url)
         const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
         if (url.protocol === "http:" && !loopback) return platform.fetch
       } catch {
@@ -35,7 +35,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const eventSdk = createSdkForServer({
       signal: abort.signal,
       fetch: eventFetch,
-      server: server.current.http,
+      server: currentServer.http,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
@@ -126,7 +126,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               if (streamErrorLogged) return
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
-                url: server.url,
+                url: currentServer.http.url,
                 fetch: eventFetch ? "platform" : "webview",
                 error,
               })
@@ -159,7 +159,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           if (!aborted(error) && !streamErrorLogged) {
             streamErrorLogged = true
             console.error("[global-sdk] event stream failed", {
-              url: server.url,
+              url: currentServer.http.url,
               fetch: eventFetch ? "platform" : "webview",
               error,
             })
@@ -200,7 +200,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     })
 
     return {
-      url: server.url,
+      url: currentServer.http.url,
       client: sdk,
       event: emitter,
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {

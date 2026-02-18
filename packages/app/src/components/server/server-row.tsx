@@ -26,7 +26,7 @@ export function ServerRow(props: ServerRowProps) {
   const [truncated, setTruncated] = createSignal(false)
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
-  const name = createMemo(() => props.conn.displayName ?? serverDisplayName(props.conn.http.url))
+  const name = createMemo(() => serverDisplayName(props.conn))
 
   const check = () => {
     const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false

@@ -447,7 +447,7 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            const [servers] = createStore<Array<ServerConnection.Sidecar>>([
+            const servers: Array<ServerConnection.Sidecar> = [
               {
                 displayName: "Local Server",
                 type: "sidecar",
@@ -458,7 +458,7 @@ render(() => {
                   password: data().password ?? undefined,
                 },
               },
-            ])
+            ]
 
             function Inner() {
               const cmd = useCommand()
