@@ -8,6 +8,7 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
+import { Meganova } from "./meganova"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -578,6 +579,12 @@ export namespace Provider {
         },
       }
     },
+    meganova: async () => {
+      return {
+        autoload: false,
+        options: {},
+      }
+    },
   }
 
   export const Model = z
@@ -749,6 +756,11 @@ export namespace Provider {
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    // Inject Meganova provider if not already in models.dev
+    if (!modelsDev[Meganova.PROVIDER_ID]) {
+      database[Meganova.PROVIDER_ID] = fromModelsDevProvider(Meganova.provider())
+    }
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null

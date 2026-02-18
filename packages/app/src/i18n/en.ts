@@ -105,6 +105,7 @@ export const dict = {
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
   "dialog.provider.openrouter.note": "Access all supported models from one provider",
   "dialog.provider.vercel.note": "Unified access to AI models with smart routing",
+  "dialog.provider.meganova.note": "Access Claude, GPT, Gemini, DeepSeek and more models",
 
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",

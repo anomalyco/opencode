@@ -424,6 +424,12 @@
         fill="currentColor"
       ></path>
     </symbol>
+    <symbol viewBox="0 0 24 24" id="meganova">
+      <path d="M12 4.5C8.5 4.5 5 7 2.5 10.5C5 8.5 8.5 8 12 9C15.5 8 19 8.5 21.5 10.5C19 7 15.5 4.5 12 4.5Z" fill="currentColor"></path>
+      <path d="M4.5 11C3 14 2 16.5 1.5 19.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      <path d="M19.5 11C21 14 22 16.5 22.5 19.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      <path d="M9.5 7L11 9.5L12 8.5L13 9.5L14.5 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    </symbol>
     <symbol viewBox="0 0 40 40" id="modelscope">
       <path
         d="M6.77825 10.4999H14.3333V14.2782H10.5551V18.055H6.77825V14.9865H3.70833V18.055H6.77825V21.8333H3V14.2782H6.77825V10.4999ZM6.77825 21.8333H10.5551V25.6115H14.3333V29.3884H6.77825V21.8333ZM14.3333 18.055H18.1116V21.8333H14.3333V18.055ZM21.8884 21.8333V25.6115H18.1116V21.8333H21.8884ZM21.8884 21.8333V18.055H25.6667V21.8333H21.8884Z"

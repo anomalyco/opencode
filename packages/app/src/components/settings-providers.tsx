@@ -24,6 +24,7 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
   { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
+  { match: (id: string) => id === "meganova", key: "dialog.provider.meganova.note" },
 ] as const
 
 export const SettingsProviders: Component = () => {

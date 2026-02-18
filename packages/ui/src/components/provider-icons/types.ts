@@ -34,6 +34,7 @@ export const iconNames = [
   "nano-gpt",
   "morph",
   "moonshotai",
+  "meganova",
   "moonshotai-cn",
   "modelscope",
   "mistral",
