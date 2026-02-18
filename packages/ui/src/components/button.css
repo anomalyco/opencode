@@ -94,7 +94,6 @@
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
       scale: 0.99;
-      transition: all 150ms ease-out;
     }
     &:disabled {
       border-color: var(--border-disabled);
