@@ -1,17 +1,16 @@
 name: deploy
 
+# Disabled: Cloudflare deployment is not used for local-only codemie.
+# Artifacts are produced by the publish-codemie workflow instead.
+# To re-enable, restore the push trigger below.
 on:
-  push:
-    branches:
-      - dev
-      - production
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   deploy:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
     steps:
       - uses: actions/checkout@v3
 
@@ -30,9 +29,7 @@ jobs:
       - name: Fix Pulumi version conflict
         run: sudo rm -f /usr/local/bin/pulumi-language-nodejs
 
-      - run: bun sst deploy --stage=${{ github.ref_name }}
+      - run: bun sst deploy --stage=${{ github.ref_name }} --print-logs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
-          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
-          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}

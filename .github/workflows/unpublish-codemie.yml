@@ -1,0 +1,38 @@
+name: unpublish-codemie
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to unpublish (e.g. 1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  unpublish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Unpublish unscoped platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in \
+            codemie-darwin-arm64 \
+            codemie-darwin-x64 \
+            codemie-darwin-x64-baseline \
+            codemie-linux-arm64 \
+            codemie-linux-arm64-musl \
+            codemie-linux-x64 \
+            codemie-linux-x64-baseline \
+            codemie-linux-x64-baseline-musl \
+            codemie-linux-x64-musl \
+            codemie-windows-x64 \
+            codemie-windows-x64-baseline; do
+            echo "Unpublishing ${pkg}@${{ inputs.version }}..."
+            npm unpublish "${pkg}@${{ inputs.version }}" --force || echo "  (skipped — not found or already removed)"
+          done

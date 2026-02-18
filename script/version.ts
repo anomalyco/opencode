@@ -6,7 +6,7 @@ import { buildNotes, getLatestRelease } from "./changelog"
 
 const output = [`version=${Script.version}`]
 
-if (!Script.preview) {
+if (!Script.preview && !process.env.OPENCODE_SKIP_RELEASE) {
   const previous = await getLatestRelease()
   const notes = await buildNotes(previous, "HEAD")
   const body = notes.join("\n") || "No notable changes"

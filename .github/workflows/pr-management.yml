@@ -17,7 +17,7 @@ jobs:
       github.event.pull_request.user.login != 'adamdotdevin' &&
       github.event.pull_request.user.login != 'iamdavidhill' &&
       github.event.pull_request.user.login != 'opencode-agent[bot]'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
     permissions:
       contents: read
       pull-requests: write
