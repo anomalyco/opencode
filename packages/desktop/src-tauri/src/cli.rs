@@ -19,6 +19,8 @@ use tokio::{
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
+use crate::server::get_wsl_config;
+
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -201,7 +203,7 @@ fn get_user_shell() -> String {
 }
 
 fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
-    false
+  get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
