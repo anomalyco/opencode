@@ -68,7 +68,7 @@
   [data-slot="session-review-diffs-group"] {
     background-color: var(--background-stronger);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-xs-border-base);
+    border: 1px solid var(--border-weak-base);
     overflow: clip;
 
     [data-component="accordion"] {
