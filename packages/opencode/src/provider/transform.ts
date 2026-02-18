@@ -359,6 +359,29 @@ export namespace ProviderTransform {
     }
     if (id.includes("grok")) return {}
 
+    // LiteLLM proxied models: infer reasoning variant from the underlying model
+    // to avoid false-positive reasoning param injection for aliased models
+    if (model.providerID === "litellm" && model.capabilities.reasoning) {
+      const apiId = model.api.id.toLowerCase()
+      if (apiId.includes("claude") || apiId.includes("anthropic")) {
+        return {
+          high: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
+            },
+          },
+          max: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: Math.min(31_999, model.limit.output - 1),
+            },
+          },
+        }
+      }
+      return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+    }
+
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
         if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
