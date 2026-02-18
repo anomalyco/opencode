@@ -200,6 +200,11 @@ When constructing the summary, try to stick to this template:
     })
 
     if ((result === "continue" || result === "compact") && input.auto) {
+      // Use the small model for the synthetic resume message so it doesn't
+      // count as a premium request. Falls back to cfg.small_model or the
+      // provider's smallest available model (e.g. gpt-5-mini for github-copilot).
+      const smallModel = (await Provider.getSmallModel(userMessage.model.providerID)) ??
+        await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -208,9 +213,7 @@ When constructing the summary, try to stick to this template:
           created: Date.now(),
         },
         agent: userMessage.agent,
-        // Use a flat-plan model for the synthetic resume message to avoid
-        // burning a premium request on the compaction continuation prompt.
-        model: { providerID: "github-copilot", modelID: "gpt-5-mini" },
+        model: { providerID: smallModel.providerID, modelID: smallModel.id },
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),
