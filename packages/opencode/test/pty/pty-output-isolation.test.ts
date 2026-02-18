@@ -18,6 +18,7 @@ describe("pty", () => {
 
           const ws = {
             readyState: 1,
+            data: { events: { connection: "a" } },
             send: (data: unknown) => {
               outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
             },
@@ -30,6 +31,7 @@ describe("pty", () => {
           Pty.connect(a.id, ws as any)
 
           // Now "reuse" the same ws object for another connection.
+          ws.data = { events: { connection: "b" } }
           ws.send = (data: unknown) => {
             outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
           }
