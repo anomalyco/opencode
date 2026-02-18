@@ -93,7 +93,6 @@
     }
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
-      scale: 0.99;
     }
     &:disabled {
       border-color: var(--border-disabled);
