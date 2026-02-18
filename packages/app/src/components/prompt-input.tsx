@@ -65,10 +65,9 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { useQueries } from "@tanstack/solid-query"
-import { useQueryOptions } from "@/context/global-sync"
-import { pathKey } from "@/utils/path-key"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { createPromptPair } from "./prompt-input/autocomplete-pair"
+import { createModelAutocomplete, createAutocompleteSettings } from "./prompt-input/autocomplete-model"
+import { GhostText } from "./prompt-input/ghost-text"
 
 interface PromptInputProps {
   class?: string
@@ -883,14 +882,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shouldReset =
       textContent.length === 0 && rawText.replace(/\n/g, "").length === 0 && !hasNonText && images.length === 0
 
-    console.log("[DEBUG handleInput]", {
-      rawText,
-      trimmed,
-      shouldReset,
-      rawPartsLength: rawParts.length,
-      imagesLength: images.length,
-    })
-
     if (shouldReset) {
       closePopover()
       resetHistoryNavigation()
@@ -924,13 +915,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     resetHistoryNavigation()
 
     mirror.input = true
-    console.log("[DEBUG handleInput] calling prompt.set", {
-      rawParts,
-      images,
-      cursorPosition,
-    })
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
+
+    // Schedule model prediction after user stops typing (500ms debounce)
+    schedulePrediction()
   }
 
   const addPart = (part: ContentPart) => {
@@ -1089,26 +1078,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
-  const fileAttachmentInput = () => (
-    <input
-      ref={(el) => (fileInputRef = el)}
-      type="file"
-      multiple
-      accept={ACCEPTED_FILE_TYPES.join(",")}
-      class="hidden"
-      onChange={(e) => {
-        const list = e.currentTarget.files
-        if (list) void addAttachments(Array.from(list))
-        e.currentTarget.value = ""
-      }}
-    />
-  )
+  const { handlePairKeyDown } = createPromptPair({
+    editor: () => editorRef,
+    addPart,
+  })
 
-  const variants = createMemo(() => ["default", ...local.model.variant.list()])
-  const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
-    return permission.isAutoAccepting(id, sdk.directory)
+  const { settings: autocompleteSettings } = createAutocompleteSettings()
+
+  const { ghostText, schedulePrediction, handleGhostKeyDown } = createModelAutocomplete({
+    enabled: () => autocompleteSettings.enabled,
+    predictionModel: () => autocompleteSettings.model,
+    getCurrentPromptText: () =>
+      prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join(""),
+    addPart,
   })
 
   const { abort, handleSubmit } = createPromptSubmit({
@@ -1159,6 +1144,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }
         }
       }
+    }
+
+    // Ghost text: Tab accepts, Escape dismisses, any key dismisses
+    // Must check before popover Tab handling so Tab can accept ghost text
+    if (ghostText()) {
+      handleGhostKeyDown(event)
+      // If Tab was consumed by ghost text, stop here
+      if (event.defaultPrevented) return
+    }
+
+    // Pair auto-completion - call before other key logic
+    // The pair handler skips when metaKey/ctrlKey/altKey are held or IME is composing
+    // It does NOT interfere with @, /, or ! triggers (those are not pair chars)
+    if (!store.popover && store.mode !== "shell" && !isImeComposing(event)) {
+      if (handlePairKeyDown(event)) return
     }
 
     if (event.key === "!" && store.mode === "normal") {
@@ -1429,84 +1429,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             data-component={newSession() ? "session-new-composer" : "session-composer"}
             onSubmit={handleSubmit}
             classList={{
-              "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
-              "border-icon-info-active border-dashed": store.draggingType !== null,
-              [props.class ?? ""]: !!props.class,
+              "select-text": true,
+              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "[&_[data-type=file]]:text-syntax-property": true,
+              "[&_[data-type=agent]]:text-syntax-type": true,
+              "font-mono!": true,
             }}
-          >
-            <PromptDragOverlay
-              type={store.draggingType}
-              label={language.t(
-                store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
-              )}
-            />
-            <PromptContextItems
-              items={contextItems()}
-              active={(item) => {
-                const active = comments.active()
-                return !!item.commentID && item.commentID === active?.id && item.path === active?.file
-              }}
-              openComment={openComment}
-              remove={(item) => {
-                if (item.commentID) comments.remove(item.path, item.commentID)
-                prompt.context.remove(item.key)
-              }}
-              t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-            />
-            <PromptImageAttachments
-              attachments={imageAttachments()}
-              onOpen={(attachment) =>
-                dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
-              }
-              onRemove={removeAttachment}
-              removeLabel={language.t("prompt.attachment.remove")}
-            />
-            <div
-              class="relative min-h-[52px]"
-              onMouseDown={(e) => {
-                const target = e.target
-                if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) return
-                editorRef?.focus()
-              }}
-            >
-              <div class="relative max-h-[180px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
-                <div
-                  data-component="prompt-input"
-                  ref={(el) => {
-                    editorRef = el
-                    props.ref?.(el)
-                  }}
-                  role="textbox"
-                  aria-multiline="true"
-                  aria-label={designPlaceholder()}
-                  contenteditable="true"
-                  autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-                  autocorrect={store.mode === "normal" ? "on" : "off"}
-                  spellcheck={store.mode === "normal"}
-                  inputMode="text"
-                  // @ts-expect-error
-                  autocomplete="off"
-                  onInput={handleInput}
-                  onPaste={handlePaste}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onBlur={handleBlur}
-                  onKeyDown={handleKeyDown}
-                  classList={{
-                    "select-text": true,
-                    "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]": true,
-                    "[&_[data-type=file]]:text-syntax-property": true,
-                    "[&_[data-type=agent]]:text-syntax-type": true,
-                    "font-mono!": store.mode === "shell",
-                  }}
-                />
-                <div
-                  data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
-                  class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]"
-                  classList={{ "font-mono!": store.mode === "shell", hidden: prompt.dirty() }}
-                >
-                  {designPlaceholder()}
+          />
+          <Show when={!prompt.dirty()}>
+            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+              {placeholder()}
+            </div>
+          </Show>
+        </div>
+        <GhostText text={ghostText()} />
+        <div class="relative p-3 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <Switch>
+              <Match when={store.mode === "shell"}>
+                <div class="flex items-center gap-2 px-2 h-6">
+                  <Icon name="console" size="small" class="text-icon-primary" />
+                  <span class="text-12-regular text-text-primary">{language.t("prompt.mode.shell")}</span>
+                  <span class="text-12-regular text-text-weak">{language.t("prompt.mode.shell.exit")}</span>
                 </div>
               </div>
             </div>
