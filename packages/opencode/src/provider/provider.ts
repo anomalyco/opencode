@@ -578,6 +578,18 @@ export namespace Provider {
         },
       }
     },
+    kilo: async () => {
+      return {
+        autoload: true,
+        options: {
+          baseURL: "https://api.kilo.ai/api/gateway",
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z

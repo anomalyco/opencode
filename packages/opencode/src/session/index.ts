@@ -579,7 +579,7 @@ export namespace Session {
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    const time_created = msg.role === "user" ? msg.time.created : msg.time.created
+    const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
     Database.use((db) => {
       db.insert(MessageTable)

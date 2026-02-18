@@ -33,7 +33,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
-  "ui.sessionTurn.status.gatheringContext": "جمع السياق",
+  "ui.sessionTurn.status.gatheringContext": "استكشاف...",
+  "ui.sessionTurn.status.gatheredContext": "تم الاستكشاف",
   "ui.sessionTurn.status.searchingCodebase": "البحث في قاعدة التعليمات البرمجية",
   "ui.sessionTurn.status.searchingWeb": "البحث في الويب",
   "ui.sessionTurn.status.makingEdits": "إجراء تعديلات",
@@ -82,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "أسئلة",
 
   "ui.common.add": "إضافة",
+  "ui.common.back": "رجوع",
   "ui.common.cancel": "إلغاء",
   "ui.common.confirm": "تأكيد",
   "ui.common.dismiss": "رفض",
@@ -96,7 +98,10 @@ export const dict = {
   "ui.message.expand": "توسيع الرسالة",
   "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
+  "ui.message.copyMessage": "نسخ الرسالة",
+  "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
+  "ui.message.interrupted": "تمت المقاطعة",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
@@ -107,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} أجيب",
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم يتم الرد)",
-  "ui.question.multiHint": "(حدد كل ما ينطبق)",
+  "ui.question.multiHint": "حدد كل ما ينطبق",
+  "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
 }

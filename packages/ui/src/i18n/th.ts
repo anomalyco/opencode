@@ -33,7 +33,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",
-  "ui.sessionTurn.status.gatheringContext": "รวบรวมบริบท",
+  "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ...",
+  "ui.sessionTurn.status.gatheredContext": "สำรวจแล้ว",
   "ui.sessionTurn.status.searchingCodebase": "กำลังค้นหาโค้ดเบส",
   "ui.sessionTurn.status.searchingWeb": "กำลังค้นหาบนเว็บ",
   "ui.sessionTurn.status.makingEdits": "กำลังแก้ไข",
@@ -82,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "คำถาม",
 
   "ui.common.add": "เพิ่ม",
+  "ui.common.back": "ย้อนกลับ",
   "ui.common.cancel": "ยกเลิก",
   "ui.common.confirm": "ยืนยัน",
   "ui.common.dismiss": "ปิด",
@@ -96,7 +98,10 @@ export const dict = {
   "ui.message.expand": "ขยายข้อความ",
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
+  "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
+  "ui.message.interrupted": "ถูกขัดจังหวะ",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",
@@ -107,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} ตอบแล้ว",
   "ui.question.answer.none": "(ไม่มีคำตอบ)",
   "ui.question.review.notAnswered": "(ไม่ได้ตอบ)",
-  "ui.question.multiHint": "(เลือกทั้งหมดที่ใช้)",
+  "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
+  "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
 }

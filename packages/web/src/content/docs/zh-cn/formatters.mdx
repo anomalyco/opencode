@@ -1,63 +1,64 @@
 ---
-title: 格式化程序
-description: opencode 使用特定于语言的格式化程序。
+title: 格式化工具
+description: OpenCode 使用特定语言的格式化工具。
 ---
 
-使用特定于语言的格式化程序编写或编辑文件后，opencode 会自动格式化文件。这可以确保生成的代码遵循项目的代码风格。
-
----
-
-## 内置
-
-opencode 附带了多个适用于流行语言和框架的内置格式化程序。下面是格式化程序、支持的文件扩展名以及所需的命令或配置选项的列表。
-
-| 格式化程序           | 扩展名                                                                                                   | 要求                                                                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| gofmt                | .go                                                                                                      | `gofmt` command available                                                                             |
-| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | `mix` command available                                                                               |
-| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `prettier` dependency in `package.json`                                                               |
-| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json(c)` config file                                                                           |
-| zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
-| clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
-| ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                            |
-| ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
-| rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
-| cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
-| uv                   | .py, .pyi                                                                                                | `uv` command available                                                                                |
-| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available                                                                           |
-| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available                                                                        |
-| htmlbeautifier       | .erb, .html.erb                                                                                          | `htmlbeautifier` command available                                                                    |
-| air                  | .R                                                                                                       | `air` command available                                                                               |
-| dart                 | .dart                                                                                                    | `dart` command available                                                                              |
-| dfmt                 | .d                                                                                                       | `dfmt` command available                                                                              |
-| ocamlformat          | .ml, .mli                                                                                                | `ocamlformat` command available and `.ocamlformat` config file                                        |
-| terraform            | .tf, .tfvars                                                                                             | `terraform` command available                                                                         |
-| gleam                | .gleam                                                                                                   | `gleam` command available                                                                             |
-| nixfmt               | .nix                                                                                                     | `nixfmt` command available                                                                            |
-| shfmt                | .sh, .bash                                                                                               | `shfmt` command available                                                                             |
-| pint                 | .php                                                                                                     | `laravel/pint` dependency in `composer.json`                                                          |
-| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
-| ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
-
-因此，如果您的项目的 `prettier` 中有 `package.json`，opencode 将自动使用它。
+OpenCode 会在文件写入或编辑后，自动使用特定语言的格式化工具对其进行格式化。这确保了生成的代码遵循你项目的代码风格。
 
 ---
 
-## 它是如何工作的
+## 内置格式化工具
 
-当 opencode 写入或编辑文件时，它：
+OpenCode 内置了多种适用于主流语言和框架的格式化工具。下表列出了各格式化工具、支持的文件扩展名以及所需的命令或配置选项。
 
-1. 根据所有启用的格式化程序检查文件扩展名。
-2. 对文件运行适当的格式化程序命令。
-3. 自动应用格式更改。
+| 格式化工具           | 扩展名                                                                                                | 要求                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| air                  | .R                                                                                                    | `air` 命令可用                                                                          |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml 及[更多](https://biomejs.dev/)                   | `biome.json(c)` 配置文件                                                                |
+| cargofmt             | .rs                                                                                                   | `cargo fmt` 命令可用                                                                    |
+| clang-format         | .c, .cpp, .h, .hpp, .ino 及[更多](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 配置文件                                                                |
+| cljfmt               | .clj, .cljs, .cljc, .edn                                                                              | `cljfmt` 命令可用                                                                       |
+| dart                 | .dart                                                                                                 | `dart` 命令可用                                                                         |
+| dfmt                 | .d                                                                                                    | `dfmt` 命令可用                                                                         |
+| gleam                | .gleam                                                                                                | `gleam` 命令可用                                                                        |
+| gofmt                | .go                                                                                                   | `gofmt` 命令可用                                                                        |
+| htmlbeautifier       | .erb, .html.erb                                                                                       | `htmlbeautifier` 命令可用                                                               |
+| ktlint               | .kt, .kts                                                                                             | `ktlint` 命令可用                                                                       |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                          | `mix` 命令可用                                                                          |
+| nixfmt               | .nix                                                                                                  | `nixfmt` 命令可用                                                                       |
+| ocamlformat          | .ml, .mli                                                                                             | `ocamlformat` 命令可用且存在 `.ocamlformat` 配置文件                                    |
+| ormolu               | .hs                                                                                                   | `ormolu` 命令可用                                                                       |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                  | `package.json` 中有 `oxfmt` 依赖，且设置了[实验性环境变量标志](/docs/cli/#experimental) |
+| pint                 | .php                                                                                                  | `composer.json` 中有 `laravel/pint` 依赖                                                |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml 及[更多](https://prettier.io/docs/en/index.html) | `package.json` 中有 `prettier` 依赖                                                     |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                             | `rubocop` 命令可用                                                                      |
+| ruff                 | .py, .pyi                                                                                             | `ruff` 命令可用且有相应配置                                                             |
+| rustfmt              | .rs                                                                                                   | `rustfmt` 命令可用                                                                      |
+| shfmt                | .sh, .bash                                                                                            | `shfmt` 命令可用                                                                        |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                             | `standardrb` 命令可用                                                                   |
+| terraform            | .tf, .tfvars                                                                                          | `terraform` 命令可用                                                                    |
+| uv                   | .py, .pyi                                                                                             | `uv` 命令可用                                                                           |
+| zig                  | .zig, .zon                                                                                            | `zig` 命令可用                                                                          |
 
-此过程在后台进行，确保无需任何手动步骤即可维护您的代码样式。
+因此，如果你的项目 `package.json` 中包含 `prettier`，OpenCode 会自动使用它进行格式化。
+
+---
+
+## 工作原理
+
+当 OpenCode 写入或编辑文件时，它会：
+
+1. 根据所有已启用的格式化工具检查文件扩展名。
+2. 对文件运行相应的格式化命令。
+3. 自动应用格式化更改。
+
+整个过程在后台完成，无需任何手动操作即可保持代码风格的一致性。
 
 ---
 
 ## 配置
 
-您可以通过 opencode 配置中的 `formatter` 部分自定义格式化程序。
+你可以通过 OpenCode 配置中的 `formatter` 部分自定义格式化工具。
 
 ```json title="opencode.json"
 {
@@ -66,22 +67,22 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 }
 ```
 
-每个格式化程序配置支持以下内容：
+每个格式化工具的配置支持以下属性：
 
-| 属性          | 类型     | 描述                               |
-| ------------- | -------- | ---------------------------------- |
-| `disabled`    | boolean  | 将其设置为 `true` 以禁用格式化程序 |
-| `command`     | string[] | 格式化运行的命令                   |
-| `environment` | object   | 运行格式化程序时要设置的环境变量   |
-| `extensions`  | string[] | 此格式化程序应处理的文件扩展名     |
+| 属性          | 类型     | 描述                           |
+| ------------- | -------- | ------------------------------ |
+| `disabled`    | boolean  | 设为 `true` 可禁用该格式化工具 |
+| `command`     | string[] | 执行格式化的命令               |
+| `environment` | object   | 运行格式化工具时设置的环境变量 |
+| `extensions`  | string[] | 该格式化工具处理的文件扩展名   |
 
-让我们看一些例子。
+下面来看一些示例。
 
 ---
 
-### 禁用格式化程序
+### 禁用格式化工具
 
-要全局禁用 **所有** 格式化程序，将 `formatter` 设置为 `false`：
+要全局禁用**所有**格式化工具，将 `formatter` 设为 `false`：
 
 ```json title="opencode.json" {3}
 {
@@ -90,7 +91,7 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 }
 ```
 
-要禁用 **特定** 格式化程序，将 `disabled` 设置为 `true`：
+要禁用**特定**格式化工具，将 `disabled` 设为 `true`：
 
 ```json title="opencode.json" {5}
 {
@@ -105,9 +106,9 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 
 ---
 
-### 自定义格式化程序
+### 自定义格式化工具
 
-您可以覆盖内置格式化程序或通过指定命令、环境变量和文件扩展名添加新格式化程序：
+你可以通过指定命令、环境变量和文件扩展名来覆盖内置格式化工具或添加新的格式化工具：
 
 ```json title="opencode.json" {4-14}
 {
@@ -128,4 +129,4 @@ opencode 附带了多个适用于流行语言和框架的内置格式化程序�
 }
 ```
 
-命令中的 **`$FILE` 占位符** 将替换为正在格式化的文件的路径。
+命令中的 **`$FILE` 占位符**会被替换为待格式化文件的路径。
