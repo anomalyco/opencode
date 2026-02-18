@@ -6,17 +6,21 @@ use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{JobObject, KillOnDrop};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+use std::sync::Arc;
 use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
-use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
+use crate::server::get_wsl_config;
+
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -34,8 +38,8 @@ pub struct Config {
 
 #[derive(Clone, Debug)]
 pub enum CommandEvent {
-    Stdout(Vec<u8>),
-    Stderr(Vec<u8>),
+    Stdout(String),
+    Stderr(String),
     Error(String),
     Terminated(TerminatedPayload),
 }
@@ -64,10 +68,11 @@ pub async fn get_config(app: &AppHandle) -> Option<Config> {
 
     events
         .fold(String::new(), async |mut config_str, event| {
-            if let CommandEvent::Stdout(stdout) = event
-                && let Ok(s) = str::from_utf8(&stdout)
-            {
-                config_str += s
+            if let CommandEvent::Stdout(s) = &event {
+                config_str += s.as_str()
+            }
+            if let CommandEvent::Stderr(s) = &event {
+                config_str += s.as_str()
             }
 
             config_str
@@ -197,16 +202,8 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn is_wsl_enabled(app: &tauri::AppHandle) -> bool {
-    let Ok(store) = app.store(SETTINGS_STORE) else {
-        return false;
-    };
-
-    store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
+  get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -308,7 +305,7 @@ pub fn spawn_command(
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-il", "-c", &line]);
+        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
@@ -317,9 +314,12 @@ pub fn spawn_command(
         cmd
     };
 
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
 
     let mut wrap = CommandWrap::from(cmd);
 
@@ -334,32 +334,25 @@ pub fn spawn_command(
     }
 
     let mut child = wrap.spawn()?;
-    let stdout = child.stdout().take();
-    let stderr = child.stderr().take();
+    let guard = Arc::new(tokio::sync::RwLock::new(()));
     let (tx, rx) = mpsc::channel(256);
     let (kill_tx, mut kill_rx) = mpsc::channel(1);
 
-    if let Some(stdout) = stdout {
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = tx.send(CommandEvent::Stdout(line.into_bytes())).await;
-            }
-        });
-    }
+    let stdout = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stdout().take().unwrap()),
+        CommandEvent::Stdout,
+    );
+    let stderr = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stderr().take().unwrap()),
+        CommandEvent::Stderr,
+    );
 
-    if let Some(stderr) = stderr {
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = tx.send(CommandEvent::Stderr(line.into_bytes())).await;
-            }
-        });
-    }
-
-    tokio::spawn(async move {
+    tokio::task::spawn(async move {
+        let mut kill_open = true;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),
@@ -368,8 +361,11 @@ pub fn spawn_command(
             }
 
             tokio::select! {
-                _ = kill_rx.recv() => {
-                    let _ = child.start_kill();
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {}
             }
@@ -387,6 +383,9 @@ pub fn spawn_command(
                 let _ = tx.send(CommandEvent::Error(err.to_string())).await;
             }
         }
+
+        stdout.abort();
+        stderr.abort();
     });
 
     let event_stream = ReceiverStream::new(rx);
@@ -397,9 +396,7 @@ pub fn spawn_command(
 
 fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
     #[cfg(unix)]
-    {
-        return status.signal();
-    }
+    return status.signal();
 
     #[cfg(not(unix))]
     {
@@ -435,12 +432,10 @@ pub fn serve(
         events
             .for_each(move |event| {
                 match event {
-                    CommandEvent::Stdout(line_bytes) => {
-                        let line = String::from_utf8_lossy(&line_bytes);
+                    CommandEvent::Stdout(line) => {
                         tracing::info!("{line}");
                     }
-                    CommandEvent::Stderr(line_bytes) => {
-                        let line = String::from_utf8_lossy(&line_bytes);
+                    CommandEvent::Stderr(line) => {
                         tracing::info!("{line}");
                     }
                     CommandEvent::Error(err) => {
@@ -492,11 +487,7 @@ pub mod sqlite_migration {
             }
 
             future::ready(match &event {
-                CommandEvent::Stdout(stdout) => {
-                    let Ok(s) = str::from_utf8(stdout) else {
-                        return future::ready(None);
-                    };
-
+                CommandEvent::Stdout(s) | CommandEvent::Stderr(s) => {
                     if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
                         if let Ok(progress) = s.parse::<u8>() {
                             let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
@@ -513,5 +504,43 @@ pub mod sqlite_migration {
                 _ => Some(event),
             })
         })
+    }
+}
+
+fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    tx: mpsc::Sender<CommandEvent>,
+    guard: Arc<tokio::sync::RwLock<()>>,
+    pipe_reader: impl AsyncBufRead + Send + Unpin + 'static,
+    wrapper: F,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let _lock = guard.read().await;
+        let reader = BufReader::new(pipe_reader);
+
+        read_line(reader, tx, wrapper).await;
+    })
+}
+
+async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    reader: BufReader<impl AsyncBufRead + Unpin>,
+    tx: mpsc::Sender<CommandEvent>,
+    wrapper: F,
+) {
+    let mut lines = reader.lines();
+    loop {
+        let line = lines.next_line().await;
+
+        match line {
+            Ok(s) => {
+                if let Some(s) = s {
+                    let _ = tx.clone().send(wrapper(s)).await;
+                }
+            }
+            Err(e) => {
+                let tx_ = tx.clone();
+                let _ = tx_.send(CommandEvent::Error(e.to_string())).await;
+                break;
+            }
+        }
     }
 }
