@@ -48,13 +48,13 @@
     }
 
     &:hover:not(:disabled) {
-      background-color: var(--surface-raised-base-hover);
+      background-color: var(--surface-base-hover);
     }
     &:focus-visible:not(:disabled) {
-      background-color: var(--surface-raised-base-hover);
+      background-color: var(--surface-base-hover);
     }
     &:active:not(:disabled) {
-      background-color: var(--surface-raised-base-active);
+      background-color: var(--surface-base-active);
     }
     &:disabled {
       color: var(--text-weak);
@@ -65,10 +65,10 @@
       }
     }
     &[data-selected="true"]:not(:disabled) {
-      background-color: var(--surface-raised-base-hover);
+      background-color: var(--surface-base-hover);
     }
     &[data-active="true"] {
-      background-color: var(--surface-raised-base-active);
+      background-color: var(--surface-base-active);
     }
   }
 
@@ -172,7 +172,7 @@
 }
 
 [data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] {
-  background-color: var(--surface-raised-base-active);
+  background-color: var(--surface-base-active);
 }
 
 [data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] [data-slot="icon-svg"] {
@@ -180,5 +180,5 @@
 }
 
 [data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
-  background-color: var(--surface-raised-base-active);
+  background-color: var(--surface-base-active);
 }
