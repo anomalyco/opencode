@@ -199,7 +199,7 @@ When constructing the summary, try to stick to this template:
       model,
     })
 
-    if (result === "continue" && input.auto) {
+    if ((result === "continue" || result === "compact") && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -208,7 +208,9 @@ When constructing the summary, try to stick to this template:
           created: Date.now(),
         },
         agent: userMessage.agent,
-        model: userMessage.model,
+        // Use a flat-plan model for the synthetic resume message to avoid
+        // burning a premium request on the compaction continuation prompt.
+        model: { providerID: "github-copilot", modelID: "gpt-5-mini" },
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),
