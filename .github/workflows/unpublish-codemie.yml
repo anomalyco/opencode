@@ -34,5 +34,5 @@ jobs:
             codemie-windows-x64 \
             codemie-windows-x64-baseline; do
             echo "Unpublishing ${pkg}@${{ inputs.version }}..."
-            npm unpublish "${pkg}@${{ inputs.version }}" || echo "  (skipped — not found or already removed)"
+            npm unpublish "${pkg}@${{ inputs.version }}" --force || echo "  (skipped — not found or already removed)"
           done
