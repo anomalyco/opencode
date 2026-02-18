@@ -33,6 +33,10 @@ export namespace FileTime {
     return state().read[sessionID]?.[file]
   }
 
+  export function tracked(sessionID: string) {
+    return Object.keys(state().read[sessionID] || {})
+  }
+
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
     const current = state()
     const currentLock = current.locks.get(filepath) ?? Promise.resolve()

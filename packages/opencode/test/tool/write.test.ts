@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { BashTool } from "../../src/tool/bash"
 
 const ctx = {
   sessionID: "test-write-session",
@@ -141,6 +142,42 @@ describe("tool.write", () => {
           // Diff should be in metadata
           expect(result.metadata).toHaveProperty("filepath", filepath)
           expect(result.metadata).toHaveProperty("exists", true)
+        },
+      })
+    })
+
+    test("allows write after same-session bash overwrite", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "old content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          FileTime.read(ctx.sessionID, filepath)
+          const bash = await BashTool.init()
+          await bash.execute(
+            {
+              command: `printf '%s' \"changed by bash\" > \"${filepath}\"`,
+              description: "Overwrite file from shell",
+            },
+            ctx,
+          )
+
+          const write = await WriteTool.init()
+          await expect(
+            write.execute(
+              {
+                filePath: filepath,
+                content: "final content",
+              },
+              ctx,
+            ),
+          ).resolves.toBeDefined()
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("final content")
         },
       })
     })

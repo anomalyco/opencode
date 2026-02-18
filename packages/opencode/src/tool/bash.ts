@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
+import { FileTime } from "@/file/time"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -77,6 +78,18 @@ export const BashTool = Tool.define("bash", async () => {
     }),
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
+      const tracked = FileTime.tracked(ctx.sessionID)
+      const baseline = new Map(
+        await Promise.all(
+          tracked.map(async (file) => [
+            file,
+            await Bun.file(file)
+              .stat()
+              .then((x) => x.mtime.getTime())
+              .catch(() => undefined),
+          ]),
+        ),
+      )
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -258,6 +271,20 @@ export const BashTool = Tool.define("bash", async () => {
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
+
+      await Promise.all(
+        tracked.map(async (file) => {
+          const before = baseline.get(file)
+          if (before === undefined) return
+          const after = await Bun.file(file)
+            .stat()
+            .then((x) => x.mtime.getTime())
+            .catch(() => undefined)
+          if (after === undefined) return
+          if (after === before) return
+          FileTime.read(ctx.sessionID, file)
+        }),
+      )
 
       return {
         title: params.description,

@@ -5,6 +5,7 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { BashTool } from "../../src/tool/bash"
 
 const ctx = {
   sessionID: "test-edit-session",
@@ -254,6 +255,42 @@ describe("tool.edit", () => {
               ctx,
             ),
           ).rejects.toThrow("modified since it was last read")
+        },
+      })
+    })
+
+    test("allows edit after same-session bash file overwrite", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "original content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+          const bash = await BashTool.init()
+          await bash.execute(
+            {
+              command: `printf '%s' \"modified content\" > \"${filepath}\"`,
+              description: "Overwrite file from shell",
+            },
+            ctx,
+          )
+
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "modified content",
+                newString: "edited content",
+              },
+              ctx,
+            ),
+          ).resolves.toBeDefined()
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("edited content")
         },
       })
     })
