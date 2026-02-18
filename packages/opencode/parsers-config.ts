@@ -214,7 +214,8 @@ export default {
     },
     {
       filetype: "clojure",
-      wasm: "https://github.com/anomalyco/tree-sitter-clojure/releases/download/v0.0.14/tree-sitter-clojure.wasm",
+      // temporarily using fork to fix issues
+      wasm: "https://github.com/anomalyco/tree-sitter-clojure/releases/download/v0.0.1/tree-sitter-clojure.wasm",
       queries: {
         highlights: [
           "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/clojure/highlights.scm",
