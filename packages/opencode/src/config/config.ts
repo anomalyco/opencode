@@ -126,12 +126,12 @@ export namespace Config {
       // Only scan project .opencode/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
-            Filesystem.up({
-              targets: [".opencode"],
-              start: Instance.directory,
-              stop: Instance.worktree,
-            }),
-          )
+          Filesystem.up({
+            targets: [".opencode"],
+            start: Instance.directory,
+            stop: Instance.worktree,
+          }),
+        )
         : []),
       // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
@@ -775,7 +775,7 @@ export namespace Config {
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
-      session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
+      session_rename: z.string().optional().default("<leader>R").describe("Rename session"),
       session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
       stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
       model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
@@ -905,6 +905,7 @@ export namespace Config {
         .describe("Delete word backward in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
+      history_search: z.string().optional().default("ctrl+r").describe("Search prompt history"),
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
       session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
@@ -1223,7 +1224,7 @@ export namespace Config {
           await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
           await fs.unlink(legacy)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
     return result
@@ -1314,7 +1315,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(configFilepath, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1322,7 +1323,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data
