@@ -6,6 +6,9 @@ const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
+// Buffer in seconds before JWT expiration to trigger a refresh
+const JWT_REFRESH_BUFFER_SECONDS = 120
+
 function normalizeDomain(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
@@ -15,6 +18,46 @@ function getUrls(domain: string) {
     DEVICE_CODE_URL: `https://${domain}/login/device/code`,
     ACCESS_TOKEN_URL: `https://${domain}/login/oauth/access_token`,
   }
+}
+
+// Cache for Copilot JWTs exchanged from OAuth tokens, keyed by domain
+const jwtCache = new Map<string, { token: string; expiresAt: number }>()
+
+async function exchangeForCopilotJWT(
+  domain: string,
+  oauthToken: string,
+): Promise<string> {
+  const cached = jwtCache.get(domain)
+  if (cached && cached.expiresAt > Date.now() / 1000 + JWT_REFRESH_BUFFER_SECONDS)
+    return cached.token
+
+  const apiHost =
+    domain === "github.com" ? "api.github.com" : `api.${domain}`
+  const response = await fetch(
+    `https://${apiHost}/copilot_internal/v2/token`,
+    {
+      headers: {
+        Authorization: `token ${oauthToken}`,
+        Accept: "application/json",
+        "User-Agent": `opencode/${Installation.VERSION}`,
+        "Editor-Version": `opencode/${Installation.VERSION}`,
+      },
+    },
+  )
+
+  if (!response.ok) return oauthToken
+
+  const data = (await response.json()) as {
+    token: string
+    expires_at: number
+  }
+
+  jwtCache.set(domain, {
+    token: data.token,
+    expiresAt: data.expires_at,
+  })
+
+  return data.token
 }
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
@@ -118,11 +161,18 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               return { isVision: false, isAgent: false }
             })
 
+            const domain = enterpriseUrl
+              ? normalizeDomain(enterpriseUrl)
+              : "github.com"
+            const token = await exchangeForCopilotJWT(domain, info.refresh)
+
             const headers: Record<string, string> = {
               "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
               "User-Agent": `opencode/${Installation.VERSION}`,
-              Authorization: `Bearer ${info.refresh}`,
+              Authorization: `Bearer ${token}`,
+              "Editor-Version": `opencode/${Installation.VERSION}`,
+              "Copilot-Integration-Id": "opencode-chat",
               "Openai-Intent": "conversation-edits",
             }
 
