@@ -197,19 +197,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         })
       },
     }),
-    viewCommand({
-      id: "steps.toggle",
-      title: input.language.t("command.steps.toggle"),
-      description: input.language.t("command.steps.toggle.description"),
-      keybind: "mod+e",
-      slash: "steps",
-      disabled: !input.params.id,
-      onSelect: () => {
-        const msg = input.activeMessage()
-        if (!msg) return
-        input.setExpanded(msg.id, (open: boolean | undefined) => !open)
-      },
-    }),
   ])
 
   const messageCommands = createMemo(() => [
