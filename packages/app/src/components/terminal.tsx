@@ -362,6 +362,13 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
+        if (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === "k") {
+          event.preventDefault()
+          event.stopPropagation()
+          t.clear()
+          return true
+        }
+
         // allow for toggle terminal keybinds in parent
         const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
         const keybinds = parseKeybind(config)
