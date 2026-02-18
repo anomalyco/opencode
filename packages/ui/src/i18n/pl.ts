@@ -32,7 +32,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegowanie pracy",
   "ui.sessionTurn.status.planning": "Planowanie kolejnych kroków",
-  "ui.sessionTurn.status.gatheringContext": "Eksplorowanie...",
+  "ui.sessionTurn.status.gatheringContext": "Eksplorowanie",
   "ui.sessionTurn.status.gatheredContext": "Wyeksplorowano",
   "ui.sessionTurn.status.searchingCodebase": "Przeszukiwanie bazy kodu",
   "ui.sessionTurn.status.searchingWeb": "Przeszukiwanie sieci",
