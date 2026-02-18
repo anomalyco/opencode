@@ -25,6 +25,7 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
+  export const Path = path.join(Global.Path.data, "opencode.db")
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
@@ -74,6 +75,7 @@ export namespace Database {
     sqlite.run("PRAGMA busy_timeout = 5000")
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
+    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     const db = drizzle({ client: sqlite, schema })
 

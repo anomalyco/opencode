@@ -51,7 +51,6 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
@@ -826,14 +825,6 @@ export default function Layout(props: ParentProps) {
       if (next) prefetchSession(next)
     }
 
-    if (import.meta.env.DEV) {
-      navStart({
-        dir: base64Encode(session.directory),
-        from: params.id,
-        to: session.id,
-        trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
-      })
-    }
     navigateToSession(session)
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
@@ -867,15 +858,6 @@ export default function Layout(props: ParentProps) {
       if (offset < 0) {
         if (prev) prefetchSession(prev, "high")
         if (next) prefetchSession(next)
-      }
-
-      if (import.meta.env.DEV) {
-        navStart({
-          dir: base64Encode(session.directory),
-          from: params.id,
-          to: session.id,
-          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
-        })
       }
 
       navigateToSession(session)
@@ -1692,6 +1674,13 @@ export default function Layout(props: ParentProps) {
     })
     const projectId = createMemo(() => panelProps.project?.id ?? "")
     const workspaces = createMemo(() => workspaceIds(panelProps.project))
+    const unseenCount = createMemo(() =>
+      workspaces().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+    )
+    const clearNotifications = () =>
+      workspaces()
+        .filter((directory) => notification.project.unseenCount(directory) > 0)
+        .forEach((directory) => notification.project.markViewed(directory))
     const workspacesEnabled = createMemo(() => {
       const project = panelProps.project
       if (!project) return false
@@ -1703,7 +1692,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-sm": true,
+          "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-[12px]": true,
           "flex-1 min-w-0": panelProps.mobile,
         }}
         style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
@@ -1718,8 +1707,8 @@ export default function Layout(props: ParentProps) {
                       id={`project:${projectId()}`}
                       value={projectName}
                       onSave={(next) => renameProject(p(), next)}
-                      class="text-16-medium text-text-strong truncate"
-                      displayClass="text-16-medium text-text-strong truncate"
+                      class="text-14-medium text-text-strong truncate"
+                      displayClass="text-14-medium text-text-strong truncate"
                       stopPropagation
                     />
 
@@ -1767,6 +1756,16 @@ export default function Layout(props: ParentProps) {
                             {layout.sidebar.workspaces(p().worktree)()
                               ? language.t("sidebar.workspaces.disable")
                               : language.t("sidebar.workspaces.enable")}
+                          </DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          data-action="project-clear-notifications"
+                          data-project={base64Encode(p().worktree)}
+                          disabled={unseenCount() === 0}
+                          onSelect={clearNotifications}
+                        >
+                          <DropdownMenu.ItemLabel>
+                            {language.t("sidebar.project.clearNotifications")}
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
@@ -2025,7 +2024,7 @@ export default function Layout(props: ParentProps) {
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
           }}
         >
           <Show when={!autoselecting()} fallback={<div class="size-full" />}>
