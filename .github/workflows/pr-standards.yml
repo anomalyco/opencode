@@ -18,6 +18,14 @@ jobs:
             const pr = context.payload.pull_request;
             const login = pr.user.login;
 
+            // Skip PRs older than Feb 18, 2026 at 6PM EST (Feb 19, 2026 00:00 UTC)
+            const cutoff = new Date('2026-02-19T00:00:00Z');
+            const prCreated = new Date(pr.created_at);
+            if (prCreated < cutoff) {
+              console.log(`Skipping: PR #${pr.number} was created before cutoff (${prCreated.toISOString()})`);
+              return;
+            }
+
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
             const { data: file } = await github.rest.repos.getContent({
@@ -156,6 +164,14 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const login = pr.user.login;
+
+            // Skip PRs older than Feb 18, 2026 at 6PM EST (Feb 19, 2026 00:00 UTC)
+            const cutoff = new Date('2026-02-19T00:00:00Z');
+            const prCreated = new Date(pr.created_at);
+            if (prCreated < cutoff) {
+              console.log(`Skipping: PR #${pr.number} was created before cutoff (${prCreated.toISOString()})`);
+              return;
+            }
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
