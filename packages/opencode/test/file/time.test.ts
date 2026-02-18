@@ -69,6 +69,23 @@ describe("file/time", () => {
         },
       })
     })
+
+    test("bounds tracked files per session", async () => {
+      await using tmp = await tmpdir()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const files = Array.from({ length: 2200 }, (_, i) => path.join(tmp.path, `file-${i}.txt`))
+          files.forEach((file) => FileTime.read(sessionID, file))
+
+          const tracked = FileTime.tracked(sessionID)
+          expect(tracked.length).toBeLessThan(files.length)
+          expect(tracked).not.toContain(files[0])
+          expect(tracked).toContain(files.at(-1)!)
+        },
+      })
+    })
   })
 
   describe("assert()", () => {

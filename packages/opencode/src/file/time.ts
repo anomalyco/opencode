@@ -5,6 +5,7 @@ import { Filesystem } from "../util/filesystem"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
+  const MAX_TRACKED = 2048
   // Per-session read times plus per-file write locks.
   // All tools that overwrite existing files should run their
   // assert/read/write/update sequence inside withLock(filepath, ...)
@@ -26,7 +27,13 @@ export namespace FileTime {
     log.info("read", { sessionID, file })
     const { read } = state()
     read[sessionID] = read[sessionID] || {}
+    if (read[sessionID][file]) delete read[sessionID][file]
     read[sessionID][file] = new Date()
+    const files = Object.keys(read[sessionID])
+    if (files.length <= MAX_TRACKED) return
+    files.slice(0, files.length - MAX_TRACKED).forEach((file) => {
+      delete read[sessionID][file]
+    })
   }
 
   export function get(sessionID: string, file: string) {

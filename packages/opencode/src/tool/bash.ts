@@ -78,20 +78,11 @@ export const BashTool = Tool.define("bash", async () => {
     }),
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
-      const tracked = FileTime.tracked(ctx.sessionID)
-      const baseline = new Map<string, number | undefined>(
-        await Promise.all(
-          tracked.map(
-            async (file): Promise<[string, number | undefined]> => [
-              file,
-              await Bun.file(file)
-                .stat()
-                .then((x) => x.mtime.getTime())
-                .catch(() => undefined),
-            ],
-          ),
-        ),
-      )
+      const mtime = (file: string) =>
+        Bun.file(file)
+          .stat()
+          .then((x) => x.mtime.getTime())
+          .catch(() => undefined)
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -177,6 +168,13 @@ export const BashTool = Tool.define("bash", async () => {
           metadata: {},
         })
       }
+
+      const dirs = Array.from(directories)
+      const tracked = FileTime.tracked(ctx.sessionID).filter((file) => {
+        if (Instance.containsPath(file)) return true
+        return dirs.some((dir) => Filesystem.contains(dir, file))
+      })
+      const baseline = new Map(await Promise.all(tracked.map(async (file) => [file, await mtime(file)] as const)))
 
       const shellEnv = await Plugin.trigger(
         "shell.env",
@@ -278,10 +276,7 @@ export const BashTool = Tool.define("bash", async () => {
         tracked.map(async (file) => {
           const before = baseline.get(file)
           if (before === undefined) return
-          const after = await Bun.file(file)
-            .stat()
-            .then((x) => x.mtime.getTime())
-            .catch(() => undefined)
+          const after = await mtime(file)
           if (after === undefined) return
           if (after === before) return
           FileTime.read(ctx.sessionID, file)
