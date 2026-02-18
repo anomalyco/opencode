@@ -57,25 +57,12 @@ function errorMessage(error: unknown) {
   return "Unknown error"
 }
 
-function setDevStats(value: {
-  activeDirectoryStores: number
-  evictions: number
-  loadSessionsFullFetchFallback: number
-}) {
-  ;(globalThis as { __OPENCODE_GLOBAL_SYNC_STATS?: typeof value }).__OPENCODE_GLOBAL_SYNC_STATS = value
-}
-
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
-
-  const stats = {
-    evictions: 0,
-    loadSessionsFallback: 0,
-  }
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
@@ -112,15 +99,6 @@ function createGlobalSync() {
     setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
   }
 
-  const updateStats = (activeDirectoryStores: number) => {
-    if (!import.meta.env.DEV) return
-    setDevStats({
-      activeDirectoryStores,
-      evictions: stats.evictions,
-      loadSessionsFullFetchFallback: stats.loadSessionsFallback,
-    })
-  }
-
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
   const queue = createRefreshQueue({
@@ -131,11 +109,6 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    markStats: updateStats,
-    incrementEvictions: () => {
-      stats.evictions += 1
-      updateStats(Object.keys(children.children).length)
-    },
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
@@ -207,10 +180,6 @@ function createGlobalSync() {
       directory,
       limit,
       list: (query) => globalSDK.client.session.list(query),
-      onFallback: () => {
-        stats.loadSessionsFallback += 1
-        updateStats(Object.keys(children.children).length)
-      },
     })
       .then((x) => {
         const nonArchived = (x.data ?? [])
