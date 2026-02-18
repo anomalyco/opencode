@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -14,6 +15,7 @@ type PromptAttachmentsInput = {
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
   addPart: (part: ContentPart) => void
+  readClipboardImage?: () => Promise<File | null>
 }
 
 export function createPromptAttachments(input: PromptAttachmentsInput) {
@@ -30,7 +32,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID(),
+        id: uuid(),
         filename: file.name,
         mime: file.type,
         dataUrl,
@@ -76,7 +78,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     const plainText = clipboardData.getData("text/plain") ?? ""
+
+    // Desktop: Browser clipboard has no images and no text, try platform's native clipboard for images
+    if (input.readClipboardImage && !plainText) {
+      const file = await input.readClipboardImage()
+      if (file) {
+        await addImageAttachment(file)
+        return
+      }
+    }
+
     if (!plainText) return
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
+    if (inserted) return
+
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 

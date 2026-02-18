@@ -34,7 +34,7 @@ async function main() {
   console.log("Fetching open PRs with beta label...")
 
   const stdout = await $`gh pr list --state open --label beta --json number,title,author,labels --limit 100`.text()
-  const prs: PR[] = JSON.parse(stdout)
+  const prs: PR[] = JSON.parse(stdout).sort((a: PR, b: PR) => a.number - b.number)
 
   console.log(`Found ${prs.length} open PRs with beta label`)
 
@@ -128,10 +128,15 @@ async function main() {
   await $`git fetch origin beta`
 
   const localTree = await $`git rev-parse beta^{tree}`.text()
-  const remoteTree = await $`git rev-parse origin/beta^{tree}`.text()
+  const remoteTrees = (await $`git log origin/dev..origin/beta --format=%T`.text()).split("\n")
 
-  if (localTree.trim() === remoteTree.trim()) {
-    console.log("Beta branch has identical contents, no push needed")
+  const matchIdx = remoteTrees.indexOf(localTree.trim())
+  if (matchIdx !== -1) {
+    if (matchIdx !== 0) {
+      console.log(`Beta branch contains this sync, but additional commits exist after it. Leaving beta branch as is.`)
+    } else {
+      console.log("Beta branch has identical contents, no push needed")
+    }
     return
   }
 

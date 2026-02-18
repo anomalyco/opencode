@@ -4,7 +4,6 @@ import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
@@ -15,6 +14,39 @@ export namespace Pty {
 
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
+  const encoder = new TextEncoder()
+
+  type Socket = {
+    readyState: number
+    data: object
+    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    close: (code?: number, reason?: string) => void
+  }
+
+  // Bun's ServerWebSocket has a per-connection `.data` object (set during
+  // `server.upgrade`) that changes when the underlying connection is recycled.
+  // We keep a reference to a stable part of it so output can't leak even when
+  // websocket objects are reused.
+  const token = (ws: Socket) => {
+    const data = ws.data
+    const events = (data as { events?: unknown }).events
+    if (events && typeof events === "object") return events
+
+    const url = (data as { url?: unknown }).url
+    if (url && typeof url === "object") return url
+
+    return data
+  }
+
+  // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+  const meta = (cursor: number) => {
+    const json = JSON.stringify({ cursor })
+    const bytes = encoder.encode(json)
+    const out = new Uint8Array(bytes.length + 1)
+    out[0] = 0
+    out.set(bytes, 1)
+    return out
+  }
 
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
@@ -68,7 +100,9 @@ export namespace Pty {
     info: Info
     process: IPty
     buffer: string
-    subscribers: Set<WSContext>
+    bufferCursor: number
+    cursor: number
+    subscribers: Map<Socket, object>
   }
 
   const state = Instance.state(
@@ -78,8 +112,12 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers) {
-          ws.close()
+        for (const ws of session.subscribers.keys()) {
+          try {
+            ws.close()
+          } catch {
+            // ignore
+          }
         }
       }
       sessions.clear()
@@ -139,35 +177,49 @@ export namespace Pty {
       info,
       process: ptyProcess,
       buffer: "",
-      subscribers: new Set(),
+      bufferCursor: 0,
+      cursor: 0,
+      subscribers: new Map(),
     }
     state().set(id, session)
-    ptyProcess.onData((data) => {
-      let open = false
-      for (const ws of session.subscribers) {
+    ptyProcess.onData((chunk) => {
+      session.cursor += chunk.length
+
+      for (const [ws, data] of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
-        open = true
-        ws.send(data)
+
+        if (token(ws) !== data) {
+          session.subscribers.delete(ws)
+          continue
+        }
+        try {
+          ws.send(chunk)
+        } catch {
+          session.subscribers.delete(ws)
+        }
       }
-      if (open) return
-      session.buffer += data
+
+      session.buffer += chunk
       if (session.buffer.length <= BUFFER_LIMIT) return
-      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
+      const excess = session.buffer.length - BUFFER_LIMIT
+      session.buffer = session.buffer.slice(excess)
+      session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const ws of session.subscribers) {
-        ws.close()
+      for (const ws of session.subscribers.keys()) {
+        try {
+          ws.close()
+        } catch {
+          // ignore
+        }
       }
       session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
-      for (const ws of session.subscribers) {
-        ws.close()
-      }
       state().delete(id)
     })
     Bus.publish(Event.Created, { info })
@@ -194,9 +246,14 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers) {
-      ws.close()
+    for (const ws of session.subscribers.keys()) {
+      try {
+        ws.close()
+      } catch {
+        // ignore
+      }
     }
+    session.subscribers.clear()
     state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
@@ -215,28 +272,52 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext) {
+  export function connect(id: string, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
       return
     }
     log.info("client connected to session", { id })
-    session.subscribers.add(ws)
-    if (session.buffer) {
-      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
-      session.buffer = ""
+
+    const start = session.bufferCursor
+    const end = session.cursor
+
+    const from =
+      cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
+
+    const data = (() => {
+      if (!session.buffer) return ""
+      if (from >= end) return ""
+      const offset = Math.max(0, from - start)
+      if (offset >= session.buffer.length) return ""
+      return session.buffer.slice(offset)
+    })()
+
+    if (data) {
       try {
-        for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
-          ws.send(buffer.slice(i, i + BUFFER_CHUNK))
+        for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
+          ws.send(data.slice(i, i + BUFFER_CHUNK))
         }
       } catch {
-        session.subscribers.delete(ws)
-        session.buffer = buffer
         ws.close()
         return
       }
     }
+
+    try {
+      ws.send(meta(end))
+    } catch {
+      ws.close()
+      return
+    }
+
+    if (!ws.data || typeof ws.data !== "object") {
+      ws.close()
+      return
+    }
+
+    session.subscribers.set(ws, token(ws))
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))

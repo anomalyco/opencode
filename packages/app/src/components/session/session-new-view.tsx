@@ -1,12 +1,15 @@
 import { Show, createMemo } from "solid-js"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
+import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
+const ROOT_CLASS =
+  "size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto 2xl:max-w-[1000px] px-6 pb-16"
 
 interface NewSessionViewProps {
   worktree: string
@@ -15,6 +18,7 @@ interface NewSessionViewProps {
 
 export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
+  const sdk = useSDK()
   const language = useLanguage()
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
@@ -24,11 +28,11 @@ export function NewSessionView(props: NewSessionViewProps) {
     if (options().includes(selection)) return selection
     return MAIN_WORKTREE
   })
-  const projectRoot = createMemo(() => sync.project?.worktree ?? sync.data.path.directory)
+  const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
   const isWorktree = createMemo(() => {
     const project = sync.project
     if (!project) return false
-    return sync.data.path.directory !== project.worktree
+    return sdk.directory !== project.worktree
   })
 
   const label = (value: string) => {
@@ -45,7 +49,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   }
 
   return (
-    <div class="size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]">
+    <div class={ROOT_CLASS}>
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />

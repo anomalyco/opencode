@@ -17,6 +17,8 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 
+const MAX_DIFF_CHANGED_LINES = 500
+
 export type SessionReviewDiffStyle = "unified" | "split"
 
 export type SessionReviewComment = {
@@ -284,18 +286,14 @@ export const SessionReview = (props: SessionReviewProps) => {
         [props.class ?? ""]: !!props.class,
       }}
     >
-      <div
-        data-slot="session-review-header"
-        classList={{
-          [props.classes?.header ?? ""]: !!props.classes?.header,
-        }}
-      >
+      <div data-slot="session-review-header" class={props.classes?.header}>
         <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <RadioGroup
               options={["unified", "split"] as const}
               current={diffStyle()}
+              size="small"
               value={(style) => style}
               label={(style) =>
                 i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
@@ -304,7 +302,12 @@ export const SessionReview = (props: SessionReviewProps) => {
             />
           </Show>
           <Show when={hasDiffs()}>
-            <Button size="normal" icon="chevron-grabber-vertical" onClick={handleExpandOrCollapseAll}>
+            <Button
+              size="small"
+              icon="chevron-grabber-vertical"
+              class="w-[106px] justify-start"
+              onClick={handleExpandOrCollapseAll}
+            >
               <Switch>
                 <Match when={open().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
                 <Match when={true}>{i18n.t("ui.sessionReview.expandAll")}</Match>
@@ -314,23 +317,29 @@ export const SessionReview = (props: SessionReviewProps) => {
           {props.actions}
         </div>
       </div>
-      <div
-        data-slot="session-review-container"
-        classList={{
-          [props.classes?.container ?? ""]: !!props.classes?.container,
-        }}
-      >
+      <div data-slot="session-review-container" class={props.classes?.container}>
         <Show when={hasDiffs()} fallback={props.empty}>
           <Accordion multiple value={open()} onChange={handleChange}>
             <For each={props.diffs}>
               {(diff) => {
                 let wrapper: HTMLDivElement | undefined
 
+                const expanded = createMemo(() => open().includes(diff.file))
+                const [force, setForce] = createSignal(false)
+
                 const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === diff.file))
                 const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
                 const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
                 const afterText = () => (typeof diff.after === "string" ? diff.after : "")
+                const changedLines = () => diff.additions + diff.deletions
+
+                const tooLarge = createMemo(() => {
+                  if (!expanded()) return false
+                  if (force()) return false
+                  if (isImageFile(diff.file)) return false
+                  return changedLines() > MAX_DIFF_CHANGED_LINES
+                })
 
                 const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
                 const isDeleted = () =>
@@ -571,94 +580,116 @@ export const SessionReview = (props: SessionReviewProps) => {
                           scheduleAnchors()
                         }}
                       >
-                        <Switch>
-                          <Match when={isImage() && imageSrc()}>
-                            <div data-slot="session-review-image-container">
-                              <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
-                            </div>
-                          </Match>
-                          <Match when={isImage() && isDeleted()}>
-                            <div data-slot="session-review-image-container" data-removed>
-                              <span data-slot="session-review-image-placeholder">
-                                {i18n.t("ui.sessionReview.change.removed")}
-                              </span>
-                            </div>
-                          </Match>
-                          <Match when={isImage() && !imageSrc()}>
-                            <div data-slot="session-review-image-container">
-                              <span data-slot="session-review-image-placeholder">
-                                {imageStatus() === "loading" ? "Loading..." : "Image"}
-                              </span>
-                            </div>
-                          </Match>
-                          <Match when={!isImage()}>
-                            <Dynamic
-                              component={diffComponent}
-                              preloadedDiff={diff.preloaded}
-                              diffStyle={diffStyle()}
-                              onRendered={() => {
-                                props.onDiffRendered?.()
-                                scheduleAnchors()
-                              }}
-                              enableLineSelection={props.onLineComment != null}
-                              onLineSelected={handleLineSelected}
-                              onLineSelectionEnd={handleLineSelectionEnd}
-                              selectedLines={selectedLines()}
-                              commentedLines={commentedLines()}
-                              before={{
-                                name: diff.file!,
-                                contents: typeof diff.before === "string" ? diff.before : "",
-                              }}
-                              after={{
-                                name: diff.file!,
-                                contents: typeof diff.after === "string" ? diff.after : "",
-                              }}
-                            />
-                          </Match>
-                        </Switch>
-
-                        <For each={comments()}>
-                          {(comment) => (
-                            <LineComment
-                              id={comment.id}
-                              top={positions()[comment.id]}
-                              onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
-                              onClick={() => {
-                                if (isCommentOpen(comment)) {
-                                  setOpened(null)
-                                  return
-                                }
-
-                                openComment(comment)
-                              }}
-                              open={isCommentOpen(comment)}
-                              comment={comment.comment}
-                              selection={selectionLabel(comment.selection)}
-                            />
-                          )}
-                        </For>
-
-                        <Show when={draftRange()}>
-                          {(range) => (
-                            <Show when={draftTop() !== undefined}>
-                              <LineCommentEditor
-                                top={draftTop()}
-                                value={draft()}
-                                selection={selectionLabel(range())}
-                                onInput={setDraft}
-                                onCancel={() => setCommenting(null)}
-                                onSubmit={(comment) => {
-                                  props.onLineComment?.({
-                                    file: diff.file,
-                                    selection: range(),
-                                    comment,
-                                    preview: selectionPreview(diff, range()),
-                                  })
-                                  setCommenting(null)
+                        <Show when={expanded()}>
+                          <Switch>
+                            <Match when={isImage() && imageSrc()}>
+                              <div data-slot="session-review-image-container">
+                                <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
+                              </div>
+                            </Match>
+                            <Match when={isImage() && isDeleted()}>
+                              <div data-slot="session-review-image-container" data-removed>
+                                <span data-slot="session-review-image-placeholder">
+                                  {i18n.t("ui.sessionReview.change.removed")}
+                                </span>
+                              </div>
+                            </Match>
+                            <Match when={isImage() && !imageSrc()}>
+                              <div data-slot="session-review-image-container">
+                                <span data-slot="session-review-image-placeholder">
+                                  {imageStatus() === "loading"
+                                    ? i18n.t("ui.sessionReview.image.loading")
+                                    : i18n.t("ui.sessionReview.image.placeholder")}
+                                </span>
+                              </div>
+                            </Match>
+                            <Match when={!isImage() && tooLarge()}>
+                              <div data-slot="session-review-large-diff">
+                                <div data-slot="session-review-large-diff-title">
+                                  {i18n.t("ui.sessionReview.largeDiff.title")}
+                                </div>
+                                <div data-slot="session-review-large-diff-meta">
+                                  {i18n.t("ui.sessionReview.largeDiff.meta", {
+                                    limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
+                                    current: changedLines().toLocaleString(),
+                                  })}
+                                </div>
+                                <div data-slot="session-review-large-diff-actions">
+                                  <Button size="normal" variant="secondary" onClick={() => setForce(true)}>
+                                    {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
+                                  </Button>
+                                </div>
+                              </div>
+                            </Match>
+                            <Match when={!isImage()}>
+                              <Dynamic
+                                component={diffComponent}
+                                preloadedDiff={diff.preloaded}
+                                diffStyle={diffStyle()}
+                                onRendered={() => {
+                                  props.onDiffRendered?.()
+                                  scheduleAnchors()
+                                }}
+                                enableLineSelection={props.onLineComment != null}
+                                onLineSelected={handleLineSelected}
+                                onLineSelectionEnd={handleLineSelectionEnd}
+                                selectedLines={selectedLines()}
+                                commentedLines={commentedLines()}
+                                before={{
+                                  name: diff.file!,
+                                  contents: typeof diff.before === "string" ? diff.before : "",
+                                }}
+                                after={{
+                                  name: diff.file!,
+                                  contents: typeof diff.after === "string" ? diff.after : "",
                                 }}
                               />
-                            </Show>
-                          )}
+                            </Match>
+                          </Switch>
+
+                          <For each={comments()}>
+                            {(comment) => (
+                              <LineComment
+                                id={comment.id}
+                                top={positions()[comment.id]}
+                                onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
+                                onClick={() => {
+                                  if (isCommentOpen(comment)) {
+                                    setOpened(null)
+                                    return
+                                  }
+
+                                  openComment(comment)
+                                }}
+                                open={isCommentOpen(comment)}
+                                comment={comment.comment}
+                                selection={selectionLabel(comment.selection)}
+                              />
+                            )}
+                          </For>
+
+                          <Show when={draftRange()}>
+                            {(range) => (
+                              <Show when={draftTop() !== undefined}>
+                                <LineCommentEditor
+                                  top={draftTop()}
+                                  value={draft()}
+                                  selection={selectionLabel(range())}
+                                  onInput={setDraft}
+                                  onCancel={() => setCommenting(null)}
+                                  onSubmit={(comment) => {
+                                    props.onLineComment?.({
+                                      file: diff.file,
+                                      selection: range(),
+                                      comment,
+                                      preview: selectionPreview(diff, range()),
+                                    })
+                                    setCommenting(null)
+                                  }}
+                                />
+                              </Show>
+                            )}
+                          </Show>
                         </Show>
                       </div>
                     </Accordion.Content>

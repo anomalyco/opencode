@@ -1,0 +1,188 @@
+---
+title: LSP เซิร์ฟเวอร์
+description: OpenCode ทำงานร่วมกับเซิร์ฟเวอร์ LSP ของคุณ
+---
+
+OpenCode ทำงานร่วมกับ Language Server Protocol (LSP) เพื่อช่วยให้ LLM โต้ตอบกับโค้ดเบสของคุณ ใช้การวินิจฉัยเพื่อให้ข้อเสนอแนะไปยัง LLM
+
+---
+
+## บิวท์อิน
+
+OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ในตัวหลายตัวสำหรับภาษายอดนิยม:
+
+| LSP เซิร์ฟเวอร์      | ส่วนขยาย                                                            | ความต้องการ                                             |
+| -------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
+| astro                | .astro                                                              | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Astro                   |
+| bash                 | .sh, .bash, .zsh, .ksh                                              | ติดตั้ง bash-Language-Server โดยอัตโนมัติ               |
+| clang                | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | ติดตั้งอัตโนมัติสำหรับโครงการ C/C++                     |
+| csharp               | .cs                                                                 | `.NET SDK` ติดตั้งแล้ว                                  |
+| clojure-lsp          | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` คำสั่งใช้ได้                              |
+| dart                 | .dart                                                               | `dart` คำสั่งใช้ได้                                     |
+| deno                 | .ts, .tsx, .js, .jsx, .mjs                                          | มีคำสั่ง `deno` (ตรวจจับอัตโนมัติ deno.json/deno.jsonc) |
+| elixir-ls            | .ex, .exs                                                           | `elixir` คำสั่งใช้ได้                                   |
+| eslint               | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` การพึ่งพาในโครงการ                             |
+| fsharp               | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` ติดตั้งแล้ว                                  |
+| gleam                | .gleam                                                              | `gleam` คำสั่งใช้ได้                                    |
+| gopls                | .go                                                                 | `go` คำสั่งใช้ได้                                       |
+| haskell              | .hs, .lhs                                                           | `haskell-language-server-wrapper` คำสั่งใช้ได้          |
+| jdtls                | .java                                                               | `Java SDK (version 21+)` ติดตั้งแล้ว                    |
+| kotlin-ls            | .kt, .kts                                                           | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Kotlin                  |
+| lua-ls               | .lua                                                                | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Lua                     |
+| nix                  | .nix                                                                | `nixd` คำสั่งใช้ได้                                     |
+| ocaml-lsp            | .ml, .mli                                                           | `ocamllsp` คำสั่งใช้ได้                                 |
+| oxlint               | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` การพึ่งพาในโครงการ                             |
+| php intelephense.php | .php                                                                | ติดตั้งอัตโนมัติสำหรับโครงการ PHP                       |
+| prisma               | .prisma                                                             | `prisma` คำสั่งใช้ได้                                   |
+| pyright              | .py, .pyi                                                           | `pyright` ติดตั้งการพึ่งพาแล้ว                          |
+| ruby-lsp (rubocop)   | .rb, .rake, .gemspec, .ru                                           | มีคำสั่ง `ruby` และ `gem`                               |
+| rust                 | .rs                                                                 | `rust-analyzer` คำสั่งใช้ได้                            |
+| sourcekit-lsp        | .swift, .objc, .objcpp                                              | ติดตั้ง `swift` (`xcode` บน macOS)                      |
+| svelte               | .svelte                                                             | ติดตั้งอัตโนมัติสำหรับโครงการ Svelte                    |
+| terraform            | .tf, .tfvars                                                        | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
+| tinymist             | .typ, .typst                                                        | ติดตั้งอัตโนมัติจากรุ่น GitHub                          |
+| typescript           | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` การพึ่งพาในโครงการ                         |
+| vue                  | .vue                                                                | ติดตั้งอัตโนมัติสำหรับโปรเจ็กต์ Vue                     |
+| yaml-ls              | .yaml, .yml                                                         | ติดตั้งเซิร์ฟเวอร์ภาษา Red Hat yaml โดยอัตโนมัติ        |
+| zls                  | .zig, .zon                                                          | `zig` คำสั่งใช้ได้                                      |
+
+เซิร์ฟเวอร์ LSP จะถูกเปิดใช้งานโดยอัตโนมัติเมื่อตรวจพบนามสกุลไฟล์ใดนามสกุลหนึ่งข้างต้นและเป็นไปตามข้อกำหนด
+
+:::note
+คุณสามารถปิดใช้งานการดาวน์โหลดเซิร์ฟเวอร์ LSP อัตโนมัติได้โดยตั้งค่าตัวแปรสภาพแวดล้อม `OPENCODE_DISABLE_LSP_DOWNLOAD` เป็น `true`
+:::
+
+---
+
+## มันทำงานอย่างไร
+
+เมื่อ opencode เปิดไฟล์ มันจะ:
+
+1. ตรวจสอบนามสกุลไฟล์กับเซิร์ฟเวอร์ LSP ที่เปิดใช้งานทั้งหมด
+2. เริ่มเซิร์ฟเวอร์ LSP ที่เหมาะสมหากยังไม่ได้ทำงาน
+
+---
+
+## กำหนดค่า
+
+You can customize LSP servers through the `lsp` section in your opencode config.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+เซิร์ฟเวอร์ LSP แต่ละเซิร์ฟเวอร์รองรับสิ่งต่อไปนี้:
+
+| คุณสมบัติ        | พิมพ์   | คำอธิบาย                                               |
+| ---------------- | ------- | ------------------------------------------------------ |
+| `disabled`       | บูลีน   | ตั้งค่านี้เป็น `true` เพื่อปิดการใช้งานเซิร์ฟเวอร์ LSP |
+| `command`        | สตริง[] | คำสั่งเพื่อเริ่มต้นเซิร์ฟเวอร์ LSP                     |
+| `extensions`     | สตริง[] | นามสกุลไฟล์ที่เซิร์ฟเวอร์ LSP นี้ควรจัดการ             |
+| `env`            | วัตถุ   | ตัวแปรสภาพแวดล้อมที่จะตั้งค่าเมื่อเริ่มต้นเซิร์ฟเวอร์  |
+| `initialization` | วัตถุ   | ตัวเลือกการเริ่มต้นที่จะส่งไปยังเซิร์ฟเวอร์ LSP        |
+
+ลองดูตัวอย่างบางส่วน
+
+---
+
+### ตัวแปรสภาพแวดล้อม
+
+ใช้คุณสมบัติ `env` เพื่อตั้งค่าตัวแปรสภาพแวดล้อมเมื่อเริ่มต้นเซิร์ฟเวอร์ LSP:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### ตัวเลือกการเริ่มต้น
+
+ใช้คุณสมบัติ `initialization` เพื่อส่งตัวเลือกการเริ่มต้นไปยังเซิร์ฟเวอร์ LSP นี่คือการตั้งค่าเฉพาะเซิร์ฟเวอร์ที่ส่งระหว่างคำขอ LSP `initialize`:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+ตัวเลือกการเริ่มต้นจะแตกต่างกันไปตามเซิร์ฟเวอร์ LSP ตรวจสอบเอกสารประกอบของเซิร์ฟเวอร์ LSP ของคุณเพื่อดูตัวเลือกที่มี
+:::
+
+---
+
+### ปิดการใช้งานเซิร์ฟเวอร์ LSP
+
+หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **ทั้งหมด** LSP ทั่วโลก ให้ตั้งค่า `lsp` เป็น `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **เฉพาะ** LSP ให้ตั้งค่า `disabled` เป็น `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### เซิร์ฟเวอร์ LSP แบบกำหนดเอง
+
+คุณสามารถเพิ่มเซิร์ฟเวอร์ LSP แบบกำหนดเองได้โดยระบุคำสั่งและนามสกุลไฟล์:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## ข้อมูลเพิ่มเติม
+
+### PHP อินเทเลฟินส์
+
+PHP Intelephense นำเสนอคุณสมบัติระดับพรีเมียมผ่านรหัสลิขสิทธิ์ คุณสามารถระบุรหัสสัญญาอนุญาตได้โดยการวาง (เท่านั้น) รหัสในไฟล์ข้อความที่:
+
+- บน macOS/Linux: `$HOME/intelephense/license.txt`
+- บน Windows: `%USERPROFILE%/intelephense/license.txt`
+
+ไฟล์ควรมีเฉพาะรหัสลิขสิทธิ์โดยไม่มีเนื้อหาเพิ่มเติม
