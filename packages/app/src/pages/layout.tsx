@@ -51,7 +51,6 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
@@ -178,7 +177,12 @@ export default function Layout(props: ParentProps) {
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
-  const clearHoverProjectSoon = () => queueMicrotask(() => setState("hoverProject", undefined))
+  const setHoverProject = (value: string | undefined) => {
+    setState("hoverProject", value)
+    if (value !== undefined) return
+    aim.reset()
+  }
+  const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
   const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
   const hoverProjectData = createMemo(() => {
@@ -189,13 +193,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
-    aim.reset()
-    setState("hoverProject", undefined)
-  })
-
-  createEffect(() => {
-    if (state.hoverProject !== undefined) return
-    aim.reset()
+    setHoverProject(undefined)
   })
 
   const autoselecting = createMemo(() => {
@@ -226,7 +224,7 @@ export default function Layout(props: ParentProps) {
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
     setState("hoverSession", undefined)
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -826,14 +824,6 @@ export default function Layout(props: ParentProps) {
       if (next) prefetchSession(next)
     }
 
-    if (import.meta.env.DEV) {
-      navStart({
-        dir: base64Encode(session.directory),
-        from: params.id,
-        to: session.id,
-        trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
-      })
-    }
     navigateToSession(session)
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
@@ -867,15 +857,6 @@ export default function Layout(props: ParentProps) {
       if (offset < 0) {
         if (prev) prefetchSession(prev, "high")
         if (next) prefetchSession(next)
-      }
-
-      if (import.meta.env.DEV) {
-        navStart({
-          dir: base64Encode(session.directory),
-          from: params.id,
-          to: session.id,
-          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
-        })
       }
 
       navigateToSession(session)
@@ -1508,7 +1489,7 @@ export default function Layout(props: ParentProps) {
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
     setStore("activeProject", id)
   }
 
@@ -1710,7 +1691,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-sm": true,
+          "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-[12px]": true,
           "flex-1 min-w-0": panelProps.mobile,
         }}
         style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
@@ -1725,8 +1706,8 @@ export default function Layout(props: ParentProps) {
                       id={`project:${projectId()}`}
                       value={projectName}
                       onSave={(next) => renameProject(p(), next)}
-                      class="text-16-medium text-text-strong truncate"
-                      displayClass="text-16-medium text-text-strong truncate"
+                      class="text-14-medium text-text-strong truncate"
+                      displayClass="text-14-medium text-text-strong truncate"
                       stopPropagation
                     />
 
@@ -1942,7 +1923,7 @@ export default function Layout(props: ParentProps) {
             if (navLeave.current !== undefined) clearTimeout(navLeave.current)
             navLeave.current = window.setTimeout(() => {
               navLeave.current = undefined
-              setState("hoverProject", undefined)
+              setHoverProject(undefined)
               setState("hoverSession", undefined)
             }, 300)
           }}
@@ -2042,7 +2023,7 @@ export default function Layout(props: ParentProps) {
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
           }}
         >
           <Show when={!autoselecting()} fallback={<div class="size-full" />}>

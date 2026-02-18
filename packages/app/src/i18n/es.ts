@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Cambiar al agente anterior",
   "command.model.variant.cycle": "Alternar esfuerzo de pensamiento",
   "command.model.variant.cycle.description": "Cambiar al siguiente nivel de esfuerzo",
+  "command.prompt.mode.shell": "Cambiar al modo Shell",
+  "command.prompt.mode.normal": "Cambiar al modo Prompt",
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
   "command.workspace.toggle": "Alternar espacios de trabajo",
@@ -223,9 +225,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Introduce comando de shell...",
   "prompt.placeholder.normal": 'Pregunta cualquier cosa... "{{example}}"',
+  "prompt.placeholder.simple": "Pregunta cualquier cosa...",
   "prompt.placeholder.summarizeComments": "Resumir comentarios…",
   "prompt.placeholder.summarizeComment": "Resumir comentario…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc para salir",
 
   "prompt.example.1": "Arreglar un TODO en el código",
@@ -506,6 +510,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Ir al último",
 
   "session.context.addToContext": "Añadir {{selection}} al contexto",
+  "session.todo.title": "Tareas",
+  "session.todo.collapse": "Contraer",
+  "session.todo.expand": "Expandir",
 
   "session.new.worktree.main": "Rama principal",
   "session.new.worktree.mainWithBranch": "Rama principal ({{branch}})",
