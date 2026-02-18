@@ -89,11 +89,11 @@ export namespace Config {
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-result = merge(
+        result = merge(
           result,
           await load(JSON.stringify(remoteConfig), {
-            configDir: path.dirname(`${key}/.well-known/opencode`),
-            configPath: `${key}/.well-known/opencode`,
+            dir: path.dirname(`${key}/.well-known/opencode`),
+            source: `${key}/.well-known/opencode`,
           }),
         )
         log.debug("loaded remote config from well-known", { url: key })
@@ -183,8 +183,14 @@ result = merge(
     }
 
     // Inline config content overrides all non-managed config sources.
-if (process.env.OPENCODE_CONFIG_CONTENT) {
-      result = merge(result, await load(process.env.OPENCODE_CONFIG_CONTENT, { configDir: Instance.directory }))
+    if (process.env.OPENCODE_CONFIG_CONTENT) {
+      result = merge(
+        result,
+        await load(process.env.OPENCODE_CONFIG_CONTENT, {
+          dir: Instance.directory,
+          source: "OPENCODE_CONFIG_CONTENT",
+        }),
+      )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -1244,11 +1250,20 @@ if (process.env.OPENCODE_CONFIG_CONTENT) {
         throw new JsonError({ path: filepath }, { cause: err })
       })
     if (!text) return {}
-    return load(text, { configDir: path.dirname(filepath), configPath: filepath })
+    return load(text, { path: filepath })
   }
 
-  async function load(text: string, options: { configDir: string; configPath?: string }) {
+  async function load(
+    text: string,
+    options:
+      | { path: string }
+      | { dir: string; source: string },
+  ) {
     const original = text
+    const configDir = "path" in options ? path.dirname(options.path) : options.dir
+    const source = "path" in options ? options.path : options.source
+    const isFile = "path" in options
+
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -1260,13 +1275,13 @@ if (process.env.OPENCODE_CONFIG_CONTENT) {
       for (const match of fileMatches) {
         const lineIndex = lines.findIndex((line) => line.includes(match))
         if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue // Skip if line is commented
+          continue
         }
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.configDir, filePath)
+        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
         const fileContent = (
           await Bun.file(resolvedPath)
             .text()
@@ -1275,16 +1290,15 @@ if (process.env.OPENCODE_CONFIG_CONTENT) {
               if (error.code === "ENOENT") {
                 throw new InvalidError(
                   {
-                    path: options.configPath ?? "<inline>",
+                    path: source,
                     message: errMsg + ` ${resolvedPath} does not exist`,
                   },
                   { cause: error },
                 )
               }
-              throw new InvalidError({ path: options.configPath ?? "<inline>", message: errMsg }, { cause: error })
+              throw new InvalidError({ path: source, message: errMsg }, { cause: error })
             })
         ).trim()
-        // escape newlines/quotes, strip outer quotes
         text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
@@ -1308,25 +1322,24 @@ if (process.env.OPENCODE_CONFIG_CONTENT) {
         .join("\n")
 
       throw new JsonError({
-        path: options.configPath ?? "<inline>",
+        path: source,
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
-      if (!parsed.data.$schema && options.configPath) {
+      if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(options.configPath, updated).catch(() => {})
+        await Bun.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
-      if (data.plugin && options.configPath) {
+      if (data.plugin && isFile) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, options.configPath)
+            data.plugin[i] = import.meta.resolve!(plugin, options.path)
           } catch (err) {}
         }
       }
@@ -1334,7 +1347,7 @@ if (process.env.OPENCODE_CONFIG_CONTENT) {
     }
 
     throw new InvalidError({
-      path: options.configPath ?? "<inline>",
+      path: source,
       issues: parsed.error.issues,
     })
   }
