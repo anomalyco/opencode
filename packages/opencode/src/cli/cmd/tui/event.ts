@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {

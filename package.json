@@ -7,20 +7,14 @@
   "packageManager": "bun@1.3.9",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
-    "dev:desktop": "bun --cwd packages/desktop tauri dev",
-    "dev:web": "bun --cwd packages/app dev",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
-    "random": "echo 'Random script'",
-    "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
     "packages": [
       "packages/*",
-      "packages/console/*",
-      "packages/sdk/js",
-      "packages/slack"
+      "packages/sdk/js"
     ],
     "catalog": {
       "@types/bun": "1.3.9",

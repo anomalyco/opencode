@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD `payment_method_type` varchar(32);

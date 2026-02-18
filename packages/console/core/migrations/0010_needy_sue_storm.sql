@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD CONSTRAINT `global_customer_id` UNIQUE(`customer_id`);
