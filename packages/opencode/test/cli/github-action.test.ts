@@ -166,20 +166,23 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toBe("PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.")
   })
 
-  test("formats error with files", () => {
+  test("formats error with files (base64 content)", () => {
+    // Base64 is ~33% larger than original, so we multiply by 0.75 to get original size
+    // 400 KB base64 = 300 KB original, 200 KB base64 = 150 KB original
     const files = [
-      { filename: "screenshot.png", content: "a".repeat(400 * 1024) }, // 400 KB
-      { filename: "diagram.png", content: "b".repeat(200 * 1024) }, // 200 KB
+      { filename: "screenshot.png", content: "a".repeat(400 * 1024) },
+      { filename: "diagram.png", content: "b".repeat(200 * 1024) },
     ]
     const result = formatPromptTooLargeError(files)
 
     expect(result).toStartWith("PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.")
     expect(result).toInclude("Files in prompt:")
-    expect(result).toInclude("screenshot.png (400 KB)")
-    expect(result).toInclude("diagram.png (200 KB)")
+    expect(result).toInclude("screenshot.png (300 KB)")
+    expect(result).toInclude("diagram.png (150 KB)")
   })
 
   test("lists all files when multiple present", () => {
+    // Base64 sizes: 4KB -> 3KB, 8KB -> 6KB, 12KB -> 9KB
     const files = [
       { filename: "img1.png", content: "x".repeat(4 * 1024) },
       { filename: "img2.jpg", content: "y".repeat(8 * 1024) },
@@ -187,8 +190,8 @@ describe("formatPromptTooLargeError", () => {
     ]
     const result = formatPromptTooLargeError(files)
 
-    expect(result).toInclude("img1.png (4 KB)")
-    expect(result).toInclude("img2.jpg (8 KB)")
-    expect(result).toInclude("img3.gif (12 KB)")
+    expect(result).toInclude("img1.png (3 KB)")
+    expect(result).toInclude("img2.jpg (6 KB)")
+    expect(result).toInclude("img3.gif (9 KB)")
   })
 })
