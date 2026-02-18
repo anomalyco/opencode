@@ -2,6 +2,8 @@ mod cli;
 mod constants;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+#[cfg(target_os = "linux")]
+pub mod linux_windowing;
 mod logging;
 mod markdown;
 mod server;

@@ -5,21 +5,21 @@ description: 使用 OpenCode 終端機使用者介面。
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一個互動式終端機介面或 TUI，供您與 LLM 一起處理專案。
+OpenCode 提供了一個互動式終端機介面（TUI），用於配合 LLM 處理您的專案。
 
-執行 OpenCode 會啟動當前目錄的 TUI。
+執行 OpenCode 即可啟動當前目錄的 TUI。
 
 ```bash
 opencode
 ```
 
-或者您可以為特定的工作目錄啟動它。
+或者您可以為指定的工作目錄啟動它。
 
 ```bash
 opencode /path/to/project
 ```
 
-進入 TUI 後，您可以透過訊息進行提示。
+進入 TUI 後，您可以輸入訊息進行提示。
 
 ```text
 Give me a quick summary of the codebase.
@@ -29,29 +29,29 @@ Give me a quick summary of the codebase.
 
 ## 檔案參考
 
-您可以使用 `@` 在訊息中引用檔案。這會在當前工作目錄中進行模糊檔案搜尋。
+您可以使用 `@` 在訊息中參考檔案。這會在當前工作目錄中進行模糊檔案搜尋。
 
 :::tip
-您還可以使用 `@` 來引用訊息中的檔案。
+您還可以使用 `@` 來參考訊息中的檔案。
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-檔案的內容會自動添加到對話中。
+檔案的內容會自動新增到對話中。
 
 ---
 
 ## Bash 指令
 
-以 `!` 開始一條訊息以執行 shell 指令。
+以 `!` 開頭的訊息會作為 shell 指令執行。
 
 ```bash frame="none"
 !ls -la
 ```
 
-指令的輸出將作為工具結果添加到對話中。
+指令的輸出會作為工具結果新增到對話中。
 
 ---
 
@@ -63,7 +63,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 /help
 ```
 
-大多數指令也有使用 `ctrl+x` 作為 Leader 鍵的按鍵綁定，其中 `ctrl+x` 是預設的 Leader 鍵。 [了解更多](/docs/keybinds)。
+大多數指令還支援以 `ctrl+x` 作為前導鍵的快速鍵，其中 `ctrl+x` 是預設前導鍵。[了解更多](/docs/keybinds)。
 
 以下是所有可用的斜線指令：
 
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-將供應商添加到 OpenCode。允許您從可用的供應商中進行選擇並添加其 API 金鑰。
+將供應商新增到 OpenCode。允許您從可用的供應商中選擇並新增其 API 金鑰。
 
 ```bash frame="none"
 /connect
@@ -81,85 +81,85 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### compact
 
-壓縮當前工作階段。 _別名_：`/summarize`
+壓縮當前工作階段。_別名_：`/summarize`
 
 ```bash frame="none"
 /compact
 ```
 
-**按鍵綁定：** `ctrl+x c`
+**快速鍵：** `ctrl+x c`
 
 ---
 
 ### details
 
-切換工具執行詳細資訊。
+切換工具執行詳情的顯示。
 
 ```bash frame="none"
 /details
 ```
 
-**按鍵綁定：** `ctrl+x d`
+**快速鍵：** `ctrl+x d`
 
 ---
 
 ### editor
 
-打開外部編輯器來撰寫訊息。使用 `EDITOR` 環境變數中設定的編輯器。 [了解更多](#editor-setup)。
+開啟外部編輯器來撰寫訊息。使用 `EDITOR` 環境變數中設定的編輯器。[了解更多](#editor-setup)。
 
 ```bash frame="none"
 /editor
 ```
 
-**按鍵綁定：** `ctrl+x e`
+**快速鍵：** `ctrl+x e`
 
 ---
 
 ### exit
 
-退出 OpenCode。 _別名_：`/quit`、`/q`
+退出 OpenCode。_別名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
 ```
 
-**按鍵綁定：** `ctrl+x q`
+**快速鍵：** `ctrl+x q`
 
 ---
 
 ### export
 
-將當前對話導出到 Markdown 並在預設編輯器中打開。使用 `EDITOR` 環境變數中設定的編輯器。 [了解更多](#editor-setup)。
+將當前對話匯出為 Markdown 並在預設編輯器中開啟。使用 `EDITOR` 環境變數中設定的編輯器。[了解更多](#editor-setup)。
 
 ```bash frame="none"
 /export
 ```
 
-**按鍵綁定：** `ctrl+x x`
+**快速鍵：** `ctrl+x x`
 
 ---
 
 ### help
 
-顯示說明對話方塊。
+顯示說明對話框。
 
 ```bash frame="none"
 /help
 ```
 
-**按鍵綁定：** `ctrl+x h`
+**快速鍵：** `ctrl+x h`
 
 ---
 
 ### init
 
-建立或更新 `AGENTS.md` 檔案。 [了解更多](/docs/rules)。
+建立或更新 `AGENTS.md` 檔案。[了解更多](/docs/rules)。
 
 ```bash frame="none"
 /init
 ```
 
-**按鍵綁定：** `ctrl+x i`
+**快速鍵：** `ctrl+x i`
 
 ---
 
@@ -171,83 +171,82 @@ How is auth handled in @packages/functions/src/api/index.ts?
 /models
 ```
 
-**按鍵綁定：** `ctrl+x m`
+**快速鍵：** `ctrl+x m`
 
 ---
 
 ### new
 
-開始新的工作階段。 _別名_：`/clear`
+開始新的工作階段。_別名_：`/clear`
 
 ```bash frame="none"
 /new
 ```
 
-**按鍵綁定：** `ctrl+x n`
+**快速鍵：** `ctrl+x n`
 
 ---
 
 ### redo
 
-重做之前撤銷的訊息。僅在使用 `/undo` 後可用。
+重做之前復原的訊息。僅在使用 `/undo` 後可用。
 
 :::tip
-任何檔案變更也將被恢復。
+所有檔案變更也會被恢復。
 :::
 
-在內部，這使用 Git 來管理檔案變更。所以你的專案**需要
-是一個 Git 儲存庫**。
+在內部，這使用 Git 來管理檔案變更。因此您的專案**需要是一個 Git 儲存庫**。
 
 ```bash frame="none"
 /redo
 ```
 
-**按鍵綁定：** `ctrl+x r`
+**快速鍵：** `ctrl+x r`
 
 ---
 
 ### sessions
 
-列出工作階段並在工作階段之間切換。 _別名_：`/resume`、`/continue`
+列出工作階段並在工作階段之間切換。_別名_：`/resume`、`/continue`
 
 ```bash frame="none"
 /sessions
 ```
 
-**按鍵綁定：** `ctrl+x l`
+**快速鍵：** `ctrl+x l`
 
 ---
 
 ### share
 
-分享當前工作階段。 [了解更多](/docs/share)。
+分享當前工作階段。[了解更多](/docs/share)。
 
 ```bash frame="none"
 /share
 ```
 
-**按鍵綁定：** `ctrl+x s`
+**快速鍵：** `ctrl+x s`
 
 ---
 
 ### themes
 
-列出可用的主題。
+列出可用主題。
 
 ```bash frame="none"
 /theme
 ```
 
-**按鍵綁定：** `ctrl+x t`
+**快速鍵：** `ctrl+x t`
 
 ---
 
 ### thinking
 
-切換對話中思考/推理區塊的可見性。啟用後，您可以看到支援擴展思考的模型的推理過程。
+切換對話中思考/推理區塊的可見性。啟用後，您可以看到支援擴充思考的模型的推理過程。
 
 :::note
-該指令僅控制是否**顯示** - 它不啟用或禁用模型的推理功能。要切換實際推理功能，請使用 `ctrl+t` 循環切換模型變體。
+此指令僅控制思考區塊是否**顯示** — 它不會啟用或停用模型的推理能力。要切換實際的推理能力，請使用 `ctrl+t` 循環切換模型變體。
 :::
 
 ```bash frame="none"
@@ -258,26 +257,25 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### undo
 
-撤銷對話中的最後一條訊息。刪除最近的使用者訊息、所有後續回應以及任何檔案變更。
+復原對話中的最後一條訊息。移除最近的使用者訊息、所有後續回應以及所有檔案變更。
 
 :::tip
-所做的任何檔案變更也將被恢復。
+所做的任何檔案變更也會被還原。
 :::
 
-在內部，這使用 Git 來管理檔案變更。所以你的專案**需要
-是一個 Git 儲存庫**。
+在內部，這使用 Git 來管理檔案變更。因此您的專案**需要是一個 Git 儲存庫**。
 
 ```bash frame="none"
 /undo
 ```
 
-**按鍵綁定：** `ctrl+x u`
+**快速鍵：** `ctrl+x u`
 
 ---
 
 ### unshare
 
-取消分享當前工作階段。 [了解更多](/docs/share#un-sharing)。
+取消分享當前工作階段。[了解更多](/docs/share#un-sharing)。
 
 ```bash frame="none"
 /unshare
@@ -301,8 +299,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
     export EDITOR="code --wait"
     ```
 
-    To make it permanent, add this to your shell profile;
-    `~/.bashrc`, `~/.zshrc`, etc.
+    要使其永久生效，請將其新增到您的 shell 設定檔中；
+    `~/.bashrc`、`~/.zshrc` 等。
 
   </TabItem>
 
@@ -315,8 +313,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     set EDITOR=code --wait
     ```
 
-    To make it permanent, use **System Properties** > **Environment
-    Variables**.
+    要使其永久生效，請使用**系統內容** > **環境變數**。
 
   </TabItem>
 
@@ -329,12 +326,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
     $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell profile.
+    要使其永久生效，請將其新增到您的 PowerShell 設定檔中。
 
   </TabItem>
 </Tabs>
 
-流行的編輯器選項包括：
+常用的編輯器選項包括：
 
 - `code` - Visual Studio Code
 - `cursor` - Cursor
@@ -342,20 +339,20 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `nvim` - Neovim 編輯器
 - `vim` - Vim 編輯器
 - `nano` - Nano 編輯器
-- `notepad` - Windows 記事本
+- `notepad` - Notepad（Windows 記事本）
 - `subl` - Sublime Text
 
 :::note
-某些編輯器（例如 VS Code）需要以 `--wait` 旗標啟動。
+某些編輯器（如 VS Code）需要以 `--wait` 旗標啟動。
 :::
 
-某些編輯器需要命令列參數才能在阻止模式下執行。 `--wait` 旗標使編輯器處理程序阻塞直到關閉。
+某些編輯器需要命令列參數才能以阻塞模式執行。`--wait` 旗標使編輯器程序阻塞直到關閉。
 
 ---
 
-## 配置
+## 設定
 
-您可以透過 OpenCode 設定檔自定義 TUI 行為。
+您可以透過 OpenCode 設定檔自訂 TUI 行為。
 
 ```json title="opencode.json"
 {
@@ -371,20 +368,20 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### 選項
 
-- `scroll_acceleration` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動。啟用後，捲動速度會隨著快速捲動手勢而增加，並在較慢的移動時保持精確。 **此設定優先於 `scroll_speed`，並在啟用時覆寫它。**
-- `scroll_speed` - 控制使用捲動指令時 TUI 捲動的速度（最小值：`1`）。預設為 `3`。 **注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則忽略此設定。**
+- `scroll_acceleration` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
+- `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`1`）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
 
 ---
 
-## 自定義
+## 自訂
 
-您可以使用指令面板（`ctrl+x h` 或 `/help`）自定義 TUI 視圖的各個方面。這些設定在重新啟動後仍然存在。
+您可以使用指令面板（`ctrl+x h` 或 `/help`）自訂 TUI 檢視的各個方面。這些設定在重新啟動後仍會保留。
 
 ---
 
 #### 使用者名稱顯示
 
-切換您的使用者名稱是否出現在聊天訊息中。透過以下方式存取：
+切換您的使用者名稱是否顯示在聊天訊息中。透過以下方式存取：
 
-- 指令面板：搜尋「使用者名稱」或「隱藏使用者名稱」
-- 該設定會自動保留並在 TUI 工作階段中被記住
+- 指令面板：搜尋「username」或「hide username」
+- 該設定會自動儲存，並在各個 TUI 工作階段中保持記憶

@@ -32,7 +32,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",
-  "ui.sessionTurn.status.gatheringContext": "Indsamler kontekst",
+  "ui.sessionTurn.status.gatheringContext": "Udforsker...",
+  "ui.sessionTurn.status.gatheredContext": "Udforsket",
   "ui.sessionTurn.status.searchingCodebase": "Søger i koden",
   "ui.sessionTurn.status.searchingWeb": "Søger på nettet",
   "ui.sessionTurn.status.makingEdits": "Laver ændringer",
@@ -81,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "spørgsmål",
 
   "ui.common.add": "Tilføj",
+  "ui.common.back": "Tilbage",
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
@@ -95,7 +97,10 @@ export const dict = {
   "ui.message.expand": "Udvid besked",
   "ui.message.collapse": "Skjul besked",
   "ui.message.copy": "Kopier",
+  "ui.message.copyMessage": "Kopier besked",
+  "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopieret!",
+  "ui.message.interrupted": "Afbrudt",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",
@@ -106,6 +111,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",
   "ui.question.review.notAnswered": "(ikke besvaret)",
-  "ui.question.multiHint": "(vælg alle der gælder)",
+  "ui.question.multiHint": "Vælg alle der gælder",
+  "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
 }

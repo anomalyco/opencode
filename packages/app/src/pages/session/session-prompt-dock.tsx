@@ -1,16 +1,18 @@
-import { For, Show } from "solid-js"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import type { QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
-import { BasicTool } from "@opencode-ai/ui/basic-tool"
+import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
+import { Icon } from "@opencode-ai/ui/icon"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
-import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
+import { SessionTodoDock } from "@/components/session-todo-dock"
 
 export function SessionPromptDock(props: {
   centered: boolean
   questionRequest: () => QuestionRequest | undefined
   permissionRequest: () => { patterns: string[]; permission: string } | undefined
   blocked: boolean
+  todos: Todo[]
   promptReady: boolean
   handoffPrompt?: string
   t: (key: string, vars?: Record<string, string | number | boolean>) => string
@@ -22,10 +24,88 @@ export function SessionPromptDock(props: {
   onSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
+  const done = createMemo(
+    () =>
+      props.todos.length > 0 && props.todos.every((todo) => todo.status === "completed" || todo.status === "cancelled"),
+  )
+
+  const [dock, setDock] = createSignal(props.todos.length > 0)
+  const [closing, setClosing] = createSignal(false)
+  const [opening, setOpening] = createSignal(false)
+  let timer: number | undefined
+  let raf: number | undefined
+
+  const scheduleClose = () => {
+    if (timer) window.clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      setDock(false)
+      setClosing(false)
+      timer = undefined
+    }, 400)
+  }
+
+  createEffect(
+    on(
+      () => [props.todos.length, done()] as const,
+      ([count, complete], prev) => {
+        if (raf) cancelAnimationFrame(raf)
+        raf = undefined
+
+        if (count === 0) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          setDock(false)
+          setClosing(false)
+          setOpening(false)
+          return
+        }
+
+        if (!complete) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          const wasHidden = !dock() || closing()
+          setDock(true)
+          setClosing(false)
+          if (wasHidden) {
+            setOpening(true)
+            raf = requestAnimationFrame(() => {
+              setOpening(false)
+              raf = undefined
+            })
+            return
+          }
+          setOpening(false)
+          return
+        }
+
+        if (prev && prev[1]) {
+          if (closing() && !timer) scheduleClose()
+          return
+        }
+
+        setDock(true)
+        setOpening(false)
+        setClosing(true)
+        scheduleClose()
+      },
+    ),
+  )
+
+  onCleanup(() => {
+    if (!timer) return
+    window.clearTimeout(timer)
+  })
+
+  onCleanup(() => {
+    if (!raf) return
+    cancelAnimationFrame(raf)
+  })
+
   return (
     <div
       ref={props.setPromptDockRef}
-      class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+      data-component="session-prompt-dock"
+      class="shrink-0 w-full pb-4 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
     >
       <div
         classList={{
@@ -35,18 +115,8 @@ export function SessionPromptDock(props: {
       >
         <Show when={props.questionRequest()} keyed>
           {(req) => {
-            const subtitle = questionSubtitle(req.questions.length, (key) => props.t(key))
             return (
-              <div data-component="tool-part-wrapper" data-question="true" class="mb-3">
-                <BasicTool
-                  icon="bubble-5"
-                  locked
-                  defaultOpen
-                  trigger={{
-                    title: props.t("ui.tool.questions"),
-                    subtitle,
-                  }}
-                />
+              <div>
                 <QuestionDock request={req} />
               </div>
             )
@@ -54,63 +124,79 @@ export function SessionPromptDock(props: {
         </Show>
 
         <Show when={props.permissionRequest()} keyed>
-          {(perm) => (
-            <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
-              <BasicTool
-                icon="checklist"
-                locked
-                defaultOpen
-                trigger={{
-                  title: props.t("notification.permission.title"),
-                  subtitle:
-                    perm.permission === "doom_loop"
-                      ? props.t("settings.permissions.tool.doom_loop.title")
-                      : perm.permission,
-                }}
-              >
-                <Show when={perm.patterns.length > 0}>
-                  <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
-                    <For each={perm.patterns}>
-                      {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
-                    </For>
-                  </div>
-                </Show>
-                <Show when={perm.permission === "doom_loop"}>
-                  <div class="text-12-regular text-text-weak pb-2 px-3">
-                    {props.t("settings.permissions.tool.doom_loop.description")}
-                  </div>
-                </Show>
-              </BasicTool>
-              <div data-component="permission-prompt">
-                <div data-slot="permission-actions">
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    onClick={() => props.onDecide("reject")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.deny")}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="small"
-                    onClick={() => props.onDecide("always")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowAlways")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="small"
-                    onClick={() => props.onDecide("once")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowOnce")}
-                  </Button>
-                </div>
+          {(perm) => {
+            const toolDescription = () => {
+              const key = `settings.permissions.tool.${perm.permission}.description`
+              const value = props.t(key)
+              if (value === key) return ""
+              return value
+            }
+
+            return (
+              <div>
+                <DockPrompt
+                  kind="permission"
+                  header={
+                    <div data-slot="permission-row" data-variant="header">
+                      <span data-slot="permission-icon">
+                        <Icon name="warning" size="normal" />
+                      </span>
+                      <div data-slot="permission-header-title">{props.t("notification.permission.title")}</div>
+                    </div>
+                  }
+                  footer={
+                    <>
+                      <div />
+                      <div data-slot="permission-footer-actions">
+                        <Button
+                          variant="ghost"
+                          size="normal"
+                          onClick={() => props.onDecide("reject")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="normal"
+                          onClick={() => props.onDecide("always")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="normal"
+                          onClick={() => props.onDecide("once")}
+                          disabled={props.responding}
+                        >
+                          {props.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </>
+                  }
+                >
+                  <Show when={toolDescription()}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-hint">{toolDescription()}</div>
+                    </div>
+                  </Show>
+
+                  <Show when={perm.patterns.length > 0}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-patterns">
+                        <For each={perm.patterns}>
+                          {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+                </DockPrompt>
               </div>
-            </div>
-          )}
+            )
+          }}
         </Show>
 
         <Show when={!props.blocked}>
@@ -122,12 +208,39 @@ export function SessionPromptDock(props: {
               </div>
             }
           >
-            <PromptInput
-              ref={props.inputRef}
-              newSessionWorktree={props.newSessionWorktree}
-              onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-              onSubmit={props.onSubmit}
-            />
+            <Show when={dock()}>
+              <div
+                classList={{
+                  "transition-[max-height,opacity,transform] duration-[400ms] ease-out overflow-hidden": true,
+                  "max-h-[320px]": !closing(),
+                  "max-h-0 pointer-events-none": closing(),
+                  "opacity-0 translate-y-9": closing() || opening(),
+                  "opacity-100 translate-y-0": !closing() && !opening(),
+                }}
+              >
+                <SessionTodoDock
+                  todos={props.todos}
+                  title={props.t("session.todo.title")}
+                  collapseLabel={props.t("session.todo.collapse")}
+                  expandLabel={props.t("session.todo.expand")}
+                />
+              </div>
+            </Show>
+            <div
+              classList={{
+                "relative z-10": true,
+                "transition-[margin] duration-[400ms] ease-out": true,
+                "-mt-9": dock() && !closing(),
+                "mt-0": !dock() || closing(),
+              }}
+            >
+              <PromptInput
+                ref={props.inputRef}
+                newSessionWorktree={props.newSessionWorktree}
+                onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                onSubmit={props.onSubmit}
+              />
+            </div>
           </Show>
         </Show>
       </div>

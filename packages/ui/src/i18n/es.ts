@@ -33,7 +33,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegando trabajo",
   "ui.sessionTurn.status.planning": "Planificando siguientes pasos",
-  "ui.sessionTurn.status.gatheringContext": "Recopilando contexto",
+  "ui.sessionTurn.status.gatheringContext": "Explorando...",
+  "ui.sessionTurn.status.gatheredContext": "Explorado",
   "ui.sessionTurn.status.searchingCodebase": "Buscando en la base de código",
   "ui.sessionTurn.status.searchingWeb": "Buscando en la web",
   "ui.sessionTurn.status.makingEdits": "Realizando ediciones",
@@ -82,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "preguntas",
 
   "ui.common.add": "Añadir",
+  "ui.common.back": "Atrás",
   "ui.common.cancel": "Cancelar",
   "ui.common.confirm": "Confirmar",
   "ui.common.dismiss": "Descartar",
@@ -96,7 +98,10 @@ export const dict = {
   "ui.message.expand": "Expandir mensaje",
   "ui.message.collapse": "Colapsar mensaje",
   "ui.message.copy": "Copiar",
+  "ui.message.copyMessage": "Copiar mensaje",
+  "ui.message.copyResponse": "Copiar respuesta",
   "ui.message.copied": "¡Copiado!",
+  "ui.message.interrupted": "Interrumpido",
   "ui.message.attachment.alt": "adjunto",
 
   "ui.patch.action.deleted": "Eliminado",
@@ -107,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} respondidas",
   "ui.question.answer.none": "(sin respuesta)",
   "ui.question.review.notAnswered": "(no respondida)",
-  "ui.question.multiHint": "(selecciona todas las que correspondan)",
+  "ui.question.multiHint": "Selecciona todas las que correspondan",
+  "ui.question.singleHint": "Selecciona una respuesta",
   "ui.question.custom.placeholder": "Escribe tu respuesta...",
 }
