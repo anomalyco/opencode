@@ -45,7 +45,7 @@
     border: transparent;
     background-color: var(--button-secondary-base);
     color: var(--text-strong);
-    box-shadow: var(--shadow-xs-border);
+    box-shadow: var(--shadow-xs-border-base);
 
     &:hover:not(:disabled) {
       background-color: var(--button-secondary-hover);
