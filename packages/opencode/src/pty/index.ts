@@ -22,6 +22,8 @@ export namespace Pty {
     close: (code?: number, reason?: string) => void
   }
 
+  type Token = number | object
+
   const sockets = new WeakMap<object, number>()
   let socketCounter = 0
 
@@ -30,6 +32,24 @@ export namespace Pty {
     const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
     sockets.set(ws, next)
     return next
+  }
+
+  // Bun's ServerWebSocket has a per-connection `.data` object that changes when
+  // the underlying connection is recycled. Using it as a token prevents output
+  // leakage even when websocket objects are reused.
+  const dataToken = (ws: Socket): object | undefined => {
+    if (!ws || typeof ws !== "object") return
+    if (!("data" in ws)) return
+    const data = (ws as { data?: unknown }).data
+    if (!data || typeof data !== "object") return
+
+    const events = (data as { events?: unknown }).events
+    if (events && typeof events === "object") return events
+
+    const url = (data as { url?: unknown }).url
+    if (url && typeof url === "object") return url
+
+    return data
   }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
@@ -96,7 +116,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Map<Socket, number>
+    subscribers: Map<Socket, Token>
   }
 
   const state = Instance.state(
@@ -179,14 +199,24 @@ export namespace Pty {
     ptyProcess.onData((data) => {
       session.cursor += data.length
 
-      for (const [ws, id] of session.subscribers) {
+      for (const [ws, token] of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
-        if (typeof ws === "object" && sockets.get(ws) !== id) {
-          session.subscribers.delete(ws)
-          continue
+
+        if (typeof token === "number") {
+          if (typeof ws === "object" && sockets.get(ws) !== token) {
+            session.subscribers.delete(ws)
+            continue
+          }
+        }
+
+        if (typeof token === "object") {
+          if (dataToken(ws) !== token) {
+            session.subscribers.delete(ws)
+            continue
+          }
         }
         try {
           ws.send(data)
@@ -305,8 +335,13 @@ export namespace Pty {
       return
     }
 
-    const socketId = tagSocket(ws)
-    if (typeof socketId === "number") session.subscribers.set(ws, socketId)
+    const token = dataToken(ws) ?? tagSocket(ws)
+    if (token === undefined) {
+      ws.close()
+      return
+    }
+
+    session.subscribers.set(ws, token)
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))
