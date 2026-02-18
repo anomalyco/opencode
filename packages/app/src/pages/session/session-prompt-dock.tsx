@@ -1,31 +1,181 @@
-import { For, Show } from "solid-js"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
+import { useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
-import { BasicTool } from "@opencode-ai/ui/basic-tool"
+import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
+import { Icon } from "@opencode-ai/ui/icon"
+import { showToast } from "@opencode-ai/ui/toast"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
-import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
+import { SessionTodoDock } from "@/components/session-todo-dock"
+import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
+import { usePrompt } from "@/context/prompt"
+import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
+import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 
 export function SessionPromptDock(props: {
   centered: boolean
-  questionRequest: () => QuestionRequest | undefined
-  permissionRequest: () => { patterns: string[]; permission: string } | undefined
-  blocked: boolean
-  promptReady: boolean
-  handoffPrompt?: string
-  t: (key: string, vars?: Record<string, string | number | boolean>) => string
-  responding: boolean
-  onDecide: (response: "once" | "always" | "reject") => void
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
+  const params = useParams()
+  const sdk = useSDK()
+  const sync = useSync()
+  const globalSync = useGlobalSync()
+  const prompt = usePrompt()
+  const language = useLanguage()
+
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const handoffPrompt = createMemo(() => getSessionHandoff(sessionKey())?.prompt)
+
+  const todos = createMemo((): Todo[] => {
+    const id = params.id
+    if (!id) return []
+    return globalSync.data.session_todo[id] ?? []
+  })
+
+  const questionRequest = createMemo((): QuestionRequest | undefined => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return sync.data.question[sessionID]?.[0]
+  })
+
+  const permissionRequest = createMemo((): PermissionRequest | undefined => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return sync.data.permission[sessionID]?.[0]
+  })
+
+  const blocked = createMemo(() => !!permissionRequest() || !!questionRequest())
+
+  const previewPrompt = () =>
+    prompt
+      .current()
+      .map((part) => {
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        if (part.type === "image") return `[image:${part.filename}]`
+        return part.content
+      })
+      .join("")
+      .trim()
+
+  createEffect(() => {
+    if (!prompt.ready()) return
+    setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
+  })
+
+  const [responding, setResponding] = createSignal(false)
+
+  createEffect(
+    on(
+      () => permissionRequest()?.id,
+      () => setResponding(false),
+      { defer: true },
+    ),
+  )
+
+  const decide = (response: "once" | "always" | "reject") => {
+    const perm = permissionRequest()
+    if (!perm) return
+    if (responding()) return
+
+    setResponding(true)
+    sdk.client.permission
+      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => setResponding(false))
+  }
+
+  const done = createMemo(
+    () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
+  )
+
+  const [dock, setDock] = createSignal(todos().length > 0)
+  const [closing, setClosing] = createSignal(false)
+  const [opening, setOpening] = createSignal(false)
+  let timer: number | undefined
+  let raf: number | undefined
+
+  const scheduleClose = () => {
+    if (timer) window.clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      setDock(false)
+      setClosing(false)
+      timer = undefined
+    }, 400)
+  }
+
+  createEffect(
+    on(
+      () => [todos().length, done()] as const,
+      ([count, complete], prev) => {
+        if (raf) cancelAnimationFrame(raf)
+        raf = undefined
+
+        if (count === 0) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          setDock(false)
+          setClosing(false)
+          setOpening(false)
+          return
+        }
+
+        if (!complete) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          const wasHidden = !dock() || closing()
+          setDock(true)
+          setClosing(false)
+          if (wasHidden) {
+            setOpening(true)
+            raf = requestAnimationFrame(() => {
+              setOpening(false)
+              raf = undefined
+            })
+            return
+          }
+          setOpening(false)
+          return
+        }
+
+        if (prev && prev[1]) {
+          if (closing() && !timer) scheduleClose()
+          return
+        }
+
+        setDock(true)
+        setOpening(false)
+        setClosing(true)
+        scheduleClose()
+      },
+    ),
+  )
+
+  onCleanup(() => {
+    if (!timer) return
+    window.clearTimeout(timer)
+  })
+
+  onCleanup(() => {
+    if (!raf) return
+    cancelAnimationFrame(raf)
+  })
+
   return (
     <div
       ref={props.setPromptDockRef}
-      class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+      data-component="session-prompt-dock"
+      class="shrink-0 w-full pb-4 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
     >
       <div
         classList={{
@@ -33,101 +183,124 @@ export function SessionPromptDock(props: {
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
         }}
       >
-        <Show when={props.questionRequest()} keyed>
+        <Show when={questionRequest()} keyed>
           {(req) => {
-            const subtitle = questionSubtitle(req.questions.length, (key) => props.t(key))
             return (
-              <div data-component="tool-part-wrapper" data-question="true" class="mb-3">
-                <BasicTool
-                  icon="bubble-5"
-                  locked
-                  defaultOpen
-                  trigger={{
-                    title: props.t("ui.tool.questions"),
-                    subtitle,
-                  }}
-                />
+              <div>
                 <QuestionDock request={req} />
               </div>
             )
           }}
         </Show>
 
-        <Show when={props.permissionRequest()} keyed>
-          {(perm) => (
-            <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
-              <BasicTool
-                icon="checklist"
-                locked
-                defaultOpen
-                trigger={{
-                  title: props.t("notification.permission.title"),
-                  subtitle:
-                    perm.permission === "doom_loop"
-                      ? props.t("settings.permissions.tool.doom_loop.title")
-                      : perm.permission,
-                }}
-              >
-                <Show when={perm.patterns.length > 0}>
-                  <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
-                    <For each={perm.patterns}>
-                      {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
-                    </For>
-                  </div>
-                </Show>
-                <Show when={perm.permission === "doom_loop"}>
-                  <div class="text-12-regular text-text-weak pb-2 px-3">
-                    {props.t("settings.permissions.tool.doom_loop.description")}
-                  </div>
-                </Show>
-              </BasicTool>
-              <div data-component="permission-prompt">
-                <div data-slot="permission-actions">
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    onClick={() => props.onDecide("reject")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.deny")}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="small"
-                    onClick={() => props.onDecide("always")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowAlways")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="small"
-                    onClick={() => props.onDecide("once")}
-                    disabled={props.responding}
-                  >
-                    {props.t("ui.permission.allowOnce")}
-                  </Button>
-                </div>
+        <Show when={permissionRequest()} keyed>
+          {(perm) => {
+            const toolDescription = () => {
+              const key = `settings.permissions.tool.${perm.permission}.description`
+              const value = language.t(key as Parameters<typeof language.t>[0])
+              if (value === key) return ""
+              return value
+            }
+
+            return (
+              <div>
+                <DockPrompt
+                  kind="permission"
+                  header={
+                    <div data-slot="permission-row" data-variant="header">
+                      <span data-slot="permission-icon">
+                        <Icon name="warning" size="normal" />
+                      </span>
+                      <div data-slot="permission-header-title">{language.t("notification.permission.title")}</div>
+                    </div>
+                  }
+                  footer={
+                    <>
+                      <div />
+                      <div data-slot="permission-footer-actions">
+                        <Button variant="ghost" size="normal" onClick={() => decide("reject")} disabled={responding()}>
+                          {language.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="normal"
+                          onClick={() => decide("always")}
+                          disabled={responding()}
+                        >
+                          {language.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button variant="primary" size="normal" onClick={() => decide("once")} disabled={responding()}>
+                          {language.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </>
+                  }
+                >
+                  <Show when={toolDescription()}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-hint">{toolDescription()}</div>
+                    </div>
+                  </Show>
+
+                  <Show when={perm.patterns.length > 0}>
+                    <div data-slot="permission-row">
+                      <span data-slot="permission-spacer" aria-hidden="true" />
+                      <div data-slot="permission-patterns">
+                        <For each={perm.patterns}>
+                          {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+                </DockPrompt>
               </div>
-            </div>
-          )}
+            )
+          }}
         </Show>
 
-        <Show when={!props.blocked}>
+        <Show when={!blocked()}>
           <Show
-            when={props.promptReady}
+            when={prompt.ready()}
             fallback={
               <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                {props.handoffPrompt || props.t("prompt.loading")}
+                {handoffPrompt() || language.t("prompt.loading")}
               </div>
             }
           >
-            <PromptInput
-              ref={props.inputRef}
-              newSessionWorktree={props.newSessionWorktree}
-              onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-              onSubmit={props.onSubmit}
-            />
+            <Show when={dock()}>
+              <div
+                classList={{
+                  "transition-[max-height,opacity,transform] duration-[400ms] ease-out overflow-hidden": true,
+                  "max-h-[320px]": !closing(),
+                  "max-h-0 pointer-events-none": closing(),
+                  "opacity-0 translate-y-9": closing() || opening(),
+                  "opacity-100 translate-y-0": !closing() && !opening(),
+                }}
+              >
+                <SessionTodoDock
+                  todos={todos()}
+                  title={language.t("session.todo.title")}
+                  collapseLabel={language.t("session.todo.collapse")}
+                  expandLabel={language.t("session.todo.expand")}
+                />
+              </div>
+            </Show>
+            <div
+              classList={{
+                "relative z-10": true,
+                "transition-[margin] duration-[400ms] ease-out": true,
+                "-mt-9": dock() && !closing(),
+                "mt-0": !dock() || closing(),
+              }}
+            >
+              <PromptInput
+                ref={props.inputRef}
+                newSessionWorktree={props.newSessionWorktree}
+                onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                onSubmit={props.onSubmit}
+              />
+            </div>
           </Show>
         </Show>
       </div>

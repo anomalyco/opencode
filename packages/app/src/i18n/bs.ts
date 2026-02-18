@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Prebaci na prethodnog agenta",
   "command.model.variant.cycle": "Promijeni nivo razmišljanja",
   "command.model.variant.cycle.description": "Prebaci na sljedeći nivo",
+  "command.prompt.mode.shell": "Prebaci na Shell način",
+  "command.prompt.mode.normal": "Prebaci na Prompt način",
   "command.permissions.autoaccept.enable": "Automatski prihvataj izmjene",
   "command.permissions.autoaccept.disable": "Zaustavi automatsko prihvatanje izmjena",
   "command.workspace.toggle": "Prikaži/sakrij radne prostore",
@@ -224,9 +226,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Unesi shell naredbu...",
   "prompt.placeholder.normal": 'Pitaj bilo šta... "{{example}}"',
+  "prompt.placeholder.simple": "Pitaj bilo šta...",
   "prompt.placeholder.summarizeComments": "Sažmi komentare…",
   "prompt.placeholder.summarizeComment": "Sažmi komentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc za izlaz",
 
   "prompt.example.1": "Popravi TODO u bazi koda",
@@ -505,6 +509,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Idi na najnovije",
 
   "session.context.addToContext": "Dodaj {{selection}} u kontekst",
+  "session.todo.title": "Zadaci",
+  "session.todo.collapse": "Sažmi",
+  "session.todo.expand": "Proširi",
 
   "session.new.worktree.main": "Glavna grana",
   "session.new.worktree.mainWithBranch": "Glavna grana ({{branch}})",

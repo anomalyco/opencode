@@ -1,31 +1,20 @@
-import {
-  AssistantMessage,
-  FilePart,
-  Message as MessageType,
-  Part as PartType,
-  type PermissionRequest,
-  type QuestionRequest,
-  TextPart,
-  ToolPart,
-} from "@opencode-ai/sdk/v2/client"
+import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
-import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
+import { useDiffComponent } from "../context/diff"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
-import { Message, Part } from "./message-part"
-import { Markdown } from "./markdown"
-import { IconButton } from "./icon-button"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { Dynamic } from "solid-js/web"
+import { AssistantParts, Message } from "./message-part"
 import { Card } from "./card"
-import { Button } from "./button"
-import { Spinner } from "./spinner"
-import { Tooltip } from "./tooltip"
-import { createStore } from "solid-js/store"
-import { DateTime, DurationUnit, Interval } from "luxon"
+import { Accordion } from "./accordion"
+import { Collapsible } from "./collapsible"
+import { DiffChanges } from "./diff-changes"
+import { Icon } from "./icon"
+import { TextShimmer } from "./text-shimmer"
 import { createAutoScroll } from "../hooks"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
-
-type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
+import { useI18n } from "../context/i18n"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -80,55 +69,10 @@ function unwrap(message: string) {
   return message
 }
 
-function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
-  if (!part) return undefined
-
-  if (part.type === "tool") {
-    switch (part.tool) {
-      case "task":
-        return t("ui.sessionTurn.status.delegating")
-      case "todowrite":
-      case "todoread":
-        return t("ui.sessionTurn.status.planning")
-      case "read":
-        return t("ui.sessionTurn.status.gatheringContext")
-      case "list":
-      case "grep":
-      case "glob":
-        return t("ui.sessionTurn.status.searchingCodebase")
-      case "webfetch":
-        return t("ui.sessionTurn.status.searchingWeb")
-      case "edit":
-      case "write":
-        return t("ui.sessionTurn.status.makingEdits")
-      case "bash":
-        return t("ui.sessionTurn.status.runningCommands")
-      default:
-        return undefined
-    }
-  }
-  if (part.type === "reasoning") {
-    const text = part.text ?? ""
-    const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-    if (match) return t("ui.sessionTurn.status.thinkingWithTopic", { topic: match[1].trim() })
-    return t("ui.sessionTurn.status.thinking")
-  }
-  if (part.type === "text") {
-    return t("ui.sessionTurn.status.gatheringThoughts")
-  }
-  return undefined
-}
-
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
-}
-
-function isAttachment(part: PartType | undefined) {
-  if (part?.type !== "file") return false
-  const mime = (part as FilePart).mime ?? ""
-  return mime.startsWith("image/") || mime === "application/pdf"
 }
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
@@ -136,61 +80,24 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function AssistantMessageItem(props: {
-  message: AssistantMessage
-  responsePartId: string | undefined
-  hideResponsePart: boolean
-  hideReasoning: boolean
-  hidden?: () => readonly { messageID: string; callID: string }[]
-}) {
-  const data = useData()
-  const emptyParts: PartType[] = []
-  const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
-  const lastTextPart = createMemo(() => {
-    const parts = msgParts()
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i]
-      if (part?.type === "text") return part as TextPart
-    }
-    return undefined
-  })
+const hidden = new Set(["todowrite", "todoread"])
 
-  const filteredParts = createMemo(() => {
-    let parts = msgParts()
-
-    if (props.hideReasoning) {
-      parts = parts.filter((part) => part?.type !== "reasoning")
-    }
-
-    if (props.hideResponsePart) {
-      const responsePartId = props.responsePartId
-      if (responsePartId && responsePartId === lastTextPart()?.id) {
-        parts = parts.filter((part) => part?.id !== responsePartId)
-      }
-    }
-
-    const hidden = props.hidden?.() ?? []
-    if (hidden.length === 0) return parts
-
-    const id = props.message.id
-    return parts.filter((part) => {
-      if (part?.type !== "tool") return true
-      const tool = part as ToolPart
-      return !hidden.some((h) => h.messageID === id && h.callID === tool.callID)
-    })
-  })
-
-  return <Message message={props.message} parts={filteredParts()} />
+function visible(part: PartType) {
+  if (part.type === "tool") {
+    if (hidden.has(part.tool)) return false
+    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    return true
+  }
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
+  return false
 }
 
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
-    sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
-    stepsExpanded?: boolean
-    onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -199,16 +106,14 @@ export function SessionTurn(
     }
   }>,
 ) {
-  const i18n = useI18n()
   const data = useData()
+  const i18n = useI18n()
+  const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
-  const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyPermissions: PermissionRequest[] = []
-  const emptyQuestions: QuestionRequest[] = []
-  const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
@@ -256,18 +161,33 @@ export function SessionTurn(
     return list(data.store.part?.[msg.id], emptyParts)
   })
 
-  const attachmentParts = createMemo(() => {
-    const msgParts = parts()
-    if (msgParts.length === 0) return emptyFiles
-    return msgParts.filter((part) => isAttachment(part)) as FilePart[]
-  })
+  const diffs = createMemo(() => {
+    const files = message()?.summary?.diffs
+    if (!files?.length) return emptyDiffs
 
-  const stickyParts = createMemo(() => {
-    const msgParts = parts()
-    if (msgParts.length === 0) return emptyParts
-    if (attachmentParts().length === 0) return msgParts
-    return msgParts.filter((part) => !isAttachment(part))
+    const seen = new Set<string>()
+    return files
+      .reduceRight<FileDiff[]>((result, diff) => {
+        if (seen.has(diff.file)) return result
+        seen.add(diff.file)
+        result.push(diff)
+        return result
+      }, [])
+      .reverse()
   })
+  const edited = createMemo(() => diffs().length)
+  const [open, setOpen] = createSignal(false)
+  const [expanded, setExpanded] = createSignal<string[]>([])
+
+  createEffect(
+    on(
+      open,
+      (value, prev) => {
+        if (!value && prev) setExpanded([])
+      },
+      { defer: true },
+    ),
+  )
 
   const assistantMessages = createMemo(
     () => {
@@ -291,9 +211,27 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
+  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const error = createMemo(
+    () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
+  )
+  const showAssistantCopyPartID = createMemo(() => {
+    const messages = assistantMessages()
 
-  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (!message) continue
+
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const part = parts[j]
+        if (!part || part.type !== "text" || !part.text?.trim()) continue
+        return part.id
+      }
+    }
+
+    return undefined
+  })
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -301,314 +239,28 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const lastTextPart = createMemo(() => {
-    const msgs = assistantMessages()
-    for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
-      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-        const part = msgParts[pi]
-        if (part?.type === "text") return part as TextPart
-      }
-    }
-    return undefined
-  })
-
-  const hasSteps = createMemo(() => {
-    for (const m of assistantMessages()) {
-      const msgParts = list(data.store.part?.[m.id], emptyParts)
-      for (const p of msgParts) {
-        if (p?.type === "tool") return true
-      }
-    }
-    return false
-  })
-
-  const permissions = createMemo(() => list(data.store.permission?.[props.sessionID], emptyPermissions))
-  const nextPermission = createMemo(() => permissions()[0])
-
-  const questions = createMemo(() => list(data.store.question?.[props.sessionID], emptyQuestions))
-  const nextQuestion = createMemo(() => questions()[0])
-
-  const hidden = createMemo(() => {
-    const out: { messageID: string; callID: string }[] = []
-    const perm = nextPermission()
-    if (perm?.tool) out.push(perm.tool)
-    const question = nextQuestion()
-    if (question?.tool) out.push(question.tool)
-    return out
-  })
-
-  const answeredQuestionParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyQuestionParts
-    if (questions().length > 0) return emptyQuestionParts
-
-    const result: { part: ToolPart; message: AssistantMessage }[] = []
-
-    for (const msg of assistantMessages()) {
-      const parts = list(data.store.part?.[msg.id], emptyParts)
-      for (const part of parts) {
-        if (part?.type !== "tool") continue
-        const tool = part as ToolPart
-        if (tool.tool !== "question") continue
-        // @ts-expect-error metadata may not exist on all tool states
-        const answers = tool.state?.metadata?.answers
-        if (answers && answers.length > 0) {
-          result.push({ part: tool, message: msg })
-        }
-      }
-    }
-
-    return result
-  })
-
-  const shellModePart = createMemo(() => {
-    const p = parts()
-    if (p.length === 0) return
-    if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
-
-    const msgs = assistantMessages()
-    if (msgs.length !== 1) return
-
-    const msgParts = list(data.store.part?.[msgs[0].id], emptyParts)
-    if (msgParts.length !== 1) return
-
-    const assistantPart = msgParts[0]
-    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
-  })
-
-  const isShellMode = createMemo(() => !!shellModePart())
-
-  const rawStatus = createMemo(() => {
-    const msgs = assistantMessages()
-    let last: PartType | undefined
-    let currentTask: ToolPart | undefined
-
-    for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
-      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-        const part = msgParts[pi]
-        if (!part) continue
-        if (!last) last = part
-
-        if (
-          part.type === "tool" &&
-          part.tool === "task" &&
-          part.state &&
-          "metadata" in part.state &&
-          part.state.metadata?.sessionId &&
-          part.state.status === "running"
-        ) {
-          currentTask = part as ToolPart
-          break
-        }
-      }
-      if (currentTask) break
-    }
-
-    const taskSessionId =
-      currentTask?.state && "metadata" in currentTask.state
-        ? (currentTask.state.metadata?.sessionId as string | undefined)
-        : undefined
-
-    if (taskSessionId) {
-      const taskMessages = list(data.store.message?.[taskSessionId], emptyMessages)
-      for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
-        const msg = taskMessages[mi]
-        if (!msg || msg.role !== "assistant") continue
-
-        const msgParts = list(data.store.part?.[msg.id], emptyParts)
-        for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-          const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part, i18n.t)
-        }
-      }
-    }
-
-    return computeStatusFromPart(last, i18n.t)
-  })
-
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
-  const retry = createMemo(() => {
-    // session_status is session-scoped; only show retry on the active (last) turn
-    if (!isLastUserMessage()) return
-    const s = status()
-    if (s.type !== "retry") return
-    return s
+
+  const assistantCopyPartID = createMemo(() => {
+    if (working()) return null
+    return showAssistantCopyPartID() ?? null
   })
-  const isRetryFreeUsageLimitError = createMemo(() => {
-    const r = retry()
-    if (!r) return false
-    return r.message.includes("Free usage exceeded")
-  })
-
-  const response = createMemo(() => lastTextPart()?.text)
-  const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => (message()?.summary?.diffs?.length ?? 0) > 0)
-  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
-
-  const [copied, setCopied] = createSignal(false)
-
-  const handleCopy = async () => {
-    const content = response() ?? ""
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
-  const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
-
-  const updateStickyHeight = (height: number) => {
-    const root = rootRef()
-    if (!root) return
-    const next = Math.ceil(height)
-    root.style.setProperty("--session-turn-sticky-height", `${next}px`)
-  }
-
-  function duration() {
-    const msg = message()
-    if (!msg) return ""
-    const completed = lastAssistantMessage()?.time.completed
-    const from = DateTime.fromMillis(msg.time.created)
-    const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
-    const interval = Interval.fromDateTimes(from, to)
-    const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
-
-    const locale = i18n.locale()
-    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
-      notation: "compact",
-      unitDisplay: "narrow",
-      compactDisplay: "short",
-      showZeros: false,
-    })
-    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
-  }
+  const assistantVisible = createMemo(() =>
+    assistantMessages().reduce((count, message) => {
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      return count + parts.filter(visible).length
+    }, 0),
+  )
 
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
-    overflowAnchor: "auto",
-  })
-
-  createResizeObserver(
-    () => stickyRef(),
-    ({ height }) => {
-      updateStickyHeight(height)
-    },
-  )
-
-  createEffect(() => {
-    const root = rootRef()
-    if (!root) return
-    const sticky = stickyRef()
-    if (!sticky) {
-      root.style.setProperty("--session-turn-sticky-height", "0px")
-      return
-    }
-    updateStickyHeight(sticky.getBoundingClientRect().height)
-  })
-
-  const [store, setStore] = createStore({
-    retrySeconds: 0,
-    status: rawStatus(),
-    duration: duration(),
-  })
-
-  createEffect(() => {
-    const r = retry()
-    if (!r) {
-      setStore("retrySeconds", 0)
-      return
-    }
-    const updateSeconds = () => {
-      const next = r.next
-      if (next) setStore("retrySeconds", Math.max(0, Math.round((next - Date.now()) / 1000)))
-    }
-    updateSeconds()
-    const timer = setInterval(updateSeconds, 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  let retryLog = ""
-  createEffect(() => {
-    const r = retry()
-    if (!r) return
-    const key = `${r.attempt}:${r.next}:${r.message}`
-    if (key === retryLog) return
-    retryLog = key
-    console.warn("[session-turn] retry", {
-      sessionID: props.sessionID,
-      messageID: props.messageID,
-      attempt: r.attempt,
-      next: r.next,
-      raw: r.message,
-      parsed: unwrap(r.message),
-    })
-  })
-
-  let errorLog = ""
-  createEffect(() => {
-    const value = error()?.data?.message
-    if (value === undefined || value === null) return
-    const raw = typeof value === "string" ? value : String(value)
-    if (!raw) return
-    if (raw === errorLog) return
-    errorLog = raw
-    console.warn("[session-turn] assistant-error", {
-      sessionID: props.sessionID,
-      messageID: props.messageID,
-      raw,
-      parsed: unwrap(raw),
-    })
-  })
-
-  createEffect(() => {
-    const update = () => {
-      setStore("duration", duration())
-    }
-
-    update()
-
-    // Only keep ticking while the active (in-progress) turn is running.
-    if (!working()) return
-
-    const timer = setInterval(update, 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  let lastStatusChange = Date.now()
-  let statusTimeout: number | undefined
-  createEffect(() => {
-    const newStatus = rawStatus()
-    if (newStatus === store.status || !newStatus) return
-
-    const timeSinceLastChange = Date.now() - lastStatusChange
-    if (timeSinceLastChange >= 2500) {
-      setStore("status", newStatus)
-      lastStatusChange = Date.now()
-      if (statusTimeout) {
-        clearTimeout(statusTimeout)
-        statusTimeout = undefined
-      }
-    } else {
-      if (statusTimeout) clearTimeout(statusTimeout)
-      statusTimeout = setTimeout(() => {
-        setStore("status", rawStatus())
-        lastStatusChange = Date.now()
-        statusTimeout = undefined
-      }, 2500 - timeSinceLastChange) as unknown as number
-    }
-  })
-
-  onCleanup(() => {
-    if (!statusTimeout) return
-    clearTimeout(statusTimeout)
+    overflowAnchor: "dynamic",
   })
 
   return (
-    <div data-component="session-turn" class={props.classes?.root} ref={setRootRef}>
+    <div data-component="session-turn" class={props.classes?.root}>
       <div
         ref={autoScroll.scrollRef}
         onScroll={autoScroll.handleScroll}
@@ -624,197 +276,126 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
               >
-                <Switch>
-                  <Match when={isShellMode()}>
-                    <Part part={shellModePart()!} message={msg()} defaultOpen />
-                  </Match>
-                  <Match when={true}>
-                    <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments" aria-live="off">
-                        <Message message={msg()} parts={attachmentParts()} />
-                      </div>
-                    </Show>
-                    <div data-slot="session-turn-sticky" ref={setStickyRef}>
-                      {/* User Message */}
-                      <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message message={msg()} parts={stickyParts()} />
-                      </div>
+                <div data-slot="session-turn-message-content" aria-live="off">
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                </div>
+                <Show when={working() && assistantVisible() === 0 && !error()}>
+                  <div data-slot="session-turn-thinking">
+                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                  </div>
+                </Show>
+                <Show when={assistantMessages().length > 0}>
+                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                    <AssistantParts
+                      messages={assistantMessages()}
+                      showAssistantCopyPartID={assistantCopyPartID()}
+                      working={working()}
+                    />
+                  </div>
+                </Show>
+                <Show when={edited() > 0 && !working()}>
+                  <div data-slot="session-turn-diffs">
+                    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                      <Collapsible.Trigger>
+                        <div data-component="session-turn-diffs-trigger">
+                          <div data-slot="session-turn-diffs-title">
+                            <span data-slot="session-turn-diffs-label">
+                              {i18n.t("ui.sessionReview.change.modified")}
+                            </span>
+                            <span data-slot="session-turn-diffs-count">
+                              {edited()} {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+                            </span>
+                            <div data-slot="session-turn-diffs-meta">
+                              <DiffChanges changes={diffs()} variant="bars" />
+                              <Collapsible.Arrow />
+                            </div>
+                          </div>
+                        </div>
+                      </Collapsible.Trigger>
+                      <Collapsible.Content>
+                        <Show when={open()}>
+                          <div data-component="session-turn-diffs-content">
+                            <Accordion
+                              multiple
+                              value={expanded()}
+                              onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                            >
+                              <For each={diffs()}>
+                                {(diff) => {
+                                  const active = createMemo(() => expanded().includes(diff.file))
+                                  const [visible, setVisible] = createSignal(false)
 
-                      {/* Trigger (sticky) */}
-                      <Show when={working() || hasSteps()}>
-                        <div data-slot="session-turn-response-trigger">
-                          <Button
-                            data-expandable={assistantMessages().length > 0}
-                            data-slot="session-turn-collapsible-trigger-content"
-                            variant="ghost"
-                            size="small"
-                            onClick={props.onStepsExpandedToggle ?? (() => {})}
-                            aria-expanded={props.stepsExpanded}
-                          >
-                            <Switch>
-                              <Match when={working()}>
-                                <Spinner />
-                              </Match>
-                              <Match when={!props.stepsExpanded}>
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  data-slot="session-turn-trigger-icon"
-                                >
-                                  <path
-                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
-                                    fill="currentColor"
-                                    stroke="currentColor"
-                                    stroke-linejoin="round"
-                                  />
-                                </svg>
-                              </Match>
-                              <Match when={props.stepsExpanded}>
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  class="text-icon-base"
-                                >
-                                  <path
-                                    d="M8.125 8.125H1.875L5 1.875L8.125 8.125Z"
-                                    fill="currentColor"
-                                    stroke="currentColor"
-                                    stroke-linejoin="round"
-                                  />
-                                </svg>
-                              </Match>
-                            </Switch>
-                            <Switch>
-                              <Match when={retry()}>
-                                <span data-slot="session-turn-retry-message">
-                                  {(() => {
-                                    const r = retry()
-                                    if (!r) return ""
-                                    const msg = isRetryFreeUsageLimitError()
-                                      ? i18n.t("ui.sessionTurn.error.freeUsageExceeded")
-                                      : unwrap(r.message)
-                                    return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
-                                  })()}
-                                </span>
-                                <Show when={isRetryFreeUsageLimitError()}>
-                                  <a
-                                    href="https://opencode.ai/zen"
-                                    target="_blank"
-                                    class="retry-error-link"
-                                    rel="noopener noreferrer"
-                                  >
-                                    {i18n.t("ui.sessionTurn.error.addCredits")}
-                                  </a>
-                                </Show>
-                                <span data-slot="session-turn-retry-seconds">
-                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
-                                  {store.retrySeconds > 0
-                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                                    : ""}
-                                </span>
-                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                              </Match>
-                              <Match when={working()}>
-                                <span data-slot="session-turn-status-text">
-                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
-                                </span>
-                              </Match>
-                              <Match when={props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
-                              </Match>
-                              <Match when={!props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
-                              </Match>
-                            </Switch>
-                            <span aria-hidden="true">·</span>
-                            <span aria-live="off">{store.duration}</span>
-                          </Button>
-                        </div>
-                      </Show>
-                    </div>
-                    {/* Response */}
-                    <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
-                        <For each={assistantMessages()}>
-                          {(assistantMessage) => (
-                            <AssistantMessageItem
-                              message={assistantMessage}
-                              responsePartId={responsePartId()}
-                              hideResponsePart={hideResponsePart()}
-                              hideReasoning={!working()}
-                              hidden={hidden}
-                            />
-                          )}
-                        </For>
-                        <Show when={error()}>
-                          <Card variant="error" class="error-card">
-                            {errorText()}
-                          </Card>
+                                  createEffect(
+                                    on(
+                                      active,
+                                      (value) => {
+                                        if (!value) {
+                                          setVisible(false)
+                                          return
+                                        }
+
+                                        requestAnimationFrame(() => {
+                                          if (!active()) return
+                                          setVisible(true)
+                                        })
+                                      },
+                                      { defer: true },
+                                    ),
+                                  )
+
+                                  return (
+                                    <Accordion.Item value={diff.file}>
+                                      <Accordion.Header>
+                                        <Accordion.Trigger>
+                                          <div data-slot="session-turn-diff-trigger">
+                                            <span data-slot="session-turn-diff-path">
+                                              <Show when={diff.file.includes("/")}>
+                                                <span data-slot="session-turn-diff-directory">
+                                                  {getDirectory(diff.file)}
+                                                </span>
+                                              </Show>
+                                              <span data-slot="session-turn-diff-filename">
+                                                {getFilename(diff.file)}
+                                              </span>
+                                            </span>
+                                            <div data-slot="session-turn-diff-meta">
+                                              <span data-slot="session-turn-diff-changes">
+                                                <DiffChanges changes={diff} />
+                                              </span>
+                                              <span data-slot="session-turn-diff-chevron">
+                                                <Icon name="chevron-down" size="small" />
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </Accordion.Trigger>
+                                      </Accordion.Header>
+                                      <Accordion.Content>
+                                        <Show when={visible()}>
+                                          <div data-slot="session-turn-diff-view" data-scrollable>
+                                            <Dynamic
+                                              component={diffComponent}
+                                              before={{ name: diff.file, contents: diff.before }}
+                                              after={{ name: diff.file, contents: diff.after }}
+                                            />
+                                          </div>
+                                        </Show>
+                                      </Accordion.Content>
+                                    </Accordion.Item>
+                                  )
+                                }}
+                              </For>
+                            </Accordion>
+                          </div>
                         </Show>
-                      </div>
-                    </Show>
-                    <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
-                      <div data-slot="session-turn-answered-question-parts">
-                        <For each={answeredQuestionParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
-                      </div>
-                    </Show>
-                    {/* Response */}
-                    <div class="sr-only" aria-live="polite">
-                      {!working() && response() ? response() : ""}
-                    </div>
-                    <Show when={!working() && response()}>
-                      <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-header">
-                          <div data-slot="session-turn-summary-title-row">
-                            <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                            <Show when={response()}>
-                              <div data-slot="session-turn-response-copy-wrapper">
-                                <Tooltip
-                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  placement="top"
-                                  gutter={8}
-                                >
-                                  <IconButton
-                                    icon={copied() ? "check" : "copy"}
-                                    size="small"
-                                    variant="secondary"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      handleCopy()
-                                    }}
-                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  />
-                                </Tooltip>
-                              </div>
-                            </Show>
-                          </div>
-                          <div data-slot="session-turn-response">
-                            <Markdown
-                              data-slot="session-turn-markdown"
-                              data-diffs={hasDiffs()}
-                              text={response() ?? ""}
-                              cacheKey={responsePartId()}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </Show>
-                    <Show when={error() && !props.stepsExpanded}>
-                      <Card variant="error" class="error-card">
-                        {errorText()}
-                      </Card>
-                    </Show>
-                  </Match>
-                </Switch>
+                      </Collapsible.Content>
+                    </Collapsible>
+                  </div>
+                </Show>
+                <Show when={error()}>
+                  <Card variant="error" class="error-card">
+                    {errorText()}
+                  </Card>
+                </Show>
               </div>
             )}
           </Show>
