@@ -102,6 +102,9 @@ export const dict = {
   "command.model.variant.cycle": "切换思考强度",
   "command.model.variant.cycle.description": "切换到下一个强度等级",
 
+  "command.prompt.mode.shell": "切换到 Shell 模式",
+  "command.prompt.mode.normal": "切换到 Prompt 模式",
+
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
 
@@ -259,9 +262,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "输入 shell 命令...",
   "prompt.placeholder.normal": '随便问点什么... "{{example}}"',
+  "prompt.placeholder.simple": "随便问点什么...",
   "prompt.placeholder.summarizeComments": "总结评论…",
   "prompt.placeholder.summarizeComment": "总结该评论…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",
   "prompt.example.1": "修复代码库中的一个 TODO",
   "prompt.example.2": "这个项目的技术栈是什么？",
@@ -524,6 +529,9 @@ export const dict = {
   "session.messages.loading": "正在加载消息...",
   "session.messages.jumpToLatest": "跳转到最新",
   "session.context.addToContext": "将 {{selection}} 添加到上下文",
+  "session.todo.title": "待办事项",
+  "session.todo.collapse": "折叠",
+  "session.todo.expand": "展开",
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支（{{branch}}）",
   "session.new.worktree.create": "创建新的 worktree",
@@ -598,6 +606,7 @@ export const dict = {
   "sidebar.project.noArchivedSessions": "没有已归档会话",
   "sidebar.dropFolder": "释放文件夹以打开项目",
   "sidebar.dropFile": "释放以添加为附件",
+  "sidebar.project.clearNotifications": "清除通知",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -667,6 +676,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
 
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",

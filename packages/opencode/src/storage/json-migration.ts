@@ -152,6 +152,7 @@ export namespace JsonMigration {
     sqlite.exec("BEGIN TRANSACTION")
 
     // Migrate projects first (no FK deps)
+    // Derive all IDs from file paths, not JSON content
     const projectIds = new Set<string>()
     const projectValues = [] as any[]
     for (let i = 0; i < projectFiles.length; i += batchSize) {
@@ -161,13 +162,10 @@ export namespace JsonMigration {
       for (let j = 0; j < batch.length; j++) {
         const data = batch[j]
         if (!data) continue
-        if (!data?.id) {
-          errs.push(`project missing id: ${projectFiles[i + j]}`)
-          continue
-        }
-        projectIds.add(data.id)
+        const id = path.basename(projectFiles[i + j], ".json")
+        projectIds.add(id)
         projectValues.push({
-          id: data.id,
+          id,
           worktree: data.worktree ?? "/",
           vcs: data.vcs,
           name: data.name ?? undefined,
@@ -186,6 +184,9 @@ export namespace JsonMigration {
     log.info("migrated projects", { count: stats.projects, duration: Math.round(performance.now() - start) })
 
     // Migrate sessions (depends on projects)
+    // Derive all IDs from directory/file paths, not JSON content, since earlier
+    // migrations may have moved sessions to new directories without updating the JSON
+    const sessionProjects = sessionFiles.map((file) => path.basename(path.dirname(file)))
     const sessionIds = new Set<string>()
     const sessionValues = [] as any[]
     for (let i = 0; i < sessionFiles.length; i += batchSize) {
@@ -195,18 +196,16 @@ export namespace JsonMigration {
       for (let j = 0; j < batch.length; j++) {
         const data = batch[j]
         if (!data) continue
-        if (!data?.id || !data?.projectID) {
-          errs.push(`session missing id or projectID: ${sessionFiles[i + j]}`)
-          continue
-        }
-        if (!projectIds.has(data.projectID)) {
+        const id = path.basename(sessionFiles[i + j], ".json")
+        const projectID = sessionProjects[i + j]
+        if (!projectIds.has(projectID)) {
           orphans.sessions++
           continue
         }
-        sessionIds.add(data.id)
+        sessionIds.add(id)
         sessionValues.push({
-          id: data.id,
-          project_id: data.projectID,
+          id,
+          project_id: projectID,
           parent_id: data.parentID ?? null,
           slug: data.slug ?? "",
           directory: data.directory ?? "",
@@ -253,11 +252,7 @@ export namespace JsonMigration {
         const data = batch[j]
         if (!data) continue
         const file = allMessageFiles[i + j]
-        const id = data.id ?? path.basename(file, ".json")
-        if (!id) {
-          errs.push(`message missing id: ${file}`)
-          continue
-        }
+        const id = path.basename(file, ".json")
         const sessionID = allMessageSessions[i + j]
         messageSessions.set(id, sessionID)
         const rest = data
@@ -287,12 +282,8 @@ export namespace JsonMigration {
         const data = batch[j]
         if (!data) continue
         const file = partFiles[i + j]
-        const id = data.id ?? path.basename(file, ".json")
-        const messageID = data.messageID ?? path.basename(path.dirname(file))
-        if (!id || !messageID) {
-          errs.push(`part missing id/messageID/sessionID: ${file}`)
-          continue
-        }
+        const id = path.basename(file, ".json")
+        const messageID = path.basename(path.dirname(file))
         const sessionID = messageSessions.get(messageID)
         if (!sessionID) {
           errs.push(`part missing message session: ${file}`)

@@ -1,85 +1,121 @@
 [data-component="radio-group"] {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--spacing) * 2);
+  --radio-group-height: 28px;
+  --radio-group-gap: 4px;
+  --radio-group-padding: 2px;
+
+  display: inline-flex;
 
   [data-slot="radio-group-wrapper"] {
     all: unset;
-    background-color: var(--surface-base);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs-border);
+    background-color: var(--surface-inset-base);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-xxs-border);
+    display: inline-flex;
+    height: var(--radio-group-height);
     margin: 0;
+    overflow: visible;
     padding: 0;
     position: relative;
     width: fit-content;
   }
 
+  &[data-fill] [data-slot="radio-group-wrapper"] {
+    width: 100%;
+  }
+
   [data-slot="radio-group-items"] {
     display: inline-flex;
-    list-style: none;
     flex-direction: row;
+    gap: var(--radio-group-gap);
+    height: 100%;
+    list-style: none;
+    position: relative;
+    z-index: 1;
+  }
+
+  &[data-fill] [data-slot="radio-group-items"] {
+    width: 100%;
   }
 
   [data-slot="radio-group-indicator"] {
-    background: var(--button-secondary-base);
-    border-radius: var(--radius-md);
+    background: var(--surface-raised-stronger-non-alpha);
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-xs-border);
     content: "";
     opacity: var(--indicator-opacity, 1);
+    pointer-events: none;
     position: absolute;
     transition:
-      opacity 300ms ease-in-out,
+      opacity 200ms ease-out,
       box-shadow 100ms ease-in-out,
-      width 150ms ease,
-      height 150ms ease,
-      transform 150ms ease;
+      width 200ms ease-out,
+      height 200ms ease-out,
+      transform 200ms ease-out;
+    will-change: transform;
+    z-index: 0;
   }
 
   [data-slot="radio-group-item"] {
+    display: flex;
+    height: 100%;
+    min-width: 0;
     position: relative;
   }
 
-  /* Separator between items */
-  [data-slot="radio-group-item"]:not(:first-of-type)::before {
-    background: var(--border-weak-base);
-    border-radius: var(--radius-xs);
-    content: "";
-    inset: 6px 0;
-    position: absolute;
-    transition: opacity 150ms ease;
-    width: 1px;
-    transform: translateX(-0.5px);
+  &[data-fill] [data-slot="radio-group-item"] {
+    flex: 1;
   }
 
-  /* Hide separator when item or previous item is checked */
-  [data-slot="radio-group-item"]:has([data-slot="radio-group-item-input"][data-checked])::before,
-  [data-slot="radio-group-item"]:has([data-slot="radio-group-item-input"][data-checked])
-    + [data-slot="radio-group-item"]::before {
-    opacity: 0;
+  [data-slot="radio-group-item-input"] {
+    border-width: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
   }
 
   [data-slot="radio-group-item-label"] {
     color: var(--text-weak);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    display: flex;
-    flex-wrap: nowrap;
-    gap: calc(var(--spacing) * 1);
+    flex: 1;
+    height: 100%;
     line-height: 1;
-    padding: 6px 12px;
-    place-content: center;
+    padding: var(--radio-group-padding);
     position: relative;
-    transition-duration: 150ms;
-    transition-property: color, opacity;
-    transition-timing-function: ease-in-out;
+    transition:
+      color 200ms ease-out,
+      opacity 200ms ease-out;
     user-select: none;
   }
 
-  [data-slot="radio-group-item-input"] {
-    all: unset;
+  [data-slot="radio-group-item-control"] {
+    align-items: center;
+    border-radius: var(--radius-xs);
+    display: inline-flex;
+    height: 100%;
+    justify-content: center;
+    min-width: 0;
+    padding: var(--radio-group-control-padding, 0 10px);
+    transition: background-color 200ms ease-out;
+    width: 100%;
+  }
+
+  &[data-pad="none"] {
+    --radio-group-control-padding: 0;
+  }
+
+  &[data-pad="normal"] {
+    --radio-group-control-padding: 0 10px;
   }
 
   /* Checked state */
@@ -87,26 +123,24 @@
     color: var(--text-strong);
   }
 
+  /* Hover state: match the inset background (adds subtle density) */
+  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+    + [data-slot="radio-group-item-label"]:hover
+    [data-slot="radio-group-item-control"] {
+    background-color: var(--surface-inset-base);
+  }
+
+  /* Do not overlay hover on the active segment */
+  [data-slot="radio-group-item-input"][data-checked]
+    + [data-slot="radio-group-item-label"]:hover
+    [data-slot="radio-group-item-control"] {
+    background-color: transparent;
+  }
+
   /* Disabled state */
   [data-slot="radio-group-item-input"][data-disabled] + [data-slot="radio-group-item-label"] {
     cursor: not-allowed;
     opacity: 0.5;
-  }
-
-  /* Hover state for unchecked, enabled items */
-  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled]) + [data-slot="radio-group-item-label"] {
-    cursor: pointer;
-    user-select: none;
-  }
-
-  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-    + [data-slot="radio-group-item-label"]:hover {
-    color: var(--text-base);
-  }
-
-  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-    + [data-slot="radio-group-item-label"]:active {
-    opacity: 0.7;
   }
 
   /* Focus state */
@@ -126,27 +160,23 @@
     flex-direction: column;
   }
 
-  &[aria-orientation="vertical"] [data-slot="radio-group-item"]:not(:first-of-type)::before {
-    height: 1px;
-    width: auto;
-    inset: 0 6px;
-    transform: translateY(-0.5px);
-  }
-
   /* Small size variant */
   &[data-size="small"] {
+    --radio-group-height: 24px;
+    --radio-group-gap: 3px;
+    --radio-group-padding: 2px;
+
     [data-slot="radio-group-item-label"] {
       font-size: 12px;
-      padding: 4px 8px;
     }
 
-    [data-slot="radio-group-item"]:not(:first-of-type)::before {
-      inset: 4px 0;
+    [data-slot="radio-group-item-control"] {
+      padding: var(--radio-group-control-padding, 0 8px);
     }
+  }
 
-    &[aria-orientation="vertical"] [data-slot="radio-group-item"]:not(:first-of-type)::before {
-      inset: 0 4px;
-    }
+  &[data-size="small"][data-pad="normal"] {
+    --radio-group-control-padding: 0 8px;
   }
 
   /* Disabled root state */

@@ -85,7 +85,7 @@ function createCopyButton(labels: CopyLabels) {
   button.setAttribute("data-size", "small")
   button.setAttribute("data-slot", "markdown-copy-button")
   button.setAttribute("aria-label", labels.copy)
-  button.setAttribute("title", labels.copy)
+  button.setAttribute("data-tooltip", labels.copy)
   button.appendChild(createIcon(iconPaths.copy, "copy-icon"))
   button.appendChild(createIcon(iconPaths.check, "check-icon"))
   return button
@@ -95,12 +95,12 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   if (copied) {
     button.setAttribute("data-copied", "true")
     button.setAttribute("aria-label", labels.copied)
-    button.setAttribute("title", labels.copied)
+    button.setAttribute("data-tooltip", labels.copied)
     return
   }
   button.removeAttribute("data-copied")
   button.setAttribute("aria-label", labels.copy)
-  button.setAttribute("title", labels.copy)
+  button.setAttribute("data-tooltip", labels.copy)
 }
 
 function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
