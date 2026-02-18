@@ -1,5 +1,6 @@
 import path from "path"
 import { exec } from "child_process"
+import { Filesystem } from "../../util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -360,7 +361,7 @@ export const GithubInstallCommand = cmd({
                 ? ""
                 : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
-            await Bun.write(
+            await Filesystem.write(
               path.join(app.root, WORKFLOW_FILE),
               `name: opencode
 
