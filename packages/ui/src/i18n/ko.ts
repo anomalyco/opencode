@@ -33,7 +33,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",
-  "ui.sessionTurn.status.gatheringContext": "탐색 중...",
+  "ui.sessionTurn.status.gatheringContext": "탐색 중",
   "ui.sessionTurn.status.gatheredContext": "탐색됨",
   "ui.sessionTurn.status.searchingCodebase": "코드베이스 검색 중",
   "ui.sessionTurn.status.searchingWeb": "웹 검색 중",

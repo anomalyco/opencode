@@ -168,6 +168,13 @@ export function FileTabContent(props: { tab: string }) {
     draftTop: undefined as number | undefined,
   })
 
+  const setCommenting = (range: SelectedLineRange | null) => {
+    setNote("commenting", range)
+    scheduleComments()
+    if (!range) return
+    setNote("draft", "")
+  }
+
   const getRoot = () => {
     const el = wrap
     if (!el) return
@@ -261,13 +268,6 @@ export function FileTabContent(props: { tab: string }) {
   })
 
   createEffect(() => {
-    const range = note.commenting
-    scheduleComments()
-    if (!range) return
-    setNote("draft", "")
-  })
-
-  createEffect(() => {
     const focus = comments.focus()
     const p = path()
     if (!focus || !p) return
@@ -278,7 +278,7 @@ export function FileTabContent(props: { tab: string }) {
     if (!target) return
 
     setNote("openedComment", target.id)
-    setNote("commenting", null)
+    setCommenting(null)
     file.setSelectedLines(p, target.selection)
     requestAnimationFrame(() => comments.clearFocus())
   })
@@ -438,16 +438,16 @@ export function FileTabContent(props: { tab: string }) {
           const p = path()
           if (!p) return
           file.setSelectedLines(p, range)
-          if (!range) setNote("commenting", null)
+          if (!range) setCommenting(null)
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           if (!range) {
-            setNote("commenting", null)
+            setCommenting(null)
             return
           }
 
           setNote("openedComment", null)
-          setNote("commenting", range)
+          setCommenting(range)
         }}
         overflow="scroll"
         class="select-text"
@@ -468,7 +468,7 @@ export function FileTabContent(props: { tab: string }) {
             onClick={() => {
               const p = path()
               if (!p) return
-              setNote("commenting", null)
+              setCommenting(null)
               setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
               file.setSelectedLines(p, comment.selection)
             }}
@@ -483,12 +483,12 @@ export function FileTabContent(props: { tab: string }) {
               value={note.draft}
               selection={formatCommentLabel(range())}
               onInput={(value) => setNote("draft", value)}
-              onCancel={() => setNote("commenting", null)}
+              onCancel={() => setCommenting(null)}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
                 addCommentToContext({ file: p, selection: range(), comment: value, origin: "file" })
-                setNote("commenting", null)
+                setCommenting(null)
               }}
               onPopoverFocusOut={(e: FocusEvent) => {
                 const current = e.currentTarget as HTMLDivElement
@@ -497,7 +497,7 @@ export function FileTabContent(props: { tab: string }) {
 
                 setTimeout(() => {
                   if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setNote("commenting", null)
+                    setCommenting(null)
                   }
                 }, 0)
               }}

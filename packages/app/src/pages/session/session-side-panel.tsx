@@ -23,7 +23,7 @@ import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
-import { getTabReorderIndex } from "@/pages/session/helpers"
+import { createOpenSessionFileTab, getTabReorderIndex } from "@/pages/session/helpers"
 import { StickyAddButton } from "@/pages/session/review-tab"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
@@ -96,15 +96,14 @@ export function SessionSidePanel(props: {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const openTab = (value: string) => {
-    const next = normalizeTab(value)
-    tabs().open(next)
-
-    const path = file.pathFromTab(next)
-    if (!path) return
-    file.load(path)
-    openReviewPanel()
-  }
+  const openTab = createOpenSessionFileTab({
+    normalizeTab,
+    openTab: tabs().open,
+    pathFromTab: file.pathFromTab,
+    loadFile: file.load,
+    openReviewPanel,
+    setActive: tabs().setActive,
+  })
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const openedTabs = createMemo(() =>
@@ -355,7 +354,7 @@ export function SessionSidePanel(props: {
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
                 </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
+                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
                       <Show
@@ -384,7 +383,7 @@ export function SessionSidePanel(props: {
                     </Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-base px-3 py-0">
+                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
                   <FileTree
                     path=""
                     modified={diffFiles()}
