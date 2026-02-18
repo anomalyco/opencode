@@ -14,6 +14,32 @@ import { SessionSummary } from "./summary"
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
 
+  function active(messages: MessageV2.WithParts[], revert: Session.Info["revert"]) {
+    if (!revert) return messages
+    return messages.flatMap((msg) => {
+      if (msg.info.id < revert.messageID) return [msg]
+      if (msg.info.id > revert.messageID) return []
+      if (!revert.partID) return []
+      const index = msg.parts.findIndex((part) => part.id === revert.partID)
+      if (index <= 0) return []
+      return [{ ...msg, parts: msg.parts.slice(0, index) }]
+    })
+  }
+
+  async function sync(sessionID: string, messages: MessageV2.WithParts[]) {
+    const diff = await SessionSummary.computeDiff({ messages })
+    await Storage.write(["session_diff", sessionID], diff)
+    Bus.publish(Session.Event.Diff, {
+      sessionID,
+      diff,
+    })
+    return {
+      additions: diff.reduce((sum, x) => sum + x.additions, 0),
+      deletions: diff.reduce((sum, x) => sum + x.deletions, 0),
+      files: diff.length,
+    }
+  }
+
   export const RevertInput = z.object({
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message"),
@@ -59,21 +85,10 @@ export namespace SessionRevert {
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
-      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
-      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
-      await Storage.write(["session_diff", input.sessionID], diffs)
-      Bus.publish(Session.Event.Diff, {
-        sessionID: input.sessionID,
-        diff: diffs,
-      })
       return Session.setRevert({
         sessionID: input.sessionID,
         revert,
-        summary: {
-          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-          files: diffs.length,
-        },
+        summary: await sync(input.sessionID, active(all, revert)),
       })
     }
     return session
@@ -85,7 +100,11 @@ export namespace SessionRevert {
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
     if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
-    return Session.clearRevert(input.sessionID)
+    await Session.clearRevert(input.sessionID)
+    return Session.setSummary({
+      sessionID: input.sessionID,
+      summary: await sync(input.sessionID, await Session.messages({ sessionID: input.sessionID })),
+    })
   }
 
   export async function cleanup(session: Session.Info) {
@@ -134,5 +153,9 @@ export namespace SessionRevert {
       }
     }
     await Session.clearRevert(sessionID)
+    await Session.setSummary({
+      sessionID,
+      summary: await sync(sessionID, await Session.messages({ sessionID })),
+    })
   }
 }

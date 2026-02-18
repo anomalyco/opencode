@@ -19,6 +19,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const active = createMemo(() => {
+    const messageID = session().revert?.messageID
+    if (!messageID) return messages()
+    return messages().filter((item) => item.id < messageID)
+  })
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -41,7 +46,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const cost = createMemo(() => {
-    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+    const total = active().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -49,7 +54,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    const last = active().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write

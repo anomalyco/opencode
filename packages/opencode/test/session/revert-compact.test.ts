@@ -7,6 +7,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { Identifier } from "../../src/id/id"
+import { Snapshot } from "../../src/snapshot"
 import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
@@ -278,6 +279,134 @@ describe("revert + compact workflow", () => {
         expect(messages.length).toBe(0) // All messages should be reverted
 
         // Clean up
+        await Session.remove(sessionID)
+      },
+    })
+  })
+
+  test("should keep session diff aligned across revert and unrevert", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+
+        async function turn(input: { file: string; text: string }) {
+          const user = await Session.updateMessage({
+            id: Identifier.ascending("message"),
+            role: "user",
+            sessionID,
+            agent: "default",
+            model: {
+              providerID: "openai",
+              modelID: "gpt-4",
+            },
+            time: {
+              created: Date.now(),
+            },
+          })
+
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: user.id,
+            sessionID,
+            type: "text",
+            text: `Edit ${input.file}`,
+          })
+
+          const assistant: MessageV2.Assistant = {
+            id: Identifier.ascending("message"),
+            role: "assistant",
+            sessionID,
+            mode: "default",
+            agent: "default",
+            path: {
+              cwd: tmp.path,
+              root: tmp.path,
+            },
+            cost: 0,
+            tokens: {
+              output: 0,
+              input: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: "gpt-4",
+            providerID: "openai",
+            parentID: user.id,
+            time: {
+              created: Date.now(),
+            },
+            finish: "end_turn",
+          }
+          await Session.updateMessage(assistant)
+
+          const from = await Snapshot.track()
+          await Bun.write(path.join(tmp.path, input.file), input.text)
+          const to = await Snapshot.track()
+          if (!from || !to) throw new Error("expected snapshot hashes")
+          const patch = await Snapshot.patch(from)
+
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: assistant.id,
+            sessionID,
+            type: "step-start",
+            snapshot: from,
+          })
+
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: assistant.id,
+            sessionID,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: to,
+            tokens: {
+              output: 1,
+              input: 1,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            cost: 0,
+          })
+
+          if (patch.files.length > 0) {
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: assistant.id,
+              sessionID,
+              type: "patch",
+              hash: patch.hash,
+              files: patch.files,
+            })
+          }
+
+          return user
+        }
+
+        const has = (diffs: Awaited<ReturnType<typeof Session.diff>>, file: string) =>
+          diffs.some((item) => item.file === file || item.file.endsWith(`/${file}`))
+
+        await turn({ file: "one.txt", text: "one\n" })
+        const second = await turn({ file: "two.txt", text: "two\n" })
+
+        await SessionRevert.revert({
+          sessionID,
+          messageID: second.id,
+        })
+
+        const undone = await Session.diff(sessionID)
+        expect(has(undone, "one.txt")).toBe(true)
+        expect(has(undone, "two.txt")).toBe(false)
+
+        await SessionRevert.unrevert({ sessionID })
+
+        const restored = await Session.diff(sessionID)
+        expect(has(restored, "one.txt")).toBe(true)
+        expect(has(restored, "two.txt")).toBe(true)
+
         await Session.remove(sessionID)
       },
     })
