@@ -28,13 +28,18 @@ export const TransitionPhaseTool = Tool.define("transitionPhase", {
         metadata: {
           phase: next.currentPhase,
           step: next.currentStep,
+          error: false as boolean,
         },
       }
     } catch (err: any) {
       return {
         title: "Transition Failed",
-        output: err.message,
-        metadata: { error: true },
+        output: err.message as string,
+        metadata: {
+          phase: state.currentPhase,
+          step: state.currentStep,
+          error: true as boolean,
+        },
       }
     }
   },

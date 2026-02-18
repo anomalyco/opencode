@@ -22,6 +22,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { DebugPhase } from "./debug-phase"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -259,10 +260,22 @@ export namespace LLM {
     })
   }
 
-  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
+  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user" | "sessionID">) {
     const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+
+    let phaseAllowed: Set<string> | null = null
+    if (DebugPhase.isDebugAgent(input.agent.name)) {
+      const state = DebugPhase.getOrCreate(input.sessionID)
+      const allowed = DebugPhase.toolsForPhase(state.currentPhase)
+      phaseAllowed = new Set(allowed)
+    }
+
     for (const tool of Object.keys(input.tools)) {
-      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
+      if (
+        input.user.tools?.[tool] === false ||
+        disabled.has(tool) ||
+        (phaseAllowed !== null && !phaseAllowed.has(tool))
+      ) {
         delete input.tools[tool]
       }
     }

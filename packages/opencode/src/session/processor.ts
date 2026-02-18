@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { DebugPhase } from "./debug-phase"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -134,6 +135,25 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
+                    // Debug agent phase safety net
+                    const agent = await Agent.get(input.assistantMessage.agent)
+                    if (DebugPhase.isDebugAgent(agent.name)) {
+                      const phaseState = DebugPhase.get(input.sessionID)
+                      if (phaseState && !DebugPhase.isToolAllowed(phaseState.currentPhase, value.toolName)) {
+                        await Session.updatePart({
+                          ...match,
+                          tool: value.toolName,
+                          state: {
+                            status: "error",
+                            input: value.input,
+                            error: `Tool "${value.toolName}" is not available in the ${phaseState.currentPhase} phase. Use transitionPhase to move to the correct phase first.`,
+                            time: { start: Date.now(), end: Date.now() },
+                          },
+                        })
+                        delete toolcalls[value.toolCallId]
+                        break
+                      }
+                    }
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,
