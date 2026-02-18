@@ -354,7 +354,7 @@ export function SessionSidePanel(props: {
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
                 </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
+                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
                       <Show
@@ -383,7 +383,7 @@ export function SessionSidePanel(props: {
                     </Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-base px-3 py-0">
+                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
                   <FileTree
                     path=""
                     modified={diffFiles()}
