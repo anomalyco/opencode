@@ -2,22 +2,43 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--surface-inset-base);
-  border: 1px solid var(--border-weaker-base);
+  background-color: transparent;
+  border: none;
   transition: background-color 0.15s ease;
   border-radius: var(--radius-md);
   overflow: clip;
+
+  &.tool-collapsible {
+    gap: 8px;
+  }
 
   [data-slot="collapsible-trigger"] {
     width: 100%;
     display: flex;
     height: 32px;
-    padding: 6px 8px 6px 12px;
+    padding: 0;
     align-items: center;
     align-self: stretch;
     cursor: default;
     user-select: none;
     color: var(--text-base);
+
+    [data-slot="collapsible-arrow"] {
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    [data-slot="collapsible-arrow-icon"] {
+      display: none;
+    }
+
+    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
+      display: inline-flex;
+    }
+
+    &:hover [data-slot="collapsible-arrow"] {
+      opacity: 1;
+    }
 
     /* text-12-medium */
     font-family: var(--font-family-sans);
@@ -45,6 +66,20 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+  }
+
+  [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    [data-slot="collapsible-arrow"] {
+      opacity: 1;
+    }
+
+    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
+      display: none;
+    }
+
+    [data-slot="collapsible-arrow-icon"][data-direction="down"] {
+      display: inline-flex;
     }
   }
 
