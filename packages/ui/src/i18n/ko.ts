@@ -11,7 +11,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "로딩 중...",
   "ui.sessionReview.image.placeholder": "이미지",
   "ui.sessionReview.largeDiff.title": "차이가 너무 커서 렌더링할 수 없습니다",
-  "ui.sessionReview.largeDiff.meta": "제한: {{lines}}줄 / {{limit}}. 현재: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "제한: {{limit}} 변경 줄. 현재: {{current}} 변경 줄.",
   "ui.sessionReview.largeDiff.renderAnyway": "그래도 렌더링",
 
   "ui.lineComment.label.prefix": "",

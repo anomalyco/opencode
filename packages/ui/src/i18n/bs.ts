@@ -15,7 +15,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Učitavanje...",
   "ui.sessionReview.image.placeholder": "Slika",
   "ui.sessionReview.largeDiff.title": "Diff je prevelik za prikaz",
-  "ui.sessionReview.largeDiff.meta": "Limit: {{lines}} linija / {{limit}}. Trenutno: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} izmijenjenih linija. Trenutno: {{current}} izmijenjenih linija.",
   "ui.sessionReview.largeDiff.renderAnyway": "Prikaži svejedno",
 
   "ui.lineComment.label.prefix": "Komentar na ",

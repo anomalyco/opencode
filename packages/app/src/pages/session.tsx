@@ -1,26 +1,20 @@
 import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore, produce } from "solid-js/store"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Select } from "@opencode-ai/ui/select"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Mark } from "@opencode-ai/ui/logo"
 
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useSync } from "@/context/sync"
-import { useGlobalSync } from "@/context/global-sync"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
+import { useTerminal } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
@@ -34,16 +28,14 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
-import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
-import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
+import { SessionHeader, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
+import { createOpenReviewFile } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
-import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   SessionReviewTab,
   StickyAddButton,
@@ -51,7 +43,6 @@ import {
   type SessionReviewTabProps,
 } from "@/pages/session/review-tab"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
-import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
@@ -59,42 +50,13 @@ import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 
-type HandoffSession = {
-  prompt: string
-  files: Record<string, SelectedLineRange | null>
-}
-
-const HANDOFF_MAX = 40
-
-const handoff = {
-  session: new Map<string, HandoffSession>(),
-  terminal: new Map<string, string[]>(),
-}
-
-const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
-  map.delete(key)
-  map.set(key, value)
-  while (map.size > HANDOFF_MAX) {
-    const first = map.keys().next().value
-    if (first === undefined) return
-    map.delete(first)
-  }
-}
-
-const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = handoff.session.get(key) ?? { prompt: "", files: {} }
-  touch(handoff.session, key, { ...prev, ...patch })
-}
-
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
-  const globalSync = useGlobalSync()
   const terminal = useTerminal()
   const dialog = useDialog()
-  const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
   const params = useParams()
@@ -104,53 +66,21 @@ export default function Page() {
   const comments = useComments()
   const permission = usePermission()
 
-  const permRequest = createMemo(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    return sync.data.permission[sessionID]?.[0]
-  })
-
-  const questionRequest = createMemo(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    return sync.data.question[sessionID]?.[0]
-  })
-
-  const blocked = createMemo(() => !!permRequest() || !!questionRequest())
-
   const [ui, setUi] = createStore({
-    responding: false,
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
-    autoCreated: false,
     scroll: {
       overflow: false,
       bottom: true,
     },
   })
 
-  createEffect(
-    on(
-      () => permRequest()?.id,
-      () => setUi("responding", false),
-      { defer: true },
-    ),
-  )
+  const blocked = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    return !!sync.data.permission[sessionID]?.[0] || !!sync.data.question[sessionID]?.[0]
+  })
 
-  const decide = (response: "once" | "always" | "reject") => {
-    const perm = permRequest()
-    if (!perm) return
-    if (ui.responding) return
-
-    setUi("responding", true)
-    sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-      .finally(() => setUi("responding", false))
-  }
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
@@ -323,206 +253,6 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
 
-  const [title, setTitle] = createStore({
-    draft: "",
-    editing: false,
-    saving: false,
-    menuOpen: false,
-    pendingRename: false,
-  })
-  let titleRef: HTMLInputElement | undefined
-
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
-  }
-
-  createEffect(
-    on(
-      sessionKey,
-      () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
-      { defer: true },
-    ),
-  )
-
-  const openTitleEditor = () => {
-    if (!params.id) return
-    setTitle({ editing: true, draft: info()?.title ?? "" })
-    requestAnimationFrame(() => {
-      titleRef?.focus()
-      titleRef?.select()
-    })
-  }
-
-  const closeTitleEditor = () => {
-    if (title.saving) return
-    setTitle({ editing: false, saving: false })
-  }
-
-  const saveTitleEditor = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
-    if (title.saving) return
-
-    const next = title.draft.trim()
-    if (!next || next === (info()?.title ?? "")) {
-      setTitle({ editing: false, saving: false })
-      return
-    }
-
-    setTitle("saving", true)
-    await sdk.client.session
-      .update({ sessionID, title: next })
-      .then(() => {
-        sync.set(
-          produce((draft) => {
-            const index = draft.session.findIndex((s) => s.id === sessionID)
-            if (index !== -1) draft.session[index].title = next
-          }),
-        )
-        setTitle({ editing: false, saving: false })
-      })
-      .catch((err) => {
-        setTitle("saving", false)
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(err),
-        })
-      })
-  }
-
-  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
-    if (params.id !== sessionID) return
-    if (parentID) {
-      navigate(`/${params.dir}/session/${parentID}`)
-      return
-    }
-    if (nextSessionID) {
-      navigate(`/${params.dir}/session/${nextSessionID}`)
-      return
-    }
-    navigate(`/${params.dir}/session`)
-  }
-
-  async function archiveSession(sessionID: string) {
-    const session = sync.session.get(sessionID)
-    if (!session) return
-
-    const sessions = sync.data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
-    await sdk.client.session
-      .update({ sessionID, time: { archived: Date.now() } })
-      .then(() => {
-        sync.set(
-          produce((draft) => {
-            const index = draft.session.findIndex((s) => s.id === sessionID)
-            if (index !== -1) draft.session.splice(index, 1)
-          }),
-        )
-        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-      })
-      .catch((err) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(err),
-        })
-      })
-  }
-
-  async function deleteSession(sessionID: string) {
-    const session = sync.session.get(sessionID)
-    if (!session) return false
-
-    const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
-    const result = await sdk.client.session
-      .delete({ sessionID })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("session.delete.failed.title"),
-          description: errorMessage(err),
-        })
-        return false
-      })
-
-    if (!result) return false
-
-    sync.set(
-      produce((draft) => {
-        const removed = new Set<string>([sessionID])
-
-        const byParent = new Map<string, string[]>()
-        for (const item of draft.session) {
-          const parentID = item.parentID
-          if (!parentID) continue
-          const existing = byParent.get(parentID)
-          if (existing) {
-            existing.push(item.id)
-            continue
-          }
-          byParent.set(parentID, [item.id])
-        }
-
-        const stack = [sessionID]
-        while (stack.length) {
-          const parentID = stack.pop()
-          if (!parentID) continue
-
-          const children = byParent.get(parentID)
-          if (!children) continue
-
-          for (const child of children) {
-            if (removed.has(child)) continue
-            removed.add(child)
-            stack.push(child)
-          }
-        }
-
-        draft.session = draft.session.filter((s) => !removed.has(s.id))
-      }),
-    )
-
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-    return true
-  }
-
-  function DialogDeleteSession(props: { sessionID: string }) {
-    const title = createMemo(() => sync.session.get(props.sessionID)?.title ?? language.t("command.session.new"))
-    const handleDelete = async () => {
-      await deleteSession(props.sessionID)
-      dialog.close()
-    }
-
-    return (
-      <Dialog title={language.t("session.delete.title")} fit>
-        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
-          <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">
-              {language.t("session.delete.confirm", { name: title() })}
-            </span>
-          </div>
-          <div class="flex justify-end gap-2">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </Button>
-            <Button variant="primary" size="large" onClick={handleDelete}>
-              {language.t("session.delete.button")}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-    )
-  }
-
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
@@ -555,8 +285,6 @@ export default function Page() {
   )
 
   const [store, setStore] = createStore({
-    activeDraggable: undefined as string | undefined,
-    activeTerminalDraggable: undefined as string | undefined,
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
@@ -679,43 +407,6 @@ export default function Page() {
     void sync.session.todo(id)
   })
 
-  createEffect(() => {
-    if (!view().terminal.opened()) {
-      setUi("autoCreated", false)
-      return
-    }
-    if (!terminal.ready() || terminal.all().length !== 0 || ui.autoCreated) return
-    terminal.new()
-    setUi("autoCreated", true)
-  })
-
-  createEffect(
-    on(
-      () => terminal.all().length,
-      (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (view().terminal.opened()) {
-            view().terminal.toggle()
-          }
-        }
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => terminal.active(),
-      (activeId) => {
-        if (!activeId || !view().terminal.opened()) return
-        // Immediately remove focus
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        focusTerminalById(activeId)
-      },
-    ),
-  )
-
   createEffect(
     on(
       () => visibleUserMessages().at(-1)?.id,
@@ -729,11 +420,6 @@ export default function Page() {
   )
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
-  const todos = createMemo(() => {
-    const id = params.id
-    if (!id) return []
-    return globalSync.data.session_todo[id] ?? []
-  })
 
   createEffect(
     on(
@@ -741,7 +427,6 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("changes", "session")
-        setUi("autoCreated", false)
       },
       { defer: true },
     ),
@@ -825,53 +510,6 @@ export default function Page() {
       if (blocked()) return
       inputRef?.focus()
     }
-  }
-
-  const handleDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeDraggable", id)
-  }
-
-  const handleDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const currentTabs = tabs().all()
-      const toIndex = getTabReorderIndex(currentTabs, draggable.id.toString(), droppable.id.toString())
-      if (toIndex === undefined) return
-      tabs().move(draggable.id.toString(), toIndex)
-    }
-  }
-
-  const handleDragEnd = () => {
-    setStore("activeDraggable", undefined)
-  }
-
-  const handleTerminalDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeTerminalDraggable", id)
-  }
-
-  const handleTerminalDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const terminals = terminal.all()
-      const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
-      const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
-      if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-        terminal.move(draggable.id.toString(), toIndex)
-      }
-    }
-  }
-
-  const handleTerminalDragEnd = () => {
-    setStore("activeTerminalDraggable", undefined)
-    const activeId = terminal.active()
-    if (!activeId) return
-    setTimeout(() => {
-      focusTerminalById(activeId)
-    }, 0)
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
@@ -1485,58 +1123,6 @@ export default function Page() {
     document.addEventListener("keydown", handleKeyDown)
   })
 
-  const previewPrompt = () =>
-    prompt
-      .current()
-      .map((part) => {
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        if (part.type === "image") return `[image:${part.filename}]`
-        return part.content
-      })
-      .join("")
-      .trim()
-
-  createEffect(() => {
-    if (!prompt.ready()) return
-    setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
-  })
-
-  createEffect(() => {
-    if (!terminal.ready()) return
-    language.locale()
-
-    touch(
-      handoff.terminal,
-      params.dir!,
-      terminal.all().map((pty) =>
-        terminalTabLabel({
-          title: pty.title,
-          titleNumber: pty.titleNumber,
-          t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
-        }),
-      ),
-    )
-  })
-
-  createEffect(() => {
-    if (!file.ready()) return
-    setSessionHandoff(sessionKey(), {
-      files: tabs()
-        .all()
-        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-          const path = file.pathFromTab(tab)
-          if (!path) return acc
-          const selected = file.selectedLines(path)
-          acc[path] =
-            selected && typeof selected === "object" && "start" in selected && "end" in selected
-              ? (selected as SelectedLineRange)
-              : null
-          return acc
-        }, {}),
-    })
-  })
-
   onCleanup(() => {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
@@ -1555,7 +1141,6 @@ export default function Page() {
           reviewCount={reviewCount()}
           onSession={() => setStore("mobileTab", "session")}
           onChanges={() => setStore("mobileTab", "changes")}
-          t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
         />
 
         {/* Session panel */}
@@ -1595,27 +1180,7 @@ export default function Page() {
                     isDesktop={isDesktop()}
                     onScrollSpyScroll={scrollSpy.onScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
-                    showHeader={!!(info()?.title || info()?.parentID)}
                     centered={centered()}
-                    title={info()?.title}
-                    parentID={info()?.parentID}
-                    openTitleEditor={openTitleEditor}
-                    closeTitleEditor={closeTitleEditor}
-                    saveTitleEditor={saveTitleEditor}
-                    titleRef={(el) => {
-                      titleRef = el
-                    }}
-                    titleState={title}
-                    onTitleDraft={(value) => setTitle("draft", value)}
-                    onTitleMenuOpen={(open) => setTitle("menuOpen", open)}
-                    onTitlePendingRename={(value) => setTitle("pendingRename", value)}
-                    onNavigateParent={() => {
-                      navigate(`/${params.dir}/session/${info()?.parentID}`)
-                    }}
-                    sessionID={params.id!}
-                    onArchiveSession={(sessionID) => void archiveSession(sessionID)}
-                    onDeleteSession={(sessionID) => dialog.show(() => <DialogDeleteSession sessionID={sessionID} />)}
-                    t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
                     setContentRef={(el) => {
                       content = el
                       autoScroll.contentRef(el)
@@ -1670,15 +1235,6 @@ export default function Page() {
 
           <SessionPromptDock
             centered={centered()}
-            questionRequest={questionRequest}
-            permissionRequest={permRequest}
-            blocked={blocked()}
-            todos={todos()}
-            promptReady={prompt.ready()}
-            handoffPrompt={handoff.session.get(sessionKey())?.prompt}
-            t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
-            responding={ui.responding}
-            onDecide={decide}
             inputRef={(el) => {
               inputRef = el
             }}
@@ -1688,7 +1244,9 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
-            setPromptDockRef={(el) => (promptDock = el)}
+            setPromptDockRef={(el) => {
+              promptDock = el
+            }}
           />
 
           <Show when={desktopReviewOpen()}>
@@ -1702,64 +1260,10 @@ export default function Page() {
           </Show>
         </div>
 
-        <SessionSidePanel
-          open={desktopSidePanelOpen()}
-          reviewOpen={desktopReviewOpen()}
-          language={language}
-          layout={layout}
-          command={command}
-          dialog={dialog}
-          file={file}
-          comments={comments}
-          hasReview={hasReview()}
-          reviewCount={reviewCount()}
-          reviewTab={reviewTab()}
-          contextOpen={contextOpen}
-          openedTabs={openedTabs}
-          activeTab={activeTab}
-          activeFileTab={activeFileTab}
-          tabs={tabs}
-          openTab={openTab}
-          showAllFiles={showAllFiles}
-          reviewPanel={reviewPanel}
-          vm={{
-            messages,
-            visibleUserMessages,
-            view,
-            info,
-          }}
-          handoffFiles={() => handoff.session.get(sessionKey())?.files}
-          codeComponent={codeComponent}
-          addCommentToContext={addCommentToContext}
-          activeDraggable={() => store.activeDraggable}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOver={handleDragOver}
-          fileTreeTab={fileTreeTab}
-          setFileTreeTabValue={setFileTreeTabValue}
-          diffsReady={diffsReady()}
-          diffFiles={diffFiles()}
-          kinds={kinds()}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
-        />
+        <SessionSidePanel reviewPanel={reviewPanel} activeDiff={tree.activeDiff} focusReviewDiff={focusReviewDiff} />
       </div>
 
-      <TerminalPanel
-        open={isDesktop() && view().terminal.opened()}
-        height={layout.terminal.height()}
-        resize={layout.terminal.resize}
-        close={view().terminal.close}
-        terminal={terminal}
-        language={language}
-        command={command}
-        handoff={() => handoff.terminal.get(params.dir!) ?? []}
-        activeTerminalDraggable={() => store.activeTerminalDraggable}
-        handleTerminalDragStart={handleTerminalDragStart}
-        handleTerminalDragOver={handleTerminalDragOver}
-        handleTerminalDragEnd={handleTerminalDragEnd}
-        onCloseTab={() => setUi("autoCreated", false)}
-      />
+      <TerminalPanel />
     </div>
   )
 }

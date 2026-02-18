@@ -14,7 +14,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.image.loading": "Laster...",
   "ui.sessionReview.image.placeholder": "Bilde",
   "ui.sessionReview.largeDiff.title": "Diff er for stor til å gjengi",
-  "ui.sessionReview.largeDiff.meta": "Grense: {{lines}} linjer / {{limit}}. Nåværende: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Grense: {{limit}} endrede linjer. Nåværende: {{current}} endrede linjer.",
   "ui.sessionReview.largeDiff.renderAnyway": "Gjengi likevel",
 
   "ui.lineComment.label.prefix": "Kommenter på ",

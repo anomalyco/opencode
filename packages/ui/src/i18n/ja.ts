@@ -12,7 +12,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "読み込み中...",
   "ui.sessionReview.image.placeholder": "画像",
   "ui.sessionReview.largeDiff.title": "差分が大きすぎて表示できません",
-  "ui.sessionReview.largeDiff.meta": "上限: {{lines}} 行 / {{limit}}。現在: {{current}}。",
+  "ui.sessionReview.largeDiff.meta": "上限: {{limit}} 変更行。現在: {{current}} 変更行。",
   "ui.sessionReview.largeDiff.renderAnyway": "それでも表示する",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
