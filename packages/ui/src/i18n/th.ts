@@ -11,7 +11,8 @@ export const dict = {
   "ui.sessionReview.image.loading": "กำลังโหลด...",
   "ui.sessionReview.image.placeholder": "รูปภาพ",
   "ui.sessionReview.largeDiff.title": "Diff มีขนาดใหญ่เกินไปจนไม่สามารถแสดงผลได้",
-  "ui.sessionReview.largeDiff.meta": "ขีดจำกัด: {{lines}} บรรทัด / {{limit}}. ปัจจุบัน: {{current}}.",
+  "ui.sessionReview.largeDiff.meta":
+    "ขีดจำกัด: {{limit}} บรรทัดที่เปลี่ยนแปลง. ปัจจุบัน: {{current}} บรรทัดที่เปลี่ยนแปลง.",
   "ui.sessionReview.largeDiff.renderAnyway": "แสดงผลต่อไป",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
@@ -33,7 +34,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",
-  "ui.sessionTurn.status.gatheringContext": "รวบรวมบริบท",
+  "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ",
+  "ui.sessionTurn.status.gatheredContext": "สำรวจแล้ว",
   "ui.sessionTurn.status.searchingCodebase": "กำลังค้นหาโค้ดเบส",
   "ui.sessionTurn.status.searchingWeb": "กำลังค้นหาบนเว็บ",
   "ui.sessionTurn.status.makingEdits": "กำลังแก้ไข",
@@ -101,6 +103,8 @@ export const dict = {
   "ui.message.expand": "ขยายข้อความ",
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
+  "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
   "ui.message.attachment.alt": "ไฟล์แนบ",

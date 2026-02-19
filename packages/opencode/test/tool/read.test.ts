@@ -211,8 +211,8 @@ describe("tool.read truncation", () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "large.json") }, ctx)
         expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Output truncated at")
-        expect(result.output).toContain("bytes")
+        expect(result.output).toContain("Output capped at")
+        expect(result.output).toContain("Use offset=")
       },
     })
   })
@@ -230,7 +230,8 @@ describe("tool.read truncation", () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 10 }, ctx)
         expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("File has more lines")
+        expect(result.output).toContain("Showing lines 1-10 of 100")
+        expect(result.output).toContain("Use offset=11")
         expect(result.output).toContain("line0")
         expect(result.output).toContain("line9")
         expect(result.output).not.toContain("line10")
@@ -267,6 +268,10 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "offset.txt"), offset: 10, limit: 5 }, ctx)
+        expect(result.output).toContain("10: line10")
+        expect(result.output).toContain("14: line14")
+        expect(result.output).not.toContain("9: line10")
+        expect(result.output).not.toContain("15: line15")
         expect(result.output).toContain("line10")
         expect(result.output).toContain("line14")
         expect(result.output).not.toContain("line0")
@@ -289,6 +294,40 @@ describe("tool.read truncation", () => {
         await expect(
           read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: 4, limit: 5 }, ctx),
         ).rejects.toThrow("Offset 4 is out of range for this file (3 lines)")
+      },
+    })
+  })
+
+  test("allows reading empty file at default offset", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "empty.txt") }, ctx)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).toContain("End of file - total 0 lines")
+      },
+    })
+  })
+
+  test("throws when offset > 1 for empty file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "empty.txt"), offset: 2 }, ctx)).rejects.toThrow(
+          "Offset 2 is out of range for this file (0 lines)",
+        )
       },
     })
   })
@@ -324,7 +363,7 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "long-line.txt") }, ctx)
-        expect(result.output).toContain("...")
+        expect(result.output).toContain("(line truncated to 2000 chars)")
         expect(result.output.length).toBeLessThan(3000)
       },
     })
@@ -421,6 +460,43 @@ describe("tool.read loaded instructions", () => {
         expect(result.output).toContain("Test Instructions")
         expect(result.metadata.loaded).toBeDefined()
         expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
+      },
+    })
+  })
+})
+
+describe("tool.read binary detection", () => {
+  test("rejects text extension files with null bytes", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const bytes = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77, 0x6f, 0x72, 0x6c, 0x64])
+        await Bun.write(path.join(dir, "null-byte.txt"), bytes)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "null-byte.txt") }, ctx)).rejects.toThrow(
+          "Cannot read binary file",
+        )
+      },
+    })
+  })
+
+  test("rejects known binary extensions", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "module.wasm"), "not really wasm")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "module.wasm") }, ctx)).rejects.toThrow(
+          "Cannot read binary file",
+        )
       },
     })
   })

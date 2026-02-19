@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Switch to the previous agent",
   "command.model.variant.cycle": "Cycle thinking effort",
   "command.model.variant.cycle.description": "Switch to the next effort level",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Auto-accept edits",
   "command.permissions.autoaccept.disable": "Stop auto-accepting edits",
   "command.workspace.toggle": "Toggle workspaces",
@@ -228,6 +230,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Summarize comments…",
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc to exit",
 
   "prompt.example.1": "Fix a TODO in the codebase",
@@ -520,7 +523,7 @@ export const dict = {
   "session.header.open.action": "Open {{app}}",
   "session.header.open.ariaLabel": "Open in {{app}}",
   "session.header.open.menu": "Open options",
-  "session.header.open.copyPath": "Copy Path",
+  "session.header.open.copyPath": "Copy path",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
