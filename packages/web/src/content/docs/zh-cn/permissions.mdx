@@ -1,0 +1,237 @@
+---
+title: 权限
+description: 控制哪些操作需要审批才能运行。
+---
+
+OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、提示你审批，还是被阻止。
+
+从 `v1.1.1` 开始，旧版 `tools` 布尔配置已被弃用，并已合并到 `permission` 中。旧版 `tools` 配置仍然支持，以保持向后兼容。
+
+---
+
+## 操作
+
+每条权限规则解析为以下之一：
+
+- `"allow"` — 无需审批直接运行
+- `"ask"` — 提示审批
+- `"deny"` — 阻止该操作
+
+---
+
+## 配置
+
+你可以全局设置权限（使用 `*`），并覆盖特定工具的权限。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+你还可以一次性设置所有权限：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## 细粒度规则（对象语法）
+
+对于大多数权限，你可以使用对象来根据工具输入应用不同的操作。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+规则通过模式匹配进行评估，**最后匹配的规则优先**。常见做法是将通配的 `"*"` 规则放在最前面，更具体的规则放在后面。
+
+### 通配符
+
+权限模式使用简单的通配符匹配：
+
+- `*` 匹配零个或多个任意字符
+- `?` 精确匹配一个字符
+- 所有其他字符按字面值匹配
+
+### 主目录展开
+
+你可以在模式开头使用 `~` 或 `$HOME` 来引用你的主目录。这对于 [`external_directory`](#外部目录) 规则特别有用。
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### 外部目录
+
+使用 `external_directory` 允许工具调用访问 OpenCode 启动时工作目录之外的路径。这适用于任何接受路径作为输入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 以及许多 `bash` 命令）。
+
+主目录展开（如 `~/...`）仅影响模式的书写方式。它不会将外部路径纳入当前工作空间，因此工作目录之外的路径仍然必须通过 `external_directory` 来允许。
+
+例如，以下配置允许访问 `~/projects/personal/` 下的所有内容：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+此处允许的任何目录都会继承与当前工作空间相同的默认值。由于 [`read` 默认为 `allow`](#默认值)，`external_directory` 下的条目也允许读取，除非另行覆盖。当需要在这些路径中限制某个工具时，请添加显式规则，例如在保留读取的同时阻止编辑：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+请将列表限定在受信任的路径上，并根据需要为其他工具（例如 `bash`）叠加额外的允许或拒绝规则。
+
+---
+
+## 可用权限
+
+OpenCode 的权限以工具名称为键，外加几个安全防护项：
+
+- `read` — 读取文件（匹配文件路径）
+- `edit` — 所有文件修改（涵盖 `edit`、`write`、`patch`、`multiedit`）
+- `glob` — 文件通配（匹配通配模式）
+- `grep` — 内容搜索（匹配正则表达式模式）
+- `list` — 列出目录中的文件（匹配目录路径）
+- `bash` — 运行 shell 命令（匹配解析后的命令，如 `git status --porcelain`）
+- `task` — 启动子代理（匹配子代理类型）
+- `skill` — 加载技能（匹配技能名称）
+- `lsp` — 运行 LSP 查询（当前不支持细粒度配置）
+- `todoread`、`todowrite` — 读取/更新待办事项列表
+- `webfetch` — 获取 URL（匹配 URL）
+- `websearch`、`codesearch` — 网页/代码搜索（匹配查询内容）
+- `external_directory` — 当工具访问项目工作目录之外的路径时触发
+- `doom_loop` — 当同一工具调用以相同输入重复 3 次时触发
+
+---
+
+## 默认值
+
+如果你未指定任何配置，OpenCode 将使用宽松的默认值：
+
+- 大多数权限默认为 `"allow"`。
+- `doom_loop` 和 `external_directory` 默认为 `"ask"`。
+- `read` 为 `"allow"`，但 `.env` 文件默认被拒绝：
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## "Ask"的作用
+
+当 OpenCode 提示审批时，界面提供三种选择：
+
+- `once` — 仅批准本次请求
+- `always` — 批准与建议模式匹配的后续请求（在当前 OpenCode 会话的剩余时间内有效）
+- `reject` — 拒绝请求
+
+`always` 所批准的模式集合由工具提供（例如，bash 审批通常会将安全的命令前缀如 `git status*` 加入白名单）。
+
+---
+
+## 代理
+
+你可以为每个代理单独覆盖权限。代理权限会与全局配置合并，且代理规则优先。[了解更多](/docs/agents#permissions)关于代理权限的内容。
+
+:::note
+有关更详细的模式匹配示例，请参阅上方的[细粒度规则（对象语法）](#细粒度规则对象语法)部分。
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+你还可以在 Markdown 中配置代理权限：
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+对带参数的命令使用模式匹配。`"grep *"` 允许执行 `grep pattern file.txt`，而单独的 `"grep"` 则会阻止它。像 `git status` 这样的命令适用于默认行为，但在传递参数时需要显式权限（如 `"git status *"`）。
+:::

@@ -1,74 +1,25 @@
-import {
-  For,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  createSignal,
-  on,
-  type JSX,
-} from "solid-js"
+import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
-import { PromptInput } from "@/components/prompt-input"
-import { SessionContextUsage } from "@/components/session-context-usage"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { BasicTool } from "@opencode-ai/ui/basic-tool"
+import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
 
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useSync } from "@/context/sync"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
-import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
-import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectFile } from "@/components/dialog-select-file"
-import FileTree from "@/components/file-tree"
-import { DialogSelectModel } from "@/components/dialog-select-model"
-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
-import { DialogFork } from "@/components/dialog-fork"
-import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
-import { useComments, type LineComment } from "@/context/comments"
-import { extractPromptFromParts } from "@/utils/prompt"
-import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { usePermission } from "@/context/permission"
-import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
-import {
-  SessionHeader,
-  SessionContextTab,
-  SortableTab,
-  FileVisual,
-  SortableTerminalTab,
-  NewSessionView,
-} from "@/components/session"
-import { navMark, navParams } from "@/utils/perf"
+import { useComments } from "@/context/comments"
+import { SessionHeader, NewSessionView } from "@/components/session"
 import { same } from "@/utils/same"
 import { scrollTabIntoView } from "@/utils/dom"
 
@@ -231,102 +182,81 @@ export default function Page() {
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
-  const terminal = useTerminal()
   const dialog = useDialog()
-  const codeComponent = useCodeComponent()
-  const command = useCommand()
   const language = useLanguage()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
-  const permission = usePermission()
-
-  const request = createMemo(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    const next = sync.data.permission[sessionID]?.[0]
-    if (!next) return
-    if (next.tool) return
-    return next
-  })
 
   const [ui, setUi] = createStore({
-    responding: false,
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
-    autoCreated: false,
+    scroll: {
+      overflow: false,
+      bottom: true,
+    },
   })
+
+  const blocked = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    return !!sync.data.permission[sessionID]?.[0] || !!sync.data.question[sessionID]?.[0]
+  })
+
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const workspaceKey = createMemo(() => params.dir ?? "")
+  const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
 
   createEffect(
     on(
-      () => request()?.id,
-      () => setUi("responding", false),
+      () => params.id,
+      (id, prev) => {
+        if (!id) return
+        if (prev) return
+
+        const pending = layout.handoff.tabs()
+        if (!pending) return
+        if (Date.now() - pending.at > 60_000) {
+          layout.handoff.clearTabs()
+          return
+        }
+
+        if (pending.id !== id) return
+        layout.handoff.clearTabs()
+        if (pending.dir !== (params.dir ?? "")) return
+
+        const from = workspaceTabs().tabs()
+        if (from.all.length === 0 && !from.active) return
+
+        const current = tabs().tabs()
+        if (current.all.length > 0 || current.active) return
+
+        const all = normalizeTabs(from.all)
+        const active = from.active ? normalizeTab(from.active) : undefined
+        tabs().setAll(all)
+        tabs().setActive(active && all.includes(active) ? active : all[0])
+
+        workspaceTabs().setAll([])
+        workspaceTabs().setActive(undefined)
+      },
       { defer: true },
     ),
   )
 
-  const decide = (response: "once" | "always" | "reject") => {
-    const perm = request()
-    if (!perm) return
-    if (ui.responding) return
-
-    setUi("responding", true)
-    sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-      .finally(() => setUi("responding", false))
-  }
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
-
-  if (import.meta.env.DEV) {
-    createEffect(
-      on(
-        () => [params.dir, params.id] as const,
-        ([dir, id], prev) => {
-          if (!id) return
-          navParams({ dir, from: prev?.[1], to: id })
-        },
-      ),
-    )
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!prompt.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:prompt-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!terminal.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:terminal-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!file.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:file-view-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (sync.data.message[id] === undefined) return
-      navMark({ dir: params.dir, to: id, name: "session:data-ready" })
-    })
-  }
-
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const centered = createMemo(() => isDesktop() && !layout.fileTree.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const sessionPanelWidth = createMemo(() => {
+    if (!desktopSidePanelOpen()) return "100%"
+    if (desktopReviewOpen()) return `${layout.session.width()}px`
+    return `calc(100% - ${layout.fileTree.width()}px)`
+  })
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -345,12 +275,8 @@ export default function Page() {
     return next
   }
 
-  const openTab = (value: string) => {
-    const next = normalizeTab(value)
-    tabs().open(next)
-
-    const path = file.pathFromTab(next)
-    if (path) file.load(path)
+  const openReviewPanel = () => {
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
   createEffect(() => {
@@ -400,6 +326,7 @@ export default function Page() {
     if (!id) return false
     return sync.session.history.loading(id)
   })
+
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
@@ -432,15 +359,15 @@ export default function Page() {
   )
 
   const [store, setStore] = createStore({
-    activeDraggable: undefined as string | undefined,
-    activeTerminalDraggable: undefined as string | undefined,
-    expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
+    changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
-    promptHeight: 0,
   })
+
+  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
   const renderedUserMessages = createMemo(
     () => {
@@ -459,7 +386,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    if (project && sdk.directory !== project.worktree) return sdk.directory
     return "main"
   })
 
@@ -490,33 +417,6 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  const kinds = createMemo(() => {
-    const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
-      if (!a) return b
-      if (a === b) return a
-      return "mix" as const
-    }
-
-    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
-
-    const out = new Map<string, "add" | "del" | "mix">()
-    for (const diff of diffs()) {
-      const file = normalize(diff.file)
-      const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
-
-      out.set(file, kind)
-
-      const parts = file.split("/")
-      for (const [idx] of parts.slice(0, -1).entries()) {
-        const dir = parts.slice(0, idx + 1).join("/")
-        if (!dir) continue
-        out.set(dir, merge(out.get(dir), kind))
-      }
-    }
-    return out
-  })
-  const emptyDiffFiles: string[] = []
-  const diffFiles = createMemo(() => diffs().map((d) => d.file), emptyDiffFiles, { equals: same })
   const diffsReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -524,14 +424,13 @@ export default function Page() {
     return sync.data.session_diff[id] !== undefined
   })
 
-  const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
+  let dockHeight = 0
   let scroller: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
 
   const scrollGestureWindowMs = 250
-
-  let touchGesture: number | undefined
 
   const markScrollGesture = (target?: EventTarget | null) => {
     const root = scroller
@@ -547,58 +446,12 @@ export default function Page() {
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   createEffect(() => {
-    if (!params.id) return
-    sync.session.sync(params.id)
+    sdk.directory
+    const id = params.id
+    if (!id) return
+    void sync.session.sync(id)
+    void sync.session.todo(id)
   })
-
-  createEffect(() => {
-    if (!view().terminal.opened()) {
-      setUi("autoCreated", false)
-      return
-    }
-    if (!terminal.ready() || terminal.all().length !== 0 || ui.autoCreated) return
-    terminal.new()
-    setUi("autoCreated", true)
-  })
-
-  createEffect(
-    on(
-      () => terminal.all().length,
-      (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (view().terminal.opened()) {
-            view().terminal.toggle()
-          }
-        }
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => terminal.active(),
-      (activeId) => {
-        if (!activeId || !view().terminal.opened()) return
-        // Immediately remove focus
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
-        const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-        if (!element) return
-
-        // Find and focus the ghostty textarea (the actual input element)
-        const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-        if (textarea) {
-          textarea.focus()
-          return
-        }
-        // Fallback: focus container and dispatch pointer event
-        element.focus()
-        element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
-      },
-    ),
-  )
 
   createEffect(
     on(
@@ -612,24 +465,27 @@ export default function Page() {
     ),
   )
 
-  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
-
   createEffect(
     on(
-      () => params.id,
+      sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("expanded", {})
+        setStore("changes", "session")
       },
       { defer: true },
     ),
   )
 
-  createEffect(() => {
-    const id = lastUserMessage()?.id
-    if (!id) return
-    setStore("expanded", id, status().type !== "idle")
-  })
+  createEffect(
+    on(
+      () => params.dir,
+      (dir) => {
+        if (!dir) return
+        setStore("newSessionWorktree", "main")
+      },
+      { defer: true },
+    ),
+  )
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -639,11 +495,6 @@ export default function Page() {
     const lines = content.split("\n").slice(start - 1, end)
     if (lines.length === 0) return undefined
     return lines.slice(0, 2).join("\n")
-  }
-
-  const addSelectionToContext = (path: string, selection: FileSelection) => {
-    const preview = selectionPreview(path, selection)
-    prompt.context.add({ type: "file", path, selection, preview })
   }
 
   const addCommentToContext = (input: {
@@ -671,355 +522,6 @@ export default function Page() {
     })
   }
 
-  command.register(() => [
-    {
-      id: "session.new",
-      title: language.t("command.session.new"),
-      category: language.t("command.category.session"),
-      keybind: "mod+shift+s",
-      slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
-    },
-    {
-      id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("palette.search.placeholder"),
-      category: language.t("command.category.file"),
-      keybind: "mod+p",
-      slash: "open",
-      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={() => showAllFiles()} />),
-    },
-    {
-      id: "tab.close",
-      title: language.t("command.tab.close"),
-      category: language.t("command.category.file"),
-      keybind: "mod+w",
-      disabled: !tabs().active(),
-      onSelect: () => {
-        const active = tabs().active()
-        if (!active) return
-        tabs().close(active)
-      },
-    },
-    {
-      id: "context.addSelection",
-      title: language.t("command.context.addSelection"),
-      description: language.t("command.context.addSelection.description"),
-      category: language.t("command.category.context"),
-      keybind: "mod+shift+l",
-      disabled: (() => {
-        const active = tabs().active()
-        if (!active) return true
-        const path = file.pathFromTab(active)
-        if (!path) return true
-        return file.selectedLines(path) == null
-      })(),
-      onSelect: () => {
-        const active = tabs().active()
-        if (!active) return
-        const path = file.pathFromTab(active)
-        if (!path) return
-
-        const range = file.selectedLines(path)
-        if (!range) {
-          showToast({
-            title: language.t("toast.context.noLineSelection.title"),
-            description: language.t("toast.context.noLineSelection.description"),
-          })
-          return
-        }
-
-        addSelectionToContext(path, selectionFromLines(range))
-      },
-    },
-    {
-      id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
-      description: "",
-      category: language.t("command.category.view"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => view().terminal.toggle(),
-    },
-    {
-      id: "review.toggle",
-      title: language.t("command.review.toggle"),
-      description: "",
-      category: language.t("command.category.view"),
-      keybind: "mod+shift+r",
-      onSelect: () => layout.fileTree.toggle(),
-    },
-    {
-      id: "terminal.new",
-      title: language.t("command.terminal.new"),
-      description: language.t("command.terminal.new.description"),
-      category: language.t("command.category.terminal"),
-      keybind: "ctrl+alt+t",
-      onSelect: () => {
-        if (terminal.all().length > 0) terminal.new()
-        view().terminal.open()
-      },
-    },
-    {
-      id: "steps.toggle",
-      title: language.t("command.steps.toggle"),
-      description: language.t("command.steps.toggle.description"),
-      category: language.t("command.category.view"),
-      keybind: "mod+e",
-      slash: "steps",
-      disabled: !params.id,
-      onSelect: () => {
-        const msg = activeMessage()
-        if (!msg) return
-        setStore("expanded", msg.id, (open: boolean | undefined) => !open)
-      },
-    },
-    {
-      id: "message.previous",
-      title: language.t("command.message.previous"),
-      description: language.t("command.message.previous.description"),
-      category: language.t("command.category.session"),
-      keybind: "mod+arrowup",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(-1),
-    },
-    {
-      id: "message.next",
-      title: language.t("command.message.next"),
-      description: language.t("command.message.next.description"),
-      category: language.t("command.category.session"),
-      keybind: "mod+arrowdown",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(1),
-    },
-    {
-      id: "model.choose",
-      title: language.t("command.model.choose"),
-      description: language.t("command.model.choose.description"),
-      category: language.t("command.category.model"),
-      keybind: "mod+'",
-      slash: "model",
-      onSelect: () => dialog.show(() => <DialogSelectModel />),
-    },
-    {
-      id: "mcp.toggle",
-      title: language.t("command.mcp.toggle"),
-      description: language.t("command.mcp.toggle.description"),
-      category: language.t("command.category.mcp"),
-      keybind: "mod+;",
-      slash: "mcp",
-      onSelect: () => dialog.show(() => <DialogSelectMcp />),
-    },
-    {
-      id: "agent.cycle",
-      title: language.t("command.agent.cycle"),
-      description: language.t("command.agent.cycle.description"),
-      category: language.t("command.category.agent"),
-      keybind: "mod+.",
-      slash: "agent",
-      onSelect: () => local.agent.move(1),
-    },
-    {
-      id: "agent.cycle.reverse",
-      title: language.t("command.agent.cycle.reverse"),
-      description: language.t("command.agent.cycle.reverse.description"),
-      category: language.t("command.category.agent"),
-      keybind: "shift+mod+.",
-      onSelect: () => local.agent.move(-1),
-    },
-    {
-      id: "model.variant.cycle",
-      title: language.t("command.model.variant.cycle"),
-      description: language.t("command.model.variant.cycle.description"),
-      category: language.t("command.category.model"),
-      keybind: "shift+mod+d",
-      onSelect: () => {
-        local.model.variant.cycle()
-      },
-    },
-    {
-      id: "permissions.autoaccept",
-      title:
-        params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? language.t("command.permissions.autoaccept.disable")
-          : language.t("command.permissions.autoaccept.enable"),
-      category: language.t("command.category.permissions"),
-      keybind: "mod+shift+a",
-      disabled: !params.id || !permission.permissionsEnabled(),
-      onSelect: () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        permission.toggleAutoAccept(sessionID, sdk.directory)
-        showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? language.t("toast.permissions.autoaccept.on.title")
-            : language.t("toast.permissions.autoaccept.off.title"),
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? language.t("toast.permissions.autoaccept.on.description")
-            : language.t("toast.permissions.autoaccept.off.description"),
-        })
-      },
-    },
-    {
-      id: "session.undo",
-      title: language.t("command.session.undo"),
-      description: language.t("command.session.undo.description"),
-      category: language.t("command.category.session"),
-      slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => {})
-        }
-        const revert = info()?.revert?.messageID
-        // Find the last user message that's not already reverted
-        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
-        if (!message) return
-        await sdk.client.session.revert({ sessionID, messageID: message.id })
-        // Restore the prompt from the reverted message
-        const parts = sync.data.part[message.id]
-        if (parts) {
-          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-          prompt.set(restored)
-        }
-        // Navigate to the message before the reverted one (which will be the new last visible message)
-        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
-        setActiveMessage(priorMessage)
-      },
-    },
-    {
-      id: "session.redo",
-      title: language.t("command.session.redo"),
-      description: language.t("command.session.redo.description"),
-      category: language.t("command.category.session"),
-      slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        const revertMessageID = info()?.revert?.messageID
-        if (!revertMessageID) return
-        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
-        if (!nextMessage) {
-          // Full unrevert - restore all messages and navigate to last
-          await sdk.client.session.unrevert({ sessionID })
-          prompt.reset()
-          // Navigate to the last message (the one that was at the revert point)
-          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
-          setActiveMessage(lastMsg)
-          return
-        }
-        // Partial redo - move forward to next message
-        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
-        // Navigate to the message before the new revert point
-        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
-        setActiveMessage(priorMsg)
-      },
-    },
-    {
-      id: "session.compact",
-      title: language.t("command.session.compact"),
-      description: language.t("command.session.compact.description"),
-      category: language.t("command.category.session"),
-      slash: "compact",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        const model = local.model.current()
-        if (!model) {
-          showToast({
-            title: language.t("toast.model.none.title"),
-            description: language.t("toast.model.none.description"),
-          })
-          return
-        }
-        await sdk.client.session.summarize({
-          sessionID,
-          modelID: model.id,
-          providerID: model.provider.id,
-        })
-      },
-    },
-    {
-      id: "session.fork",
-      title: language.t("command.session.fork"),
-      description: language.t("command.session.fork.description"),
-      category: language.t("command.category.session"),
-      slash: "fork",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: () => dialog.show(() => <DialogFork />),
-    },
-    ...(sync.data.config.share !== "disabled"
-      ? [
-          {
-            id: "session.share",
-            title: language.t("command.session.share"),
-            description: language.t("command.session.share.description"),
-            category: language.t("command.category.session"),
-            slash: "share",
-            disabled: !params.id || !!info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .share({ sessionID: params.id })
-                .then((res) => {
-                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
-                    showToast({
-                      title: language.t("toast.session.share.copyFailed.title"),
-                      variant: "error",
-                    }),
-                  )
-                })
-                .then(() =>
-                  showToast({
-                    title: language.t("toast.session.share.success.title"),
-                    description: language.t("toast.session.share.success.description"),
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: language.t("toast.session.share.failed.title"),
-                    description: language.t("toast.session.share.failed.description"),
-                    variant: "error",
-                  }),
-                )
-            },
-          },
-          {
-            id: "session.unshare",
-            title: language.t("command.session.unshare"),
-            description: language.t("command.session.unshare.description"),
-            category: language.t("command.category.session"),
-            slash: "unshare",
-            disabled: !params.id || !info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .unshare({ sessionID: params.id })
-                .then(() =>
-                  showToast({
-                    title: language.t("toast.session.unshare.success.title"),
-                    description: language.t("toast.session.unshare.success.description"),
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: language.t("toast.session.unshare.failed.title"),
-                    description: language.t("toast.session.unshare.failed.description"),
-                    variant: "error",
-                  }),
-                )
-            },
-          },
-        ]
-      : []),
-  ])
-
   const handleKeyDown = (event: KeyboardEvent) => {
     const activeElement = document.activeElement as HTMLElement | undefined
     if (activeElement) {
@@ -1034,8 +536,8 @@ export default function Page() {
       return
     }
 
-    // Don't autofocus chat if terminal panel is open
-    if (view().terminal.opened()) return
+    // Don't autofocus chat if desktop terminal panel is open
+    if (isDesktop() && view().terminal.opened()) return
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
     if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
@@ -1044,79 +546,20 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
+      if (blocked()) return
       inputRef?.focus()
     }
-  }
-
-  const handleDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeDraggable", id)
-  }
-
-  const handleDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const currentTabs = tabs().all()
-      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
-      const toIndex = currentTabs?.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== undefined) {
-        tabs().move(draggable.id.toString(), toIndex)
-      }
-    }
-  }
-
-  const handleDragEnd = () => {
-    setStore("activeDraggable", undefined)
-  }
-
-  const handleTerminalDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeTerminalDraggable", id)
-  }
-
-  const handleTerminalDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const terminals = terminal.all()
-      const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
-      const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
-      if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-        terminal.move(draggable.id.toString(), toIndex)
-      }
-    }
-  }
-
-  const handleTerminalDragEnd = () => {
-    setStore("activeTerminalDraggable", undefined)
-    const activeId = terminal.active()
-    if (!activeId) return
-    setTimeout(() => {
-      const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
-      const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-      if (!element) return
-
-      // Find and focus the ghostty textarea (the actual input element)
-      const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-      if (textarea) {
-        textarea.focus()
-        return
-      }
-      // Fallback: focus container and dispatch pointer event
-      element.focus()
-      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
-    }, 0)
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context"),
+      .filter((tab) => tab !== "context" && tab !== "review"),
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1127,54 +570,146 @@ export default function Page() {
     activeDiff: undefined as string | undefined,
   })
 
-  const reviewScroll = () => tree.reviewScroll
-  const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
-  const pendingDiff = () => tree.pendingDiff
-  const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
-  const activeDiff = () => tree.activeDiff
-  const setActiveDiff = (value: string | undefined) => setTree("activeDiff", value)
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        setTree({ reviewScroll: undefined, pendingDiff: undefined, activeDiff: undefined })
+      },
+      { defer: true },
+    ),
+  )
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
     setFileTreeTab("all")
   }
 
+  const focusInput = () => inputRef?.focus()
+
+  useSessionCommands({
+    navigateMessageByOffset,
+    setActiveMessage,
+    focusInput,
+  })
+
+  const openReviewFile = createOpenReviewFile({
+    showAllFiles,
+    tabForPath: file.tab,
+    openTab: tabs().open,
+    loadFile: file.load,
+  })
+
+  const changesOptions = ["session", "turn"] as const
+  const changesOptionsList = [...changesOptions]
+
+  const changesTitle = () => (
+    <Select
+      options={changesOptionsList}
+      current={store.changes}
+      label={(option) =>
+        option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
+      }
+      onSelect={(option) => option && setStore("changes", option)}
+      variant="ghost"
+      size="large"
+    />
+  )
+
+  const emptyTurn = () => (
+    <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
+      <Mark class="w-14 opacity-10" />
+      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
+    </div>
+  )
+
+  const reviewContent = (input: {
+    diffStyle: DiffStyle
+    onDiffStyleChange?: (style: DiffStyle) => void
+    classes?: SessionReviewTabProps["classes"]
+    loadingClass: string
+    emptyClass: string
+  }) => (
+    <Switch>
+      <Match when={store.changes === "turn" && !!params.id}>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={emptyTurn()}
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
+      </Match>
+      <Match when={hasReview()}>
+        <Show
+          when={diffsReady()}
+          fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
+        >
+          <SessionReviewTab
+            title={changesTitle()}
+            diffs={reviewDiffs}
+            view={view}
+            diffStyle={input.diffStyle}
+            onDiffStyleChange={input.onDiffStyleChange}
+            onScrollRef={(el) => setTree("reviewScroll", el)}
+            focusedFile={tree.activeDiff}
+            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            comments={comments.all()}
+            focusedComment={comments.focus()}
+            onFocusedCommentChange={comments.setFocus}
+            onViewFile={openReviewFile}
+            classes={input.classes}
+          />
+        </Show>
+      </Match>
+      <Match when={true}>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={
+            store.changes === "turn" ? (
+              emptyTurn()
+            ) : (
+              <div class={input.emptyClass}>
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+              </div>
+            )
+          }
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
+      </Match>
+    </Switch>
+  )
+
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-        <Switch>
-          <Match when={hasReview()}>
-            <Show
-              when={diffsReady()}
-              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
-            >
-              <SessionReviewTab
-                diffs={diffs}
-                view={view}
-                diffStyle={layout.review.diffStyle()}
-                onDiffStyleChange={layout.review.setDiffStyle}
-                onScrollRef={setReviewScroll}
-                focusedFile={activeDiff()}
-                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                comments={comments.all()}
-                focusedComment={comments.focus()}
-                onFocusedCommentChange={comments.setFocus}
-                onViewFile={(path) => {
-                  showAllFiles()
-                  const value = file.tab(path)
-                  tabs().open(value)
-                  file.load(path)
-                }}
-              />
-            </Show>
-          </Match>
-          <Match when={true}>
-            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-              <Mark class="w-14 opacity-10" />
-              <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
-            </div>
-          </Match>
-        </Switch>
+        {reviewContent({
+          diffStyle: layout.review.diffStyle(),
+          onDiffStyleChange: layout.review.setDiffStyle,
+          loadingClass: "px-6 py-4 text-text-weak",
+          emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+        })}
       </div>
     </div>
   )
@@ -1192,11 +727,6 @@ export default function Page() {
     ),
   )
 
-  const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
-    setFileTreeTab(value)
-  }
-
   const reviewDiffId = (path: string) => {
     const sum = checksum(path)
     if (!sum) return
@@ -1204,7 +734,7 @@ export default function Page() {
   }
 
   const reviewDiffTop = (path: string) => {
-    const root = reviewScroll()
+    const root = tree.reviewScroll
     if (!root) return
 
     const id = reviewDiffId(path)
@@ -1220,7 +750,7 @@ export default function Page() {
   }
 
   const scrollToReviewDiff = (path: string) => {
-    const root = reviewScroll()
+    const root = tree.reviewScroll
     if (!root) return false
 
     const top = reviewDiffTop(path)
@@ -1232,26 +762,26 @@ export default function Page() {
   }
 
   const focusReviewDiff = (path: string) => {
+    openReviewPanel()
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
-    setActiveDiff(path)
-    setPendingDiff(path)
+    setTree({ activeDiff: path, pendingDiff: path })
   }
 
   createEffect(() => {
-    const pending = pendingDiff()
+    const pending = tree.pendingDiff
     if (!pending) return
-    if (!reviewScroll()) return
+    if (!tree.reviewScroll) return
     if (!diffsReady()) return
 
     const attempt = (count: number) => {
-      if (pendingDiff() !== pending) return
+      if (tree.pendingDiff !== pending) return
       if (count > 60) {
-        setPendingDiff(undefined)
+        setTree("pendingDiff", undefined)
         return
       }
 
-      const root = reviewScroll()
+      const root = tree.reviewScroll
       if (!root) {
         requestAnimationFrame(() => attempt(count + 1))
         return
@@ -1269,7 +799,7 @@ export default function Page() {
       }
 
       if (Math.abs(root.scrollTop - top) <= 1) {
-        setPendingDiff(undefined)
+        setTree("pendingDiff", undefined)
         return
       }
 
@@ -1282,29 +812,71 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active === "context") return "context"
+    if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (reviewTab() && hasReview()) return "review"
     return "empty"
   })
 
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen()) return
+    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
 
     const next = activeTab()
     if (next === "empty") return
     tabs().setActive(next)
   })
 
+  createEffect(
+    on(
+      () => layout.fileTree.opened(),
+      (opened, prev) => {
+        if (prev === undefined) return
+        if (!isDesktop()) return
+
+        if (opened) {
+          const active = tabs().active()
+          const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
+          layout.fileTree.setTab(tab)
+          return
+        }
+
+        if (fileTreeTab() !== "changes") return
+        tabs().setActive("review")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!layout.fileTree.opened()) return
+    if (fileTreeTab() !== "all") return
+
+    const active = tabs().active()
+    if (active && active !== "review") return
+
+    const first = openedTabs()[0]
+    if (first) {
+      tabs().setActive(first)
+      return
+    }
+
+    if (contextOpen()) tabs().setActive("context")
+  })
+
   createEffect(() => {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? layout.fileTree.opened() && fileTreeTab() === "changes" : store.mobileTab === "changes"
+    const wants = isDesktop()
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1312,29 +884,80 @@ export default function Page() {
     void sync.session.diff(id)
   })
 
+  let treeDir: string | undefined
   createEffect(() => {
+    const dir = sdk.directory
     if (!isDesktop()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
     fileTreeTab()
-    void file.tree.list("")
+    const refresh = treeDir !== dir
+    treeDir = dir
+    void (refresh ? file.tree.refresh("") : file.tree.list(""))
   })
+
+  createEffect(
+    on(
+      () => sdk.directory,
+      () => {
+        void file.tree.list("")
+
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
+        void file.load(path, { force: true })
+      },
+      { defer: true },
+    ),
+  )
 
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
   })
 
-  const clearMessageHash = () => {
-    if (!window.location.hash) return
-    window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+  let scrollStateFrame: number | undefined
+  let scrollStateTarget: HTMLDivElement | undefined
+  const scrollSpy = createScrollSpy({
+    onActive: (id) => {
+      if (id === store.messageId) return
+      setStore("messageId", id)
+    },
+  })
+
+  const updateScrollState = (el: HTMLDivElement) => {
+    const max = el.scrollHeight - el.clientHeight
+    const overflow = max > 1
+    const bottom = !overflow || el.scrollTop >= max - 2
+
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
+    setUi("scroll", { overflow, bottom })
+  }
+
+  const scheduleScrollState = (el: HTMLDivElement) => {
+    scrollStateTarget = el
+    if (scrollStateFrame !== undefined) return
+
+    scrollStateFrame = requestAnimationFrame(() => {
+      scrollStateFrame = undefined
+
+      const target = scrollStateTarget
+      scrollStateTarget = undefined
+      if (!target) return
+
+      updateScrollState(target)
+    })
   }
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
     clearMessageHash()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1350,15 +973,33 @@ export default function Page() {
     ),
   )
 
-  let scrollSpyFrame: number | undefined
-  let scrollSpyTarget: HTMLDivElement | undefined
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        scrollSpy.clear()
+      },
+      { defer: true },
+    ),
+  )
 
   const anchor = (id: string) => `message-${id}`
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
+    scrollSpy.setContainer(el)
+    if (el) scheduleScrollState(el)
   }
+
+  createResizeObserver(
+    () => content,
+    () => {
+      const el = scroller
+      if (el) scheduleScrollState(el)
+      scrollSpy.markDirty()
+    },
+  )
 
   const turnInit = 20
   const turnBatch = 20
@@ -1448,618 +1089,128 @@ export default function Page() {
     ({ height }) => {
       const next = Math.ceil(height)
 
-      if (next === store.promptHeight) return
+      if (next === dockHeight) return
 
       const el = scroller
       const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
 
-      setStore("promptHeight", next)
+      dockHeight = next
 
       if (stick && el) {
         requestAnimationFrame(() => {
           el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
         })
       }
+
+      if (el) scheduleScrollState(el)
+      scrollSpy.markDirty()
     },
   )
 
-  const updateHash = (id: string) => {
-    window.history.replaceState(null, "", `#${anchor(id)}`)
-  }
-
-  createEffect(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    const raw = sessionStorage.getItem("opencode.pendingMessage")
-    if (!raw) return
-    const parts = raw.split("|")
-    const pendingSessionID = parts[0]
-    const messageID = parts[1]
-    if (!pendingSessionID || !messageID) return
-    if (pendingSessionID !== sessionID) return
-
-    sessionStorage.removeItem("opencode.pendingMessage")
-    setUi("pendingMessage", messageID)
+  const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
+    sessionKey,
+    sessionID: () => params.id,
+    messagesReady,
+    visibleUserMessages,
+    turnStart: () => store.turnStart,
+    currentMessageId: () => store.messageId,
+    pendingMessage: () => ui.pendingMessage,
+    setPendingMessage: (value) => setUi("pendingMessage", value),
+    setActiveMessage,
+    setTurnStart: (value) => setStore("turnStart", value),
+    scheduleTurnBackfill,
+    autoScroll,
+    scroller: () => scroller,
+    anchor,
+    scheduleScrollState,
+    consumePendingMessage: layout.pendingMessage.consume,
   })
 
-  const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
-    const root = scroller
-    if (!root) return false
-
-    const a = el.getBoundingClientRect()
-    const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
-    root.scrollTo({ top, behavior })
-    return true
-  }
-
-  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    setActiveMessage(message)
-
-    const msgs = visibleUserMessages()
-    const index = msgs.findIndex((m) => m.id === message.id)
-    if (index !== -1 && index < store.turnStart) {
-      setStore("turnStart", index)
-      scheduleTurnBackfill()
-
-      requestAnimationFrame(() => {
-        const el = document.getElementById(anchor(message.id))
-        if (!el) {
-          requestAnimationFrame(() => {
-            const next = document.getElementById(anchor(message.id))
-            if (!next) return
-            scrollToElement(next, behavior)
-          })
-          return
-        }
-        scrollToElement(el, behavior)
-      })
-
-      updateHash(message.id)
-      return
-    }
-
-    const el = document.getElementById(anchor(message.id))
-    if (!el) {
-      updateHash(message.id)
-      requestAnimationFrame(() => {
-        const next = document.getElementById(anchor(message.id))
-        if (!next) return
-        if (!scrollToElement(next, behavior)) return
-      })
-      return
-    }
-    if (scrollToElement(el, behavior)) {
-      updateHash(message.id)
-      return
-    }
-
-    requestAnimationFrame(() => {
-      const next = document.getElementById(anchor(message.id))
-      if (!next) return
-      if (!scrollToElement(next, behavior)) return
-    })
-    updateHash(message.id)
-  }
-
-  const applyHash = (behavior: ScrollBehavior) => {
-    const hash = window.location.hash.slice(1)
-    if (!hash) {
-      autoScroll.forceScrollToBottom()
-      return
-    }
-
-    const match = hash.match(/^message-(.+)$/)
-    if (match) {
-      autoScroll.pause()
-      const msg = visibleUserMessages().find((m) => m.id === match[1])
-      if (msg) {
-        scrollToMessage(msg, behavior)
-        return
-      }
-
-      // If we have a message hash but the message isn't loaded/rendered yet,
-      // don't fall back to "bottom". We'll retry once messages arrive.
-      return
-    }
-
-    const target = document.getElementById(hash)
-    if (target) {
-      autoScroll.pause()
-      scrollToElement(target, behavior)
-      return
-    }
-
-    autoScroll.forceScrollToBottom()
-  }
-
-  const closestMessage = (node: Element | null): HTMLElement | null => {
-    if (!node) return null
-    const match = node.closest?.("[data-message-id]") as HTMLElement | null
-    if (match) return match
-    const root = node.getRootNode?.()
-    if (root instanceof ShadowRoot) return closestMessage(root.host)
-    return null
-  }
-
-  const getActiveMessageId = (container: HTMLDivElement) => {
-    const rect = container.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-
-    const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2))
-    const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + 100))
-
-    const hit = document.elementFromPoint(x, y)
-    const host = closestMessage(hit)
-    const id = host?.dataset.messageId
-    if (id) return id
-
-    // Fallback: DOM query (handles edge hit-testing cases)
-    const cutoff = container.scrollTop + 100
-    const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let last: string | undefined
-
-    for (const node of nodes) {
-      const next = node.dataset.messageId
-      if (!next) continue
-      if (node.offsetTop > cutoff) break
-      last = next
-    }
-
-    return last
-  }
-
-  const scheduleScrollSpy = (container: HTMLDivElement) => {
-    scrollSpyTarget = container
-    if (scrollSpyFrame !== undefined) return
-
-    scrollSpyFrame = requestAnimationFrame(() => {
-      scrollSpyFrame = undefined
-
-      const target = scrollSpyTarget
-      scrollSpyTarget = undefined
-      if (!target) return
-
-      const id = getActiveMessageId(target)
-      if (!id) return
-      if (id === store.messageId) return
-
-      setStore("messageId", id)
-    })
-  }
-
-  createEffect(() => {
-    const sessionID = params.id
-    const ready = messagesReady()
-    if (!sessionID || !ready) return
-
-    requestAnimationFrame(() => {
-      applyHash("auto")
-    })
-  })
-
-  // Retry message navigation once the target message is actually loaded.
-  createEffect(() => {
-    const sessionID = params.id
-    const ready = messagesReady()
-    if (!sessionID || !ready) return
-
-    // dependencies
-    visibleUserMessages().length
-    store.turnStart
-
-    const targetId =
-      ui.pendingMessage ??
-      (() => {
-        const hash = window.location.hash.slice(1)
-        const match = hash.match(/^message-(.+)$/)
-        if (!match) return undefined
-        return match[1]
-      })()
-    if (!targetId) return
-    if (store.messageId === targetId) return
-
-    const msg = visibleUserMessages().find((m) => m.id === targetId)
-    if (!msg) return
-    if (ui.pendingMessage === targetId) setUi("pendingMessage", undefined)
-    autoScroll.pause()
-    requestAnimationFrame(() => scrollToMessage(msg, "auto"))
-  })
-
-  createEffect(() => {
-    const sessionID = params.id
-    const ready = messagesReady()
-    if (!sessionID || !ready) return
-
-    const handler = () => requestAnimationFrame(() => applyHash("auto"))
-    window.addEventListener("hashchange", handler)
-    onCleanup(() => window.removeEventListener("hashchange", handler))
-  })
-
-  createEffect(() => {
+  onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
-  })
-
-  const previewPrompt = () =>
-    prompt
-      .current()
-      .map((part) => {
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        if (part.type === "image") return `[image:${part.filename}]`
-        return part.content
-      })
-      .join("")
-      .trim()
-
-  createEffect(() => {
-    if (!prompt.ready()) return
-    handoff.prompt = previewPrompt()
-  })
-
-  createEffect(() => {
-    if (!terminal.ready()) return
-    language.locale()
-
-    const label = (pty: LocalPTY) => {
-      const title = pty.title
-      const number = pty.titleNumber
-      const match = title.match(/^Terminal (\d+)$/)
-      const parsed = match ? Number(match[1]) : undefined
-      const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
-
-      if (title && !isDefaultTitle) return title
-      if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
-      if (title) return title
-      return language.t("terminal.title")
-    }
-
-    handoff.terminals = terminal.all().map(label)
-  })
-
-  createEffect(() => {
-    if (!file.ready()) return
-    handoff.files = Object.fromEntries(
-      tabs()
-        .all()
-        .flatMap((tab) => {
-          const path = file.pathFromTab(tab)
-          if (!path) return []
-          return [[path, file.selectedLines(path) ?? null] as const]
-        }),
-    )
   })
 
   onCleanup(() => {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
-    if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
+    scrollSpy.destroy()
+    if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar */}
-        <Show when={!isDesktop() && params.id}>
-          <Tabs class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="w-1/2"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                {language.t("session.tab.session")}
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="changes"
-                class="w-1/2 !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
-              >
-                <Switch>
-                  <Match when={hasReview()}>
-                    {language.t("session.review.filesChanged", { count: reviewCount() })}
-                  </Match>
-                  <Match when={true}>{language.t("session.review.change.other")}</Match>
-                </Switch>
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        </Show>
+        <SessionMobileTabs
+          open={!isDesktop() && !!params.id}
+          mobileTab={store.mobileTab}
+          hasReview={hasReview()}
+          reviewCount={reviewCount()}
+          onSession={() => setStore("mobileTab", "session")}
+          onChanges={() => setStore("mobileTab", "changes")}
+        />
 
         {/* Session panel */}
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": layout.fileTree.opened(),
+            "flex-1": true,
+            "md:flex-none": desktopSidePanelOpen(),
           }}
           style={{
-            width: isDesktop() && layout.fileTree.opened() ? `${layout.session.width()}px` : "100%",
-            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
+            width: sessionPanelWidth(),
           }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
                 <Show when={activeMessage()}>
-                  <Show
-                    when={!mobileChanges()}
-                    fallback={
-                      <div class="relative h-full overflow-hidden">
-                        <Switch>
-                          <Match when={hasReview()}>
-                            <Show
-                              when={diffsReady()}
-                              fallback={
-                                <div class="px-4 py-4 text-text-weak">
-                                  {language.t("session.review.loadingChanges")}
-                                </div>
-                              }
-                            >
-                              <SessionReviewTab
-                                diffs={diffs}
-                                view={view}
-                                diffStyle="unified"
-                                focusedFile={activeDiff()}
-                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                                comments={comments.all()}
-                                focusedComment={comments.focus()}
-                                onFocusedCommentChange={comments.setFocus}
-                                onViewFile={(path) => {
-                                  showAllFiles()
-                                  const value = file.tab(path)
-                                  tabs().open(value)
-                                  file.load(path)
-                                }}
-                                classes={{
-                                  root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                                  header: "px-4",
-                                  container: "px-4",
-                                }}
-                              />
-                            </Show>
-                          </Match>
-                          <Match when={true}>
-                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                              <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.review.empty")}
-                              </div>
-                            </div>
-                          </Match>
-                        </Switch>
-                      </div>
-                    }
-                  >
-                    <div class="relative w-full h-full min-w-0">
-                      <div
-                        class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
-                        classList={{
-                          "opacity-100 translate-y-0 scale-100": autoScroll.userScrolled(),
-                          "opacity-0 translate-y-2 scale-95 pointer-events-none": !autoScroll.userScrolled(),
-                        }}
-                      >
-                        <button
-                          class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
-                          onClick={resumeScroll}
-                        >
-                          <Icon name="arrow-down-to-line" />
-                        </button>
-                      </div>
-                      <div
-                        ref={setScrollRef}
-                        onWheel={(e) => {
-                          const root = e.currentTarget
-                          const target = e.target instanceof Element ? e.target : undefined
-                          const nested = target?.closest("[data-scrollable]")
-                          if (!nested || nested === root) {
-                            markScrollGesture(root)
-                            return
-                          }
+                  <MessageTimeline
+                    mobileChanges={mobileChanges()}
+                    mobileFallback={reviewContent({
+                      diffStyle: "unified",
+                      classes: {
+                        root: "pb-8",
+                        header: "px-4",
+                        container: "px-4",
+                      },
+                      loadingClass: "px-4 py-4 text-text-weak",
+                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+                    })}
+                    scroll={ui.scroll}
+                    onResumeScroll={resumeScroll}
+                    setScrollRef={setScrollRef}
+                    onScheduleScrollState={scheduleScrollState}
+                    onAutoScrollHandleScroll={autoScroll.handleScroll}
+                    onMarkScrollGesture={markScrollGesture}
+                    hasScrollGesture={hasScrollGesture}
+                    isDesktop={isDesktop()}
+                    onScrollSpyScroll={scrollSpy.onScroll}
+                    onAutoScrollInteraction={autoScroll.handleInteraction}
+                    centered={centered()}
+                    setContentRef={(el) => {
+                      content = el
+                      autoScroll.contentRef(el)
 
-                          if (!(nested instanceof HTMLElement)) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const max = nested.scrollHeight - nested.clientHeight
-                          if (max <= 1) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const delta =
-                            e.deltaMode === 1
-                              ? e.deltaY * 40
-                              : e.deltaMode === 2
-                                ? e.deltaY * root.clientHeight
-                                : e.deltaY
-                          if (!delta) return
-
-                          if (delta < 0) {
-                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
-                            return
-                          }
-
-                          const remaining = max - nested.scrollTop
-                          if (delta > remaining) markScrollGesture(root)
-                        }}
-                        onTouchStart={(e) => {
-                          touchGesture = e.touches[0]?.clientY
-                        }}
-                        onTouchMove={(e) => {
-                          const next = e.touches[0]?.clientY
-                          const prev = touchGesture
-                          touchGesture = next
-                          if (next === undefined || prev === undefined) return
-
-                          const delta = prev - next
-                          if (!delta) return
-
-                          const root = e.currentTarget
-                          const target = e.target instanceof Element ? e.target : undefined
-                          const nested = target?.closest("[data-scrollable]")
-                          if (!nested || nested === root) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          if (!(nested instanceof HTMLElement)) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const max = nested.scrollHeight - nested.clientHeight
-                          if (max <= 1) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          if (delta < 0) {
-                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
-                            return
-                          }
-
-                          const remaining = max - nested.scrollTop
-                          if (delta > remaining) markScrollGesture(root)
-                        }}
-                        onTouchEnd={() => {
-                          touchGesture = undefined
-                        }}
-                        onTouchCancel={() => {
-                          touchGesture = undefined
-                        }}
-                        onPointerDown={(e) => {
-                          if (e.target !== e.currentTarget) return
-                          markScrollGesture(e.currentTarget)
-                        }}
-                        onScroll={(e) => {
-                          if (!hasScrollGesture()) return
-                          autoScroll.handleScroll()
-                          markScrollGesture(e.currentTarget)
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
-                        }}
-                        onClick={autoScroll.handleInteraction}
-                        class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
-                      >
-                        <Show when={info()?.title || info()?.parentID}>
-                          <div
-                            classList={{
-                              "sticky top-0 z-30 bg-background-stronger": true,
-                              "w-full": true,
-                              "px-4 md:px-6": true,
-                              "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]":
-                                centered(),
-                            }}
-                          >
-                            <div class="h-10 flex items-center gap-1">
-                              <Show when={info()?.parentID}>
-                                <IconButton
-                                  tabIndex={-1}
-                                  icon="arrow-left"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
-                                  }}
-                                  aria-label={language.t("common.goBack")}
-                                />
-                              </Show>
-                              <Show when={info()?.title}>
-                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
-                              </Show>
-                            </div>
-                          </div>
-                        </Show>
-
-                        <div
-                          ref={autoScroll.contentRef}
-                          role="log"
-                          class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
-                          classList={{
-                            "w-full": true,
-                            "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]":
-                              centered(),
-                            "mt-0.5": centered(),
-                            "mt-0": !centered(),
-                          }}
-                        >
-                          <Show when={store.turnStart > 0}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                onClick={() => setStore("turnStart", 0)}
-                              >
-                                {language.t("session.messages.renderEarlier")}
-                              </Button>
-                            </div>
-                          </Show>
-                          <Show when={historyMore()}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                disabled={historyLoading()}
-                                onClick={() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  setStore("turnStart", 0)
-                                  sync.session.history.loadMore(id)
-                                }}
-                              >
-                                {historyLoading()
-                                  ? language.t("session.messages.loadingEarlier")
-                                  : language.t("session.messages.loadEarlier")}
-                              </Button>
-                            </div>
-                          </Show>
-                          <For each={renderedUserMessages()}>
-                            {(message) => {
-                              if (import.meta.env.DEV) {
-                                onMount(() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
-                                })
-                              }
-
-                              return (
-                                <div
-                                  id={anchor(message.id)}
-                                  data-message-id={message.id}
-                                  classList={{
-                                    "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
-                                  }}
-                                >
-                                  <SessionTurn
-                                    sessionID={params.id!}
-                                    messageID={message.id}
-                                    lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={store.expanded[message.id] ?? false}
-                                    onStepsExpandedToggle={() =>
-                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                    }
-                                    classes={{
-                                      root: "min-w-0 w-full relative",
-                                      content: "flex flex-col justify-between !overflow-visible",
-                                      container: "w-full px-4 md:px-6",
-                                    }}
-                                  />
-                                </div>
-                              )
-                            }}
-                          </For>
-                        </div>
-                      </div>
-                    </div>
-                  </Show>
+                      const root = scroller
+                      if (root) scheduleScrollState(root)
+                    }}
+                    turnStart={store.turnStart}
+                    onRenderEarlier={() => setStore("turnStart", 0)}
+                    historyMore={historyMore()}
+                    historyLoading={historyLoading()}
+                    onLoadEarlier={() => {
+                      const id = params.id
+                      if (!id) return
+                      setStore("turnStart", 0)
+                      sync.session.history.loadMore(id)
+                    }}
+                    renderedUserMessages={renderedUserMessages()}
+                    anchor={anchor}
+                    onRegisterMessage={scrollSpy.register}
+                    onUnregisterMessage={scrollSpy.unregister}
+                    lastUserMessageID={lastUserMessage()?.id}
+                  />
                 </Show>
               </Match>
               <Match when={true}>
@@ -2075,7 +1226,7 @@ export default function Page() {
 
                     const target = value === "main" ? sync.project?.worktree : value
                     if (!target) return
-                    if (target === sync.data.path.directory) return
+                    if (target === sdk.directory) return
                     layout.projects.open(target)
                     navigate(`/${base64Encode(target)}/session`)
                   }}
@@ -2084,93 +1235,28 @@ export default function Page() {
             </Switch>
           </div>
 
-          {/* Prompt input */}
-          <div
-            ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
-          >
-            <div
-              classList={{
-                "w-full px-4 pointer-events-auto": true,
-                "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
-              }}
-            >
-              <Show when={request()} keyed>
-                {(perm) => (
-                  <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
-                    <BasicTool
-                      icon="checklist"
-                      locked
-                      defaultOpen
-                      trigger={{
-                        title: language.t("notification.permission.title"),
-                        subtitle:
-                          perm.permission === "doom_loop"
-                            ? language.t("settings.permissions.tool.doom_loop.title")
-                            : perm.permission,
-                      }}
-                    >
-                      <Show when={perm.patterns.length > 0}>
-                        <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
-                          <For each={perm.patterns}>
-                            {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
-                          </For>
-                        </div>
-                      </Show>
-                      <Show when={perm.permission === "doom_loop"}>
-                        <div class="text-12-regular text-text-weak pb-2 px-3">
-                          {language.t("settings.permissions.tool.doom_loop.description")}
-                        </div>
-                      </Show>
-                    </BasicTool>
-                    <div data-component="permission-prompt">
-                      <div data-slot="permission-actions">
-                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
-                          {language.t("ui.permission.deny")}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={() => decide("always")}
-                          disabled={ui.responding}
-                        >
-                          {language.t("ui.permission.allowAlways")}
-                        </Button>
-                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
-                          {language.t("ui.permission.allowOnce")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </Show>
+          <SessionPromptDock
+            centered={centered()}
+            inputRef={(el) => {
+              inputRef = el
+            }}
+            newSessionWorktree={newSessionWorktree()}
+            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+            onSubmit={() => {
+              comments.clear()
+              resumeScroll()
+            }}
+            setPromptDockRef={(el) => {
+              promptDock = el
+            }}
+          />
 
-              <Show
-                when={prompt.ready()}
-                fallback={
-                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || language.t("prompt.loading")}
-                  </div>
-                }
-              >
-                <PromptInput
-                  ref={(el) => {
-                    inputRef = el
-                  }}
-                  newSessionWorktree={newSessionWorktree()}
-                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                  onSubmit={resumeScroll}
-                />
-              </Show>
-            </div>
-          </div>
-
-          <Show when={isDesktop() && layout.fileTree.opened()}>
+          <Show when={desktopReviewOpen()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
               min={450}
-              max={window.innerWidth * 0.45}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
               onResize={layout.session.resize}
             />
           </Show>
@@ -2933,151 +2019,7 @@ export default function Page() {
         </Show>
       </div>
 
-      <Show when={isDesktop() && view().terminal.opened()}>
-        <div
-          id="terminal-panel"
-          role="region"
-          aria-label={language.t("terminal.title")}
-          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
-          style={{ height: `${layout.terminal.height()}px` }}
-        >
-          <ResizeHandle
-            direction="vertical"
-            size={layout.terminal.height()}
-            min={100}
-            max={window.innerHeight * 0.6}
-            collapseThreshold={50}
-            onResize={layout.terminal.resize}
-            onCollapse={view().terminal.close}
-          />
-          <Show
-            when={terminal.ready()}
-            fallback={
-              <div class="flex flex-col h-full pointer-events-none">
-                <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
-                  <For each={handoff.terminals}>
-                    {(title) => (
-                      <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
-                        {title}
-                      </div>
-                    )}
-                  </For>
-                  <div class="flex-1" />
-                  <div class="text-text-weak pr-2">
-                    {language.t("common.loading")}
-                    {language.t("common.loading.ellipsis")}
-                  </div>
-                </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">
-                  {language.t("terminal.loading")}
-                </div>
-              </div>
-            }
-          >
-            <DragDropProvider
-              onDragStart={handleTerminalDragStart}
-              onDragEnd={handleTerminalDragEnd}
-              onDragOver={handleTerminalDragOver}
-              collisionDetector={closestCenter}
-            >
-              <DragDropSensors />
-              <ConstrainDragYAxis />
-              <div class="flex flex-col h-full">
-                <Tabs
-                  variant="alt"
-                  value={terminal.active()}
-                  onChange={(id) => {
-                    // Only switch tabs if not in the middle of starting edit mode
-                    terminal.open(id)
-                  }}
-                  class="!h-auto !flex-none"
-                >
-                  <Tabs.List class="h-10">
-                    <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                      <For each={terminal.all()}>
-                        {(pty) => (
-                          <SortableTerminalTab
-                            terminal={pty}
-                            onClose={() => {
-                              view().terminal.close()
-                              setUi("autoCreated", false)
-                            }}
-                          />
-                        )}
-                      </For>
-                    </SortableProvider>
-                    <div class="h-full flex items-center justify-center">
-                      <TooltipKeybind
-                        title={language.t("command.terminal.new")}
-                        keybind={command.keybind("terminal.new")}
-                        class="flex items-center"
-                      >
-                        <IconButton
-                          icon="plus-small"
-                          variant="ghost"
-                          iconSize="large"
-                          onClick={terminal.new}
-                          aria-label={language.t("command.terminal.new")}
-                        />
-                      </TooltipKeybind>
-                    </div>
-                  </Tabs.List>
-                </Tabs>
-                <div class="flex-1 min-h-0 relative">
-                  <For each={terminal.all()}>
-                    {(pty) => (
-                      <div
-                        id={`terminal-wrapper-${pty.id}`}
-                        class="absolute inset-0"
-                        style={{
-                          display: terminal.active() === pty.id ? "block" : "none",
-                        }}
-                      >
-                        <Show when={pty.id} keyed>
-                          <Terminal
-                            pty={pty}
-                            onCleanup={terminal.update}
-                            onConnectError={() => terminal.clone(pty.id)}
-                          />
-                        </Show>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </div>
-              <DragOverlay>
-                <Show when={store.activeTerminalDraggable}>
-                  {(draggedId) => {
-                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
-                    return (
-                      <Show when={pty()}>
-                        {(t) => (
-                          <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                            {(() => {
-                              const title = t().title
-                              const number = t().titleNumber
-                              const match = title.match(/^Terminal (\d+)$/)
-                              const parsed = match ? Number(match[1]) : undefined
-                              const isDefaultTitle =
-                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
-
-                              if (title && !isDefaultTitle) return title
-                              if (Number.isFinite(number) && number > 0)
-                                return language.t("terminal.title.numbered", { number })
-                              if (title) return title
-                              return language.t("terminal.title")
-                            })()}
-                          </div>
-                        )}
-                      </Show>
-                    )
-                  }}
-                </Show>
-              </DragOverlay>
-            </DragDropProvider>
-          </Show>
-        </div>
-      </Show>
+      <TerminalPanel />
     </div>
   )
 }

@@ -36,7 +36,6 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const handleClick = (e: MouseEvent) => scrollTabIntoView(e.currentTarget as HTMLElement)
 
   return (
-    // @ts-ignore
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
       <div class="relative h-full">
         <Tabs.Trigger
@@ -60,7 +59,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
           onMiddleClick={() => props.onTabClose(props.tab)}
           onClick={handleClick}
         >
-          <Show when={path()}>{(p) => <FileVisual path={p()} />}</Show>
+          <Show when={content()}>{(value) => value()}</Show>
         </Tabs.Trigger>
       </div>
     </div>

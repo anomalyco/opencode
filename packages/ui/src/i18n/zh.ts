@@ -4,19 +4,27 @@ type Keys = keyof typeof en
 
 export const dict = {
   "ui.sessionReview.title": "会话变更",
+  "ui.sessionReview.title.lastTurn": "上一轮变更",
   "ui.sessionReview.diffStyle.unified": "统一",
   "ui.sessionReview.diffStyle.split": "拆分",
   "ui.sessionReview.expandAll": "全部展开",
   "ui.sessionReview.collapseAll": "全部收起",
-
   "ui.sessionReview.change.added": "已添加",
   "ui.sessionReview.change.removed": "已移除",
+  "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.image.loading": "加载中...",
+  "ui.sessionReview.image.placeholder": "图片",
+  "ui.sessionReview.largeDiff.title": "差异过大，无法渲染",
+  "ui.sessionReview.largeDiff.meta": "限制：{{limit}} 行变更。当前：{{current}} 行变更。",
+  "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
+
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在评论 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.submit": "评论",
+
   "ui.sessionTurn.steps.show": "显示步骤",
   "ui.sessionTurn.steps.hide": "隐藏步骤",
   "ui.sessionTurn.summary.response": "回复",
@@ -24,10 +32,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重试中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒后",
+  "ui.sessionTurn.error.freeUsageExceeded": "免费使用额度已用完",
+  "ui.sessionTurn.error.addCredits": "添加积分",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在规划下一步",
-  "ui.sessionTurn.status.gatheringContext": "正在收集上下文",
+  "ui.sessionTurn.status.gatheringContext": "正在探索",
+  "ui.sessionTurn.status.gatheredContext": "已探索",
   "ui.sessionTurn.status.searchingCodebase": "正在搜索代码库",
   "ui.sessionTurn.status.searchingWeb": "正在搜索网页",
   "ui.sessionTurn.status.makingEdits": "正在修改",
@@ -76,6 +87,7 @@ export const dict = {
   "ui.common.question.other": "个问题",
 
   "ui.common.add": "添加",
+  "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "确认",
   "ui.common.dismiss": "忽略",
@@ -90,7 +102,10 @@ export const dict = {
   "ui.message.expand": "展开消息",
   "ui.message.collapse": "收起消息",
   "ui.message.copy": "复制",
-  "ui.message.copied": "已复制",
+  "ui.message.copyMessage": "复制消息",
+  "ui.message.copyResponse": "复制回复",
+  "ui.message.copied": "已复制！",
+  "ui.message.interrupted": "已中断",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已删除",
@@ -101,6 +116,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(无答案)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(可多选)",
+  "ui.question.multiHint": "可多选",
+  "ui.question.singleHint": "选择一个答案",
   "ui.question.custom.placeholder": "输入你的答案...",
 } satisfies Partial<Record<Keys, string>>
