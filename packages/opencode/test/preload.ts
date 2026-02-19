@@ -46,6 +46,12 @@ const testManagedConfigDir = path.join(dir, "managed")
 process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
 process.env["OPENCODE_DISABLE_DEFAULT_PLUGINS"] = "true"
 
+// Ensure tests don't depend on user git config.
+process.env["GIT_AUTHOR_NAME"] = "opencode-test"
+process.env["GIT_AUTHOR_EMAIL"] = "opencode-test@example.com"
+process.env["GIT_COMMITTER_NAME"] = "opencode-test"
+process.env["GIT_COMMITTER_EMAIL"] = "opencode-test@example.com"
+
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })

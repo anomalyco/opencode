@@ -7,6 +7,9 @@ import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
+import { Database, eq } from "../../src/storage/db"
+import { ProjectTable } from "../../src/project/project.sql"
+import { PermissionTable, SessionTable } from "../../src/session/session.sql"
 
 Log.init({ print: false })
 
@@ -245,6 +248,139 @@ describe("Project.fromDirectory with worktrees", () => {
         .quiet()
         .catch(() => {})
     }
+  })
+
+  test("repairs duplicate project IDs for the same worktree", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
+    try {
+      await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const first = await p.fromDirectory(tmp.path).then((x) => x.project)
+      await Database.transaction((db) => {
+        db.insert(SessionTable)
+          .values({
+            id: "ses_first",
+            project_id: first.id,
+            parent_id: null,
+            slug: "slug",
+            directory: tmp.path,
+            title: "first session",
+            version: "test",
+            share_url: null,
+            summary_additions: null,
+            summary_deletions: null,
+            summary_files: null,
+            summary_diffs: null,
+            revert: null,
+            permission: null,
+            time_created: Date.now(),
+            time_updated: Date.now(),
+            time_compacting: null,
+            time_archived: null,
+          })
+          .run()
+
+        db.insert(ProjectTable)
+          .values({
+            id: "dupe-project",
+            worktree: tmp.path,
+            vcs: "git",
+            sandboxes: [worktreePath],
+            icon_url: "data:image/png;base64,AA==",
+            time_created: Date.now() + 1,
+            time_updated: Date.now() + 1,
+          })
+          .run()
+        db.insert(SessionTable)
+          .values({
+            id: "ses_dupe",
+            project_id: "dupe-project",
+            parent_id: null,
+            slug: "slug",
+            directory: worktreePath,
+            title: "dupe session",
+            version: "test",
+            share_url: null,
+            summary_additions: null,
+            summary_deletions: null,
+            summary_files: null,
+            summary_diffs: null,
+            revert: null,
+            permission: null,
+            time_created: Date.now() + 2,
+            time_updated: Date.now() + 2,
+            time_compacting: null,
+            time_archived: null,
+          })
+          .run()
+        db.insert(PermissionTable)
+          .values({
+            project_id: "dupe-project",
+            data: [{ permission: "file.read", pattern: "**", action: "allow" }],
+            time_created: Date.now() + 3,
+            time_updated: Date.now() + 3,
+          })
+          .run()
+      })
+
+      await p.repairAll()
+
+      const repaired = await p.fromDirectory(worktreePath).then((x) => x.project)
+      expect(repaired.id).toBe(first.id)
+      expect(repaired.icon?.url).toBe("data:image/png;base64,AA==")
+
+      const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+      expect(projects.length).toBe(1)
+
+      const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, "ses_dupe")).get())
+      expect(session?.project_id).toBe(first.id)
+
+      const permission = Database.use((db) =>
+        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, first.id)).get(),
+      )
+      expect(permission).toBeDefined()
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
+  test("does not repair non-git duplicate projects", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    await Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: "ng-1",
+          worktree: tmp.path,
+          vcs: null,
+          sandboxes: [],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+      db.insert(ProjectTable)
+        .values({
+          id: "ng-2",
+          worktree: tmp.path,
+          vcs: null,
+          sandboxes: [],
+          time_created: Date.now() + 1,
+          time_updated: Date.now() + 1,
+        })
+        .run()
+    })
+
+    await p.repairAll()
+
+    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+    expect(projects.length).toBe(2)
   })
 })
 
