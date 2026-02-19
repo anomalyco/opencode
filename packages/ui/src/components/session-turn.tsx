@@ -9,6 +9,7 @@ import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
@@ -315,78 +316,77 @@ export function SessionTurn(
                       <Collapsible.Content>
                         <Show when={open()}>
                           <div data-component="session-turn-diffs-content">
-                            <div data-slot="session-turn-diffs-group">
-                              <Accordion
-                                multiple
-                                value={expanded()}
-                                onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
-                              >
-                                <For each={diffs()}>
-                                  {(diff) => {
-                                    const active = createMemo(() => expanded().includes(diff.file))
-                                    const [visible, setVisible] = createSignal(false)
+                            <Accordion
+                              multiple
+                              style={{ "--sticky-accordion-offset": "40px" }}
+                              value={expanded()}
+                              onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                            >
+                              <For each={diffs()}>
+                                {(diff) => {
+                                  const active = createMemo(() => expanded().includes(diff.file))
+                                  const [visible, setVisible] = createSignal(false)
 
-                                    createEffect(
-                                      on(
-                                        active,
-                                        (value) => {
-                                          if (!value) {
-                                            setVisible(false)
-                                            return
-                                          }
+                                  createEffect(
+                                    on(
+                                      active,
+                                      (value) => {
+                                        if (!value) {
+                                          setVisible(false)
+                                          return
+                                        }
 
-                                          requestAnimationFrame(() => {
-                                            if (!active()) return
-                                            setVisible(true)
-                                          })
-                                        },
-                                        { defer: true },
-                                      ),
-                                    )
+                                        requestAnimationFrame(() => {
+                                          if (!active()) return
+                                          setVisible(true)
+                                        })
+                                      },
+                                      { defer: true },
+                                    ),
+                                  )
 
-                                    return (
-                                      <Accordion.Item value={diff.file}>
-                                        <Accordion.Header>
-                                          <Accordion.Trigger>
-                                            <div data-slot="session-turn-diff-trigger">
-                                              <span data-slot="session-turn-diff-path">
-                                                <Show when={diff.file.includes("/")}>
-                                                  <span data-slot="session-turn-diff-directory">
-                                                    {`\u202A${getDirectory(diff.file)}\u202C`}
-                                                  </span>
-                                                </Show>
-                                                <span data-slot="session-turn-diff-filename">
-                                                  {getFilename(diff.file)}
+                                  return (
+                                    <Accordion.Item value={diff.file}>
+                                      <StickyAccordionHeader>
+                                        <Accordion.Trigger>
+                                          <div data-slot="session-turn-diff-trigger">
+                                            <span data-slot="session-turn-diff-path">
+                                              <Show when={diff.file.includes("/")}>
+                                                <span data-slot="session-turn-diff-directory">
+                                                  {`\u202A${getDirectory(diff.file)}\u202C`}
                                                 </span>
+                                              </Show>
+                                              <span data-slot="session-turn-diff-filename">
+                                                {getFilename(diff.file)}
                                               </span>
-                                              <div data-slot="session-turn-diff-meta">
-                                                <span data-slot="session-turn-diff-changes">
-                                                  <DiffChanges changes={diff} />
-                                                </span>
-                                                <span data-slot="session-turn-diff-chevron">
-                                                  <Icon name="chevron-down" size="small" />
-                                                </span>
-                                              </div>
+                                            </span>
+                                            <div data-slot="session-turn-diff-meta">
+                                              <span data-slot="session-turn-diff-changes">
+                                                <DiffChanges changes={diff} />
+                                              </span>
+                                              <span data-slot="session-turn-diff-chevron">
+                                                <Icon name="chevron-down" size="small" />
+                                              </span>
                                             </div>
-                                          </Accordion.Trigger>
-                                        </Accordion.Header>
-                                        <Accordion.Content>
-                                          <Show when={visible()}>
-                                            <div data-slot="session-turn-diff-view" data-scrollable>
-                                              <Dynamic
-                                                component={diffComponent}
-                                                before={{ name: diff.file, contents: diff.before }}
-                                                after={{ name: diff.file, contents: diff.after }}
-                                              />
-                                            </div>
-                                          </Show>
-                                        </Accordion.Content>
-                                      </Accordion.Item>
-                                    )
-                                  }}
-                                </For>
-                              </Accordion>
-                            </div>
+                                          </div>
+                                        </Accordion.Trigger>
+                                      </StickyAccordionHeader>
+                                      <Accordion.Content>
+                                        <Show when={visible()}>
+                                          <div data-slot="session-turn-diff-view" data-scrollable>
+                                            <Dynamic
+                                              component={diffComponent}
+                                              before={{ name: diff.file, contents: diff.before }}
+                                              after={{ name: diff.file, contents: diff.after }}
+                                            />
+                                          </div>
+                                        </Show>
+                                      </Accordion.Content>
+                                    </Accordion.Item>
+                                  )
+                                }}
+                              </For>
+                            </Accordion>
                           </div>
                         </Show>
                       </Collapsible.Content>
