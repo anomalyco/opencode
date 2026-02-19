@@ -35,9 +35,12 @@ import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
+import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Button } from "./button"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
+import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
@@ -117,6 +120,7 @@ function createThrottledValue(getValue: () => string) {
   createEffect(() => {
     const next = getValue()
     const now = Date.now()
+
     const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
     if (remaining <= 0) {
       if (timeout) {
@@ -250,6 +254,126 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
+function renderable(part: PartType) {
+  if (part.type === "tool") {
+    if (HIDDEN_TOOLS.has(part.tool)) return false
+    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    return true
+  }
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
+  return !!PART_MAPPING[part.type]
+}
+
+export function AssistantParts(props: {
+  messages: AssistantMessage[]
+  showAssistantCopyPartID?: string | null
+  working?: boolean
+}) {
+  const data = useData()
+  const emptyParts: PartType[] = []
+
+  const grouped = createMemo(() => {
+    const keys: string[] = []
+    const items: Record<
+      string,
+      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] }
+    > = {}
+    const push = (
+      key: string,
+      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] },
+    ) => {
+      keys.push(key)
+      items[key] = item
+    }
+
+    const parts = props.messages.flatMap((message) =>
+      list(data.store.part?.[message.id], emptyParts)
+        .filter(renderable)
+        .map((part) => ({ message, part })),
+    )
+
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.part.id}`, {
+        type: "context",
+        parts: parts
+          .slice(start, end + 1)
+          .map((x) => x.part)
+          .filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((item, index) => {
+      if (isContextGroupTool(item.part)) {
+        if (start < 0) start = index
+        return
+      }
+
+      flush(index - 1)
+      push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
+    })
+
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
+
+  const last = createMemo(() => grouped().keys.at(-1))
+
+  return (
+    <For each={grouped().keys}>
+      {(key) => {
+        const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
+        const tail = createMemo(() => last() === key)
+        return (
+          <>
+            <Show when={ctx()}>
+              {(entry) => <ContextToolGroup parts={entry().parts} busy={props.working && tail()} />}
+            </Show>
+            <Show when={part()}>
+              {(entry) => (
+                <Part
+                  part={entry().part}
+                  message={entry().message}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                />
+              )}
+            </Show>
+          </>
+        )
+      }}
+    </For>
+  )
+}
 
 function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
@@ -390,6 +514,8 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
+      if (!renderable(part)) return
+
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
         return
@@ -408,31 +534,43 @@ export function AssistantMessageDisplay(props: {
     <For each={grouped().keys}>
       {(key) => {
         const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
         return (
-          <Show when={item()}>
-            {(value) => {
-              const entry = value()
-              if (entry.type === "context") return <ContextToolGroup parts={entry.parts} />
-              return (
+          <>
+            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
+            <Show when={part()}>
+              {(entry) => (
                 <Part
-                  part={entry.part}
+                  part={entry().part}
                   message={props.message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                 />
-              )
-            }}
-          </Show>
+              )}
+            </Show>
+          </>
         )
       }}
     </For>
   )
 }
 
-function ContextToolGroup(props: { parts: ToolPart[] }) {
+function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  const pending = createMemo(() =>
-    props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
+  const pending = createMemo(
+    () =>
+      !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
   const details = createMemo(() => summary().join(", "))
@@ -445,7 +583,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
             when={pending()}
             fallback={
               <span data-slot="context-tool-group-title">
-                <span data-slot="context-tool-group-label">Gathered context</span>
+                <span data-slot="context-tool-group-label">{i18n.t("ui.sessionTurn.status.gatheredContext")}</span>
                 <Show when={details().length}>
                   <span data-slot="context-tool-group-summary">{details()}</span>
                 </Show>
@@ -535,13 +673,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
-  const provider = createMemo(() => {
-    const id = props.message.model?.providerID
-    if (!id) return ""
-    const match = data.store.provider?.all?.find((p) => p.id === id)
-    return match?.name ?? id
-  })
-
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
     const modelID = props.message.model?.modelID
@@ -562,7 +693,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const metaHead = createMemo(() => {
     const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", provider(), model()]
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
@@ -891,13 +1022,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         <Show when={showPermission() && permission()}>
           <div data-component="permission-prompt">
             <div data-slot="permission-actions">
-              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+              <Button variant="ghost" size="normal" onClick={() => respond("reject")}>
                 {i18n.t("ui.permission.deny")}
               </Button>
-              <Button variant="secondary" size="small" onClick={() => respond("always")}>
+              <Button variant="secondary" size="normal" onClick={() => respond("always")}>
                 {i18n.t("ui.permission.allowAlways")}
               </Button>
-              <Button variant="primary" size="small" onClick={() => respond("once")}>
+              <Button variant="primary" size="normal" onClick={() => respond("once")}>
                 {i18n.t("ui.permission.allowOnce")}
               </Button>
             </div>
@@ -918,13 +1049,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
   )
 
-  const provider = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const id = (props.message as AssistantMessage).providerID
-    const match = data.store.provider?.all?.find((p) => p.id === id)
-    return match?.name ?? id
-  })
-
   const model = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
@@ -939,9 +1063,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (typeof completed !== "number") return ""
     const ms = completed - message.time.created
     if (!(ms >= 0)) return ""
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-    const minutes = Math.floor(ms / 60_000)
-    const seconds = Math.round((ms - minutes * 60_000) / 1000)
+    const total = Math.round(ms / 1000)
+    if (total < 60) return `${total}s`
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
     return `${minutes}m ${seconds}s`
   })
 
@@ -950,7 +1075,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      provider(),
       model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
@@ -1347,6 +1471,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="code-lines"
+        defer
         trigger={
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
@@ -1407,6 +1532,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="code-lines"
+        defer
         trigger={
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
@@ -1467,6 +1593,16 @@ ToolRegistry.register({
     const i18n = useI18n()
     const diffComponent = useDiffComponent()
     const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
+    const [expanded, setExpanded] = createSignal<string[]>([])
+    let seeded = false
+
+    createEffect(() => {
+      const list = files()
+      if (list.length === 0) return
+      if (seeded) return
+      seeded = true
+      setExpanded(list.filter((f) => f.type !== "delete").map((f) => f.filePath))
+    })
 
     const subtitle = createMemo(() => {
       const count = files().length
@@ -1475,65 +1611,100 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        trigger={{
-          title: i18n.t("ui.tool.patch"),
-          subtitle: subtitle(),
-        }}
-      >
-        <Show when={files().length > 0}>
-          <div data-component="apply-patch-files">
-            <For each={files()}>
-              {(file) => (
-                <div data-component="apply-patch-file">
-                  <div data-slot="apply-patch-file-header">
-                    <Switch>
-                      <Match when={file.type === "delete"}>
-                        <span data-slot="apply-patch-file-action" data-type="delete">
-                          {i18n.t("ui.patch.action.deleted")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "add"}>
-                        <span data-slot="apply-patch-file-action" data-type="add">
-                          {i18n.t("ui.patch.action.created")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "move"}>
-                        <span data-slot="apply-patch-file-action" data-type="move">
-                          {i18n.t("ui.patch.action.moved")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "update"}>
-                        <span data-slot="apply-patch-file-action" data-type="update">
-                          {i18n.t("ui.patch.action.patched")}
-                        </span>
-                      </Match>
-                    </Switch>
-                    <span data-slot="apply-patch-file-path">{file.relativePath}</span>
-                    <Show when={file.type !== "delete"}>
-                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
-                    </Show>
-                    <Show when={file.type === "delete"}>
-                      <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
-                    </Show>
-                  </div>
-                  <Show when={file.type !== "delete"}>
-                    <div data-component="apply-patch-file-diff">
-                      <Dynamic
-                        component={diffComponent}
-                        before={{ name: file.filePath, contents: file.before }}
-                        after={{ name: file.filePath, contents: file.after }}
-                      />
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-      </BasicTool>
+      <div data-component="apply-patch-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={{
+            title: i18n.t("ui.tool.patch"),
+            subtitle: subtitle(),
+          }}
+        >
+          <Show when={files().length > 0}>
+            <Accordion
+              multiple
+              data-scope="apply-patch"
+              style={{ "--sticky-accordion-offset": "40px" }}
+              value={expanded()}
+              onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+            >
+              <For each={files()}>
+                {(file) => {
+                  const active = createMemo(() => expanded().includes(file.filePath))
+                  const [visible, setVisible] = createSignal(false)
+
+                  createEffect(() => {
+                    if (!active()) {
+                      setVisible(false)
+                      return
+                    }
+
+                    requestAnimationFrame(() => {
+                      if (!active()) return
+                      setVisible(true)
+                    })
+                  })
+
+                  return (
+                    <Accordion.Item value={file.filePath} data-type={file.type}>
+                      <StickyAccordionHeader>
+                        <Accordion.Trigger>
+                          <div data-slot="apply-patch-trigger-content">
+                            <div data-slot="apply-patch-file-info">
+                              <FileIcon node={{ path: file.relativePath, type: "file" }} />
+                              <div data-slot="apply-patch-file-name-container">
+                                <Show when={file.relativePath.includes("/")}>
+                                  <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
+                                </Show>
+                                <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
+                              </div>
+                            </div>
+                            <div data-slot="apply-patch-trigger-actions">
+                              <Switch>
+                                <Match when={file.type === "add"}>
+                                  <span data-slot="apply-patch-change" data-type="added">
+                                    {i18n.t("ui.patch.action.created")}
+                                  </span>
+                                </Match>
+                                <Match when={file.type === "delete"}>
+                                  <span data-slot="apply-patch-change" data-type="removed">
+                                    {i18n.t("ui.patch.action.deleted")}
+                                  </span>
+                                </Match>
+                                <Match when={file.type === "move"}>
+                                  <span data-slot="apply-patch-change" data-type="modified">
+                                    {i18n.t("ui.patch.action.moved")}
+                                  </span>
+                                </Match>
+                                <Match when={true}>
+                                  <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                                </Match>
+                              </Switch>
+                              <Icon name="chevron-grabber-vertical" size="small" />
+                            </div>
+                          </div>
+                        </Accordion.Trigger>
+                      </StickyAccordionHeader>
+                      <Accordion.Content>
+                        <Show when={visible()}>
+                          <div data-component="apply-patch-file-diff">
+                            <Dynamic
+                              component={diffComponent}
+                              before={{ name: file.filePath, contents: file.before }}
+                              after={{ name: file.movePath ?? file.filePath, contents: file.after }}
+                            />
+                          </div>
+                        </Show>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  )
+                }}
+              </For>
+            </Accordion>
+          </Show>
+        </BasicTool>
+      </div>
     )
   },
 })

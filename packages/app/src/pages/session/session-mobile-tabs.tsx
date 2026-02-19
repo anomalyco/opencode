@@ -1,5 +1,6 @@
 import { Show } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { useLanguage } from "@/context/language"
 
 export function SessionMobileTabs(props: {
   open: boolean
@@ -8,8 +9,9 @@ export function SessionMobileTabs(props: {
   reviewCount: number
   onSession: () => void
   onChanges: () => void
-  t: (key: string, vars?: Record<string, string | number | boolean>) => string
 }) {
+  const language = useLanguage()
+
   return (
     <Show when={props.open}>
       <Tabs value={props.mobileTab} class="h-auto">
@@ -20,7 +22,7 @@ export function SessionMobileTabs(props: {
             classes={{ button: "w-full" }}
             onClick={props.onSession}
           >
-            {props.t("session.tab.session")}
+            {language.t("session.tab.session")}
           </Tabs.Trigger>
           <Tabs.Trigger
             value="changes"
@@ -29,8 +31,8 @@ export function SessionMobileTabs(props: {
             onClick={props.onChanges}
           >
             {props.hasReview
-              ? props.t("session.review.filesChanged", { count: props.reviewCount })
-              : props.t("session.review.change.other")}
+              ? language.t("session.review.filesChanged", { count: props.reviewCount })
+              : language.t("session.review.change.other")}
           </Tabs.Trigger>
         </Tabs.List>
       </Tabs>
