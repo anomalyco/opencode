@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install:*)",
+      "Bash(oh-my-opencode install:*)",
+      "Bash(gemini --help:*)",
+      "Bash(cmd /c \"dir C:\\\\Users\\\\Tony\\\\.codex 2>nul\")",
+      "Bash(cmd /c \"dir C:\\\\Users\\\\Tony\\\\.gemini 2>nul\")",
+      "Bash(npm uninstall:*)",
+      "Bash(D:/programs/opencode/opencode.exe --version)",
+      "Bash(D:/programs/opencode/opencode.exe:*)",
+      "Bash(git show:*)",
+      "Bash(\"C:/Users/Tony/.bun/bin/bun.exe\" run typecheck:*)",
+      "Bash(git rebase:*)"
+    ]
+  }
+}
