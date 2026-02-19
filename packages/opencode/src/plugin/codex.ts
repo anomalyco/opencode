@@ -11,7 +11,12 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
+const OAUTH_HOST = "127.0.0.1"
+const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_PORT}/auth/callback`
+const OAUTH_CANCEL_URI = `http://${OAUTH_HOST}:${OAUTH_PORT}/cancel`
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const OAUTH_RETRY_DELAY_MS = 200
+const OAUTH_MAX_START_ATTEMPTS = 10
 
 interface PkceCodes {
   verifier: string
@@ -244,73 +249,105 @@ let pendingOAuth: PendingOAuth | undefined
 
 async function startOAuthServer(): Promise<{ port: number; redirectUri: string }> {
   if (oauthServer) {
-    return { port: OAUTH_PORT, redirectUri: `http://localhost:${OAUTH_PORT}/auth/callback` }
+    return { port: OAUTH_PORT, redirectUri: OAUTH_REDIRECT_URI }
   }
 
-  oauthServer = Bun.serve({
+  const serve = () => {
+    try {
+      oauthServer = Bun.serve({
+        hostname: OAUTH_HOST,
+        port: OAUTH_PORT,
+        fetch(req) {
+          const url = new URL(req.url)
+
+          if (url.pathname === "/auth/callback") {
+            const code = url.searchParams.get("code")
+            const state = url.searchParams.get("state")
+            const error = url.searchParams.get("error")
+            const errorDescription = url.searchParams.get("error_description")
+
+            if (error) {
+              const errorMsg = errorDescription || error
+              pendingOAuth?.reject(new Error(errorMsg))
+              pendingOAuth = undefined
+              return new Response(HTML_ERROR(errorMsg), {
+                headers: { "Content-Type": "text/html" },
+              })
+            }
+
+            if (!code) {
+              const errorMsg = "Missing authorization code"
+              pendingOAuth?.reject(new Error(errorMsg))
+              pendingOAuth = undefined
+              return new Response(HTML_ERROR(errorMsg), {
+                status: 400,
+                headers: { "Content-Type": "text/html" },
+              })
+            }
+
+            if (!pendingOAuth || state !== pendingOAuth.state) {
+              const errorMsg = "Invalid state - potential CSRF attack"
+              pendingOAuth?.reject(new Error(errorMsg))
+              pendingOAuth = undefined
+              return new Response(HTML_ERROR(errorMsg), {
+                status: 400,
+                headers: { "Content-Type": "text/html" },
+              })
+            }
+
+            const current = pendingOAuth
+            pendingOAuth = undefined
+
+            exchangeCodeForTokens(code, OAUTH_REDIRECT_URI, current.pkce)
+              .then((tokens) => current.resolve(tokens))
+              .catch((err) => current.reject(err))
+
+            return new Response(HTML_SUCCESS, {
+              headers: { "Content-Type": "text/html" },
+            })
+          }
+
+          if (url.pathname === "/cancel") {
+            pendingOAuth?.reject(new Error("Login cancelled"))
+            pendingOAuth = undefined
+            queueMicrotask(stopOAuthServer)
+            return new Response("Login cancelled", { status: 200 })
+          }
+
+          return new Response("Not found", { status: 404 })
+        },
+      })
+      log.info("codex oauth server started", { port: OAUTH_PORT, hostname: OAUTH_HOST })
+      return true
+    } catch {
+      oauthServer = undefined
+      return false
+    }
+  }
+
+  if (serve()) {
+    return { port: OAUTH_PORT, redirectUri: OAUTH_REDIRECT_URI }
+  }
+
+  log.warn("codex oauth server failed to start, retrying after cancel request", {
     port: OAUTH_PORT,
-    fetch(req) {
-      const url = new URL(req.url)
-
-      if (url.pathname === "/auth/callback") {
-        const code = url.searchParams.get("code")
-        const state = url.searchParams.get("state")
-        const error = url.searchParams.get("error")
-        const errorDescription = url.searchParams.get("error_description")
-
-        if (error) {
-          const errorMsg = errorDescription || error
-          pendingOAuth?.reject(new Error(errorMsg))
-          pendingOAuth = undefined
-          return new Response(HTML_ERROR(errorMsg), {
-            headers: { "Content-Type": "text/html" },
-          })
-        }
-
-        if (!code) {
-          const errorMsg = "Missing authorization code"
-          pendingOAuth?.reject(new Error(errorMsg))
-          pendingOAuth = undefined
-          return new Response(HTML_ERROR(errorMsg), {
-            status: 400,
-            headers: { "Content-Type": "text/html" },
-          })
-        }
-
-        if (!pendingOAuth || state !== pendingOAuth.state) {
-          const errorMsg = "Invalid state - potential CSRF attack"
-          pendingOAuth?.reject(new Error(errorMsg))
-          pendingOAuth = undefined
-          return new Response(HTML_ERROR(errorMsg), {
-            status: 400,
-            headers: { "Content-Type": "text/html" },
-          })
-        }
-
-        const current = pendingOAuth
-        pendingOAuth = undefined
-
-        exchangeCodeForTokens(code, `http://localhost:${OAUTH_PORT}/auth/callback`, current.pkce)
-          .then((tokens) => current.resolve(tokens))
-          .catch((err) => current.reject(err))
-
-        return new Response(HTML_SUCCESS, {
-          headers: { "Content-Type": "text/html" },
-        })
-      }
-
-      if (url.pathname === "/cancel") {
-        pendingOAuth?.reject(new Error("Login cancelled"))
-        pendingOAuth = undefined
-        return new Response("Login cancelled", { status: 200 })
-      }
-
-      return new Response("Not found", { status: 404 })
-    },
+    hostname: OAUTH_HOST,
   })
 
-  log.info("codex oauth server started", { port: OAUTH_PORT })
-  return { port: OAUTH_PORT, redirectUri: `http://localhost:${OAUTH_PORT}/auth/callback` }
+  for (const _ of Array.from({ length: OAUTH_MAX_START_ATTEMPTS })) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 2000)
+    await fetch(OAUTH_CANCEL_URI, {
+      signal: controller.signal,
+    }).catch(() => undefined)
+    clearTimeout(timeout)
+    await Bun.sleep(OAUTH_RETRY_DELAY_MS)
+    if (serve()) {
+      return { port: OAUTH_PORT, redirectUri: OAUTH_REDIRECT_URI }
+    }
+  }
+
+  throw new Error(`Failed to start server. Is port ${OAUTH_PORT} in use?`)
 }
 
 function stopOAuthServer() {
