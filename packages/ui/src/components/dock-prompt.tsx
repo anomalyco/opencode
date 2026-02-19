@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import { dockShellClass, dockTrayClass } from "./dock-surface"
+import { DockShell, DockTray } from "./dock-surface"
 
 export function DockPrompt(props: {
   kind: "question" | "permission"
@@ -12,13 +12,11 @@ export function DockPrompt(props: {
 
   return (
     <div data-component="dock-prompt" data-kind={props.kind} ref={props.ref}>
-      <div data-slot={slot("body")} class={dockShellClass}>
+      <DockShell data-slot={slot("body")}>
         <div data-slot={slot("header")}>{props.header}</div>
         <div data-slot={slot("content")}>{props.children}</div>
-      </div>
-      <div data-slot={slot("footer")} class={dockTrayClass}>
-        {props.footer}
-      </div>
+      </DockShell>
+      <DockTray data-slot={slot("footer")}>{props.footer}</DockTray>
     </div>
   )
 }

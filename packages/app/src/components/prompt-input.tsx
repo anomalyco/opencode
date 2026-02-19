@@ -20,7 +20,7 @@ import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
-import { dockShellClass, dockTrayClass } from "@opencode-ai/ui/dock-surface"
+import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
@@ -1046,11 +1046,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <form
+      <DockShellForm
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          [dockShellClass]: true,
           "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
@@ -1244,9 +1243,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-      </form>
+      </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
-        <div class={`${dockTrayClass} -mt-3.5 rounded-tl-0 rounded-tr-0`}>
+        <DockTray attach="top">
           <div class="px-2 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <Show when={store.mode === "shell"}>
@@ -1386,7 +1385,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               />
             </div>
           </div>
-        </div>
+        </DockTray>
       </Show>
     </div>
   )
