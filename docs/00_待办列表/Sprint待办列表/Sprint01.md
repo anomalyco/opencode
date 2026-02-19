@@ -20,7 +20,7 @@
 
 | 编号   | 标题                                                         | 类型 | 优先级 | 故事点 | 状态     | 负责人 |
 | ------ | ------------------------------------------------------------ | ---- | ------ | ------ | -------- | ------ |
-| BUG-001 | OpenCode MCP工具调用未注入progressToken导致长评审超时（-32001） | BUG  | P0     | 3      | 设计完成 | Tony   |
+| BUG-001 | OpenCode MCP工具调用未注入progressToken导致长评审超时（-32001） | BUG  | P0     | 3      | 待验收 | Tony   |
 | US-001 | 右侧栏目增加"额度"显示 + 传递 client_mode                    | US   | P2     | 5      | 等待依赖 | Tony   |
 
 ---
@@ -29,7 +29,7 @@
 
 > 作为 OpenCode 用户，我希望在 design/implementation 评审中不再出现 `-32001` 超时，以便长时评审能够稳定完成。
 
-**状态**：设计完成
+**状态**：待验收
 
 **来源issue**：review_mcp/Sprint01/BUG-005 MCP评审请求超时（-32001）
 
@@ -61,6 +61,13 @@
 - 主设计文档：`docs/01_Sprint记录/Sprint01/BUG-001/BUG-001_设计.md`
 - 评审结果：通过（Codex 等价 + Claude 维度等价）
 - 结论：可进入 implementation 阶段
+
+**实施完成记录 [2026-02-19]**：
+- 代码实现：`packages/opencode/src/mcp/index.ts`（补齐 `onprogress` 回调，形成 progress 续时闭环）
+- 测试新增：`packages/opencode/test/mcp/progress-token.test.ts`
+- 测试修复：`packages/opencode/test/preload.ts`（Windows 下清理目录 EBUSY/EPERM 兼容）
+- 实施评审：通过（Codex 等价 + Claude 维度等价）
+- 当前状态：待验收
 ---
 
 ## US-001 右侧栏目增加"额度"显示 + 传递 client_mode
@@ -96,6 +103,7 @@
 
 | 日期       | 更新内容                                                                          | 更新人 |
 | ---------- | --------------------------------------------------------------------------------- | ------ |
+| 2026-02-19 | BUG-001 实施完成，状态更新为待验收 | Tony   |
 | 2026-02-19 | BUG-001 设计文档完成并通过等价双评审 | Tony   |
 | 2026-02-19 | BUG-001 方案选择完成：方案1（OpenCode客户端修复优先）                              | Tony   |
 | 2026-02-19 | 创建 BUG-001：OpenCode MCP工具调用未注入progressToken导致长评审超时（-32001） | Tony   |

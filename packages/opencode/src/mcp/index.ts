@@ -139,6 +139,7 @@ export namespace MCP {
           },
           CallToolResultSchema,
           {
+            onprogress: () => undefined,
             resetTimeoutOnProgress: true,
             timeout,
           },
