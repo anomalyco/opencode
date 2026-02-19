@@ -95,12 +95,13 @@ export namespace Question {
   })
 
   export async function ask(input: {
+    id?: string
     sessionID: string
     questions: Info[]
     tool?: { messageID: string; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
-    const id = Identifier.ascending("question")
+    const id = Identifier.ascending("question", input.id)
 
     log.info("asking", { id, questions: input.questions.length })
 

@@ -332,6 +332,94 @@ export async function withSession<T>(
   }
 }
 
+async function dockRequest<T>(
+  sdk: ReturnType<typeof createSdk>,
+  sessionID: string,
+  method: "POST" | "DELETE",
+  path: string,
+  body?: unknown,
+) {
+  const info = await sdk.path.get().then((x) => x.data)
+  const directory = info?.directory
+  if (!directory) throw new Error("Failed to resolve directory for e2e dock request")
+
+  const url = path ? `${serverUrl}/e2e/session/${sessionID}/${path}` : `${serverUrl}/e2e/session/${sessionID}`
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      "x-opencode-directory": encodeURIComponent(directory),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Dock e2e request failed (${response.status}): ${text}`)
+  }
+
+  return (await response.json()) as T
+}
+
+export async function seedSessionQuestion(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    id?: string
+    questions: Array<{
+      header: string
+      question: string
+      options: Array<{ label: string; description: string }>
+      multiple?: boolean
+      custom?: boolean
+    }>
+  },
+) {
+  return dockRequest<{ id: string }>(sdk, input.sessionID, "POST", "question", {
+    id: input.id,
+    questions: input.questions,
+  })
+}
+
+export async function seedSessionPermission(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    id?: string
+    permission: string
+    patterns: string[]
+    always?: string[]
+    metadata?: Record<string, unknown>
+    description?: string
+  },
+) {
+  return dockRequest<{ id: string }>(sdk, input.sessionID, "POST", "permission", {
+    id: input.id,
+    permission: input.permission,
+    patterns: input.patterns,
+    always: input.always,
+    metadata: input.metadata,
+    description: input.description,
+  })
+}
+
+export async function seedSessionTodos(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    todos: Array<{ content: string; status: string; priority: string }>
+  },
+) {
+  return dockRequest<boolean>(sdk, input.sessionID, "POST", "todo", {
+    todos: input.todos,
+  })
+}
+
+export async function clearSessionDockSeed(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  return dockRequest<boolean>(sdk, sessionID, "DELETE", "")
+}
+
 export async function openStatusPopover(page: Page) {
   await defocus(page)
 
