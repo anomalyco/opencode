@@ -267,7 +267,6 @@ describe("Project.fromDirectory with worktrees", () => {
         .catch(() => {})
     }
   })
-
   test("repairs duplicate project IDs for the same worktree", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
@@ -399,7 +398,6 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
-
     await p.repairAll()
 
     const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
