@@ -1288,7 +1288,6 @@
 }
 
 [data-component="apply-patch-file-diff"] {
-  max-height: 420px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;

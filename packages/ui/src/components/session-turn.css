@@ -187,7 +187,6 @@
     background-color: var(--surface-inset-base);
     width: 100%;
     min-width: 0;
-    max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;

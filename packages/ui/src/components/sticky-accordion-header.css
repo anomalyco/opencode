@@ -5,7 +5,7 @@
 }
 
 [data-slot="accordion-item"]:first-child [data-component="sticky-accordion-header"] {
-  background-color: var(--background-base);
+  background-color: var(--background-stronger);
 }
 
 [data-component="sticky-accordion-header"][data-expanded],
