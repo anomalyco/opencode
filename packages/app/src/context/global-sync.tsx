@@ -1,41 +1,41 @@
-import {
-  type Config,
-  type Path,
-  type Project,
-  type ProviderAuthResponse,
-  type ProviderListResponse,
-  type Todo,
-  createOpencodeClient,
+import type {
+  Config,
+  OpencodeClient,
+  Path,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
-import { createStore, produce, reconcile } from "solid-js/store"
-import { useGlobalSDK } from "./global-sdk"
-import type { InitError } from "../pages/error"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 import {
   createContext,
   createEffect,
-  untrack,
   getOwner,
-  useContext,
+  Match,
   onCleanup,
   onMount,
   type ParentProps,
   Switch,
-  Match,
+  untrack,
+  useContext,
 } from "solid-js"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { usePlatform } from "./platform"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
-import { createRefreshQueue } from "./global-sync/queue"
-import { createChildStoreManager } from "./global-sync/child-store"
-import { trimSessions } from "./global-sync/session-trim"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
-import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
+import type { InitError } from "../pages/error"
+import { useGlobalSDK } from "./global-sdk"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
-import { sanitizeProject } from "./global-sync/utils"
+import { createChildStoreManager } from "./global-sync/child-store"
+import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
+import { createRefreshQueue } from "./global-sync/queue"
+import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
+import { sanitizeProject } from "./global-sync/utils"
+import { usePlatform } from "./platform"
 
 type GlobalStore = {
   ready: boolean
@@ -57,14 +57,6 @@ function errorMessage(error: unknown) {
   return "Unknown error"
 }
 
-function setDevStats(value: {
-  activeDirectoryStores: number
-  evictions: number
-  loadSessionsFullFetchFallback: number
-}) {
-  ;(globalThis as { __OPENCODE_GLOBAL_SYNC_STATS?: typeof value }).__OPENCODE_GLOBAL_SYNC_STATS = value
-}
-
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
@@ -72,12 +64,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
-  const stats = {
-    evictions: 0,
-    loadSessionsFallback: 0,
-  }
-
-  const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
+  const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -112,15 +99,6 @@ function createGlobalSync() {
     setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
   }
 
-  const updateStats = (activeDirectoryStores: number) => {
-    if (!import.meta.env.DEV) return
-    setDevStats({
-      activeDirectoryStores,
-      evictions: stats.evictions,
-      loadSessionsFullFetchFallback: stats.loadSessionsFallback,
-    })
-  }
-
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
   const queue = createRefreshQueue({
@@ -131,11 +109,6 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    markStats: updateStats,
-    incrementEvictions: () => {
-      stats.evictions += 1
-      updateStats(Object.keys(children.children).length)
-    },
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
@@ -151,9 +124,7 @@ function createGlobalSync() {
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
-    const sdk = createOpencodeClient({
-      baseUrl: globalSDK.url,
-      fetch: platform.fetch,
+    const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
@@ -193,7 +164,10 @@ function createGlobalSync() {
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
     if (meta && meta.limit >= store.limit) {
-      const next = trimSessions(store.session, { limit: store.limit, permission: store.permission })
+      const next = trimSessions(store.session, {
+        limit: store.limit,
+        permission: store.permission,
+      })
       if (next.length !== store.session.length) {
         setStore("session", reconcile(next, { key: "id" }))
       }
@@ -206,10 +180,6 @@ function createGlobalSync() {
       directory,
       limit,
       list: (query) => globalSDK.client.session.list(query),
-      onFallback: () => {
-        stats.loadSessionsFallback += 1
-        updateStats(Object.keys(children.children).length)
-      },
     })
       .then((x) => {
         const nonArchived = (x.data ?? [])
@@ -218,10 +188,17 @@ function createGlobalSync() {
           .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         const limit = store.limit
         const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], { limit, permission: store.permission })
+        const sessions = trimSessions([...nonArchived, ...childSessions], {
+          limit,
+          permission: store.permission,
+        })
         setStore(
           "sessionTotal",
-          estimateRootSessionTotal({ count: nonArchived.length, limit: x.limit, limited: x.limited }),
+          estimateRootSessionTotal({
+            count: nonArchived.length,
+            limit: x.limit,
+            limited: x.limited,
+          }),
         )
         setStore("session", reconcile(sessions, { key: "id" }))
         sessionMeta.set(directory, { limit })
@@ -331,7 +308,9 @@ function createGlobalSync() {
     await bootstrapGlobal({
       globalSDK: globalSDK.client,
       connectErrorTitle: language.t("dialog.server.add.error"),
-      connectErrorDescription: language.t("error.globalSync.connectFailed", { url: globalSDK.url }),
+      connectErrorDescription: language.t("error.globalSync.connectFailed", {
+        url: globalSDK.url,
+      }),
       requestFailedTitle: language.t("common.requestFailed"),
       setGlobalStore,
     })
