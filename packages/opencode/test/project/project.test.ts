@@ -203,6 +203,36 @@ describe("Project.fromDirectory with worktrees", () => {
     }
   })
 
+  test("returns a coherent project when called from root or any worktree", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
+    try {
+      await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const root = await p.fromDirectory(tmp.path)
+      const wt = await p.fromDirectory(worktreePath)
+
+      expect(root.project.id).not.toBe("global")
+      expect(wt.project.id).toBe(root.project.id)
+
+      expect(root.project.worktree).toBe(tmp.path)
+      expect(wt.project.worktree).toBe(tmp.path)
+
+      expect(root.sandbox).toBe(tmp.path)
+      expect(wt.sandbox).toBe(worktreePath)
+
+      expect(wt.project.sandboxes).toContain(worktreePath)
+      expect(wt.project.sandboxes).not.toContain(tmp.path)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
   test("repairs duplicate project IDs for the same worktree", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
