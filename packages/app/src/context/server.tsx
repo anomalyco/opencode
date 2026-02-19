@@ -21,11 +21,12 @@ export function serverDisplayName(conn?: ServerConnection.Any) {
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(url: string) {
-  if (!url) return ""
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+function projectsKey(key: ServerConnection.Key) {
+  if (!key) return ""
+  if (key === "sidecar") return "local"
+  const host = key.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-  return url
+  return key
 }
 
 export namespace ServerConnection {
@@ -101,15 +102,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }),
     )
 
-    const allServers = createMemo(
-      (): Array<ServerConnection.Any> => [
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const servers = [
         ...(props.servers ?? []),
         ...store.list.map((value) => ({
           type: "http" as const,
           http: typeof value === "string" ? { url: value } : value,
         })),
-      ],
-    )
+      ]
+
+      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
+
+      return [...deduped.values()]
+    })
 
     const [state, setState] = createStore({
       active: props.defaultServer,
@@ -187,10 +192,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
-    const isLocal = createMemo(() => origin() === "local")
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
+    const isLocal = createMemo(() => {
+      const c = current()
+      return c?.type === "sidecar" && c.variant === "base"
+    })
 
     return {
       ready: isReady,
