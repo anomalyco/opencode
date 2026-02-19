@@ -6,7 +6,7 @@
   border: none;
   transition: background-color 0.15s ease;
   border-radius: var(--radius-md);
-  overflow: clip;
+  overflow: visible;
 
   &.tool-collapsible {
     gap: 8px;
@@ -81,6 +81,10 @@
   [data-slot="collapsible-content"] {
     overflow: hidden;
     /* animation: slideUp 250ms ease-out; */
+
+    &[data-expanded] {
+      overflow: visible;
+    }
 
     /* &[data-expanded] { */
     /*   animation: slideDown 250ms ease-out; */
