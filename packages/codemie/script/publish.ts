@@ -32,10 +32,14 @@ await $`cp ./script/postinstall.mjs ${wrapperDir}/postinstall.mjs`
 // Write LICENSE
 await Bun.file(`${wrapperDir}/LICENSE`).write("Apache-2.0\n\nSee https://www.apache.org/licenses/LICENSE-2.0\n")
 
+// Copy wrapper README
+await $`cp ./README.md ${wrapperDir}/README.md`
+
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
     {
       name: wrapperName,
+      description: "Codemie Code AI coding agent — platform wrapper",
       bin: {
         codemie: "./bin/codemie",
       },
@@ -44,6 +48,8 @@ await Bun.file(`${wrapperDir}/package.json`).write(
       },
       version: version,
       license: "Apache-2.0",
+      repository: { type: "git", url: "https://github.com/codemie-ai/codemie-opencode" },
+      homepage: "https://github.com/codemie-ai/codemie-opencode",
       optionalDependencies: binaries,
     },
     null,
