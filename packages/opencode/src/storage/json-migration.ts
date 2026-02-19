@@ -46,7 +46,7 @@ export namespace JsonMigration {
     const db = drizzle({ client: sqlite })
 
     // Optimize SQLite for bulk inserts
-    sqlite.exec("PRAGMA journal_mode = WAL")
+    sqlite.exec("PRAGMA journal_mode = DELETE")
     sqlite.exec("PRAGMA synchronous = OFF")
     sqlite.exec("PRAGMA cache_size = 10000")
     sqlite.exec("PRAGMA temp_store = MEMORY")

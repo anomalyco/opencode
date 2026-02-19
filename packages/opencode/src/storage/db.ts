@@ -70,12 +70,12 @@ export namespace Database {
 
     const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
 
-    sqlite.run("PRAGMA journal_mode = WAL")
+    sqlite.run("PRAGMA journal_mode = DELETE")
     sqlite.run("PRAGMA synchronous = NORMAL")
     sqlite.run("PRAGMA busy_timeout = 5000")
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
+    sqlite.run("PRAGMA locking_mode = EXCLUSIVE")
 
     const db = drizzle({ client: sqlite, schema })
 
