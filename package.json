@@ -78,7 +78,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
-    "@aws-sdk/credential-providers": "3.993.0",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
