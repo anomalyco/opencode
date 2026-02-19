@@ -279,6 +279,12 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
+    // reject pending callbacks before deleting so promises don't hang forever
+    const err = new DOMException(`Session ${sessionID} cancelled`, "AbortError")
+    for (const cb of match.callbacks) {
+      try { cb.reject(err) } catch {}
+    }
+    match.callbacks.length = 0
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
