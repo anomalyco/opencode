@@ -4,7 +4,8 @@ node_modules
 .sst
 .env
 .idea
-.vscode
+.vscode/*
+!.vscode/extensions.json
 .codex
 *~
 playground

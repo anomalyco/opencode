@@ -5,7 +5,12 @@
       "options": {},
     },
   },
-  "mcp": {},
+  "mcp": {
+    "debugger": {
+      "type": "local",
+      "command": ["npx", "-y", "debugger-mcp-server"],
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

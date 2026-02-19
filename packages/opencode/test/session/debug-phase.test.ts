@@ -80,27 +80,27 @@ describe("DebugPhase.toolsForPhase", () => {
       "transitionPhase",
     ])
     expect(DebugPhase.toolsForPhase("BREAKPOINTING")).toEqual([
-      "setBreakpoints",
-      "removeBreakpoints",
-      "listBreakpoints",
+      "debugger_set_breakpoints",
+      "debugger_remove_breakpoints",
+      "debugger_list_breakpoints",
       "read",
       "transitionPhase",
     ])
     expect(DebugPhase.toolsForPhase("DEBUGGING")).toEqual([
-      "startDebugSession",
-      "continueExecution",
-      "stepOver",
-      "stepInto",
-      "stepOut",
-      "getVariables",
-      "getCallStack",
-      "evaluateExpression",
-      "listBreakpoints",
+      "debugger_start_debug_session",
+      "debugger_continue_execution",
+      "debugger_step_over",
+      "debugger_step_into",
+      "debugger_step_out",
+      "debugger_get_variables",
+      "debugger_get_call_stack",
+      "debugger_evaluate_expression",
+      "debugger_list_breakpoints",
       "transitionPhase",
     ])
     expect(DebugPhase.toolsForPhase("EXPLAINING")).toEqual(["transitionPhase"])
     expect(DebugPhase.toolsForPhase("CONFIRMING")).toEqual([
-      "stopDebugSession",
+      "debugger_stop_debug_session",
       "transitionPhase",
     ])
   })
@@ -120,8 +120,8 @@ describe("DebugPhase.isToolAllowed", () => {
     expect(DebugPhase.isToolAllowed("PLANNING", "read")).toBe(true)
     expect(DebugPhase.isToolAllowed("PLANNING", "edit")).toBe(false)
     expect(DebugPhase.isToolAllowed("CODING", "edit")).toBe(true)
-    expect(DebugPhase.isToolAllowed("CODING", "startDebugSession")).toBe(false)
-    expect(DebugPhase.isToolAllowed("DEBUGGING", "stepOver")).toBe(true)
+    expect(DebugPhase.isToolAllowed("CODING", "debugger_start_debug_session")).toBe(false)
+    expect(DebugPhase.isToolAllowed("DEBUGGING", "debugger_step_over")).toBe(true)
     expect(DebugPhase.isToolAllowed("EXPLAINING", "transitionPhase")).toBe(true)
     expect(DebugPhase.isToolAllowed("EXPLAINING", "read")).toBe(false)
   })
