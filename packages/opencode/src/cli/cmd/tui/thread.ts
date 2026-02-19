@@ -81,6 +81,7 @@ export const TuiThreadCommand = cmd({
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
+    let unsignal = () => {}
     try {
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker
       // spawn or async work so the OS cannot kill the process group.
@@ -128,6 +129,30 @@ export const TuiThreadCommand = cmd({
         await client.call("reload", undefined)
       })
 
+      let pending: Promise<void> | undefined
+      const shutdown = () => {
+        if (pending) return pending
+        pending = Promise.race([
+          client.call("shutdown", undefined),
+          new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+        ]).catch(() => {})
+        return pending
+      }
+
+      const onSignal = async () => {
+        await shutdown()
+        process.exit(0)
+      }
+
+      process.on("SIGINT", onSignal)
+      process.on("SIGTERM", onSignal)
+      process.on("SIGHUP", onSignal)
+      unsignal = () => {
+        process.off("SIGINT", onSignal)
+        process.off("SIGTERM", onSignal)
+        process.off("SIGHUP", onSignal)
+      }
+
       const prompt = await iife(async () => {
         const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
         if (!args.prompt) return piped
@@ -172,7 +197,7 @@ export const TuiThreadCommand = cmd({
           fork: args.fork,
         },
         onExit: async () => {
-          await client.call("shutdown", undefined)
+          await shutdown()
         },
       })
 
@@ -182,6 +207,7 @@ export const TuiThreadCommand = cmd({
 
       await tuiPromise
     } finally {
+      unsignal()
       unguard?.()
     }
     process.exit(0)
