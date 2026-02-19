@@ -163,6 +163,7 @@
 
   [data-slot="session-review-file-name-container"] {
     display: flex;
+    align-items: center;
     flex-grow: 1;
     min-width: 0;
   }
@@ -193,6 +194,8 @@
     cursor: pointer;
     border-radius: 4px;
     opacity: 0;
+    will-change: opacity;
+    transform: translateZ(0);
     transition: opacity 0.15s ease;
 
     &:hover {

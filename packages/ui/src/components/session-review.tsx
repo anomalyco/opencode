@@ -6,6 +6,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { Tooltip } from "./tooltip"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -533,16 +534,19 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 </Show>
                                 <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
                                 <Show when={props.onViewFile}>
-                                  <button
-                                    data-slot="session-review-view-button"
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      props.onViewFile?.(diff.file)
-                                    }}
-                                  >
-                                    <Icon name="eye" size="small" />
-                                  </button>
+                                  <Tooltip value="Open file" placement="top" gutter={4}>
+                                    <button
+                                      data-slot="session-review-view-button"
+                                      type="button"
+                                      aria-label="Open file"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        props.onViewFile?.(diff.file)
+                                      }}
+                                    >
+                                      <Icon name="open-file" size="small" />
+                                    </button>
+                                  </Tooltip>
                                 </Show>
                               </div>
                             </div>
