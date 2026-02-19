@@ -35,17 +35,38 @@ export namespace Snapshot {
     if (!exists) return
     const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
       .quiet()
-      .cwd(Instance.directory)
+      .cwd(Instance.worktree)
       .nothrow()
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0)
       log.warn("cleanup failed", {
         exitCode: result.exitCode,
         stderr: result.stderr.toString(),
         stdout: result.stdout.toString(),
       })
-      return
+    if (result.exitCode === 0) log.info("cleanup", { prune })
+    await pruneStale(git)
+  }
+
+  async function pruneStale(git: string) {
+    const dir = path.join(git, "objects", "pack")
+    const entries = await fs.readdir(dir).catch((err) => {
+      if (err.code !== "ENOENT") log.warn("pruneStale readdir failed", { dir, error: String(err) })
+      return [] as string[]
+    })
+    const now = Date.now()
+    const day = 24 * 60 * 60 * 1000
+    for (const entry of entries) {
+      if (!entry.startsWith("tmp_pack_")) continue
+      const full = path.join(dir, entry)
+      const stat = await fs.stat(full).catch(() => undefined)
+      if (!stat || !stat.isFile()) continue
+      if (now - stat.mtimeMs < day) continue
+      const ok = await fs
+        .unlink(full)
+        .then(() => true)
+        .catch(() => false)
+      if (ok) log.info("removed stale tmp", { entry, hours: Math.round((now - stat.mtimeMs) / 1000 / 60 / 60) })
     }
-    log.info("cleanup", { prune })
   }
 
   export async function track() {
@@ -66,13 +87,13 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.worktree).nothrow()
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
-      .cwd(Instance.directory)
+      .cwd(Instance.worktree)
       .nothrow()
       .text()
-    log.info("tracking", { hash, cwd: Instance.directory, git })
+    log.info("tracking", { hash, cwd: Instance.worktree, git })
     return hash.trim()
   }
 
@@ -84,11 +105,11 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.worktree).nothrow()
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
-        .cwd(Instance.directory)
+        .cwd(Instance.worktree)
         .nothrow()
 
     // If git diff fails, return empty patch
@@ -162,7 +183,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.worktree).nothrow()
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
@@ -203,7 +224,7 @@ export namespace Snapshot {
     const statuses =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
         .quiet()
-        .cwd(Instance.directory)
+        .cwd(Instance.worktree)
         .nothrow()
         .text()
 
@@ -217,7 +238,7 @@ export namespace Snapshot {
 
     for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
-      .cwd(Instance.directory)
+      .cwd(Instance.worktree)
       .nothrow()
       .lines()) {
       if (!line) continue

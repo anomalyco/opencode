@@ -1,7 +1,10 @@
 import { test, expect } from "bun:test"
 import { $ } from "bun"
+import path from "path"
+import fs from "fs/promises"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
+import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
 async function bootstrap() {
@@ -1035,6 +1038,92 @@ test("diffFull with whitespace changes", async () => {
       const whitespaceDiff = diffs[0]
       expect(whitespaceDiff.file).toBe("whitespace.txt")
       expect(whitespaceDiff.additions).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("snapshot from subdirectory covers worktree and respects gitignore", async () => {
+  await using tmp = await bootstrap()
+  const sub = `${tmp.path}/sub`
+  await $`mkdir -p ${sub}`.quiet()
+  await Bun.write(`${tmp.path}/.gitignore`, "ignored/\n")
+  await $`git add .gitignore`.cwd(tmp.path).quiet()
+  await $`git commit --no-gpg-sign -m "add gitignore"`.cwd(tmp.path).quiet()
+
+  await Instance.provide({
+    directory: sub,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // file in subdirectory — should be tracked
+      await Bun.write(`${sub}/tracked.txt`, "tracked")
+      // file in ignored directory — should NOT be tracked
+      await $`mkdir -p ${sub}/ignored`.quiet()
+      await Bun.write(`${sub}/ignored/file.txt`, "ignored")
+      // file at worktree root — should be tracked (worktree-scoped)
+      await Bun.write(`${tmp.path}/root.txt`, "root level")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(`${tmp.path}/sub/tracked.txt`)
+      expect(patch.files).not.toContain(`${sub}/ignored/file.txt`)
+      expect(patch.files).toContain(`${tmp.path}/root.txt`)
+    },
+  })
+})
+
+test("cleanup removes stale tmp files", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Snapshot.track()
+
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      const packDir = path.join(git, "objects", "pack")
+      await fs.mkdir(packDir, { recursive: true })
+
+      const stale = path.join(packDir, "tmp_pack_stale")
+      await Bun.write(stale, "stale data")
+      const past = Date.now() - 25 * 60 * 60 * 1000
+      await fs.utimes(stale, past / 1000, past / 1000)
+
+      const fresh = path.join(packDir, "tmp_pack_fresh")
+      await Bun.write(fresh, "fresh data")
+      const recent = Date.now() - 1 * 60 * 60 * 1000
+      await fs.utimes(fresh, recent / 1000, recent / 1000)
+
+      await Snapshot.cleanup()
+
+      expect(await Bun.file(stale).exists()).toBe(false)
+      expect(await Bun.file(fresh).exists()).toBe(true)
+    },
+  })
+})
+
+test("cleanup prunes stale tmp files even when gc fails", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Snapshot.track()
+
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+
+      // corrupt the git repo so gc fails
+      await Bun.write(path.join(git, "HEAD"), "garbage")
+
+      const packDir = path.join(git, "objects", "pack")
+      await fs.mkdir(packDir, { recursive: true })
+
+      const stale = path.join(packDir, "tmp_pack_stale")
+      await Bun.write(stale, "stale data")
+      const past = Date.now() - 25 * 60 * 60 * 1000
+      await fs.utimes(stale, past / 1000, past / 1000)
+
+      await Snapshot.cleanup()
+
+      expect(await Bun.file(stale).exists()).toBe(false)
     },
   })
 })
