@@ -10,6 +10,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { Plugin } from "../plugin"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -122,6 +123,37 @@ export namespace LSP {
               initialization: item.initialization,
             }
           },
+        }
+      }
+
+      // Apply LSP server configs from plugins
+      const plugins = await Plugin.list()
+      for (const plugin of plugins) {
+        for (const [name, item] of Object.entries(plugin.lsp ?? {})) {
+          const existing = servers[name]
+          if (item.disabled) {
+            log.info(`LSP server ${name} is disabled by plugin`)
+            delete servers[name]
+            continue
+          }
+          servers[name] = {
+            ...existing,
+            id: name,
+            root: existing?.root ?? (async () => Instance.directory),
+            extensions: item.extensions ?? existing?.extensions ?? [],
+            spawn: async (root) => {
+              return {
+                process: spawn(item.command[0], item.command.slice(1), {
+                  cwd: root,
+                  env: {
+                    ...process.env,
+                    ...item.env,
+                  },
+                }),
+                initialization: item.initialization,
+              }
+            },
+          }
         }
       }
 

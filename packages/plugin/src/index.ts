@@ -145,11 +145,25 @@ export type AuthOuathResult = { url: string; instructions: string } & (
     }
 )
 
+export type LspServerConfig =
+  | { disabled: true }
+  | {
+      command: string[]
+      extensions?: string[]
+      disabled?: boolean
+      env?: Record<string, string>
+      initialization?: Record<string, any>
+    }
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
+  }
+  /** Register or override LSP servers. Keys are server IDs. */
+  lsp?: {
+    [key: string]: LspServerConfig
   }
   auth?: AuthHook
   /**
