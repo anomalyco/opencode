@@ -4,13 +4,15 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type LanguageModelUsage, type ProviderMetadata } from "ai"
+import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Storage } from "../storage/storage"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like } from "../storage/db"
+import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
@@ -22,6 +24,8 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import { iife } from "@/util/iife"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -37,6 +41,64 @@ export namespace Session {
     return new RegExp(
       `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
     ).test(title)
+  }
+
+  type SessionRow = typeof SessionTable.$inferSelect
+
+  export function fromRow(row: SessionRow): Info {
+    const summary =
+      row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
+        ? {
+            additions: row.summary_additions ?? 0,
+            deletions: row.summary_deletions ?? 0,
+            files: row.summary_files ?? 0,
+            diffs: row.summary_diffs ?? undefined,
+          }
+        : undefined
+    const share = row.share_url ? { url: row.share_url } : undefined
+    const revert = row.revert ?? undefined
+    return {
+      id: row.id,
+      slug: row.slug,
+      projectID: row.project_id,
+      directory: row.directory,
+      parentID: row.parent_id ?? undefined,
+      title: row.title,
+      version: row.version,
+      summary,
+      share,
+      revert,
+      permission: row.permission ?? undefined,
+      time: {
+        created: row.time_created,
+        updated: row.time_updated,
+        compacting: row.time_compacting ?? undefined,
+        archived: row.time_archived ?? undefined,
+      },
+    }
+  }
+
+  export function toRow(info: Info) {
+    return {
+      id: info.id,
+      project_id: info.projectID,
+      parent_id: info.parentID,
+      slug: info.slug,
+      directory: info.directory,
+      title: info.title,
+      version: info.version,
+      share_url: info.share?.url,
+      summary_additions: info.summary?.additions,
+      summary_deletions: info.summary?.deletions,
+      summary_files: info.summary?.files,
+      summary_diffs: info.summary?.diffs,
+      revert: info.revert ?? null,
+      permission: info.permission,
+      time_created: info.time.created,
+      time_updated: info.time.updated,
+      time_compacting: info.time.compacting,
+      time_archived: info.time.archived,
+    }
   }
 
   function getForkedTitle(title: string): string {
@@ -91,16 +153,6 @@ export namespace Session {
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
-
-  export const ShareInfo = z
-    .object({
-      secret: z.string(),
-      url: z.string(),
-    })
-    .meta({
-      ref: "SessionShare",
-    })
-  export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
     Created: BusEvent.define(
@@ -198,8 +250,17 @@ export namespace Session {
   )
 
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
-    await update(sessionID, (draft) => {
-      draft.time.updated = Date.now()
+    const now = Date.now()
+    Database.use((db) => {
+      const row = db
+        .update(SessionTable)
+        .set({ time_updated: now })
+        .where(eq(SessionTable.id, sessionID))
+        .returning()
+        .get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
+      const info = fromRow(row)
+      Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
   })
 
@@ -225,21 +286,19 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
-    Bus.publish(Event.Created, {
-      info: result,
+    Database.use((db) => {
+      db.insert(SessionTable).values(toRow(result)).run()
+      Database.effect(() =>
+        Bus.publish(Event.Created, {
+          info: result,
+        }),
+      )
     })
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id)
-        .then((share) => {
-          update(result.id, (draft) => {
-            draft.share = share
-          })
-        })
-        .catch(() => {
-          // Silently ignore sharing errors during session creation
-        })
+      share(result.id).catch(() => {
+        // Silently ignore sharing errors during session creation
+      })
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -254,12 +313,9 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read as Info
-  })
-
-  export const getShare = fn(Identifier.schema("session"), async (id) => {
-    return Storage.read<ShareInfo>(["share", id])
+    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+    return fromRow(row)
   })
 
   export const share = fn(Identifier.schema("session"), async (id) => {
@@ -269,15 +325,12 @@ export namespace Session {
     }
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
-    await update(
-      id,
-      (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      },
-      { touch: false },
-    )
+    Database.use((db) => {
+      const row = db.update(SessionTable).set({ share_url: share.url }).where(eq(SessionTable.id, id)).returning().get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      const info = fromRow(row)
+      Database.effect(() => Bus.publish(Event.Updated, { info }))
+    })
     return share
   })
 
@@ -285,32 +338,155 @@ export namespace Session {
     // Use ShareNext to remove the share (same as share function uses ShareNext to create)
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
-    await update(
-      id,
-      (draft) => {
-        draft.share = undefined
-      },
-      { touch: false },
-    )
+    Database.use((db) => {
+      const row = db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning().get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      const info = fromRow(row)
+      Database.effect(() => Bus.publish(Event.Updated, { info }))
+    })
   })
 
-  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
-    const project = Instance.project
-    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
-      editor(draft)
-      if (options?.touch !== false) {
-        draft.time.updated = Date.now()
-      }
+  export const setTitle = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      title: z.string(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ title: input.title })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
+  export const setArchived = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      time: z.number().optional(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ time_archived: input.time })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
+  export const setPermission = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      permission: PermissionNext.Ruleset,
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ permission: input.permission, time_updated: Date.now() })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
+  export const setRevert = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      revert: Info.shape.revert,
+      summary: Info.shape.summary,
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({
+            revert: input.revert ?? null,
+            summary_additions: input.summary?.additions,
+            summary_deletions: input.summary?.deletions,
+            summary_files: input.summary?.files,
+            time_updated: Date.now(),
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
+  export const clearRevert = fn(Identifier.schema("session"), async (sessionID) => {
+    return Database.use((db) => {
+      const row = db
+        .update(SessionTable)
+        .set({
+          revert: null,
+          time_updated: Date.now(),
+        })
+        .where(eq(SessionTable.id, sessionID))
+        .returning()
+        .get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
+      const info = fromRow(row)
+      Database.effect(() => Bus.publish(Event.Updated, { info }))
+      return info
     })
-    Bus.publish(Event.Updated, {
-      info: result,
-    })
-    return result
-  }
+  })
+
+  export const setSummary = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      summary: Info.shape.summary,
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({
+            summary_additions: input.summary?.additions,
+            summary_deletions: input.summary?.deletions,
+            summary_files: input.summary?.files,
+            time_updated: Date.now(),
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
 
   export const diff = fn(Identifier.schema("session"), async (sessionID) => {
-    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-    return diffs ?? []
+    try {
+      return await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+    } catch {
+      return []
+    }
   })
 
   export const messages = fn(
@@ -329,22 +505,55 @@ export namespace Session {
     },
   )
 
-  export async function* list() {
+  export function* list(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    search?: string
+    limit?: number
+  }) {
     const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+    const conditions = [eq(SessionTable.project_id, project.id)]
+
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+
+    const limit = input?.limit ?? 100
+
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(and(...conditions))
+        .orderBy(desc(SessionTable.time_updated))
+        .limit(limit)
+        .all(),
+    )
+    for (const row of rows) {
+      yield fromRow(row)
     }
   }
 
   export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
-    const result = [] as Session.Info[]
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
-      if (session.parentID !== parentID) continue
-      result.push(session)
-    }
-    return result
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+        .all(),
+    )
+    return rows.map(fromRow)
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
@@ -355,15 +564,14 @@ export namespace Session {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
-        }
-        await Storage.remove(msg)
-      }
-      await Storage.remove(["session", project.id, sessionID])
-      Bus.publish(Event.Deleted, {
-        info: session,
+      // CASCADE delete handles messages and parts automatically
+      Database.use((db) => {
+        db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
+        Database.effect(() =>
+          Bus.publish(Event.Deleted, {
+            info: session,
+          }),
+        )
       })
     } catch (e) {
       log.error(e)
@@ -371,9 +579,23 @@ export namespace Session {
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    await Storage.write(["message", msg.sessionID, msg.id], msg)
-    Bus.publish(MessageV2.Event.Updated, {
-      info: msg,
+    const time_created = msg.time.created
+    const { id, sessionID, ...data } = msg
+    Database.use((db) => {
+      db.insert(MessageTable)
+        .values({
+          id,
+          session_id: sessionID,
+          time_created,
+          data,
+        })
+        .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
+        .run()
+      Database.effect(() =>
+        Bus.publish(MessageV2.Event.Updated, {
+          info: msg,
+        }),
+      )
     })
     return msg
   })
@@ -384,10 +606,15 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      await Storage.remove(["message", input.sessionID, input.messageID])
-      Bus.publish(MessageV2.Event.Removed, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
+      // CASCADE delete handles parts automatically
+      Database.use((db) => {
+        db.delete(MessageTable).where(eq(MessageTable.id, input.messageID)).run()
+        Database.effect(() =>
+          Bus.publish(MessageV2.Event.Removed, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+          }),
+        )
       })
       return input.messageID
     },
@@ -400,70 +627,113 @@ export namespace Session {
       partID: Identifier.schema("part"),
     }),
     async (input) => {
-      await Storage.remove(["part", input.messageID, input.partID])
-      Bus.publish(MessageV2.Event.PartRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        partID: input.partID,
+      Database.use((db) => {
+        db.delete(PartTable).where(eq(PartTable.id, input.partID)).run()
+        Database.effect(() =>
+          Bus.publish(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            partID: input.partID,
+          }),
+        )
       })
       return input.partID
     },
   )
 
-  const UpdatePartInput = z.union([
-    MessageV2.Part,
-    z.object({
-      part: MessageV2.TextPart,
-      delta: z.string(),
-    }),
-    z.object({
-      part: MessageV2.ReasoningPart,
-      delta: z.string(),
-    }),
-  ])
+  const UpdatePartInput = MessageV2.Part
 
-  export const updatePart = fn(UpdatePartInput, async (input) => {
-    const part = "delta" in input ? input.part : input
-    const delta = "delta" in input ? input.delta : undefined
-    await Storage.write(["part", part.messageID, part.id], part)
-    Bus.publish(MessageV2.Event.PartUpdated, {
-      part,
-      delta,
+  export const updatePart = fn(UpdatePartInput, async (part) => {
+    const { id, messageID, sessionID, ...data } = part
+    const time = Date.now()
+    Database.use((db) => {
+      db.insert(PartTable)
+        .values({
+          id,
+          message_id: messageID,
+          session_id: sessionID,
+          time_created: time,
+          data,
+        })
+        .onConflictDoUpdate({ target: PartTable.id, set: { data } })
+        .run()
+      Database.effect(() =>
+        Bus.publish(MessageV2.Event.PartUpdated, {
+          part,
+        }),
+      )
     })
     return part
   })
 
+  export const updatePartDelta = fn(
+    z.object({
+      sessionID: z.string(),
+      messageID: z.string(),
+      partID: z.string(),
+      field: z.string(),
+      delta: z.string(),
+    }),
+    async (input) => {
+      Bus.publish(MessageV2.Event.PartDelta, input)
+    },
+  )
+
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelUsage>(),
+      usage: z.custom<LanguageModelV2Usage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
-      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0) as number
-
-      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
       }
+      const inputTokens = safe(input.usage.inputTokens ?? 0)
+      const outputTokens = safe(input.usage.outputTokens ?? 0)
+      const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+
+      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      const cacheWriteInputTokens = safe(
+        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+          0) as number,
+      )
+
+      // OpenRouter provides inputTokens as the total count of input tokens (including cached).
+      // AFAIK other providers (OpenRouter/OpenAI/Gemini etc.) do it the same way e.g. vercel/ai#8794 (comment)
+      // Anthropic does it differently though - inputTokens doesn't include cached tokens.
+      // It looks like OpenCode's cost calculation assumes all providers return inputTokens the same way Anthropic does (I'm guessing getUsage logic was originally implemented with anthropic), so it's causing incorrect cost calculation for OpenRouter and others.
+      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      const adjustedInputTokens = safe(
+        excludesCachedTokens ? inputTokens : inputTokens - cacheReadInputTokens - cacheWriteInputTokens,
+      )
+
+      const total = iife(() => {
+        // Anthropic doesn't provide total_tokens, also ai sdk will vastly undercount if we
+        // don't compute from components
+        if (
+          input.model.api.npm === "@ai-sdk/anthropic" ||
+          input.model.api.npm === "@ai-sdk/amazon-bedrock" ||
+          input.model.api.npm === "@ai-sdk/google-vertex/anthropic"
+        ) {
+          return adjustedInputTokens + outputTokens + cacheReadInputTokens + cacheWriteInputTokens
+        }
+        return input.usage.totalTokens
+      })
 
       const tokens = {
-        input: safe(adjustedInputTokens),
-        output: safe(input.usage.outputTokens ?? 0),
-        reasoning: safe(input.usage?.reasoningTokens ?? 0),
+        total,
+        input: adjustedInputTokens,
+        output: outputTokens,
+        reasoning: reasoningTokens,
         cache: {
-          write: safe(cacheWriteInputTokens),
-          read: safe(cacheReadInputTokens),
+          write: cacheWriteInputTokens,
+          read: cacheReadInputTokens,
         },
       }
 

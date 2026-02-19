@@ -1,0 +1,237 @@
+---
+title: İzinler
+description: Hangi işlemlerin çalıştırılması için onay sürecini kontrol edin.
+---
+
+opencode, belirli bir eylemin otomatik olarak mı çalıştırılacağına, size sorulacağına veya engelleneceğine karar vermek için `permission` yapılandırmasını kullanır.
+
+`v1.1.1` itibarıyla eski `tools` boolean yapılandırması kullanımdan kaldırıldı ve `permission` ile birleştirildi. Eski `tools` yapılandırması geriye dönük uyumluluk açısından hâlâ desteklenmektedir.
+
+---
+
+## Eylemler
+
+Her izin kuralı şunlardan birine çözümlenir:
+
+- `"allow"` — onay olmadan çalıştır
+- `"ask"` — onay istemi
+- `"deny"` — eylemi engelle
+
+---
+
+## Yapılandırma
+
+İzinleri genel olarak (`*` ile) ayarlayabilir ve belirli araçları geçersiz kılabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Ayrıntılı Kurallar (Nesne Sözdizimi)
+
+Çoğu izin için, araç girişine bağlı olarak farklı eylemleri uygulamak için bir nesneyi kullanabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Kurallar, **son eşleşen kuralın kazanması** ile kalıp eşleşmesine göre değerlendirilir. Yaygın bir model, tümünü yakala `"*"` kuralını ilk sıraya koymak ve daha spesifik kuralları ondan sonra koymaktır.
+
+### Joker Karakterler
+
+İzin kalıpları basit joker karakter eşleştirmesini kullanır:
+
+- `*` herhangi bir karakterin sıfır veya daha fazlasıyla eşleşir
+- `?` tam olarak bir karakterle eşleşir
+- Diğer tüm karakterler birebir eşleşir
+
+### Ana Dizin Genişletme
+
+Ana dizininize referans vermek için bir modelin başlangıcında `~` veya `$HOME` kullanabilirsiniz. Bu özellikle [`external_directory`](#external-directories) kuralları için kullanışlıdır.
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Harici Dizinler
+
+opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `list`, `glob`, `grep` ve birçok `bash` komutu).
+
+Ana sayfa genişletmesi (`~/...` gibi) yalnızca bir kalıbın nasıl yazıldığını etkiler. Geçerli çalışma alanının harici bir yolunu oluşturmaz, dolayısıyla çalışma dizini dışındaki yollara yine de `external_directory` aracılığıyla izin verilmesi gerekir.
+
+Örneğin bu, `~/projects/personal/` altındaki her şeye erişime izin verir:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Burada izin verilen herhangi bir dizin, geçerli çalışma alanıyla aynı varsayılanları devralır. [`read` defaults to `allow`](#defaults)'dan bu yana, geçersiz kılınmadığı sürece `external_directory` altındaki girişler için okumalara da izin verilir. Bir aracın bu yollarda kısıtlanması gerektiğinde (okumaları tutarken düzenlemeleri engellemek gibi) açık kurallar ekleyin:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Listeyi güvenilir yollara odaklı tutun ve diğer araçlar için gereken ekstra izin verme veya reddetme kurallarını katmanlayın (örneğin `bash`).
+
+---
+
+## Mevcut İzinler
+
+opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanır:
+
+- `read` — bir dosyayı okumak (dosya yoluyla eşleşir)
+- `edit` — tüm dosya değişiklikleri (`edit`, `write`, `patch`, `multiedit`'yi kapsar)
+- `glob` — dosya genellemesi (glob düzeniyle eşleşir)
+- `grep` — içerik arama (regex modeliyle eşleşir)
+- `list` — bir dizideki dosyaları listeleme (dizin yoluyla eşleşir)
+- `bash` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
+- `task` — alt agent'ların başlatılması (alt agent türüyle eşleşir)
+- `skill` — bir skill yükleniyor (skill adıyla eşleşir)
+- `lsp` — LSP sorgularını çalıştırıyor (şu anda ayrıntılı değil)
+- `todoread`, `todowrite` — yapılacaklar listesini okuma/güncelleme
+- `webfetch` — URL getiriliyor (URL ile eşleşiyor)
+- `websearch`, `codesearch` — web/kod arama (sorguyla eşleşir)
+- `external_directory` — bir araç proje çalışma dizini dışındaki yollara dokunduğunda tetiklenir
+- `doom_loop` — aynı araç çağrısı aynı girdiyle 3 kez tekrarlandığında tetiklenir
+
+---
+
+## Varsayılanlar
+
+Hiçbir şey belirtmezseniz opencode izin verilen varsayılanlardan başlar:
+
+- Çoğu izin varsayılan olarak `"allow"` şeklindedir.
+- `doom_loop` ve `external_directory` varsayılan olarak `"ask"`'dir.
+- `read`, `"allow"`'dır, ancak `.env` dosyaları varsayılan olarak reddedilir:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## “Sor” Ne Yapar?
+
+opencode onay istediğinde kullanıcı arayüzü üç sonuç sunar:
+
+- `once` — yalnızca bu isteği onayla
+- `always` — önerilen kalıplarla eşleşen gelecekteki istekleri onaylayın (geçerli opencode oturumunun geri kalanı için)
+- `reject` — isteği reddet
+
+`always`'ın onaylayacağı kalıp seti araç tarafından sağlanır (örneğin, bash onayları genellikle `git status*` gibi güvenli bir komut önekini beyaz listeye alır).
+
+---
+
+## Agent'lar
+
+Agent bazında izinleri geçersiz kılabilirsiniz. Agent izinleri global yapılandırmayla birleştirilir ve agent kuralları önceliklidir. [Daha fazla bilgi](/docs/agents#permissions).
+
+:::note
+Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı kurallar (nesne söz dizimi)](#granular-rules-object-syntax) bölümüne bakın.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Agent izinlerini Markdown'da da yapılandırabilirsiniz:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+Bağımsız değişken içeren komutlar için kalıp eşleştirmeyi kullanın. `"grep *"`, `grep pattern file.txt`'ye izin verir, ancak `"grep"` tek başına onu engeller. `git status` gibi komutlar varsayılan davranış için çalışır ancak argümanlar aktarıldığında açık izin (`"git status *"` gibi) gerektirir.
+:::

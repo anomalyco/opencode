@@ -1,28 +1,100 @@
+use futures::{FutureExt, Stream, StreamExt, future};
+use process_wrap::tokio::CommandWrap;
+#[cfg(unix)]
+use process_wrap::tokio::ProcessGroup;
+#[cfg(windows)]
+use process_wrap::tokio::{CommandWrapper, JobObject, KillOnDrop};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::sync::Arc;
+use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_shell::{ShellExt, process::Command};
+use tauri_specta::Event;
+use tokio::{
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
+#[cfg(windows)]
+use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+
+use crate::server::get_wsl_config;
+
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+// Keep this as a custom wrapper instead of process_wrap::CreationFlags.
+// JobObject pre_spawn rewrites creation flags, so this must run after it.
+struct WinCreationFlags;
+
+#[cfg(windows)]
+impl CommandWrapper for WinCreationFlags {
+    fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
+        command.creation_flags((CREATE_NO_WINDOW | CREATE_SUSPENDED).0);
+        Ok(())
+    }
+}
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
     pub hostname: Option<String>,
     pub port: Option<u32>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
 }
 
+#[derive(Clone, Debug)]
+pub enum CommandEvent {
+    Stdout(String),
+    Stderr(String),
+    Error(String),
+    Terminated(TerminatedPayload),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TerminatedPayload {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommandChild {
+    kill: mpsc::Sender<()>,
+}
+
+impl CommandChild {
+    pub fn kill(&self) -> std::io::Result<()> {
+        self.kill
+            .try_send(())
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    }
+}
+
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
-    create_command(app, "debug config")
-        .output()
+    let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
+
+    events
+        .fold(String::new(), async |mut config_str, event| {
+            if let CommandEvent::Stdout(s) = &event {
+                config_str += s.as_str()
+            }
+            if let CommandEvent::Stderr(s) = &event {
+                config_str += s.as_str()
+            }
+
+            config_str
+        })
+        .map(|v| serde_json::from_str::<Config>(&v))
         .await
-        .inspect_err(|e| eprintln!("Failed to read OC config: {e}"))
         .ok()
-        .and_then(|out| String::from_utf8(out.stdout.to_vec()).ok())
-        .and_then(|s| serde_json::from_str::<Config>(&s).ok())
 }
 
 fn get_cli_install_path() -> Option<std::path::PathBuf> {
@@ -51,6 +123,7 @@ fn is_cli_installed() -> bool {
 const INSTALL_SCRIPT: &str = include_str!("../../../../install");
 
 #[tauri::command]
+#[specta::specta]
 pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
     if cfg!(not(unix)) {
         return Err("CLI installation is only supported on macOS & Linux".to_string());
@@ -93,12 +166,12 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
 
 pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     if cfg!(debug_assertions) {
-        println!("Skipping CLI sync for debug build");
+        tracing::debug!("Skipping CLI sync for debug build");
         return Ok(());
     }
 
     if !is_cli_installed() {
-        println!("No CLI installation found, skipping sync");
+        tracing::info!("No CLI installation found, skipping sync");
         return Ok(());
     }
 
@@ -121,21 +194,21 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     let app_version = app.package_info().version.clone();
 
     if cli_version >= app_version {
-        println!(
-            "CLI version {} is up to date (app version: {}), skipping sync",
-            cli_version, app_version
+        tracing::info!(
+            %cli_version, %app_version,
+            "CLI is up to date, skipping sync"
         );
         return Ok(());
     }
 
-    println!(
-        "CLI version {} is older than app version {}, syncing",
-        cli_version, app_version
+    tracing::info!(
+        %cli_version, %app_version,
+        "CLI is older than app version, syncing"
     );
 
     install_cli(app)?;
 
-    println!("Synced installed CLI");
+    tracing::info!("Synced installed CLI");
 
     Ok(())
 }
@@ -144,40 +217,342 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
+fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
+    get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
+}
+
+fn shell_escape(input: &str) -> String {
+    if input.is_empty() {
+        return "''".to_string();
+    }
+
+    let mut escaped = String::from("'");
+    escaped.push_str(&input.replace("'", "'\"'\"'"));
+    escaped.push('\'');
+    escaped
+}
+
+pub fn spawn_command(
+    app: &tauri::AppHandle,
+    args: &str,
+    extra_env: &[(&str, String)],
+) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), std::io::Error> {
     let state_dir = app
         .path()
         .resolve("", BaseDirectory::AppLocalData)
         .expect("Failed to resolve app local data dir");
 
-    #[cfg(target_os = "windows")]
-    return app
-        .shell()
-        .sidecar("opencode-cli")
-        .unwrap()
-        .args(args.split_whitespace())
-        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-        .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
-        .env("OPENCODE_CLIENT", "desktop")
-        .env("XDG_STATE_HOME", &state_dir);
+    let mut envs = vec![
+        (
+            "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(),
+            "true".to_string(),
+        ),
+        (
+            "OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(),
+            "true".to_string(),
+        ),
+        ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
+        (
+            "XDG_STATE_HOME".to_string(),
+            state_dir.to_string_lossy().to_string(),
+        ),
+    ];
+    envs.extend(
+        extra_env
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.clone())),
+    );
 
-    #[cfg(not(target_os = "windows"))]
-    return {
+    let mut cmd = if cfg!(windows) {
+        if is_wsl_enabled(app) {
+            tracing::info!("WSL is enabled, spawning CLI server in WSL");
+            let version = app.package_info().version.to_string();
+            let mut script = vec![
+                "set -e".to_string(),
+                "BIN=\"$HOME/.opencode/bin/opencode\"".to_string(),
+                "if [ ! -x \"$BIN\" ]; then".to_string(),
+                format!(
+                    "  curl -fsSL https://opencode.ai/install | bash -s -- --version {} --no-modify-path",
+                    shell_escape(&version)
+                ),
+                "fi".to_string(),
+            ];
+
+            let mut env_prefix = vec![
+                "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true".to_string(),
+                "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
+                "OPENCODE_CLIENT=desktop".to_string(),
+                "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
+            ];
+            env_prefix.extend(
+                envs.iter()
+                    .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
+                    .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
+                    .filter(|(key, _)| key != "OPENCODE_CLIENT")
+                    .filter(|(key, _)| key != "XDG_STATE_HOME")
+                    .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
+            );
+
+            script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
+
+            let mut cmd = Command::new("wsl");
+            cmd.args(["-e", "bash", "-lc", &script.join("\n")]);
+            cmd
+        } else {
+            let sidecar = get_sidecar_path(app);
+            let mut cmd = Command::new(sidecar);
+            cmd.args(args.split_whitespace());
+
+            for (key, value) in envs {
+                cmd.env(key, value);
+            }
+
+            cmd
+        }
+    } else {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
 
-        let cmd = if shell.ends_with("/nu") {
+        let line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
         } else {
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        app.shell()
-            .command(&shell)
-            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-            .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
-            .env("OPENCODE_CLIENT", "desktop")
-            .env("XDG_STATE_HOME", &state_dir)
-            .args(["-il", "-c", &cmd])
+        let mut cmd = Command::new(shell);
+        cmd.args(["-l", "-c", &line]);
+
+        for (key, value) in envs {
+            cmd.env(key, value);
+        }
+
+        cmd
     };
+
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+
+    let mut wrap = CommandWrap::from(cmd);
+
+    #[cfg(unix)]
+    {
+        wrap.wrap(ProcessGroup::leader());
+    }
+
+    #[cfg(windows)]
+    {
+        wrap.wrap(JobObject).wrap(WinCreationFlags).wrap(KillOnDrop);
+    }
+
+    let mut child = wrap.spawn()?;
+    let guard = Arc::new(tokio::sync::RwLock::new(()));
+    let (tx, rx) = mpsc::channel(256);
+    let (kill_tx, mut kill_rx) = mpsc::channel(1);
+
+    let stdout = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stdout().take().unwrap()),
+        CommandEvent::Stdout,
+    );
+    let stderr = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stderr().take().unwrap()),
+        CommandEvent::Stderr,
+    );
+
+    tokio::task::spawn(async move {
+        let mut kill_open = true;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Ok(status),
+                Ok(None) => {}
+                Err(err) => break Err(err),
+            }
+
+            tokio::select! {
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+            }
+        };
+
+        match status {
+            Ok(status) => {
+                let payload = TerminatedPayload {
+                    code: status.code(),
+                    signal: signal_from_status(status),
+                };
+                let _ = tx.send(CommandEvent::Terminated(payload)).await;
+            }
+            Err(err) => {
+                let _ = tx.send(CommandEvent::Error(err.to_string())).await;
+            }
+        }
+
+        stdout.abort();
+        stderr.abort();
+    });
+
+    let event_stream = ReceiverStream::new(rx);
+    let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
+
+    Ok((event_stream, CommandChild { kill: kill_tx }))
+}
+
+fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    return status.signal();
+
+    #[cfg(not(unix))]
+    {
+        let _ = status;
+        None
+    }
+}
+
+pub fn serve(
+    app: &AppHandle,
+    hostname: &str,
+    port: u32,
+    password: &str,
+) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
+    let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
+
+    tracing::info!(port, "Spawning sidecar");
+
+    let envs = [
+        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+        ("OPENCODE_SERVER_PASSWORD", password.to_string()),
+    ];
+
+    let (events, child) = spawn_command(
+        app,
+        format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
+        &envs,
+    )
+    .expect("Failed to spawn opencode");
+
+    let mut exit_tx = Some(exit_tx);
+    tokio::spawn(
+        events
+            .for_each(move |event| {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Stderr(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Error(err) => {
+                        tracing::error!("{err}");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(
+                            code = ?payload.code,
+                            signal = ?payload.signal,
+                            "Sidecar terminated"
+                        );
+
+                        if let Some(tx) = exit_tx.take() {
+                            let _ = tx.send(payload);
+                        }
+                    }
+                }
+
+                future::ready(())
+            })
+            .instrument(tracing::info_span!("sidecar")),
+    );
+
+    (child, exit_rx)
+}
+
+pub mod sqlite_migration {
+    use super::*;
+
+    #[derive(
+        tauri_specta::Event, serde::Serialize, serde::Deserialize, Clone, Copy, Debug, specta::Type,
+    )]
+    #[serde(tag = "type", content = "value")]
+    pub enum SqliteMigrationProgress {
+        InProgress(u8),
+        Done,
+    }
+
+    pub(super) fn logs_middleware(
+        app: AppHandle,
+        stream: impl Stream<Item = CommandEvent>,
+    ) -> impl Stream<Item = CommandEvent> {
+        let app = app.clone();
+        let mut done = false;
+
+        stream.filter_map(move |event| {
+            if done {
+                return future::ready(Some(event));
+            }
+
+            future::ready(match &event {
+                CommandEvent::Stdout(s) | CommandEvent::Stderr(s) => {
+                    if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
+                        if let Ok(progress) = s.parse::<u8>() {
+                            let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
+                        } else if s == "done" {
+                            done = true;
+                            let _ = SqliteMigrationProgress::Done.emit(&app);
+                        }
+
+                        None
+                    } else {
+                        Some(event)
+                    }
+                }
+                _ => Some(event),
+            })
+        })
+    }
+}
+
+fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    tx: mpsc::Sender<CommandEvent>,
+    guard: Arc<tokio::sync::RwLock<()>>,
+    pipe_reader: impl AsyncBufRead + Send + Unpin + 'static,
+    wrapper: F,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let _lock = guard.read().await;
+        let reader = BufReader::new(pipe_reader);
+
+        read_line(reader, tx, wrapper).await;
+    })
+}
+
+async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    reader: BufReader<impl AsyncBufRead + Unpin>,
+    tx: mpsc::Sender<CommandEvent>,
+    wrapper: F,
+) {
+    let mut lines = reader.lines();
+    loop {
+        let line = lines.next_line().await;
+
+        match line {
+            Ok(s) => {
+                if let Some(s) = s {
+                    let _ = tx.clone().send(wrapper(s)).await;
+                }
+            }
+            Err(e) => {
+                let tx_ = tx.clone();
+                let _ = tx_.send(CommandEvent::Error(e.to_string())).await;
+                break;
+            }
+        }
+    }
 }

@@ -1,0 +1,192 @@
+---
+title: 快捷鍵
+description: 自訂您的快捷鍵。
+---
+
+OpenCode 提供了一系列快捷鍵，您可以透過 OpenCode 設定進行自訂。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## 前導鍵
+
+OpenCode 的大多數快捷鍵使用 `leader`（前導鍵）。這可以避免與終端機中的其他快捷鍵衝突。
+
+預設情況下，`ctrl+x` 是前導鍵，大多數操作需要您先按下前導鍵，然後再按對應的快捷鍵。例如，要新建一個工作階段，請先按 `ctrl+x`，然後按 `n`。
+
+您不一定需要使用前導鍵來設定快捷鍵，但我們建議您這樣做。
+
+---
+
+## 停用快捷鍵
+
+您可以透過在設定中將對應的鍵值設定為 "none" 來停用某個快捷鍵。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## 桌面版提示詞輸入快捷鍵
+
+OpenCode 桌面應用程式的提示詞輸入框支援常見的 Readline/Emacs 風格文字編輯快捷鍵。這些快捷鍵為內建功能，目前無法透過 `opencode.json` 進行設定。
+
+| 快捷鍵   | 操作                              |
+| -------- | --------------------------------- |
+| `ctrl+a` | 移動到當前行的開頭                |
+| `ctrl+e` | 移動到當前行的末尾                |
+| `ctrl+b` | 游標向後移動一個字元              |
+| `ctrl+f` | 游標向前移動一個字元              |
+| `alt+b`  | 游標向後移動一個單詞              |
+| `alt+f`  | 游標向前移動一個單詞              |
+| `ctrl+d` | 刪除游標所在位置的字元            |
+| `ctrl+k` | 刪除從游標到行尾的內容            |
+| `ctrl+u` | 刪除從游標到行首的內容            |
+| `ctrl+w` | 刪除前一個單詞                    |
+| `alt+d`  | 刪除後一個單詞                    |
+| `ctrl+t` | 交換游標前後的字元                |
+| `ctrl+g` | 取消彈出視窗 / 中止正在執行的回應 |
+
+---
+
+## Shift+Enter
+
+某些終端機預設不會發送帶修飾鍵的 Enter 鍵。您可能需要設定終端機將 `Shift+Enter` 作為跳脫序列發送。
+
+### Windows Terminal
+
+開啟您的 `settings.json` 檔案，路徑為：
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+將以下內容新增到根級 `actions` 陣列中：
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+將以下內容新增到根級 `keybindings` 陣列中：
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+儲存檔案並重新啟動 Windows Terminal，或開啟一個新分頁。

@@ -1,18 +1,26 @@
 export const dict = {
   "ui.sessionReview.title": "تغييرات الجلسة",
-  "ui.sessionReview.diffStyle.unified": "موجد",
+  "ui.sessionReview.title.lastTurn": "تغييرات آخر دور",
+  "ui.sessionReview.diffStyle.unified": "موحد",
   "ui.sessionReview.diffStyle.split": "منقسم",
   "ui.sessionReview.expandAll": "توسيع الكل",
   "ui.sessionReview.collapseAll": "طي الكل",
-
   "ui.sessionReview.change.added": "مضاف",
   "ui.sessionReview.change.removed": "محذوف",
+  "ui.sessionReview.change.modified": "معدل",
+  "ui.sessionReview.image.loading": "جار التحميل...",
+  "ui.sessionReview.image.placeholder": "صورة",
+  "ui.sessionReview.largeDiff.title": "Diff كبير جدا لعرضه",
+  "ui.sessionReview.largeDiff.meta": "الحد: {{limit}} سطرًا متغيرًا. الحالي: {{current}} سطرًا متغيرًا.",
+  "ui.sessionReview.largeDiff.renderAnyway": "اعرض على أي حال",
+
   "ui.lineComment.label.prefix": "تعليق على ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "أضف تعليقًا",
   "ui.lineComment.submit": "تعليق",
+
   "ui.sessionTurn.steps.show": "إظهار الخطوات",
   "ui.sessionTurn.steps.hide": "إخفاء الخطوات",
   "ui.sessionTurn.summary.response": "استجابة",
@@ -20,10 +28,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
   "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+  "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
+  "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
-  "ui.sessionTurn.status.gatheringContext": "جمع السياق",
+  "ui.sessionTurn.status.gatheringContext": "استكشاف",
+  "ui.sessionTurn.status.gatheredContext": "تم الاستكشاف",
   "ui.sessionTurn.status.searchingCodebase": "البحث في قاعدة التعليمات البرمجية",
   "ui.sessionTurn.status.searchingWeb": "البحث في الويب",
   "ui.sessionTurn.status.makingEdits": "إجراء تعديلات",
@@ -72,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "أسئلة",
 
   "ui.common.add": "إضافة",
+  "ui.common.back": "رجوع",
   "ui.common.cancel": "إلغاء",
   "ui.common.confirm": "تأكيد",
   "ui.common.dismiss": "رفض",
@@ -86,7 +98,10 @@ export const dict = {
   "ui.message.expand": "توسيع الرسالة",
   "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
+  "ui.message.copyMessage": "نسخ الرسالة",
+  "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
+  "ui.message.interrupted": "تمت المقاطعة",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
@@ -97,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} أجيب",
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم يتم الرد)",
-  "ui.question.multiHint": "(حدد كل ما ينطبق)",
+  "ui.question.multiHint": "حدد كل ما ينطبق",
+  "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
 }
