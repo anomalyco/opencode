@@ -3,6 +3,7 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
+import { useRoute } from "../context/route"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
@@ -11,6 +12,12 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const route = useRoute()
+
+  const sessionID = createMemo(() => {
+    if (route.data.type === "session") return route.data.sessionID
+    return undefined
+  })
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -49,6 +56,12 @@ export function DialogStatus() {
           esc
         </text>
       </box>
+      <Show when={sessionID()}>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.textMuted}>Session ID:</text>
+          <text fg={theme.text}>{sessionID()}</text>
+        </box>
+      </Show>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
