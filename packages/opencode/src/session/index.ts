@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, like } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -505,20 +505,38 @@ export namespace Session {
     },
   )
 
-  export function* list() {
+  export function* list(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    search?: string
+    limit?: number
+  }) {
     const project = Instance.project
-    // const rel = path.relative(Instance.worktree, Instance.directory)
-    // const suffix = path.sep + rel
+    const conditions = [eq(SessionTable.project_id, project.id)]
+
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+
+    const limit = input?.limit ?? 100
+
     const rows = Database.use((db) =>
       db
         .select()
         .from(SessionTable)
-        .where(
-          and(
-            eq(SessionTable.project_id, project.id),
-            // or(eq(SessionTable.directory, Instance.directory), like(SessionTable.directory, `%${suffix}`)),
-          ),
-        )
+        .where(and(...conditions))
+        .orderBy(desc(SessionTable.time_updated))
+        .limit(limit)
         .all(),
     )
     for (const row of rows) {
@@ -561,7 +579,7 @@ export namespace Session {
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    const time_created = msg.role === "user" ? msg.time.created : msg.time.created
+    const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
     Database.use((db) => {
       db.insert(MessageTable)
