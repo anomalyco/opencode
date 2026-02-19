@@ -26,9 +26,9 @@ jobs:
       matrix:
         include:
           - system: x86_64-linux
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
           - system: aarch64-linux
-            runner: blacksmith-4vcpu-ubuntu-2404-arm
+            runner: ${{ vars.RUNNER_UBUNTU_ARM || 'blacksmith-4vcpu-ubuntu-2404-arm' }}
           - system: x86_64-darwin
             runner: macos-15-intel
           - system: aarch64-darwin
@@ -77,7 +77,7 @@ jobs:
   update-hashes:
     needs: compute-hash
     if: github.event_name != 'pull_request'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
 
     steps:
       - name: Checkout repository

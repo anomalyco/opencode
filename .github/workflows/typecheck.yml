@@ -9,7 +9,7 @@ on:
 
 jobs:
   typecheck:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ vars.RUNNER_UBUNTU || 'blacksmith-4vcpu-ubuntu-2404' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
