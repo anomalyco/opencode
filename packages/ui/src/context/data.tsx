@@ -7,11 +7,13 @@ import type {
   PermissionRequest,
   QuestionRequest,
   QuestionAnswer,
+  ProviderListResponse,
 } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
+  provider?: ProviderListResponse
   session: Session[]
   session_status: {
     [sessionID: string]: SessionStatus
@@ -48,6 +50,8 @@ export type QuestionRejectFn = (input: { requestID: string }) => void
 
 export type NavigateToSessionFn = (sessionID: string) => void
 
+export type SessionHrefFn = (sessionID: string) => string
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -57,6 +61,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onQuestionReply?: QuestionReplyFn
     onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
+    onSessionHref?: SessionHrefFn
   }) => {
     return {
       get store() {
@@ -69,6 +74,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       replyToQuestion: props.onQuestionReply,
       rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
+      sessionHref: props.onSessionHref,
     }
   },
 })

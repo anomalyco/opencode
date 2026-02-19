@@ -1,0 +1,371 @@
+---
+title: Dodaci
+description: Napišite vlastite dodatke za proširenje OpenCode.
+---
+
+Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode.
+Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane zajednice.
+
+---
+
+## Korištenje dodatka
+
+Postoje dva načina za učitavanje dodataka.
+
+### Iz lokalnih datoteka
+
+Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
+
+- `.opencode/plugins/` - Dodaci na nivou projekta
+- `~/.config/opencode/plugins/` - Globalni dodaci
+  Datoteke u ovim direktorijumima se automatski učitavaju pri pokretanju.
+
+---
+
+### Iz npm-a
+
+Navedite npm pakete u vašoj konfiguracijskoj datoteci.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Podržani su i regularni i npm paketi sa opsegom.
+Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### Kako se instaliraju dodaci
+
+**npm dodaci** se instaliraju automatski pomoću Bun pri pokretanju. Paketi i njihove zavisnosti su keširani u `~/.cache/opencode/node_modules/`.
+**Lokalni dodaci** se učitavaju direktno iz direktorija dodataka. Da biste koristili vanjske pakete, morate kreirati `package.json` unutar svog konfiguracijskog direktorija (pogledajte [Zavisnosti](#dependencies)) ili objaviti dodatak na npm i [dodati ga u svoju konfiguraciju](/docs/config#plugins).
+
+---
+
+### Redoslijed učitavanja
+
+Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
+
+1. Globalna konfiguracija (`~/.config/opencode/opencode.json`)
+2. Konfiguracija projekta (`opencode.json`)
+3. Globalni direktorij dodataka (`~/.config/opencode/plugins/`)
+4. Direktorij dodataka projekta (`.opencode/plugins/`)
+   Duplicirani npm paketi sa istim imenom i verzijom se učitavaju jednom. Međutim, lokalni dodatak i npm dodatak sa sličnim nazivima se učitavaju odvojeno.
+
+---
+
+## Kreiranje dodatka
+
+Dodatak je **JavaScript/TypeScript modul** koji izvozi jedan ili više dodataka
+funkcije. Svaka funkcija prima objekt konteksta i vraća hooks objekt.
+
+---
+
+### Zavisnosti
+
+Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `package.json` u svoj konfiguracijski direktorij sa zavisnostima koje su vam potrebne.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Osnovna struktura
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+Funkcija dodatka prima:
+
+- `project`: Trenutne informacije o projektu.
+- `directory`: Trenutni radni direktorij.
+- `worktree`: Putanja git radnog stabla.
+- `client`: Opencode SDK klijent za interakciju sa AI.
+- `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) za izvršavanje naredbi.
+
+---
+
+### Podrška za TypeScript
+
+Za TypeScript dodatke, možete uvesti tipove iz paketa dodataka:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### Događaji
+
+Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku Primjeri. Evo liste različitih dostupnih događaja.
+
+#### Komandni događaji
+
+- `command.executed`
+
+#### Događaji datoteka
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Instalacijski događaji
+
+- `installation.updated`
+
+#### LSP događaji
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Događaji poruka
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Događaji dozvola
+
+- `permission.asked`
+- `permission.replied`
+
+#### Serverski događaji
+
+- `server.connected`
+
+#### Događaji sesije
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Todo događaji
+
+- `todo.updated`
+
+#### Shell događaji
+
+- `shell.env`
+
+#### Događaji alata
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUI događaji
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Primjeri
+
+Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
+
+### Slanje obavještenja
+
+Pošaljite obavještenja kada se dogode određeni događaji:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Koristimo `osascript` za pokretanje AppleScript-a na macOS-u. Ovdje ga koristimo za slanje obavještenja.
+:::note
+Ako koristite desktop aplikaciju OpenCode, ona može automatski slati sistemske obavijesti kada je odgovor spreman ili kada dođe do greške u sesiji.
+:::
+
+---
+
+### .env zaštita
+
+Spriječite opencode da čita `.env` fajlove:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Ubacivanje varijabli okruženja
+
+Ubacite varijable okruženja u sva izvršavanja ljuske (AI alati i korisnički terminali):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Prilagođeni alati
+
+Dodaci također mogu dodati prilagođene alate u opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima funkciju Zod sheme i vraća definiciju alata sa:
+
+- `description`: Šta alat radi
+- `args`: Zod šema za argumente alata
+- `execute`: Funkcija koja se pokreće kada se pozove alat
+  Vaši prilagođeni alati će biti dostupni za opencode zajedno sa ugrađenim alatima.
+
+---
+
+### Bilježenje
+
+Koristite `client.app.log()` umjesto `console.log` za strukturirano bilježenje:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
+
+### Kuke za sažimanje
+
+Prilagodite kontekst uključen kada se sesija zbije:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+`experimental.session.compacting` kuka se aktivira prije nego što LLM generira sažetak nastavka. Koristite ga za ubacivanje konteksta specifičnog za domenu koji bi zadani prompt za sažimanje propustio.
+Također možete u potpunosti zamijeniti prompt za sabijanje postavljanjem `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Kada je `output.prompt` postavljen, on u potpunosti zamjenjuje zadani prompt za sažimanje. Niz `output.context` se zanemaruje u ovom slučaju.
