@@ -73,7 +73,8 @@ export namespace ToolRegistry {
               touchFile: (filePath: string, waitForDiagnostics?: boolean) =>
                 LSP.touchFile(filePath, waitForDiagnostics),
               diagnostics: () => LSP.diagnostics(),
-              diagnosticPretty: (diagnostic) => LSP.Diagnostic.pretty(diagnostic),
+              diagnosticPretty: (diagnostic: Parameters<typeof LSP.Diagnostic.pretty>[0]) =>
+                LSP.Diagnostic.pretty(diagnostic),
               hover: (input: { file: string; line: number; character: number }) => LSP.hover(input),
             },
           } as unknown as PluginToolContext
