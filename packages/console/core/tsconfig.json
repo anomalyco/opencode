@@ -7,5 +7,6 @@
     "jsx": "preserve",
     "jsxImportSource": "react",
     "types": ["@cloudflare/workers-types", "node"]
-  }
+  },
+  "exclude": ["drizzle.config.ts"]
 }

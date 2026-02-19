@@ -19,5 +19,6 @@
         "namespaceImportPackages": ["effect", "@effect/*"]
       }
     ]
-  }
+  },
+  "exclude": ["drizzle.config.ts"]
 }
