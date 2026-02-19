@@ -2,21 +2,15 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
-    // General
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "target": "ESNext",
-    // Modules
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
+    "lib": ["es2023", "dom", "dom.iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "lib": ["es2023", "dom", "dom.iterable"],
-    // Type Checking & Safety
     "strict": true,
-    "types": ["vite/client", "bun"]
+    "types": ["vite/client", "node"]
   },
-  "exclude": ["**/*.stories.*", "**/*.mdx"]
+  "include": [".storybook/**/*.ts", ".storybook/**/*.tsx"]
 }
