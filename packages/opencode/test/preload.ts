@@ -9,8 +9,27 @@ import { afterAll } from "bun:test"
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
-afterAll(() => {
-  fsSync.rmSync(dir, { recursive: true, force: true })
+afterAll(async () => {
+  for (let i = 0; i < 5; i++) {
+    try {
+      fsSync.rmSync(dir, { recursive: true, force: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== "EBUSY" && code !== "EPERM") {
+        throw error
+      }
+      await Bun.sleep(100)
+    }
+  }
+  try {
+    fsSync.rmSync(dir, { recursive: true, force: true })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== "EBUSY" && code !== "EPERM") {
+      throw error
+    }
+  }
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
