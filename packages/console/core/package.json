@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "1.1.65",
+  "version": "1.2.6",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,7 +12,7 @@
     "@opencode-ai/console-resource": "workspace:*",
     "@planetscale/database": "1.19.0",
     "aws4fetch": "1.0.20",
-    "drizzle-orm": "0.41.0",
+    "drizzle-orm": "catalog:",
     "postgres": "3.4.7",
     "stripe": "18.0.0",
     "ulid": "catalog:",
@@ -44,7 +44,7 @@
     "@tsconfig/node22": "22.0.2",
     "@types/bun": "1.3.0",
     "@types/node": "catalog:",
-    "drizzle-kit": "0.30.5",
+    "drizzle-kit": "catalog:",
     "mysql2": "3.14.4",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"

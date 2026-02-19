@@ -60,6 +60,15 @@ The directory is the one OpenCode was started from. Override via query param or 
 
 - `?directory=/path/to/project`
 - `x-opencode-directory: /path/to/project`
+### Question Tool Opt-In
+
+ACP excludes `QuestionTool` by default.
+
+```bash
+OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
+```
+
+Enable this only for ACP clients that support interactive question prompts.
 
 ### Programmatic
 

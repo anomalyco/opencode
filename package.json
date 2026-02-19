@@ -40,6 +40,8 @@
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
+      "drizzle-kit": "1.0.0-beta.12-a5629fb",
+      "drizzle-orm": "1.0.0-beta.12-a5629fb",
       "ai": "5.0.124",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
@@ -67,10 +69,11 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "@types/mime-types": "3.0.1",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "3.17.23",
+    "sst": "3.18.10",
     "turbo": "2.5.6"
   },
   "dependencies": {
@@ -101,6 +104,7 @@
     "@types/node": "catalog:"
   },
   "patchedDependencies": {
-    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch"
+    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+    "@openrouter/ai-sdk-provider@1.5.4": "patches/@openrouter%2Fai-sdk-provider@1.5.4.patch"
   }
 }
