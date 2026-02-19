@@ -914,7 +914,7 @@ export namespace Provider {
         headers: {},
         options: {},
         cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-        limit: { context: 200000, output: 32000 },
+        limit: { context: 1000000, output: 32000 },
         capabilities: {
           temperature: true,
           reasoning: true,
@@ -954,7 +954,7 @@ export namespace Provider {
         headers: {},
         options: {},
         cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-        limit: { context: 200000, output: 64000 },
+        limit: { context: 1000000, output: 64000 },
         capabilities: {
           temperature: true,
           reasoning: true,
