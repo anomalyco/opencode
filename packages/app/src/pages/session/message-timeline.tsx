@@ -535,7 +535,7 @@ export function MessageTimeline(props: {
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",
-                      container: "w-full px-4 md:px-6",
+                      container: "w-full px-4 md:px-5",
                     }}
                   />
                 </div>
