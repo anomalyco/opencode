@@ -283,6 +283,66 @@ describe("file/index Bun.file patterns", () => {
   })
 
   describe("shouldEncode() logic", () => {
+    test("treats .ts files as text", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "test.ts")
+      await fs.writeFile(filepath, "export const value = 1", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("test.ts")
+          expect(result.type).toBe("text")
+          expect(result.content).toBe("export const value = 1")
+        },
+      })
+    })
+
+    test("treats .mts files as text", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "test.mts")
+      await fs.writeFile(filepath, "export const value = 1", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("test.mts")
+          expect(result.type).toBe("text")
+          expect(result.content).toBe("export const value = 1")
+        },
+      })
+    })
+
+    test("treats .sh files as text", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "test.sh")
+      await fs.writeFile(filepath, "#!/usr/bin/env bash\necho hello", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("test.sh")
+          expect(result.type).toBe("text")
+          expect(result.content).toBe("#!/usr/bin/env bash\necho hello")
+        },
+      })
+    })
+
+    test("treats Dockerfile as text", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "Dockerfile")
+      await fs.writeFile(filepath, "FROM alpine:3.20", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("Dockerfile")
+          expect(result.type).toBe("text")
+          expect(result.content).toBe("FROM alpine:3.20")
+        },
+      })
+    })
+
     test("returns encoding info for text files", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.txt")
