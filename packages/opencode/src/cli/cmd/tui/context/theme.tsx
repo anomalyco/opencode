@@ -412,7 +412,7 @@ async function getCustomThemes() {
       cwd: dir,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = await Filesystem.readJson(item)
     }
   }
   return result

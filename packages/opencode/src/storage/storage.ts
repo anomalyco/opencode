@@ -103,12 +103,12 @@ export namespace Storage {
                 },
               )) {
                 const dest = path.join(dir, "part", message.id, path.basename(partFile))
-                const part = await Bun.file(partFile).json()
+                const part = await Filesystem.readJson(partFile)
                 log.info("copying", {
                   partFile,
                   dest,
                 })
-                await Bun.write(dest, JSON.stringify(part))
+                await Filesystem.writeJson(dest, part)
               }
             }
           }

@@ -3,11 +3,12 @@ import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
-describe("file/index Bun.file patterns", () => {
+describe("file/index Filesystem patterns", () => {
   describe("File.read() - text content", () => {
-    test("reads text file via Bun.file().text()", async () => {
+    test("reads text file via Filesystem.readText()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.txt")
       await fs.writeFile(filepath, "Hello World", "utf-8")
@@ -22,7 +23,7 @@ describe("file/index Bun.file patterns", () => {
       })
     })
 
-    test("reads with Bun.file().exists() check", async () => {
+    test("reads with Filesystem.exists() check", async () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
@@ -81,7 +82,7 @@ describe("file/index Bun.file patterns", () => {
   })
 
   describe("File.read() - binary content", () => {
-    test("reads binary file via Bun.file().arrayBuffer()", async () => {
+    test("reads binary file via Filesystem.readArrayBuffer()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "image.png")
       const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -115,8 +116,8 @@ describe("file/index Bun.file patterns", () => {
     })
   })
 
-  describe("File.read() - Bun.file().type", () => {
-    test("detects MIME type via Bun.file().type", async () => {
+  describe("File.read() - Filesystem.mimeType()", () => {
+    test("detects MIME type via Filesystem.mimeType()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.json")
       await fs.writeFile(filepath, '{"key": "value"}', "utf-8")
@@ -124,8 +125,7 @@ describe("file/index Bun.file patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const bunFile = Bun.file(filepath)
-          expect(bunFile.type).toContain("application/json")
+          expect(Filesystem.mimeType(filepath)).toContain("application/json")
 
           const result = await File.read("test.json")
           expect(result.type).toBe("text")
@@ -149,16 +149,15 @@ describe("file/index Bun.file patterns", () => {
         await Instance.provide({
           directory: tmp.path,
           fn: async () => {
-            const bunFile = Bun.file(filepath)
-            expect(bunFile.type).toContain(mime)
+            expect(Filesystem.mimeType(filepath)).toContain(mime)
           },
         })
       }
     })
   })
 
-  describe("File.list() - Bun.file().exists() and .text()", () => {
-    test("reads .gitignore via Bun.file().exists() and .text()", async () => {
+  describe("File.list() - Filesystem.exists() and readText()", () => {
+    test("reads .gitignore via Filesystem.exists() and readText()", async () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
@@ -168,10 +167,9 @@ describe("file/index Bun.file patterns", () => {
           await fs.writeFile(gitignorePath, "node_modules\ndist\n", "utf-8")
 
           // This is used internally in File.list()
-          const bunFile = Bun.file(gitignorePath)
-          expect(await bunFile.exists()).toBe(true)
+          expect(await Filesystem.exists(gitignorePath)).toBe(true)
 
-          const content = await bunFile.text()
+          const content = await Filesystem.readText(gitignorePath)
           expect(content).toContain("node_modules")
         },
       })
@@ -186,9 +184,8 @@ describe("file/index Bun.file patterns", () => {
           const ignorePath = path.join(tmp.path, ".ignore")
           await fs.writeFile(ignorePath, "*.log\n.env\n", "utf-8")
 
-          const bunFile = Bun.file(ignorePath)
-          expect(await bunFile.exists()).toBe(true)
-          expect(await bunFile.text()).toContain("*.log")
+          expect(await Filesystem.exists(ignorePath)).toBe(true)
+          expect(await Filesystem.readText(ignorePath)).toContain("*.log")
         },
       })
     })
@@ -200,8 +197,7 @@ describe("file/index Bun.file patterns", () => {
         directory: tmp.path,
         fn: async () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
-          const bunFile = Bun.file(gitignorePath)
-          expect(await bunFile.exists()).toBe(false)
+          expect(await Filesystem.exists(gitignorePath)).toBe(false)
 
           // File.list() should still work
           const nodes = await File.list()
@@ -211,8 +207,8 @@ describe("file/index Bun.file patterns", () => {
     })
   })
 
-  describe("File.changed() - Bun.file().text() for untracked files", () => {
-    test("reads untracked files via Bun.file().text()", async () => {
+  describe("File.changed() - Filesystem.readText() for untracked files", () => {
+    test("reads untracked files via Filesystem.readText()", async () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
@@ -222,8 +218,7 @@ describe("file/index Bun.file patterns", () => {
           await fs.writeFile(untrackedPath, "new content\nwith multiple lines", "utf-8")
 
           // This is how File.changed() reads untracked files
-          const bunFile = Bun.file(untrackedPath)
-          const content = await bunFile.text()
+          const content = await Filesystem.readText(untrackedPath)
           const lines = content.split("\n").length
           expect(lines).toBe(2)
         },
@@ -232,7 +227,7 @@ describe("file/index Bun.file patterns", () => {
   })
 
   describe("Error handling", () => {
-    test("handles errors gracefully in Bun.file().text()", async () => {
+    test("handles errors gracefully in Filesystem.readText()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "readonly.txt")
       await fs.writeFile(filepath, "content", "utf-8")
@@ -240,9 +235,9 @@ describe("file/index Bun.file patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nonExistentFile = Bun.file(path.join(tmp.path, "does-not-exist.txt"))
-          // Bun.file().text() on non-existent file throws
-          await expect(nonExistentFile.text()).rejects.toThrow()
+          const nonExistentPath = path.join(tmp.path, "does-not-exist.txt")
+          // Filesystem.readText() on non-existent file throws
+          await expect(Filesystem.readText(nonExistentPath)).rejects.toThrow()
 
           // But File.read() handles this gracefully
           const result = await File.read("does-not-exist.txt")
@@ -251,14 +246,14 @@ describe("file/index Bun.file patterns", () => {
       })
     })
 
-    test("handles errors in Bun.file().arrayBuffer()", async () => {
+    test("handles errors in Filesystem.readArrayBuffer()", async () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nonExistentFile = Bun.file(path.join(tmp.path, "does-not-exist.bin"))
-          const buffer = await nonExistentFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+          const nonExistentPath = path.join(tmp.path, "does-not-exist.bin")
+          const buffer = await Filesystem.readArrayBuffer(nonExistentPath).catch(() => new ArrayBuffer(0))
           expect(buffer.byteLength).toBe(0)
         },
       })
@@ -272,7 +267,6 @@ describe("file/index Bun.file patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const bunFile = Bun.file(filepath)
           // File.read() handles missing images gracefully
           const result = await File.read("broken.png")
           expect(result.type).toBe("text")
