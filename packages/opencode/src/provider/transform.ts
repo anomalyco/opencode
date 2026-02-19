@@ -621,8 +621,10 @@ export namespace ProviderTransform {
           levels.map((effort) => [
             effort,
             {
-              includeThoughts: true,
-              thinkingLevel: effort,
+              thinkingConfig: {
+                includeThoughts: true,
+                thinkingLevel: effort,
+              },
             },
           ]),
         )
@@ -642,8 +644,7 @@ export namespace ProviderTransform {
           groqEffort.map((effort) => [
             effort,
             {
-              includeThoughts: true,
-              thinkingLevel: effort,
+              reasoningEffort: effort,
             },
           ]),
         )
