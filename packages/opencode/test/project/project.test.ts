@@ -233,6 +233,40 @@ describe("Project.fromDirectory with worktrees", () => {
     }
   })
 
+  test("reuses canonical DB project id when cache is different", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
+    try {
+      await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const initial = await p.fromDirectory(worktreePath)
+      const canonicalId = initial.project.id
+      expect(canonicalId).not.toBe("global")
+
+      const common = await $`git rev-parse --git-common-dir`
+        .cwd(tmp.path)
+        .quiet()
+        .then((r) => r.text())
+        .then((s) => s.trim())
+      const commonDir = path.isAbsolute(common) ? common : path.resolve(tmp.path, common)
+      const cacheFile = path.join(commonDir, "opencode")
+
+      await Bun.write(cacheFile, "bogus-project-id")
+
+      const again = await p.fromDirectory(worktreePath)
+      expect(again.project.id).toBe(canonicalId)
+      expect(again.project.sandboxes).toContain(worktreePath)
+      expect(await Bun.file(cacheFile).text()).toBe(canonicalId)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
   test("repairs duplicate project IDs for the same worktree", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
