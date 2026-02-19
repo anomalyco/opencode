@@ -86,7 +86,8 @@ export namespace Project {
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
+        let id = await Bun.file(path.join(dotgit, "opencode"))
+          .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -124,7 +125,9 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            void Bun.file(path.join(dotgit, "opencode"))
+              .write(id)
+              .catch(() => undefined)
           }
         }
 
@@ -274,9 +277,10 @@ export namespace Project {
     )
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
-    const buffer = await Filesystem.readBytes(shortest)
-    const base64 = buffer.toString("base64")
-    const mime = Filesystem.mimeType(shortest) || "image/png"
+    const file = Bun.file(shortest)
+    const buffer = await file.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString("base64")
+    const mime = file.type || "image/png"
     const url = `data:${mime};base64,${base64}`
     await update({
       projectID: input.id,
@@ -377,8 +381,10 @@ export namespace Project {
     const data = fromRow(row)
     const valid: string[] = []
     for (const dir of data.sandboxes) {
-      const s = Filesystem.stat(dir)
-      if (s?.isDirectory()) valid.push(dir)
+      const stat = await Bun.file(dir)
+        .stat()
+        .catch(() => undefined)
+      if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
   }

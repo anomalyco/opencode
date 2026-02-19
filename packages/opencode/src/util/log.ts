@@ -1,6 +1,5 @@
 import path from "path"
 import fs from "fs/promises"
-import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
 
@@ -64,15 +63,13 @@ export namespace Log {
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
+    const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
-    const stream = createWriteStream(logpath, { flags: "a" })
+    const writer = logfile.writer()
     write = async (msg: any) => {
-      return new Promise((resolve, reject) => {
-        stream.write(msg, (err) => {
-          if (err) reject(err)
-          else resolve(msg.length)
-        })
-      })
+      const num = writer.write(msg)
+      writer.flush()
+      return num
     }
   }
 

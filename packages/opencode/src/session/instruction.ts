@@ -85,7 +85,7 @@ export namespace InstructionPrompt {
     }
 
     for (const file of globalFiles()) {
-      if (await Filesystem.exists(file)) {
+      if (await Bun.file(file).exists()) {
         paths.add(path.resolve(file))
         break
       }
@@ -120,7 +120,9 @@ export namespace InstructionPrompt {
     const paths = await systemPaths()
 
     const files = Array.from(paths).map(async (p) => {
-      const content = await Filesystem.readText(p).catch(() => "")
+      const content = await Bun.file(p)
+        .text()
+        .catch(() => "")
       return content ? "Instructions from: " + p + "\n" + content : ""
     })
 
@@ -162,7 +164,7 @@ export namespace InstructionPrompt {
   export async function find(dir: string) {
     for (const file of FILES) {
       const filepath = path.resolve(path.join(dir, file))
-      if (await Filesystem.exists(filepath)) return filepath
+      if (await Bun.file(filepath).exists()) return filepath
     }
   }
 
@@ -180,7 +182,9 @@ export namespace InstructionPrompt {
 
       if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)
-        const content = await Filesystem.readText(found).catch(() => undefined)
+        const content = await Bun.file(found)
+          .text()
+          .catch(() => undefined)
         if (content) {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }
