@@ -1025,12 +1025,12 @@ export function Session() {
             <scrollbox
               ref={(r) => {
                 scroll = r
-                // Scroll anchoring: after content resizes, yoga recalculates
-                // child positions during the tree walk. recalculateBarProps
-                // fires mid-walk (children not yet updated). We schedule a
-                // process.nextTick to run AFTER the tree walk finishes, then
-                // compare the anchor child's new _y with its saved position
-                // and adjust scrollTop to keep the same content in view.
+                // Scroll anchoring: when content resizes, yoga recalculates
+                // child positions. recalculateBarProps fires mid-tree-walk
+                // (children's _y not yet updated), but yoga's computed layout
+                // is already finalized. We read the anchor child's new
+                // position directly from yoga (getComputedLayout().top) and
+                // adjust scrollTop synchronously to avoid any flicker.
                 const original = (r as any).recalculateBarProps.bind(r)
                 ;(r as any).recalculateBarProps = () => {
                   const savedId = anchorChildId
@@ -1038,16 +1038,14 @@ export function Session() {
                   const wasAtBottom = userAtBottom
                   original()
                   if (wasAtBottom || !savedId) return
-                  process.nextTick(() => {
-                    if (r.isDestroyed) return
-                    const anchor = r.getChildren().find((c: any) => c.id === savedId)
-                    if (!anchor) return
-                    const delta = (anchor as any)._y - savedY
-                    if (delta !== 0) {
-                      r.scrollTop = r.scrollTop + delta
-                    }
-                    saveAnchor()
-                  })
+                  const anchor = r.getChildren().find((c: any) => c.id === savedId)
+                  if (!anchor) return
+                  const newY = anchor.getLayoutNode().getComputedLayout().top
+                  const delta = newY - savedY
+                  if (delta !== 0) {
+                    r.scrollTop = r.scrollTop + delta
+                    anchorChildY = newY
+                  }
                 }
               }}
               viewportOptions={{
