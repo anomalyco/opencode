@@ -668,6 +668,8 @@ body {
       max-width: none;
       max-height: none;
       display: block;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
     }
   }
 

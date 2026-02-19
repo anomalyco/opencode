@@ -240,7 +240,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["icon-diff-add-active"] = diffAdd[isDark ? 10 : 11]
   tokens["icon-diff-delete-base"] = diffDelete[isDark ? 8 : 9]
   tokens["icon-diff-delete-hover"] = diffDelete[isDark ? 9 : 10]
-  tokens["icon-diff-modified-base"] = tokens["icon-warning-base"]
+  tokens["icon-diff-modified-base"] = isDark ? "#ffba92" : "#FF8C00"
 
   tokens["syntax-comment"] = "var(--text-weak)"
   tokens["syntax-regexp"] = "var(--text-base)"
