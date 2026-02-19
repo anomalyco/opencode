@@ -2121,12 +2121,13 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   )
 }
 
-function normalizePath(input?: string) {
+function normalizePath(input?: string | number) {
   if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+  const p = typeof input === "string" ? input : String(input)
+  if (path.isAbsolute(p)) {
+    return path.relative(process.cwd(), p) || "."
   }
-  return input
+  return p
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
