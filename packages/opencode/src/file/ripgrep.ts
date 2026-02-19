@@ -207,6 +207,21 @@ export namespace Ripgrep {
     return filepath
   }
 
+  // Read .ignore entries and return them as negation globs.
+  // ripgrep's --glob flag overrides .ignore rules, so when user-provided
+  // include globs are present (e.g. **/*.json), ignored files that match
+  // the glob are whitelisted back. Re-applying them as negation globs
+  // after the include globs restores the intended filtering.
+  async function negationsFromIgnore(cwd: string) {
+    const content = await fs.readFile(path.join(cwd, ".ignore"), "utf-8").catch(() => "")
+    const globs: string[] = []
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith("#")) globs.push(`--glob=!${trimmed}`)
+    }
+    return globs
+  }
+
   export async function* files(input: {
     cwd: string
     glob?: string[]
@@ -225,6 +240,7 @@ export namespace Ripgrep {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
+      args.push(...(await negationsFromIgnore(input.cwd)))
     }
 
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
@@ -347,6 +363,7 @@ export namespace Ripgrep {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
+      args.push(...(await negationsFromIgnore(input.cwd)))
     }
 
     if (input.limit) {
