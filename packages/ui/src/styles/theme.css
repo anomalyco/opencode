@@ -190,6 +190,11 @@
   --text-on-brand-weak: var(--smoke-light-alpha-9);
   --text-on-brand-weaker: var(--smoke-light-alpha-8);
   --text-on-brand-strong: var(--smoke-light-alpha-12);
+  --text-interactive-weak: var(--cobalt-light-8);
+  --text-success-base: var(--apple-light-8);
+  --text-warning-base: var(--solaris-light-8);
+  --text-critical-base: var(--ember-light-9);
+  --text-info-base: var(--lilac-light-8);
   --button-primary-base: var(--smoke-light-12);
   --button-secondary-base: #fdfcfc;
   --button-secondary-hover: #faf9f9;
@@ -448,6 +453,11 @@
     --text-on-brand-weak: var(--smoke-dark-alpha-9);
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
+    --text-interactive-weak: var(--cobalt-dark-9);
+    --text-success-base: var(--apple-dark-9);
+    --text-warning-base: var(--solaris-dark-9);
+    --text-critical-base: var(--ember-dark-9);
+    --text-info-base: var(--lilac-dark-9);
     --button-primary-base: var(--smoke-dark-12);
     --button-secondary-base: #231f1f;
     --button-secondary-hover: #2a2727;

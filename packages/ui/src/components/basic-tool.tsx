@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, type IconProps } from "./icon"
+import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
 import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
 
@@ -86,6 +87,11 @@ export function BasicTool(props: BasicToolProps) {
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
+            <div data-slot="basic-tool-tool-indicator">
+              <Show when={pending()} fallback={<Icon name={props.icon} size="small" />}>
+                <Spinner />
+              </Show>
+            </div>
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>

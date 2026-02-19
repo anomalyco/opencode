@@ -10,13 +10,10 @@
 
   &.tool-collapsible {
     gap: 8px;
-    padding: 4px 6px;
-    border-radius: 6px;
-    background-color: light-dark(
-      color-mix(in oklch, var(--surface-inset-base) 60%, transparent),
-      color-mix(in oklch, var(--surface-inset-base) 40%, transparent)
-    );
-    border: 1px solid var(--border-weaker-base);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background-color: light-dark(color-mix(in oklch, var(--surface-inset-base) 50%, transparent), #282828);
+    border: 1px solid light-dark(color-mix(in oklch, var(--border-weak-base) 50%, transparent), #363636);
   }
 
   [data-slot="collapsible-trigger"] {

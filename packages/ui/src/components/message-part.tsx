@@ -575,7 +575,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const details = createMemo(() => summary().join(", "))
 
   return (
-    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+    <Collapsible open={open()} onOpenChange={setOpen} class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
           <Show
@@ -614,7 +614,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                       <div data-slot="basic-tool-tool-info">
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
+                            <span data-slot="basic-tool-tool-title" class="tool-read">
                               <Show when={running} fallback={trigger.title}>
                                 <TextShimmer text={trigger.title} />
                               </Show>
@@ -1176,6 +1176,7 @@ ToolRegistry.register({
           icon="glasses"
           trigger={{
             title: i18n.t("ui.tool.read"),
+            titleClass: "tool-read",
             subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
             args,
           }}
@@ -1203,7 +1204,11 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="bullet-list"
-        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+        trigger={{
+          title: i18n.t("ui.tool.list"),
+          titleClass: "tool-read",
+          subtitle: getDirectory(props.input.path || "/"),
+        }}
       >
         <Show when={props.output}>
           {(output) => (
@@ -1227,6 +1232,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.glob"),
+          titleClass: "tool-read",
           subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
@@ -1256,6 +1262,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.grep"),
+          titleClass: "tool-read",
           subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
@@ -1290,7 +1297,7 @@ ToolRegistry.register({
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" class="tool-read">
                 <Show when={pending()} fallback={i18n.t("ui.tool.webfetch")}>
                   <TextShimmer text={i18n.t("ui.tool.webfetch")} />
                 </Show>
@@ -1429,6 +1436,7 @@ ToolRegistry.register({
         icon="console"
         trigger={{
           title: i18n.t("ui.tool.shell"),
+          titleClass: "tool-exec",
           subtitle: props.input.description,
         }}
       >
@@ -1477,7 +1485,7 @@ ToolRegistry.register({
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
+                <span data-slot="message-part-title-text" class="tool-edit">
                   <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
                     <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
                   </Show>
@@ -1538,7 +1546,7 @@ ToolRegistry.register({
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
+                <span data-slot="message-part-title-text" class="tool-edit">
                   <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
                     <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
                   </Show>
@@ -1618,6 +1626,7 @@ ToolRegistry.register({
         defer
         trigger={{
           title: i18n.t("ui.tool.patch"),
+          titleClass: "tool-edit",
           subtitle: subtitle(),
         }}
       >
@@ -1734,6 +1743,7 @@ ToolRegistry.register({
         icon="checklist"
         trigger={{
           title: i18n.t("ui.tool.todos"),
+          titleClass: "tool-interact",
           subtitle: subtitle(),
         }}
       >
@@ -1780,6 +1790,7 @@ ToolRegistry.register({
         icon="bubble-5"
         trigger={{
           title: i18n.t("ui.tool.questions"),
+          titleClass: "tool-interact",
           subtitle: subtitle(),
         }}
       >

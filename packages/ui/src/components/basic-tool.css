@@ -22,6 +22,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    color: var(--text-weak);
+    opacity: 0.7;
 
     [data-component="spinner"] {
       width: 16px;
@@ -77,7 +79,7 @@
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+    color: var(--text-base);
 
     &.capitalize {
       text-transform: capitalize;
@@ -86,6 +88,22 @@
     &.agent-title {
       color: var(--text-base);
       font-weight: var(--font-weight-medium);
+    }
+
+    &.tool-read {
+      color: var(--text-interactive-weak);
+    }
+
+    &.tool-edit {
+      color: var(--text-warning-base);
+    }
+
+    &.tool-exec {
+      color: var(--text-success-base);
+    }
+
+    &.tool-interact {
+      color: var(--text-info-base);
     }
   }
 
@@ -100,7 +118,7 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-base);
+    color: var(--text-weak);
 
     &.clickable {
       cursor: pointer;
@@ -144,6 +162,6 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-base);
+    color: var(--text-weak);
   }
 }
