@@ -70,29 +70,28 @@ export function SessionPromptDock(props: {
     setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
   })
 
-  const [responding, setResponding] = createSignal(false)
-
-  createEffect(
-    on(
-      () => permissionRequest()?.id,
-      () => setResponding(false),
-      { defer: true },
-    ),
-  )
+  const [responding, setResponding] = createSignal<string | undefined>()
+  const permissionResponding = () => {
+    const perm = permissionRequest()
+    if (!perm) return false
+    return responding() === perm.id
+  }
 
   const decide = (response: "once" | "always" | "reject") => {
     const perm = permissionRequest()
     if (!perm) return
-    if (responding()) return
+    if (responding() === perm.id) return
 
-    setResponding(true)
+    setResponding(perm.id)
     sdk.client.permission
       .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
-      .finally(() => setResponding(false))
+      .finally(() => {
+        setResponding((id) => (id === perm.id ? undefined : id))
+      })
   }
 
   const done = createMemo(
@@ -175,11 +174,11 @@ export function SessionPromptDock(props: {
     <div
       ref={props.setPromptDockRef}
       data-component="session-prompt-dock"
-      class="shrink-0 w-full pb-4 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
+      class="shrink-0 w-full pb-3 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
     >
       <div
         classList={{
-          "w-full px-4 pointer-events-auto": true,
+          "w-full px-3 pointer-events-auto": true,
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
         }}
       >
@@ -218,18 +217,28 @@ export function SessionPromptDock(props: {
                     <>
                       <div />
                       <div data-slot="permission-footer-actions">
-                        <Button variant="ghost" size="normal" onClick={() => decide("reject")} disabled={responding()}>
+                        <Button
+                          variant="ghost"
+                          size="normal"
+                          onClick={() => decide("reject")}
+                          disabled={permissionResponding()}
+                        >
                           {language.t("ui.permission.deny")}
                         </Button>
                         <Button
                           variant="secondary"
                           size="normal"
                           onClick={() => decide("always")}
-                          disabled={responding()}
+                          disabled={permissionResponding()}
                         >
                           {language.t("ui.permission.allowAlways")}
                         </Button>
-                        <Button variant="primary" size="normal" onClick={() => decide("once")} disabled={responding()}>
+                        <Button
+                          variant="primary"
+                          size="normal"
+                          onClick={() => decide("once")}
+                          disabled={permissionResponding()}
+                        >
                           {language.t("ui.permission.allowOnce")}
                         </Button>
                       </div>

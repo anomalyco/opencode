@@ -36,7 +36,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Arbeit delegieren",
   "ui.sessionTurn.status.planning": "Nächste Schritte planen",
-  "ui.sessionTurn.status.gatheringContext": "Erkunden...",
+  "ui.sessionTurn.status.gatheringContext": "Erkunden",
   "ui.sessionTurn.status.gatheredContext": "Erkundet",
   "ui.sessionTurn.status.searchingCodebase": "Codebasis durchsuchen",
   "ui.sessionTurn.status.searchingWeb": "Web durchsuchen",

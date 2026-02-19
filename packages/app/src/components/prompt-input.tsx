@@ -423,6 +423,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!isFocused()) setComposing(false)
   })
 
+  const handleBlur = () => {
+    closePopover()
+    setComposing(false)
+  }
+
   const agentList = createMemo(() =>
     sync.data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
@@ -1128,6 +1133,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onPaste={handlePaste}
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
+              onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               dir={isRTL() ? "rtl" : "ltr"}
               classList={{
@@ -1379,7 +1385,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <TooltipKeybind
                     placement="top"
                     gutter={4}
-                    title={language.t(mode === "shell" ? "command.prompt.mode.shell" : "command.prompt.mode.normal")}
+                    openDelay={2000}
+                    title={language.t(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
                     keybind={command.keybind(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
                     class="size-full flex items-center justify-center"
                   >
