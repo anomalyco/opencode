@@ -21,6 +21,8 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+const MAX_DEPTH = 128
+
 function pathToFileUrl(filepath: string): string {
   return `file://${encodeFilePath(filepath)}`
 }
@@ -69,13 +71,13 @@ const kindLabel = (kind: Kind) => {
 const kindTextColor = (kind: Kind) => {
   if (kind === "add") return "color: var(--icon-diff-add-base)"
   if (kind === "del") return "color: var(--icon-diff-delete-base)"
-  return "color: var(--icon-warning-active)"
+  return "color: var(--icon-diff-modified-base)"
 }
 
 const kindDotColor = (kind: Kind) => {
   if (kind === "add") return "background-color: var(--icon-diff-add-base)"
   if (kind === "del") return "background-color: var(--icon-diff-delete-base)"
-  return "background-color: var(--icon-warning-active)"
+  return "background-color: var(--icon-diff-modified-base)"
 }
 
 const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
@@ -260,11 +262,19 @@ export default function FileTree(props: {
   _marks?: Set<string>
   _deeps?: Map<string, number>
   _kinds?: ReadonlyMap<string, Kind>
+  _chain?: readonly string[]
 }) {
   const file = useFile()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
+
+  const key = (p: string) =>
+    file
+      .normalize(p)
+      .replace(/[\\/]+$/, "")
+      .replaceAll("\\", "/")
+  const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
 
   const filter = createMemo(() => {
     if (props._filter) return props._filter
@@ -307,23 +317,45 @@ export default function FileTree(props: {
 
     const out = new Map<string, number>()
 
-    const visit = (dir: string, lvl: number): number => {
-      const expanded = file.tree.state(dir)?.expanded ?? false
-      if (!expanded) return -1
+    const root = props.path
+    if (!(file.tree.state(root)?.expanded ?? false)) return out
 
-      const nodes = file.tree.children(dir)
-      const max = nodes.reduce((max, node) => {
-        if (node.type !== "directory") return max
-        const open = file.tree.state(node.path)?.expanded ?? false
-        if (!open) return max
-        return Math.max(max, visit(node.path, lvl + 1))
-      }, lvl)
+    const seen = new Set<string>()
+    const stack: { dir: string; lvl: number; i: number; kids: string[]; max: number }[] = []
 
-      out.set(dir, max)
-      return max
+    const push = (dir: string, lvl: number) => {
+      const id = key(dir)
+      if (seen.has(id)) return
+      seen.add(id)
+
+      const kids = file.tree
+        .children(dir)
+        .filter((node) => node.type === "directory" && (file.tree.state(node.path)?.expanded ?? false))
+        .map((node) => node.path)
+
+      stack.push({ dir, lvl, i: 0, kids, max: lvl })
     }
 
-    visit(props.path, level - 1)
+    push(root, level - 1)
+
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!
+
+      if (top.i < top.kids.length) {
+        const next = top.kids[top.i]!
+        top.i++
+        push(next, top.lvl + 1)
+        continue
+      }
+
+      out.set(top.dir, top.max)
+      stack.pop()
+
+      const parent = stack[stack.length - 1]
+      if (!parent) continue
+      parent.max = Math.max(parent.max, top.max)
+    }
+
     return out
   })
 
@@ -415,12 +447,13 @@ export default function FileTree(props: {
   })
 
   return (
-    <div class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
+    <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
           const deep = () => deeps().get(node.path) ?? -1
           const kind = () => visibleKind(node, kinds(), marks())
+          const active = () => !!kind() && !node.ignored
 
           return (
             <Switch>
@@ -459,21 +492,27 @@ export default function FileTree(props: {
                       }}
                       style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
                     />
-                    <FileTree
-                      path={node.path}
-                      level={level + 1}
-                      allowed={props.allowed}
-                      modified={props.modified}
-                      kinds={props.kinds}
-                      active={props.active}
-                      draggable={props.draggable}
-                      tooltip={props.tooltip}
-                      onFileClick={props.onFileClick}
-                      _filter={filter()}
-                      _marks={marks()}
-                      _deeps={deeps()}
-                      _kinds={kinds()}
-                    />
+                    <Show
+                      when={level < MAX_DEPTH && !chain.includes(key(node.path))}
+                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
+                    >
+                      <FileTree
+                        path={node.path}
+                        level={level + 1}
+                        allowed={props.allowed}
+                        modified={props.modified}
+                        kinds={props.kinds}
+                        active={props.active}
+                        draggable={props.draggable}
+                        tooltip={props.tooltip}
+                        onFileClick={props.onFileClick}
+                        _filter={filter()}
+                        _marks={marks()}
+                        _deeps={deeps()}
+                        _kinds={kinds()}
+                        _chain={chain}
+                      />
+                    </Show>
                   </Collapsible.Content>
                 </Collapsible>
               </Match>
@@ -492,7 +531,37 @@ export default function FileTree(props: {
                     onClick={() => props.onFileClick?.(node)}
                   >
                     <div class="w-4 shrink-0" />
-                    <FileIcon node={node} class="text-icon-weak size-4" />
+                    <Switch>
+                      <Match when={node.ignored}>
+                        <FileIcon
+                          node={node}
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style="color: var(--icon-weak-base)"
+                          mono
+                        />
+                      </Match>
+                      <Match when={active()}>
+                        <FileIcon
+                          node={node}
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style={kindTextColor(kind()!)}
+                          mono
+                        />
+                      </Match>
+                      <Match when={!node.ignored}>
+                        <span class="filetree-iconpair size-4">
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
+                        </span>
+                      </Match>
+                    </Switch>
                   </FileTreeNode>
                 </FileTreeNodeTooltip>
               </Match>
