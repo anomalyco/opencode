@@ -30,7 +30,7 @@ export function formatDateUTC(date: Date) {
     timeZoneName: "short",
     timeZone: "UTC",
   }
-  return date.toLocaleDateString("en-US", options)
+  return date.toLocaleDateString(undefined, options)
 }
 
 export function formatBalance(amount: number) {

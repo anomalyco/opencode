@@ -36,7 +36,7 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
-        attachments?: MessageV2.FilePart[]
+        attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
       }>
       formatValidationError?(error: z.ZodError): string
     }>
