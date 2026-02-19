@@ -61,7 +61,6 @@ import {
   displayName,
   errorMessage,
   getDraggableId,
-  projectSessionTarget,
   sortedRootSessions,
   syncWorkspaceOrder,
   workspaceKey,
@@ -82,8 +81,7 @@ export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
-      lastSession: {} as { [directory: string]: string },
-      lastSessionAt: {} as { [directory: string]: number },
+      lastProjectSession: {} as { [directory: string]: { directory: string; id: string; at: number } },
       activeProject: undefined as string | undefined,
       activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
@@ -1076,19 +1074,37 @@ export default function Layout(props: ParentProps) {
     dialog.show(() => <DialogSettings />)
   }
 
-  function navigateToProject(directory: string | undefined) {
-    if (!directory) return
-    server.projects.touch(directory)
+  function projectRoot(directory: string) {
     const project = layout.projects
       .list()
       .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
-    const target = projectSessionTarget({
-      directory,
-      project,
-      lastSession: store.lastSession,
-      lastSessionAt: store.lastSessionAt,
-    })
-    navigateWithSidebarReset(`/${base64Encode(target.directory)}${target.id ? `/session/${target.id}` : ""}`)
+    if (project) return project.worktree
+
+    const known = Object.entries(store.workspaceOrder).find(
+      ([root, dirs]) => root === directory || dirs.includes(directory),
+    )
+    if (known) return known[0]
+
+    const [child] = globalSync.child(directory, { bootstrap: false })
+    const id = child.project
+    if (!id) return directory
+
+    const meta = globalSync.data.project.find((item) => item.id === id)
+    return meta?.worktree ?? directory
+  }
+
+  function navigateToProject(directory: string | undefined) {
+    if (!directory) return
+    const root = projectRoot(directory)
+    server.projects.touch(root)
+
+    const projectSession = store.lastProjectSession[root]
+    if (projectSession?.id) {
+      navigateWithSidebarReset(`/${base64Encode(projectSession.directory)}/session/${projectSession.id}`)
+      return
+    }
+
+    navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -1442,8 +1458,8 @@ export default function Layout(props: ParentProps) {
         if (!dir || !id) return
         const directory = decode64(dir)
         if (!directory) return
-        setStore("lastSession", directory, id)
-        setStore("lastSessionAt", directory, Date.now())
+        const at = Date.now()
+        setStore("lastProjectSession", projectRoot(directory), { directory, id, at })
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
         if (expanded === false) {
