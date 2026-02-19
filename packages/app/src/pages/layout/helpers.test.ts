@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { collectOpenProjectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
+import {
+  displayName,
+  errorMessage,
+  getDraggableId,
+  projectSessionTarget,
+  syncWorkspaceOrder,
+  workspaceKey,
+} from "./helpers"
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -88,5 +95,35 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("picks newest session across project workspaces", () => {
+    const result = projectSessionTarget({
+      directory: "/root",
+      project: { worktree: "/root", sandboxes: ["/root/a", "/root/b"] },
+      lastSession: {
+        "/root": "root-session",
+        "/root/a": "sandbox-a",
+        "/root/b": "sandbox-b",
+      },
+      lastSessionAt: {
+        "/root": 1,
+        "/root/a": 3,
+        "/root/b": 2,
+      },
+    })
+
+    expect(result).toEqual({ directory: "/root/a", id: "sandbox-a", at: 3 })
+  })
+
+  test("falls back to project route when no session exists", () => {
+    const result = projectSessionTarget({
+      directory: "/root",
+      project: { worktree: "/root", sandboxes: ["/root/a"] },
+      lastSession: {},
+      lastSessionAt: {},
+    })
+
+    expect(result).toEqual({ directory: "/root" })
   })
 })

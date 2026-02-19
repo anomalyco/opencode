@@ -62,6 +62,24 @@ export const errorMessage = (err: unknown, fallback: string) => {
   return fallback
 }
 
+export function projectSessionTarget(input: {
+  directory: string
+  project?: { worktree: string; sandboxes?: string[] }
+  lastSession: Record<string, string>
+  lastSessionAt: Record<string, number>
+}): { directory: string; id?: string; at?: number } {
+  const dirs = input.project ? [input.project.worktree, ...(input.project.sandboxes ?? [])] : [input.directory]
+  const best = dirs.reduce<{ directory: string; id: string; at: number } | undefined>((result, directory) => {
+    const id = input.lastSession[directory]
+    if (!id) return result
+    const at = input.lastSessionAt[directory] ?? 0
+    if (result && result.at >= at) return result
+    return { directory, id, at }
+  }, undefined)
+  if (best) return best
+  return { directory: input.directory }
+}
+
 export const syncWorkspaceOrder = (local: string, dirs: string[], existing?: string[]) => {
   if (!existing) return dirs
   const keep = existing.filter((d) => d !== local && dirs.includes(d))

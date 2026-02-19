@@ -61,6 +61,7 @@ import {
   displayName,
   errorMessage,
   getDraggableId,
+  projectSessionTarget,
   sortedRootSessions,
   syncWorkspaceOrder,
   workspaceKey,
@@ -82,6 +83,7 @@ export default function Layout(props: ParentProps) {
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
       lastSession: {} as { [directory: string]: string },
+      lastSessionAt: {} as { [directory: string]: number },
       activeProject: undefined as string | undefined,
       activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
@@ -1077,8 +1079,16 @@ export default function Layout(props: ParentProps) {
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
     server.projects.touch(directory)
-    const lastSession = store.lastSession[directory]
-    navigateWithSidebarReset(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
+    const project = layout.projects
+      .list()
+      .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+    const target = projectSessionTarget({
+      directory,
+      project,
+      lastSession: store.lastSession,
+      lastSessionAt: store.lastSessionAt,
+    })
+    navigateWithSidebarReset(`/${base64Encode(target.directory)}${target.id ? `/session/${target.id}` : ""}`)
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -1433,6 +1443,7 @@ export default function Layout(props: ParentProps) {
         const directory = decode64(dir)
         if (!directory) return
         setStore("lastSession", directory, id)
+        setStore("lastSessionAt", directory, Date.now())
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
         if (expanded === false) {
