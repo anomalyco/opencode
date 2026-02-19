@@ -9,6 +9,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { Database, eq } from "../../src/storage/db"
 import { ProjectTable } from "../../src/project/project.sql"
 import { PermissionTable, SessionTable } from "../../src/session/session.sql"
+import fs from "fs/promises"
 
 Log.init({ print: false })
 
@@ -371,10 +372,12 @@ describe("Project.fromDirectory with worktrees", () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
+    const stamp = `${Date.now()}-${Math.random()}`
+
     await Database.transaction((db) => {
       db.insert(ProjectTable)
         .values({
-          id: "ng-1",
+          id: `ng-1-${stamp}`,
           worktree: tmp.path,
           vcs: null,
           sandboxes: [],
@@ -384,7 +387,7 @@ describe("Project.fromDirectory with worktrees", () => {
         .run()
       db.insert(ProjectTable)
         .values({
-          id: "ng-2",
+          id: `ng-2-${stamp}`,
           worktree: tmp.path,
           vcs: null,
           sandboxes: [],
@@ -394,10 +397,59 @@ describe("Project.fromDirectory with worktrees", () => {
         .run()
     })
 
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
     await p.repairAll()
 
     const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
     expect(projects.length).toBe(2)
+
+    const after = await fs.readdir(dir)
+    const added = after.filter((f) => !before.includes(f))
+    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("does not repair when only one git project exists for a worktree", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const stamp = `${Date.now()}-${Math.random()}`
+
+    await Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: `git-1-${stamp}`,
+          worktree: tmp.path,
+          vcs: "git",
+          sandboxes: [],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+      db.insert(ProjectTable)
+        .values({
+          id: `ng-1-${stamp}`,
+          worktree: tmp.path,
+          vcs: null,
+          sandboxes: [],
+          time_created: Date.now() + 1,
+          time_updated: Date.now() + 1,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+    expect(projects.length).toBe(2)
+
+    const after = await fs.readdir(dir)
+    const added = after.filter((f) => !before.includes(f))
+    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
   })
 })
 

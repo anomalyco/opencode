@@ -98,10 +98,8 @@ export namespace Project {
         .select({ worktree: ProjectTable.worktree })
         .from(ProjectTable)
         .groupBy(ProjectTable.worktree)
-        // Only consider worktrees that have at least one git-backed project row.
-        // Non-git projects can share a `worktree` path, but they don't participate in
-        // git worktrees/sandboxes and shouldn't be modified by this repair.
-        .having(sql`count(*) > 1 AND sum(case when ${ProjectTable.vcs} = 'git' then 1 else 0 end) > 0`)
+        // Only repair git-backed duplicates. Sandboxes/worktrees are a git feature.
+        .having(sql`sum(case when ${ProjectTable.vcs} = 'git' then 1 else 0 end) > 1`)
         .all()
         .map((x) => x.worktree),
     )
@@ -142,7 +140,9 @@ export namespace Project {
     if (row.vcs !== "git") return
 
     const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all())
-    const dupes = projects.filter((p) => p.id !== row.id)
+    const gitProjects = projects.filter((p) => p.vcs === "git")
+    if (gitProjects.length <= 1) return
+    const dupes = gitProjects.filter((p) => p.id !== row.id)
     if (dupes.length === 0) return
 
     const meta = merge(fromRow(row), dupes)
