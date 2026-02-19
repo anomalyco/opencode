@@ -66,7 +66,7 @@ function EditBody(props: { request: PermissionRequest }) {
     <box flexDirection="column" gap={1}>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <text fg={theme.textMuted}>{"→"}</text>
-        <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
+        <text fg={theme.textMuted}>수정 {normalizePath(filepath())}</text>
       </box>
       <Show when={diff()}>
         <scrollbox height="100%">
@@ -143,15 +143,15 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
     <Switch>
       <Match when={store.stage === "always"}>
         <Prompt
-          title="Always allow"
+          title="항상 허용"
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={"OpenCode를 다시 시작할 때까지 " + props.request.permission + " 권한을 허용합니다."} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>OpenCode를 다시 시작할 때까지 다음 패턴을 허용합니다</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -166,7 +166,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               </Match>
             </Switch>
           }
-          options={{ confirm: "Confirm", cancel: "Cancel" }}
+          options={{ confirm: "확인", cancel: "취소" }}
           escapeKey="cancel"
           onSelect={(option) => {
             setStore("stage", "permission")
@@ -196,23 +196,23 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         {(() => {
           const body = (
             <Prompt
-              title="Permission required"
+              title="권한 필요"
               body={
                 <Switch>
                   <Match when={props.request.permission === "edit"}>
                     <EditBody request={props.request} />
                   </Match>
                   <Match when={props.request.permission === "read"}>
-                    <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
+                    <TextBody icon="→" title={`읽기 ` + normalizePath(input().filePath as string)} />
                   </Match>
                   <Match when={props.request.permission === "glob"}>
-                    <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
+                    <TextBody icon="✱" title={`Glob 검색 "` + (input().pattern ?? "") + `"`} />
                   </Match>
                   <Match when={props.request.permission === "grep"}>
-                    <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
+                    <TextBody icon="✱" title={`Grep 검색 "` + (input().pattern ?? "") + `"`} />
                   </Match>
                   <Match when={props.request.permission === "list"}>
-                    <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
+                    <TextBody icon="→" title={`목록 보기 ` + normalizePath(input().path as string)} />
                   </Match>
                   <Match when={props.request.permission === "bash"}>
                     <TextBody
@@ -224,7 +224,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   <Match when={props.request.permission === "task"}>
                     <TextBody
                       icon="#"
-                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
+                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} 작업`}
                       description={"◉ " + input().description}
                     />
                   </Match>
@@ -253,18 +253,18 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                       const raw = parent ?? filepath ?? derived
                       const dir = normalizePath(raw)
 
-                      return <TextBody icon="←" title={`Access external directory ` + dir} />
+                      return <TextBody icon="←" title={`외부 디렉터리 접근 ` + dir} />
                     })()}
                   </Match>
                   <Match when={props.request.permission === "doom_loop"}>
-                    <TextBody icon="⟳" title="Continue after repeated failures" />
+                    <TextBody icon="⟳" title="반복 실패 후 계속 진행" />
                   </Match>
                   <Match when={true}>
-                    <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                    <TextBody icon="⚙" title={`도구 호출 ` + props.request.permission} />
                   </Match>
                 </Switch>
               }
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{ once: "한 번 허용", always: "항상 허용", reject: "거부" }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
@@ -331,10 +331,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
           <text fg={theme.error}>{"△"}</text>
-          <text fg={theme.text}>Reject permission</text>
+          <text fg={theme.text}>권한 거부</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>OpenCode가 어떻게 다르게 동작해야 하는지 입력하세요</text>
         </box>
       </box>
       <box
@@ -424,7 +424,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     }
   })
 
-  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const hint = createMemo(() => (store.expanded ? "축소" : "전체화면"))
   const renderer = useRenderer()
 
   const content = () => (
@@ -490,10 +490,10 @@ function Prompt<const T extends Record<string, string>>(props: {
             </text>
           </Show>
           <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+            {"⇆"} <span style={{ fg: theme.textMuted }}>선택</span>
           </text>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+            enter <span style={{ fg: theme.textMuted }}>확인</span>
           </text>
         </box>
       </box>

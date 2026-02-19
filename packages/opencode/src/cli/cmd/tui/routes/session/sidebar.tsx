@@ -12,7 +12,14 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean; progressPlaceholder?: boolean }) {
+export function Sidebar(props: {
+  sessionID: string
+  overlay?: boolean
+  progressPlaceholder?: boolean
+  width?: number
+  onNarrow?: () => void
+  onWiden?: () => void
+}) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -129,21 +136,28 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     }
     return result
   })
+  const getToolPartAgent = (part: SessionToolPart, fallbackByMessageID: Map<string, string>) => {
+    const candidate = part as SessionToolPart & {
+      subtask?: { agent?: unknown }
+      agent?: unknown
+      metadata?: Record<string, unknown>
+    }
+    const fromSubtask = candidate.subtask?.agent
+    if (typeof fromSubtask === "string" && fromSubtask.length > 0) return fromSubtask
+    const fromPart = candidate.agent
+    if (typeof fromPart === "string" && fromPart.length > 0) return fromPart
+    const fromMetadata = candidate.metadata?.agent
+    if (typeof fromMetadata === "string" && fromMetadata.length > 0) return fromMetadata
+    return fallbackByMessageID.get(part.messageID)
+  }
   const recentAgents = createMemo(() => {
     const seen = new Set<string>()
     const result: string[] = []
-    const messageItems = messages()
-    for (let i = messageItems.length - 1; i >= 0; i--) {
-      const message = messageItems[i]
-      if (message.role !== "assistant") continue
-      if (!message.agent || seen.has(message.agent)) continue
-      seen.add(message.agent)
-      result.push(message.agent)
-    }
-    const partItems = parts()
-    for (let i = partItems.length - 1; i >= 0; i--) {
-      const part = partItems[i]
-      const name = part.type === "subtask" ? part.agent : part.type === "agent" ? part.name : undefined
+    const fallbackByMessageID = assistantAgentByMessageID()
+    const items = toolParts()
+    for (let i = items.length - 1; i >= 0; i--) {
+      const part = items[i]
+      const name = getToolPartAgent(part, fallbackByMessageID)
       if (!name || seen.has(name)) continue
       seen.add(name)
       result.push(name)
@@ -157,9 +171,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
   })
   const agentToolCallCounts = createMemo(() => {
     const counts = new Map<string, number>()
-    const agentByMessageID = assistantAgentByMessageID()
+    const fallbackByMessageID = assistantAgentByMessageID()
     for (const part of toolParts()) {
-      const agent = agentByMessageID.get(part.messageID)
+      const agent = getToolPartAgent(part, fallbackByMessageID)
       if (!agent) continue
       counts.set(agent, (counts.get(agent) ?? 0) + 1)
     }
@@ -263,7 +277,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
     <Show when={session()}>
       <box
         backgroundColor={theme.backgroundPanel}
-        width={42}
+        width={props.width ?? 42}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
@@ -280,6 +294,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean; progressP
               <text fg={theme.text}>
                 <b>컨텍스트</b>
               </text>
+              <box flexDirection="row" justifyContent="space-between">
+                <text fg={theme.textMuted}>폭 {props.width ?? 42}</text>
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.textMuted} onMouseDown={() => props.onNarrow?.()}>
+                    [ - ]
+                  </text>
+                  <text fg={theme.textMuted} onMouseDown={() => props.onWiden?.()}>
+                    [ + ]
+                  </text>
+                </box>
+              </box>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} 토큰</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% 사용됨</text>
               <text fg={theme.textMuted}>{cost()} 사용</text>
