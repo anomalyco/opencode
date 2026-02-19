@@ -1,14 +1,6 @@
 [data-component="sticky-accordion-header"] {
-  --sticky-accordion-top: 0px;
   position: sticky;
-  top: var(--sticky-accordion-top);
-}
-
-[data-slot="accordion-item"]:first-child [data-component="sticky-accordion-header"] {
-  background-color: var(--background-stronger);
-}
-
-[data-component="sticky-accordion-header"][data-expanded],
-[data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"] {
+  top: calc(var(--sticky-accordion-top, 0px) + var(--sticky-accordion-offset, 0px));
   z-index: 10;
+  background-color: var(--background-stronger);
 }

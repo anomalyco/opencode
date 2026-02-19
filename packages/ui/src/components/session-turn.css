@@ -81,6 +81,17 @@
     min-width: 0;
   }
 
+  [data-slot="session-turn-diffs"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    height: 40px;
+    padding-bottom: 8px;
+    background-color: var(--background-stronger);
+  }
+
   [data-component="session-turn-diffs-trigger"] {
     width: 100%;
     display: flex;
@@ -124,7 +135,7 @@
   }
 
   [data-component="session-turn-diffs-content"] {
-    padding-top: 8px;
+    padding-top: 0px;
     display: flex;
     flex-direction: column;
   }
