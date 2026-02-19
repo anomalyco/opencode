@@ -9,13 +9,13 @@ This is a wrapper package that automatically installs the correct platform-speci
 ## Supported platforms
 
 | OS      | Architecture |
-|---------|-------------|
-| macOS   | arm64       |
-| macOS   | x64         |
-| Linux   | arm64       |
-| Linux   | x64         |
-| Linux   | x64 (musl)  |
-| Windows | x64         |
+| ------- | ------------ |
+| macOS   | arm64        |
+| macOS   | x64          |
+| Linux   | arm64        |
+| Linux   | x64          |
+| Linux   | x64 (musl)   |
+| Windows | x64          |
 
 ## Part of the @codemieai/code ecosystem
 
