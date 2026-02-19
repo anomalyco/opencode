@@ -87,8 +87,15 @@ for (const platformDir of platformDirs) {
   if (fs.existsSync(pkgJsonPath)) {
     const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"))
     pkgJson.name = "@codemieai/" + pkgJson.name.replace(/^opencode-/, "codemie-opencode-")
+    pkgJson.description = "Platform-specific binary for @codemieai/codemie-opencode"
+    pkgJson.repository = { type: "git", url: "https://github.com/codemie-ai/codemie-opencode" }
+    pkgJson.homepage = "https://github.com/codemie-ai/codemie-opencode"
+    pkgJson.license = "Apache-2.0"
     fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2))
   }
+
+  // Copy platform README
+  fs.copyFileSync(path.join(dir, "README.platform.md"), path.join(destDir, "README.md"))
 }
 
 console.log("codemie build complete!")
