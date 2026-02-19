@@ -100,7 +100,57 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (dock instanceof HTMLElement) observer.observe(dock)
     if (scroller instanceof HTMLElement) observer.observe(scroller)
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (store.editing) return
+
+      if (e.key === "Enter") {
+        e.preventDefault()
+        next()
+        return
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault()
+        reject()
+        return
+      }
+
+      if (e.key === "Tab" && e.shiftKey) {
+        e.preventDefault()
+        jump((store.tab - 1 + total()) % total())
+        return
+      }
+
+      if (e.key === "Tab") {
+        e.preventDefault()
+        jump((store.tab + 1) % total())
+        return
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault()
+        jump((store.tab - 1 + total()) % total())
+        return
+      }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault()
+        jump((store.tab + 1) % total())
+        return
+      }
+
+      const digit = Number(e.key)
+      if (digit >= 1 && digit <= 9) {
+        e.preventDefault()
+        selectOption(digit - 1)
+        return
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown)
+
     onCleanup(() => {
+      document.removeEventListener("keydown", onKeyDown)
       window.removeEventListener("resize", update)
       observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
