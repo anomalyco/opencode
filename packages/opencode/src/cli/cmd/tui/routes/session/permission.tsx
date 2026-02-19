@@ -64,12 +64,16 @@ function EditBody(props: { request: PermissionRequest }) {
 
   return (
     <box flexDirection="column" gap={1}>
-      <box flexDirection="row" gap={1} paddingLeft={1}>
-        <text fg={theme.textMuted}>{"→"}</text>
-        <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
-      </box>
       <Show when={diff()}>
-        <scrollbox height="100%">
+        <scrollbox
+          height="100%"
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.background,
+              foregroundColor: theme.borderActive,
+            },
+          }}
+        >
           <diff
             diff={diff()}
             view={view()}
@@ -90,6 +94,11 @@ function EditBody(props: { request: PermissionRequest }) {
             removedLineNumberBg={theme.diffRemovedLineNumberBg}
           />
         </scrollbox>
+      </Show>
+      <Show when={!diff()}>
+        <box paddingLeft={1}>
+          <text fg={theme.textMuted}>No diff provided</text>
+        </box>
       </Show>
     </box>
   )
@@ -194,76 +203,233 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       </Match>
       <Match when={store.stage === "permission"}>
         {(() => {
+          const info = () => {
+            const permission = props.request.permission
+            const data = input()
+
+            if (permission === "edit") {
+              const raw = props.request.metadata?.filepath
+              const filepath = typeof raw === "string" ? raw : ""
+              return {
+                icon: "→",
+                title: `Edit ${normalizePath(filepath)}`,
+                body: <EditBody request={props.request} />,
+              }
+            }
+
+            if (permission === "read") {
+              const raw = data.filePath
+              const filePath = typeof raw === "string" ? raw : ""
+              return {
+                icon: "→",
+                title: `Read ${normalizePath(filePath)}`,
+                body: (
+                  <Show when={filePath}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Path: " + normalizePath(filePath)}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "glob") {
+              const pattern = typeof data.pattern === "string" ? data.pattern : ""
+              return {
+                icon: "✱",
+                title: `Glob "${pattern}"`,
+                body: (
+                  <Show when={pattern}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "grep") {
+              const pattern = typeof data.pattern === "string" ? data.pattern : ""
+              return {
+                icon: "✱",
+                title: `Grep "${pattern}"`,
+                body: (
+                  <Show when={pattern}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "list") {
+              const raw = data.path
+              const dir = typeof raw === "string" ? raw : ""
+              return {
+                icon: "→",
+                title: `List ${normalizePath(dir)}`,
+                body: (
+                  <Show when={dir}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Path: " + normalizePath(dir)}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "bash") {
+              const title =
+                typeof data.description === "string" && data.description ? data.description : "Shell command"
+              const command = typeof data.command === "string" ? data.command : ""
+              return {
+                icon: "#",
+                title,
+                body: (
+                  <Show when={command}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.text}>{"$ " + command}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "task") {
+              const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
+              const desc = typeof data.description === "string" ? data.description : ""
+              return {
+                icon: "#",
+                title: `${Locale.titlecase(type)} Task`,
+                body: (
+                  <Show when={desc}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.text}>{"◉ " + desc}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "webfetch") {
+              const url = typeof data.url === "string" ? data.url : ""
+              return {
+                icon: "%",
+                title: `WebFetch ${url}`,
+                body: (
+                  <Show when={url}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"URL: " + url}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "websearch") {
+              const query = typeof data.query === "string" ? data.query : ""
+              return {
+                icon: "◈",
+                title: `Exa Web Search "${query}"`,
+                body: (
+                  <Show when={query}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Query: " + query}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "codesearch") {
+              const query = typeof data.query === "string" ? data.query : ""
+              return {
+                icon: "◇",
+                title: `Exa Code Search "${query}"`,
+                body: (
+                  <Show when={query}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>{"Query: " + query}</text>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "external_directory") {
+              const meta = props.request.metadata ?? {}
+              const parent = typeof meta["parentDir"] === "string" ? meta["parentDir"] : undefined
+              const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
+              const pattern = props.request.patterns?.[0]
+              const derived =
+                typeof pattern === "string" ? (pattern.includes("*") ? path.dirname(pattern) : pattern) : undefined
+
+              const raw = parent ?? filepath ?? derived
+              const dir = normalizePath(raw)
+              const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
+
+              return {
+                icon: "←",
+                title: `Access external directory ${dir}`,
+                body: (
+                  <Show when={patterns.length > 0}>
+                    <box paddingLeft={1} gap={1}>
+                      <text fg={theme.textMuted}>Patterns</text>
+                      <box>
+                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                      </box>
+                    </box>
+                  </Show>
+                ),
+              }
+            }
+
+            if (permission === "doom_loop") {
+              return {
+                icon: "⟳",
+                title: "Continue after repeated failures",
+                body: (
+                  <box paddingLeft={1}>
+                    <text fg={theme.textMuted}>This keeps the session running despite repeated failures.</text>
+                  </box>
+                ),
+              }
+            }
+
+            return {
+              icon: "⚙",
+              title: `Call tool ${permission}`,
+              body: (
+                <box paddingLeft={1}>
+                  <text fg={theme.textMuted}>{"Tool: " + permission}</text>
+                </box>
+              ),
+            }
+          }
+
+          const current = info()
+
+          const header = () => (
+            <box flexDirection="column" gap={0}>
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                <text fg={theme.warning}>{"△"}</text>
+                <text fg={theme.text}>Permission required</text>
+              </box>
+              <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
+                <text fg={theme.textMuted} flexShrink={0}>
+                  {current.icon}
+                </text>
+                <text fg={theme.text}>{current.title}</text>
+              </box>
+            </box>
+          )
+
           const body = (
             <Prompt
               title="Permission required"
-              body={
-                <Switch>
-                  <Match when={props.request.permission === "edit"}>
-                    <EditBody request={props.request} />
-                  </Match>
-                  <Match when={props.request.permission === "read"}>
-                    <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
-                  </Match>
-                  <Match when={props.request.permission === "glob"}>
-                    <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
-                  </Match>
-                  <Match when={props.request.permission === "grep"}>
-                    <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
-                  </Match>
-                  <Match when={props.request.permission === "list"}>
-                    <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
-                  </Match>
-                  <Match when={props.request.permission === "bash"}>
-                    <TextBody
-                      icon="#"
-                      title={(input().description as string) ?? ""}
-                      description={("$ " + input().command) as string}
-                    />
-                  </Match>
-                  <Match when={props.request.permission === "task"}>
-                    <TextBody
-                      icon="#"
-                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
-                      description={"◉ " + input().description}
-                    />
-                  </Match>
-                  <Match when={props.request.permission === "webfetch"}>
-                    <TextBody icon="%" title={`WebFetch ` + (input().url ?? "")} />
-                  </Match>
-                  <Match when={props.request.permission === "websearch"}>
-                    <TextBody icon="◈" title={`Exa Web Search "` + (input().query ?? "") + `"`} />
-                  </Match>
-                  <Match when={props.request.permission === "codesearch"}>
-                    <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
-                  </Match>
-                  <Match when={props.request.permission === "external_directory"}>
-                    {(() => {
-                      const meta = props.request.metadata ?? {}
-                      const parent = typeof meta["parentDir"] === "string" ? meta["parentDir"] : undefined
-                      const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
-                      const pattern = props.request.patterns?.[0]
-                      const derived =
-                        typeof pattern === "string"
-                          ? pattern.includes("*")
-                            ? path.dirname(pattern)
-                            : pattern
-                          : undefined
-
-                      const raw = parent ?? filepath ?? derived
-                      const dir = normalizePath(raw)
-
-                      return <TextBody icon="←" title={`Access external directory ` + dir} />
-                    })()}
-                  </Match>
-                  <Match when={props.request.permission === "doom_loop"}>
-                    <TextBody icon="⟳" title="Continue after repeated failures" />
-                  </Match>
-                  <Match when={true}>
-                    <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
-                  </Match>
-                </Switch>
-              }
+              header={header()}
+              body={current.body}
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
@@ -372,6 +538,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
 
 function Prompt<const T extends Record<string, string>>(props: {
   title: string
+  header?: JSX.Element
   body: JSX.Element
   options: T
   escapeKey?: keyof T
@@ -445,10 +612,19 @@ function Prompt<const T extends Record<string, string>>(props: {
           })}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1} flexGrow={1}>
-        <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-          <text fg={theme.warning}>{"△"}</text>
-          <text fg={theme.text}>{props.title}</text>
-        </box>
+        <Show
+          when={props.header}
+          fallback={
+            <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
+              <text fg={theme.warning}>{"△"}</text>
+              <text fg={theme.text}>{props.title}</text>
+            </box>
+          }
+        >
+          <box paddingLeft={1} flexShrink={0}>
+            {props.header}
+          </box>
+        </Show>
         {props.body}
       </box>
       <box
