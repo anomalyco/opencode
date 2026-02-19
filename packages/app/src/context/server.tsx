@@ -102,15 +102,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }),
     )
 
-    const allServers = createMemo(
-      (): Array<ServerConnection.Any> => [
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const servers = [
         ...(props.servers ?? []),
         ...store.list.map((value) => ({
           type: "http" as const,
           http: typeof value === "string" ? { url: value } : value,
         })),
-      ],
-    )
+      ]
+
+      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
+
+      return [...deduped.values()]
+    })
 
     const [state, setState] = createStore({
       active: props.defaultServer,
