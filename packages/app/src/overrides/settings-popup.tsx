@@ -23,7 +23,7 @@ export function SettingsPopup() {
   const dev = createMemo(() => {
     if (typeof window !== "object") return ""
     if (!window.location?.hostname) return ""
-    return `http://${window.location.hostname}/preview`
+    return `${window.location.origin}/preview`
   })
   const [config] = createResource(
     () => sdk.directory,
