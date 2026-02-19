@@ -13,5 +13,5 @@ const story = create({
     children: "Popover content",
   },
 })
-export default { title: "UI/Popover", component: story.meta.component }
+export default { title: "UI/Popover", id: "components-popover", component: story.meta.component }
 export const Basic = story.Basic

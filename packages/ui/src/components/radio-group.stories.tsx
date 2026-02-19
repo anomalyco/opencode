@@ -10,5 +10,5 @@ const story = create({
     defaultValue: "One",
   },
 })
-export default { title: "UI/RadioGroup", component: story.meta.component }
+export default { title: "UI/RadioGroup", id: "components-radio-group", component: story.meta.component }
 export const Basic = story.Basic

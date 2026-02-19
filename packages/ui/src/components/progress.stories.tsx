@@ -12,5 +12,5 @@ const story = create({
     showValueLabel: true,
   },
 })
-export default { title: "UI/Progress", component: story.meta.component }
+export default { title: "UI/Progress", id: "components-progress", component: story.meta.component }
 export const Basic = story.Basic

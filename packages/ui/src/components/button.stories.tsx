@@ -3,6 +3,7 @@ import { Button } from "./button"
 
 export default {
   title: "UI/Button",
+  id: "components-button",
   component: Button,
   args: {
     children: "Button",

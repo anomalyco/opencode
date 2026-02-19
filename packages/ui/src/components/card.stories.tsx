@@ -4,6 +4,7 @@ import { Button } from "./button"
 
 export default {
   title: "UI/Card",
+  id: "components-card",
   component: Card,
   args: {
     variant: "normal",

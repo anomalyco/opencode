@@ -14,5 +14,5 @@ const story = create({
     style: "height:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)",
   },
 })
-export default { title: "UI/ResizeHandle", component: story.meta.component }
+export default { title: "UI/ResizeHandle", id: "components-resize-handle", component: story.meta.component }
 export const Basic = story.Basic

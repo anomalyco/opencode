@@ -10,5 +10,5 @@ const story = create({
     children: "Hover card content",
   },
 })
-export default { title: "UI/HoverCard", component: story.meta.component }
+export default { title: "UI/HoverCard", id: "components-hover-card", component: story.meta.component }
 export const Basic = story.Basic
