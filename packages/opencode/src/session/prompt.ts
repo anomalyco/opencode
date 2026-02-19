@@ -170,7 +170,7 @@ export namespace SessionPrompt {
     }
 
     _busy.add(input.sessionID)
-    using _guard = defer(() => void _busy.delete(input.sessionID))
+    using _lock = defer(() => void _busy.delete(input.sessionID))
 
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
@@ -278,7 +278,7 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
-    // clear pending callbacks — with the _busy guard, this array
+    // clear pending callbacks — with the _busy lock, this array
     // should be empty, but clear it to be safe
     match.callbacks.length = 0
     delete s[sessionID]
@@ -732,10 +732,9 @@ export namespace SessionPrompt {
       }
       continue
     }
-    // set idle before post-loop cleanup so messages don't sit as QUEUED
-    // while we run compaction and stream reads
-    _busy.delete(sessionID)
-    SessionStatus.set(sessionID, { type: "idle" })
+    // _busy lock is released by the `using` disposer in prompt() on return —
+    // deleting it here opens a race window where a second caller sneaks in
+    // before prompt() actually returns (#6636)
 
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
