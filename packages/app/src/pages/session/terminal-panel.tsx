@@ -168,7 +168,10 @@ export function TerminalPanel() {
           "border-t border-border-weak-base": open(),
           "pointer-events-none": !open(),
         }}
-        style={{ height: open() ? `${height()}px` : "0px" }}
+        style={{
+          height: `${height()}px`,
+          display: open() ? "flex" : "none",
+        }}
       >
         <Show when={open()}>
           <ResizeHandle
