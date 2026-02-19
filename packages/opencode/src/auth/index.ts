@@ -1,7 +1,9 @@
 import path from "path"
 import { Global } from "../global"
-import fs from "fs/promises"
 import z from "zod"
+import { Filesystem } from "../util/filesystem"
+
+export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 export namespace Auth {
   export const Oauth = z
@@ -10,6 +12,7 @@ export namespace Auth {
       refresh: z.string(),
       access: z.string(),
       expires: z.number(),
+      accountId: z.string().optional(),
       enterpriseUrl: z.string().optional(),
     })
     .meta({ ref: "OAuth" })
@@ -40,8 +43,7 @@ export namespace Auth {
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch(() => ({}))
     return Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
@@ -54,17 +56,13 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
-    const file = Bun.file(filepath)
     const data = await all()
-    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Filesystem.writeJson(filepath, { ...data, [key]: info }, 0o600)
   }
 
   export async function remove(key: string) {
-    const file = Bun.file(filepath)
     const data = await all()
     delete data[key]
-    await Bun.write(file, JSON.stringify(data, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Filesystem.writeJson(filepath, data, 0o600)
   }
 }

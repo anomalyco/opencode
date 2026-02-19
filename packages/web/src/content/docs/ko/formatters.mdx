@@ -1,0 +1,130 @@
+---
+title: 포매터
+description: opencode는 언어별 포매터를 사용합니다.
+---
+
+opencode는 언어 별 형식을 사용하여 작성 또는 편집 한 후 자동으로 파일을 포맷합니다. 이 생성 된 코드는 프로젝트의 코드 스타일을 따릅니다.
+
+---
+
+## 내장
+
+opencode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장 형식자와 함께 제공됩니다. 아래는 formatters, 지원된 파일 확장 및 명령 또는 구성 옵션의 목록입니다.
+
+| 포매터               | 확장자                                                                             | 요구 사항                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                | `gofmt` 명령 사용 가능                                                                        |
+| Mix                  | .ex, .ex, .eex, .heex, .leex, .neex, .sface                                        | `mix` 명령 사용 가능                                                                          |
+| Biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, [기타](https://biomejs.dev/) | `biome.json(c)` 구성 파일                                                                     |
+| Zig                  | .zig, .zon                                                                         | `zig` 명령 사용 가능                                                                          |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, [기타](https://clang.llvm.org/docs/ClangFormat.html)     | `.clang-format` 구성 파일                                                                     |
+| ktlint               | .kt, .kts                                                                          | `ktlint` 명령 사용 가능                                                                       |
+| ruff                 | .py, .pyi                                                                          | 구성 가능한 `ruff` 명령                                                                       |
+| rustfmt              | .rs                                                                                | `rustfmt` 명령 사용 가능                                                                      |
+| cargo fmt            | .rs                                                                                | `cargo fmt` 명령 사용 가능                                                                    |
+| uv                   | .py, .pyi                                                                          | `uv` 명령 사용 가능                                                                           |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                          | `rubocop` 명령 사용 가능                                                                      |
+| StandardRB           | .rb, .rake, .gemspec, .ru                                                          | `standardrb` 명령 사용 가능                                                                   |
+| htmlbeautifier       | .erb, .html.erb                                                                    | `htmlbeautifier` 명령 사용 가능                                                               |
+| Air                  | .R                                                                                 | `air` 명령 사용 가능                                                                          |
+| Dart                 | 다트                                                                               | `dart` 명령                                                                                   |
+| dfmt                 | .d                                                                                 | `dfmt` 명령 사용 가능                                                                         |
+| ocamlformat          | .ml, .mli                                                                          | `ocamlformat` 명령 사용 가능·`.ocamlformat` 설정 파일                                         |
+| Terraform            | .tf, .tfvars                                                                       | `terraform` 명령 사용 가능                                                                    |
+| gleam                | .gleam                                                                             | `gleam` 명령 사용 가능                                                                        |
+| nixfmt               | .nix                                                                               | `nixfmt` 명령 사용 가능                                                                       |
+| shfmt                | .sh, .bash                                                                         | `shfmt` 명령 사용 가능                                                                        |
+| Pint                 | .php                                                                               | `laravel/pint` 의존도 `composer.json`                                                         |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                               | `oxfmt` Dependency in `package.json`, [experimental env 변수 플래그](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                | `ormolu` 명령 사용 가능                                                                       |
+
+그래서 프로젝트가 `prettier`를 `package.json`에 가지고 있다면, opencode는 자동으로 그것을 사용합니다.
+
+---
+
+## 작동 방식
+
+opencode가 파일을 작성하거나 편집할 때:
+
+1. 모든 활성화된 formatters에 대한 파일 확장을 확인합니다.
+2. 파일에 적절한 형식의 명령을 실행합니다.
+3. 형식 변경을 자동으로 적용합니다.
+
+이 과정은 배경에서 발생합니다. 코드 스타일은 수동 단계없이 유지됩니다.
+
+---
+
+## 구성
+
+opencode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+각 formatter 구성은 다음을 지원합니다:
+
+| 속성          | 타입     | 설명                              |
+| ------------- | -------- | --------------------------------- |
+| `disabled`    | boolean  | `true`로 설정하여 포매터 비활성화 |
+| `command`     | 문자열[] | 형식을 실행하는 명령              |
+| `environment` | 객체     | 형식의 실행시 설정하는 환경 변수  |
+| `extensions`  | string[] | 이 형식의 파일 확장자 취급        |
+
+몇 가지 예제를 살펴 보자.
+
+---
+
+## 포매터 비활성화
+
+모든 포매터를 비활성화하려면 `formatter`를 `false`로 설정하십시오:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+**특정** 포매터의 경우, `disabled`를 `true`로 설정하십시오:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### 사용자 정의 포매터
+
+내장 형식자를 무시하거나 명령, 환경 변수 및 파일 확장을 지정하여 새로운 것을 추가 할 수 있습니다.
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+명령의 **`$FILE` placeholder**는 형식의 파일 경로로 대체됩니다.

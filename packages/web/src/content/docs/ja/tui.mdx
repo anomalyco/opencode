@@ -1,0 +1,384 @@
+---
+title: TUI
+description: OpenCode ターミナルユーザーインターフェイスの使用。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode は、LLM を使用してプロジェクトを作業するための対話型ターミナルインターフェイスまたは TUI を提供します。
+
+OpenCode を実行すると、現在のディレクトリの TUI が開始されます。
+
+```bash
+opencode
+```
+
+または、特定の作業ディレクトリに対して起動することもできます。
+
+```bash
+opencode /path/to/project
+```
+
+TUI に入ったら、メッセージを表示することができます。
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## ファイル参照
+
+`@` を使用してメッセージ内のファイルを参照できます。これにより、現在の作業ディレクトリ内であいまいなファイル検索が行われます。
+
+:::tip
+`@` を使用してメッセージ内のファイルを参照することもできます。
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+ファイルの内容は会話に自動的に追加されます。
+
+---
+
+## Bash コマンド
+
+メッセージを `!` で開始して、シェルコマンドを実行します。
+
+```bash frame="none"
+!ls -la
+```
+
+コマンドの出力は、ツールの結果として会話に追加されます。
+
+---
+
+## コマンド
+
+OpenCode TUI を使用する場合、「`/`」に続いてコマンド名を入力すると、アクションをすばやく実行できます。例えば：
+
+```bash frame="none"
+/help
+```
+
+ほとんどのコマンドには、`ctrl+x` をリーダーキーとして使用するキーバインドもあります。`ctrl+x` がデフォルトのリーダーキーです。 [詳細はこちら](/docs/keybinds)。
+
+利用可能なすべてのスラッシュコマンドは次のとおりです。
+
+---
+
+### 接続
+
+OpenCode にプロバイダーを追加します。利用可能なプロバイダーから選択し、その API キーを追加できます。
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### コンパクト
+
+現在のセッションを圧縮します。 _別名_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**キーバインド:** `ctrl+x c`
+
+---
+
+### 詳細
+
+ツール実行の詳細を切り替えます。
+
+```bash frame="none"
+/details
+```
+
+**キーバインド:** `ctrl+x d`
+
+---
+
+### エディタ
+
+メッセージを作成するために外部エディタを開きます。 `EDITOR` 環境変数に設定されたエディタを使用します。 [詳細はこちら](#editor-setup)。
+
+```bash frame="none"
+/editor
+```
+
+**キーバインド:** `ctrl+x e`
+
+---
+
+### 終了
+
+OpenCode を終了します。 _エイリアス_: `/quit`、`/q`
+
+```bash frame="none"
+/exit
+```
+
+**キーバインド:** `ctrl+x q`
+
+---
+
+### エクスポート
+
+現在の会話を Markdown にエクスポートし、デフォルトのエディターで開きます。 `EDITOR` 環境変数に設定されたエディタを使用します。 [詳細はこちら](#editor-setup)。
+
+```bash frame="none"
+/export
+```
+
+**キーバインド:** `ctrl+x x`
+
+---
+
+### ヘルプ
+
+ヘルプダイアログを表示します。
+
+```bash frame="none"
+/help
+```
+
+**キーバインド:** `ctrl+x h`
+
+---
+
+### 初期化
+
+`AGENTS.md` ファイルを作成または更新します。 [詳細はこちら](/docs/rules)。
+
+```bash frame="none"
+/init
+```
+
+**キーバインド:** `ctrl+x i`
+
+---
+
+### モデル
+
+利用可能なモデルをリストします。
+
+```bash frame="none"
+/models
+```
+
+**キーバインド:** `ctrl+x m`
+
+---
+
+### 新規セッション
+
+新しいセッションを開始します。 _別名_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**キーバインド:** `ctrl+x n`
+
+---
+
+### やり直し
+
+以前に取り消したメッセージをやり直します。 `/undo` を使用した後にのみ使用できます。
+
+:::tip
+ファイルの変更も復元されます。
+:::
+内部的には、`undo` を使用してファイルの変更を管理します。したがって、あなたのプロジェクトは **Git リポジトリ** である必要があります。
+
+```bash frame="none"
+/redo
+```
+
+**キーバインド:** `ctrl+x r`
+
+---
+
+### セッション
+
+セッションを一覧表示して切り替えます。 _エイリアス_: `/resume`、`/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**キーバインド:** `ctrl+x l`
+
+---
+
+### 共有
+
+現在のセッションを共有します。 [詳細はこちら](/docs/share)。
+
+```bash frame="none"
+/share
+```
+
+**キーバインド:** `ctrl+x s`
+
+---
+
+### テーマ
+
+利用可能なテーマをリストします。
+
+```bash frame="none"
+/theme
+```
+
+**キーバインド:** `ctrl+x t`
+
+---
+
+### 思考
+
+会話内の思考/推論ブロックの表示を切り替えます。有効にすると、拡張思考をサポートするモデルの推論プロセスを確認できます。
+
+:::note
+このコマンドは、思考ブロックを**表示**するかどうかのみを制御します。モデルの推論機能を有効または無効にすることはありません。実際の推論機能を切り替えるには、`ctrl+t` を使用してモデルバリアントを循環させます。
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### 元に戻す
+
+会話の最後のメッセージを元に戻します。最新のユーザーメッセージ、その後のすべての応答、およびファイルの変更を削除します。
+
+:::tip
+加えられたファイルの変更も元に戻されます。
+:::
+内部的には、`undo` を使用してファイルの変更を管理します。したがって、あなたのプロジェクトは **Git リポジトリ** である必要があります。
+
+```bash frame="none"
+/undo
+```
+
+**キーバインド:** `ctrl+x u`
+
+---
+
+### 共有の解除
+
+現在のセッションの共有を解除します。 [詳細はこちら](/docs/share#un-sharing)。
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## エディタのセットアップ
+
+`/editor` および `/export` コマンドはどちらも、`EDITOR` 環境変数で指定されたエディターを使用します。
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+これを永続的にするには、これをシェルプロファイルに追加します。
+`~/.bashrc`、`~/.zshrc`など
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+これを永続的にするには、**システムプロパティ** > **環境変数**を使用します。
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+これを永続的にするには、これを PowerShell プロファイルに追加します。
+
+  </TabItem>
+</Tabs>
+
+一般的なエディターオプションには次のものがあります。
+
+- `code` - VS Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim エディター
+- `vim` - Vim エディター
+- `nano` - ナノエディター
+- `notepad` - Windows メモ帳
+- `subl` - Sublime Text
+
+:::note
+VS Code などの一部のエディターは、`--wait` フラグを使用して起動する必要があります。
+:::
+一部のモードでは実行にコマンドライン引数が必要です。`--wait` フラグを使うと、エディターが閉じるまでプロセスが待機します。
+
+---
+
+## 設定
+
+OpenCode 設定ファイルを通じて TUI の動作をカスタマイズできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### オプション
+
+- `scroll_acceleration` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
+- `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `1`)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
+
+---
+
+## カスタマイズ
+
+コマンドパレット (`ctrl+x h` または `/help`) を使用して、TUI ビューのさまざまな側面をカスタマイズできます。これらの設定は再起動後も維持されます。
+
+---
+
+#### ユーザー名の表示
+
+チャットメッセージにユーザー名を表示するかどうかを切り替えます。これには次の方法でアクセスします。
+
+- コマンドパレット:「ユーザー名」または「ユーザー名を隠す」を検索します。
+- 設定は自動的に保持され、TUI セッション全体で記憶されます。

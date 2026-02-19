@@ -45,12 +45,13 @@ function providerIconsPlugin() {
 }
 
 async function fetchProviderIcons() {
-  const providers = await fetch("https://models.dev/api.json")
+  const url = process.env.OPENCODE_MODELS_URL || "https://models.dev"
+  const providers = await fetch(`${url}/api.json`)
     .then((res) => res.json())
     .then((json) => Object.keys(json))
   await Promise.all(
     providers.map((provider) =>
-      fetch(`https://models.dev/logos/${provider}.svg`)
+      fetch(`${url}/logos/${provider}.svg`)
         .then((res) => res.text())
         .then((svg) => fs.writeFileSync(`./src/assets/icons/provider/${provider}.svg`, svg)),
     ),

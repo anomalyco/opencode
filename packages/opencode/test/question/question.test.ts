@@ -82,11 +82,11 @@ test("reply - resolves the pending ask with answers", async () => {
 
       await Question.reply({
         requestID,
-        answers: ["Option 1"],
+        answers: [["Option 1"]],
       })
 
       const answers = await askPromise
-      expect(answers).toEqual(["Option 1"])
+      expect(answers).toEqual([["Option 1"]])
     },
   })
 })
@@ -115,7 +115,7 @@ test("reply - removes from pending list", async () => {
 
       await Question.reply({
         requestID: pending[0].id,
-        answers: ["Option 1"],
+        answers: [["Option 1"]],
       })
 
       const pendingAfter = await Question.list()
@@ -131,7 +131,7 @@ test("reply - does nothing for unknown requestID", async () => {
     fn: async () => {
       await Question.reply({
         requestID: "que_unknown",
-        answers: ["Option 1"],
+        answers: [["Option 1"]],
       })
       // Should not throw
     },
@@ -244,11 +244,11 @@ test("ask - handles multiple questions", async () => {
 
       await Question.reply({
         requestID: pending[0].id,
-        answers: ["Build", "Dev"],
+        answers: [["Build"], ["Dev"]],
       })
 
       const answers = await askPromise
-      expect(answers).toEqual(["Build", "Dev"])
+      expect(answers).toEqual([["Build"], ["Dev"]])
     },
   })
 })

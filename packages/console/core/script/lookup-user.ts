@@ -1,8 +1,17 @@
-import { Database, eq, sql, inArray } from "../src/drizzle/index.js"
+import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, UsageTable } from "../src/schema/billing.sql.js"
+import {
+  BillingTable,
+  PaymentTable,
+  SubscriptionTable,
+  SubscriptionPlan,
+  UsageTable,
+} from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
+import { BlackData } from "../src/black.js"
+import { centsToMicroCents } from "../src/util/price.js"
+import { getWeekBounds } from "../src/util/date.js"
 
 // get input from command line
 const identifier = process.argv[2]
@@ -35,14 +44,26 @@ if (identifier.startsWith("wrk_")) {
         workspaceID: UserTable.workspaceID,
         workspaceName: WorkspaceTable.name,
         role: UserTable.role,
+        subscribed: SubscriptionTable.timeCreated,
       })
       .from(UserTable)
-      .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
-      .where(eq(UserTable.accountID, accountID)),
+      .rightJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
+      .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .where(eq(UserTable.accountID, accountID))
+      .then((rows) =>
+        rows.map((row) => ({
+          userID: row.userID,
+          workspaceID: row.workspaceID,
+          workspaceName: row.workspaceName,
+          role: row.role,
+          subscribed: formatDate(row.subscribed),
+        })),
+      ),
   )
 
-  // Get all payments for these workspaces
-  await Promise.all(users.map((u: { workspaceID: string }) => printWorkspace(u.workspaceID)))
+  for (const user of users) {
+    await printWorkspace(user.workspaceID)
+  }
 }
 
 async function printWorkspace(workspaceID: string) {
@@ -56,19 +77,79 @@ async function printWorkspace(workspaceID: string) {
 
   printHeader(`Workspace "${workspace.name}" (${workspace.id})`)
 
+  await printTable("Users", (tx) =>
+    tx
+      .select({
+        authEmail: AuthTable.subject,
+        inviteEmail: UserTable.email,
+        role: UserTable.role,
+        timeSeen: UserTable.timeSeen,
+        monthlyLimit: UserTable.monthlyLimit,
+        monthlyUsage: UserTable.monthlyUsage,
+        timeDeleted: UserTable.timeDeleted,
+        fixedUsage: SubscriptionTable.fixedUsage,
+        rollingUsage: SubscriptionTable.rollingUsage,
+        timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
+        timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
+        timeSubscriptionCreated: SubscriptionTable.timeCreated,
+        subscription: BillingTable.subscription,
+      })
+      .from(UserTable)
+      .innerJoin(BillingTable, eq(BillingTable.workspaceID, workspace.id))
+      .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
+      .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .where(eq(UserTable.workspaceID, workspace.id))
+      .then((rows) =>
+        rows.map((row) => {
+          const subStatus = getSubscriptionStatus(row)
+          return {
+            email: (row.timeDeleted ? "❌ " : "") + (row.authEmail ?? row.inviteEmail),
+            role: row.role,
+            timeSeen: formatDate(row.timeSeen),
+            monthly: formatMonthlyUsage(row.monthlyUsage, row.monthlyLimit),
+            subscribed: formatDate(row.timeSubscriptionCreated),
+            subWeekly: subStatus.weekly,
+            subRolling: subStatus.rolling,
+            rateLimited: subStatus.rateLimited,
+            retryIn: subStatus.retryIn,
+          }
+        }),
+      ),
+  )
+
   await printTable("Billing", (tx) =>
     tx
       .select({
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
+        reload: BillingTable.reload,
+        subscriptionID: BillingTable.subscriptionID,
+        subscription: {
+          plan: BillingTable.subscriptionPlan,
+          booked: BillingTable.timeSubscriptionBooked,
+          enrichment: BillingTable.subscription,
+        },
+        timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
       .then(
         (rows) =>
           rows.map((row) => ({
-            ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
+            reload: row.reload ? "yes" : "no",
+            customerID: row.customerID,
+            subscriptionID: row.subscriptionID,
+            subscription: row.subscriptionID
+              ? [
+                  `Black ${row.subscription.enrichment!.plan}`,
+                  row.subscription.enrichment!.seats > 1 ? `X ${row.subscription.enrichment!.seats} seats` : "",
+                  row.subscription.enrichment!.coupon ? `(coupon: ${row.subscription.enrichment!.coupon})` : "",
+                  `(ref: ${row.subscriptionID})`,
+                ].join(" ")
+              : row.subscription.booked
+                ? `Waitlist ${row.subscription.plan} plan${row.timeSubscriptionSelected ? " (selected)" : ""}`
+                : undefined,
           }))[0],
       ),
   )
@@ -79,6 +160,7 @@ async function printWorkspace(workspaceID: string) {
         amount: PaymentTable.amount,
         paymentID: PaymentTable.paymentID,
         invoiceID: PaymentTable.invoiceID,
+        customerID: PaymentTable.customerID,
         timeCreated: PaymentTable.timeCreated,
         timeRefunded: PaymentTable.timeRefunded,
       })
@@ -97,6 +179,7 @@ async function printWorkspace(workspaceID: string) {
       ),
   )
 
+  /*
   await printTable("Usage", (tx) =>
     tx
       .select({
@@ -122,6 +205,84 @@ async function printWorkspace(workspaceID: string) {
         })),
       ),
   )
+        */
+}
+
+function formatMicroCents(value: number | null | undefined) {
+  if (value === null || value === undefined) return null
+  return `$${(value / 100000000).toFixed(2)}`
+}
+
+function formatDate(value: Date | null | undefined) {
+  if (!value) return null
+  return value.toISOString().split("T")[0]
+}
+
+function formatMonthlyUsage(usage: number | null | undefined, limit: number | null | undefined) {
+  const usageText = formatMicroCents(usage) ?? "$0.00"
+  if (limit === null || limit === undefined) return `${usageText} / no limit`
+  return `${usageText} / $${limit.toFixed(2)}`
+}
+
+function formatRetryTime(seconds: number) {
+  const days = Math.floor(seconds / 86400)
+  if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.ceil((seconds % 3600) / 60)
+  if (hours >= 1) return `${hours}hr ${minutes}min`
+  return `${minutes}min`
+}
+
+function getSubscriptionStatus(row: {
+  subscription: {
+    plan: (typeof SubscriptionPlan)[number]
+  } | null
+  timeSubscriptionCreated: Date | null
+  fixedUsage: number | null
+  rollingUsage: number | null
+  timeFixedUpdated: Date | null
+  timeRollingUpdated: Date | null
+}) {
+  if (!row.timeSubscriptionCreated || !row.subscription) {
+    return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
+  }
+
+  const black = BlackData.getLimits({ plan: row.subscription.plan })
+  const now = new Date()
+  const week = getWeekBounds(now)
+
+  const fixedLimit = black.fixedLimit ? centsToMicroCents(black.fixedLimit * 100) : null
+  const rollingLimit = black.rollingLimit ? centsToMicroCents(black.rollingLimit * 100) : null
+  const rollingWindowMs = (black.rollingWindow ?? 5) * 3600 * 1000
+
+  // Calculate current weekly usage (reset if outside current week)
+  const currentWeekly =
+    row.fixedUsage && row.timeFixedUpdated && row.timeFixedUpdated >= week.start ? row.fixedUsage : 0
+
+  // Calculate current rolling usage
+  const windowStart = new Date(now.getTime() - rollingWindowMs)
+  const currentRolling =
+    row.rollingUsage && row.timeRollingUpdated && row.timeRollingUpdated >= windowStart ? row.rollingUsage : 0
+
+  // Check rate limiting
+  const isWeeklyLimited = fixedLimit !== null && currentWeekly >= fixedLimit
+  const isRollingLimited = rollingLimit !== null && currentRolling >= rollingLimit
+
+  let retryIn: string | null = null
+  if (isWeeklyLimited) {
+    const retryAfter = Math.ceil((week.end.getTime() - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  } else if (isRollingLimited && row.timeRollingUpdated) {
+    const retryAfter = Math.ceil((row.timeRollingUpdated.getTime() + rollingWindowMs - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  }
+
+  return {
+    weekly: fixedLimit !== null ? `${formatMicroCents(currentWeekly)} / $${black.fixedLimit}` : null,
+    rolling: rollingLimit !== null ? `${formatMicroCents(currentRolling)} / $${black.rollingLimit}` : null,
+    rateLimited: isWeeklyLimited || isRollingLimited ? "yes" : "no",
+    retryIn,
+  }
 }
 
 function printHeader(title: string) {

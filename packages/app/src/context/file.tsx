@@ -1,299 +1,270 @@
-import { createEffect, createMemo, onCleanup } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { FileContent } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { Persist, persisted } from "@/utils/persist"
+import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
+import { createPathHelpers } from "./file/path"
+import {
+  approxBytes,
+  evictContentLru,
+  getFileContentBytesTotal,
+  getFileContentEntryCount,
+  hasFileContent,
+  removeFileContentBytes,
+  resetFileContentLru,
+  setFileContentBytes,
+  touchFileContent,
+} from "./file/content-cache"
+import { createFileViewCache } from "./file/view-cache"
+import { createFileTreeStore } from "./file/tree-store"
+import { invalidateFromWatcher } from "./file/watcher"
+import {
+  selectionFromLines,
+  type FileState,
+  type FileSelection,
+  type FileViewState,
+  type SelectedLineRange,
+} from "./file/types"
 
-export type FileSelection = {
-  startLine: number
-  startChar: number
-  endLine: number
-  endChar: number
+export type { FileSelection, SelectedLineRange, FileViewState, FileState }
+export { selectionFromLines }
+export {
+  evictContentLru,
+  getFileContentBytesTotal,
+  getFileContentEntryCount,
+  removeFileContentBytes,
+  resetFileContentLru,
+  setFileContentBytes,
+  touchFileContent,
 }
 
-export type SelectedLineRange = {
-  start: number
-  end: number
-  side?: "additions" | "deletions"
-  endSide?: "additions" | "deletions"
-}
-
-export type FileViewState = {
-  scrollTop?: number
-  scrollLeft?: number
-  selectedLines?: SelectedLineRange | null
-}
-
-export type FileState = {
-  path: string
-  name: string
-  loaded?: boolean
-  loading?: boolean
-  error?: string
-  content?: FileContent
-}
-
-function stripFileProtocol(input: string) {
-  if (!input.startsWith("file://")) return input
-  return input.slice("file://".length)
-}
-
-function stripQueryAndHash(input: string) {
-  const hashIndex = input.indexOf("#")
-  const queryIndex = input.indexOf("?")
-
-  if (hashIndex !== -1 && queryIndex !== -1) {
-    return input.slice(0, Math.min(hashIndex, queryIndex))
-  }
-
-  if (hashIndex !== -1) return input.slice(0, hashIndex)
-  if (queryIndex !== -1) return input.slice(0, queryIndex)
-  return input
-}
-
-export function selectionFromLines(range: SelectedLineRange): FileSelection {
-  const startLine = Math.min(range.start, range.end)
-  const endLine = Math.max(range.start, range.end)
-  return {
-    startLine,
-    endLine,
-    startChar: 0,
-    endChar: 0,
-  }
-}
-
-function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
-  if (range.start <= range.end) return range
-
-  const startSide = range.side
-  const endSide = range.endSide ?? startSide
-
-  return {
-    ...range,
-    start: range.end,
-    end: range.start,
-    side: endSide,
-    endSide: startSide !== endSide ? startSide : undefined,
-  }
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error) return error
+  return "Unknown error"
 }
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
+  gate: false,
   init: () => {
     const sdk = useSDK()
-    const sync = useSync()
+    useSync()
     const params = useParams()
+    const language = useLanguage()
+    const layout = useLayout()
 
-    const directory = createMemo(() => sync.data.path.directory)
-
-    function normalize(input: string) {
-      const root = directory()
-      const prefix = root.endsWith("/") ? root : root + "/"
-
-      let path = stripQueryAndHash(stripFileProtocol(input))
-
-      if (path.startsWith(prefix)) {
-        path = path.slice(prefix.length)
-      }
-
-      if (path.startsWith(root)) {
-        path = path.slice(root.length)
-      }
-
-      if (path.startsWith("./")) {
-        path = path.slice(2)
-      }
-
-      if (path.startsWith("/")) {
-        path = path.slice(1)
-      }
-
-      return path
-    }
-
-    function tab(input: string) {
-      const path = normalize(input)
-      return `file://${path}`
-    }
-
-    function pathFromTab(tabValue: string) {
-      if (!tabValue.startsWith("file://")) return
-      return normalize(tabValue)
-    }
+    const scope = createMemo(() => sdk.directory)
+    const path = createPathHelpers(scope)
+    const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
-
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
       file: {},
     })
 
-    const legacyViewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
+    const tree = createFileTreeStore({
+      scope,
+      normalizeDir: path.normalizeDir,
+      list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+      onError: (message) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.file.listFailed.title"),
+          description: message,
+        })
+      },
+    })
 
-    const [view, setView, _, ready] = persisted(
-      Persist.scoped(params.dir!, params.id, "file-view", [legacyViewKey()]),
-      createStore<{
-        file: Record<string, FileViewState>
-      }>({
-        file: {},
-      }),
-    )
-
-    const MAX_VIEW_FILES = 500
-    const viewMeta = { pruned: false }
-
-    const pruneView = (keep?: string) => {
-      const keys = Object.keys(view.file)
-      if (keys.length <= MAX_VIEW_FILES) return
-
-      const drop = keys.filter((key) => key !== keep).slice(0, keys.length - MAX_VIEW_FILES)
-      if (drop.length === 0) return
-
-      setView(
-        produce((draft) => {
-          for (const key of drop) {
-            delete draft.file[key]
-          }
-        }),
-      )
+    const evictContent = (keep?: Set<string>) => {
+      evictContentLru(keep, (target) => {
+        if (!store.file[target]) return
+        setStore(
+          "file",
+          target,
+          produce((draft) => {
+            draft.content = undefined
+            draft.loaded = false
+          }),
+        )
+      })
     }
 
     createEffect(() => {
-      if (!ready()) return
-      if (viewMeta.pruned) return
-      viewMeta.pruned = true
-      pruneView()
+      scope()
+      inflight.clear()
+      resetFileContentLru()
+      batch(() => {
+        setStore("file", reconcile({}))
+        tree.reset()
+      })
     })
 
-    function ensure(path: string) {
-      if (!path) return
-      if (store.file[path]) return
-      setStore("file", path, { path, name: getFilename(path) })
+    const viewCache = createFileViewCache()
+    const view = createMemo(() => viewCache.load(scope(), params.id))
+
+    const ensure = (file: string) => {
+      if (!file) return
+      if (store.file[file]) return
+      setStore("file", file, { path: file, name: getFilename(file) })
     }
 
-    function load(input: string, options?: { force?: boolean }) {
-      const path = normalize(input)
-      if (!path) return Promise.resolve()
-
-      ensure(path)
-
-      const current = store.file[path]
-      if (!options?.force && current?.loaded) return Promise.resolve()
-
-      const pending = inflight.get(path)
-      if (pending) return pending
-
+    const setLoading = (file: string) => {
       setStore(
         "file",
-        path,
+        file,
         produce((draft) => {
           draft.loading = true
           draft.error = undefined
         }),
       )
+    }
+
+    const setLoaded = (file: string, content: FileState["content"]) => {
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.loaded = true
+          draft.loading = false
+          draft.content = content
+        }),
+      )
+    }
+
+    const setLoadError = (file: string, message: string) => {
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.loading = false
+          draft.error = message
+        }),
+      )
+      showToast({
+        variant: "error",
+        title: language.t("toast.file.loadFailed.title"),
+        description: message,
+      })
+    }
+
+    const load = (input: string, options?: { force?: boolean }) => {
+      const file = path.normalize(input)
+      if (!file) return Promise.resolve()
+
+      const directory = scope()
+      const key = `${directory}\n${file}`
+      ensure(file)
+
+      const current = store.file[file]
+      if (!options?.force && current?.loaded) return Promise.resolve()
+
+      const pending = inflight.get(key)
+      if (pending) return pending
+
+      setLoading(file)
 
       const promise = sdk.client.file
-        .read({ path })
+        .read({ path: file })
         .then((x) => {
-          setStore(
-            "file",
-            path,
-            produce((draft) => {
-              draft.loaded = true
-              draft.loading = false
-              draft.content = x.data
-            }),
-          )
+          if (scope() !== directory) return
+          const content = x.data
+          setLoaded(file, content)
+
+          if (!content) return
+          touchFileContent(file, approxBytes(content))
+          evictContent(new Set([file]))
         })
         .catch((e) => {
-          setStore(
-            "file",
-            path,
-            produce((draft) => {
-              draft.loading = false
-              draft.error = e.message
-            }),
-          )
-          showToast({
-            variant: "error",
-            title: "Failed to load file",
-            description: e.message,
-          })
+          if (scope() !== directory) return
+          setLoadError(file, errorMessage(e))
         })
         .finally(() => {
-          inflight.delete(path)
+          inflight.delete(key)
         })
 
-      inflight.set(path, promise)
+      inflight.set(key, promise)
       return promise
     }
 
+    const search = (query: string, dirs: "true" | "false") =>
+      sdk.client.find.files({ query, dirs }).then(
+        (x) => (x.data ?? []).map(path.normalize),
+        () => [],
+      )
+
     const stop = sdk.event.listen((e) => {
-      const event = e.details
-      if (event.type !== "file.watcher.updated") return
-      const path = normalize(event.properties.file)
-      if (!path) return
-      if (path.startsWith(".git/")) return
-      if (!store.file[path]) return
-      load(path, { force: true })
+      invalidateFromWatcher(e.details, {
+        normalize: path.normalize,
+        hasFile: (file) => Boolean(store.file[file]),
+        isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
+        loadFile: (file) => {
+          void load(file, { force: true })
+        },
+        node: tree.node,
+        isDirLoaded: tree.isLoaded,
+        refreshDir: (dir) => {
+          void tree.listDir(dir, { force: true })
+        },
+      })
     })
 
-    const get = (input: string) => store.file[normalize(input)]
-
-    const scrollTop = (input: string) => view.file[normalize(input)]?.scrollTop
-    const scrollLeft = (input: string) => view.file[normalize(input)]?.scrollLeft
-    const selectedLines = (input: string) => view.file[normalize(input)]?.selectedLines
-
-    const setScrollTop = (input: string, top: number) => {
-      const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollTop === top) return current
-        return {
-          ...(current ?? {}),
-          scrollTop: top,
-        }
-      })
-      pruneView(path)
+    const get = (input: string) => {
+      const file = path.normalize(input)
+      const state = store.file[file]
+      const content = state?.content
+      if (!content) return state
+      if (hasFileContent(file)) {
+        touchFileContent(file)
+        return state
+      }
+      touchFileContent(file, approxBytes(content))
+      return state
     }
 
-    const setScrollLeft = (input: string, left: number) => {
-      const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollLeft === left) return current
-        return {
-          ...(current ?? {}),
-          scrollLeft: left,
-        }
-      })
-      pruneView(path)
+    function withPath(input: string, action: (file: string) => unknown) {
+      return action(path.normalize(input))
     }
+    const scrollTop = (input: string) => withPath(input, (file) => view().scrollTop(file))
+    const scrollLeft = (input: string) => withPath(input, (file) => view().scrollLeft(file))
+    const selectedLines = (input: string) => withPath(input, (file) => view().selectedLines(file))
+    const setScrollTop = (input: string, top: number) => withPath(input, (file) => view().setScrollTop(file, top))
+    const setScrollLeft = (input: string, left: number) => withPath(input, (file) => view().setScrollLeft(file, left))
+    const setSelectedLines = (input: string, range: SelectedLineRange | null) =>
+      withPath(input, (file) => view().setSelectedLines(file, range))
 
-    const setSelectedLines = (input: string, range: SelectedLineRange | null) => {
-      const path = normalize(input)
-      const next = range ? normalizeSelectedLines(range) : null
-      setView("file", path, (current) => {
-        if (current?.selectedLines === next) return current
-        return {
-          ...(current ?? {}),
-          selectedLines: next,
-        }
-      })
-      pruneView(path)
-    }
-
-    onCleanup(() => stop())
+    onCleanup(() => {
+      stop()
+      viewCache.clear()
+    })
 
     return {
-      ready,
-      normalize,
-      tab,
-      pathFromTab,
+      ready: () => view().ready(),
+      normalize: path.normalize,
+      tab: path.tab,
+      pathFromTab: path.pathFromTab,
+      tree: {
+        list: tree.listDir,
+        refresh: (input: string) => tree.listDir(input, { force: true }),
+        state: tree.dirState,
+        children: tree.children,
+        expand: tree.expandDir,
+        collapse: tree.collapseDir,
+        toggle(input: string) {
+          if (tree.dirState(input)?.expanded) {
+            tree.collapseDir(input)
+            return
+          }
+          tree.expandDir(input)
+        },
+      },
       get,
       load,
       scrollTop,
@@ -302,10 +273,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setScrollLeft,
       selectedLines,
       setSelectedLines,
-      searchFiles: (query: string) =>
-        sdk.client.find.files({ query, dirs: "false" }).then((x) => (x.data ?? []).map(normalize)),
-      searchFilesAndDirectories: (query: string) =>
-        sdk.client.find.files({ query, dirs: "true" }).then((x) => (x.data ?? []).map(normalize)),
+      searchFiles: (query: string) => search(query, "false"),
+      searchFilesAndDirectories: (query: string) => search(query, "true"),
     }
   },
 })

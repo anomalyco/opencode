@@ -8,6 +8,39 @@
   }
 }
 
+@utility session-scroller {
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 5px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-weak-base);
+    border-radius: 5px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--border-weak-base);
+  }
+
+  & {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-weak-base) transparent;
+  }
+}
+
+@utility badge-mask {
+  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+  mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+}
+
 @utility truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;

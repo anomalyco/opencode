@@ -1,11 +1,12 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
+import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
+const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -14,24 +15,82 @@ export function normalizeServerUrl(input: string) {
   return withProtocol.replace(/\/+$/, "")
 }
 
-export function serverDisplayName(url: string) {
-  if (!url) return ""
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .split("/")[0]
+export function serverDisplayName(conn?: ServerConnection.Any) {
+  if (!conn) return ""
+  if (conn.displayName) return conn.displayName
+  return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(url: string) {
-  if (!url) return ""
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+function projectsKey(key: ServerConnection.Key) {
+  if (!key) return ""
+  if (key === "sidecar") return "local"
+  const host = key.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-  return url
+  return key
+}
+
+export namespace ServerConnection {
+  type Base = { displayName?: string }
+
+  export type HttpBase = {
+    url: string
+    username?: string
+    password?: string
+  }
+
+  // Regular web connections
+  export type Http = {
+    type: "http"
+    http: HttpBase
+  } & Base
+
+  export type Sidecar = {
+    type: "sidecar"
+    http: HttpBase
+  } & (
+    | // Regular desktop server
+    { variant: "base" }
+    // WSL server (windows only)
+    | {
+        variant: "wsl"
+        distro: string
+      }
+  ) &
+    Base
+
+  // Remote server desktop can SSH into
+  export type Ssh = {
+    type: "ssh"
+    host: string
+    // SSH client exposes an HTTP server for the app to use as a proxy
+    http: HttpBase
+  } & Base
+
+  export type Any =
+    | Http
+    // All these are desktop-only
+    | (Sidecar | Ssh)
+
+  export const key = (conn: Any): Key => {
+    switch (conn.type) {
+      case "http":
+        return Key.make(conn.http.url)
+      case "sidecar": {
+        if (conn.variant === "wsl") return Key.make(`wsl:${conn.distro}`)
+        return Key.make("sidecar")
+      }
+      case "ssh":
+        return Key.make(`ssh:${conn.host}`)
+    }
+  }
+
+  export type Key = string & { _brand: "Key" }
+  export const Key = { make: (v: string) => v as Key }
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string }) => {
+  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
@@ -39,88 +98,42 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       createStore({
         list: [] as string[],
         projects: {} as Record<string, StoredProject[]>,
+        lastProject: {} as Record<string, string>,
       }),
     )
 
-    const [active, setActiveRaw] = createSignal("")
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const servers = [
+        ...(props.servers ?? []),
+        ...store.list.map((value) => ({
+          type: "http" as const,
+          http: typeof value === "string" ? { url: value } : value,
+        })),
+      ]
 
-    function setActive(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      setActiveRaw(url)
-    }
+      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-
-      const fallback = normalizeServerUrl(props.defaultUrl)
-      if (fallback && url === fallback) {
-        setActiveRaw(url)
-        return
-      }
-
-      batch(() => {
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
-        }
-        setActiveRaw(url)
-      })
-    }
-
-    function remove(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-
-      const list = store.list.filter((x) => x !== url)
-      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
-
-      batch(() => {
-        setStore("list", list)
-        setActiveRaw(next)
-      })
-    }
-
-    createEffect(() => {
-      if (!ready()) return
-      if (active()) return
-      const url = normalizeServerUrl(props.defaultUrl)
-      if (!url) return
-      setActiveRaw(url)
+      return [...deduped.values()]
     })
 
-    const isReady = createMemo(() => ready() && !!active())
+    const [state, setState] = createStore({
+      active: props.defaultServer,
+      healthy: undefined as boolean | undefined,
+    })
 
-    const [healthy, setHealthy] = createSignal<boolean | undefined>(undefined)
+    const healthy = () => state.healthy
 
-    const check = (url: string) => {
-      const sdk = createOpencodeClient({
-        baseUrl: url,
-        fetch: platform.fetch,
-        signal: AbortSignal.timeout(3000),
-      })
-      return sdk.global
-        .health()
-        .then((x) => x.data?.healthy === true)
-        .catch(() => false)
-    }
-
-    createEffect(() => {
-      const url = active()
-      if (!url) return
-
-      setHealthy(undefined)
-
+    function startHealthPolling(conn: ServerConnection.Any) {
       let alive = true
       let busy = false
 
       const run = () => {
         if (busy) return
         busy = true
-        void check(url)
+        void check(conn)
           .then((next) => {
             if (!alive) return
-            setHealthy(next)
+            setState("healthy", next)
           })
           .finally(() => {
             busy = false
@@ -128,30 +141,80 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }
 
       run()
-      const interval = setInterval(run, 10_000)
-
-      onCleanup(() => {
+      const interval = setInterval(run, HEALTH_POLL_INTERVAL_MS)
+      return () => {
         alive = false
         clearInterval(interval)
+      }
+    }
+
+    function setActive(input: ServerConnection.Key) {
+      if (state.active !== input) setState("active", input)
+    }
+
+    function add(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+      return batch(() => {
+        const http: ServerConnection.HttpBase = { url }
+        if (!store.list.includes(url)) {
+          setStore("list", store.list.length, url)
+        }
+        const conn: ServerConnection.Http = { type: "http", http }
+        setState("active", ServerConnection.key(conn))
+        return conn
       })
+    }
+
+    function remove(key: ServerConnection.Key) {
+      const list = store.list.filter((x) => x !== key)
+      batch(() => {
+        setStore("list", list)
+        if (state.active === key) {
+          const next = list[0]
+          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+        }
+      })
+    }
+
+    const isReady = createMemo(() => ready() && !!state.active)
+
+    const fetcher = platform.fetch ?? globalThis.fetch
+    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http, fetcher).then((x) => x.healthy)
+
+    createEffect(() => {
+      const current_ = current()
+      if (!current_) return
+
+      setState("healthy", undefined)
+      onCleanup(startHealthPolling(current_))
     })
 
-    const origin = createMemo(() => projectsKey(active()))
+    const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
-    const isLocal = createMemo(() => origin() === "local")
+    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
+      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
+    )
+    const isLocal = createMemo(() => {
+      const c = current()
+      return c?.type === "sidecar" && c.variant === "base"
+    })
 
     return {
       ready: isReady,
       healthy,
       isLocal,
-      get url() {
-        return active()
+      get key() {
+        return state.active
       },
       get name() {
-        return serverDisplayName(active())
+        return serverDisplayName(current())
       },
       get list() {
-        return store.list
+        return allServers()
+      },
+      get current() {
+        return current()
       },
       setActive,
       add,
@@ -199,6 +262,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
           setStore("projects", key, result)
+        },
+        last() {
+          const key = origin()
+          if (!key) return
+          return store.lastProject[key]
+        },
+        touch(directory: string) {
+          const key = origin()
+          if (!key) return
+          setStore("lastProject", key, directory)
         },
       },
     }

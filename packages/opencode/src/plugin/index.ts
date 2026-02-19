@@ -7,20 +7,29 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { CodexAuthPlugin } from "./codex"
+import { Session } from "../session"
+import { NamedError } from "@opencode-ai/util/error"
+import { CopilotAuthPlugin } from "./copilot"
+import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
+  const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
+
+  // Built-in plugins that are directly imported (not installed from npm)
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
+      directory: Instance.directory,
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -29,11 +38,22 @@ export namespace Plugin {
       serverUrl: Server.url(),
       $: Bun.$,
     }
-    const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
+
+    for (const plugin of INTERNAL_PLUGINS) {
+      log.info("loading internal plugin", { name: plugin.name })
+      const init = await plugin(input)
+      hooks.push(init)
     }
+
+    let plugins = config.plugin ?? []
+    if (plugins.length) await Config.waitForDependencies()
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+      plugins = [...BUILTIN, ...plugins]
+    }
+
     for (let plugin of plugins) {
+      // ignore old codex plugin since it is supported first party now
+      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
@@ -41,8 +61,21 @@ export namespace Plugin {
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
         plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (builtin) return ""
-          throw err
+          if (!builtin) throw err
+
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to install builtin plugin", {
+            pkg,
+            version,
+            error: message,
+          })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+            }).toObject(),
+          })
+
+          return ""
         })
         if (!plugin) continue
       }
