@@ -22,6 +22,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
 
@@ -89,11 +90,30 @@ const detectOS = (platform: ReturnType<typeof usePlatform>): OS => {
   return "unknown"
 }
 
+const errorText = (value: unknown): string => {
+  if (value && typeof value === "object" && "data" in value) {
+    const data = (value as { data?: { message?: unknown } }).data
+    if (typeof data?.message === "string" && data.message) return data.message
+  }
+  if (value && typeof value === "object" && "error" in value) {
+    const nested = errorText((value as { error?: unknown }).error)
+    if (nested) return nested
+  }
+  if (value && typeof value === "object" && "message" in value) {
+    const message = (value as { message?: unknown }).message
+    if (typeof message === "string" && message) return message
+  }
+  if (value instanceof Error && value.message) return value.message
+  if (typeof value === "string" && value) return value
+  return ""
+}
+
 const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown) => {
+  const message = errorText(err)
   showToast({
     variant: "error",
     title: language.t("common.requestFailed"),
-    description: err instanceof Error ? err.message : String(err),
+    description: message || language.t("common.requestFailed"),
   })
 }
 
@@ -204,6 +224,112 @@ export function SessionHeader() {
     if (current) return current.name || getFilename(current.worktree)
     return getFilename(projectDirectory())
   })
+  const workspace = createMemo(() => {
+    const directory = projectDirectory()
+    if (!directory) return ""
+
+    const current = project()
+    if (!current) return getFilename(directory)
+
+    const root = getFilename(current.worktree)
+    if (directory === current.worktree) return root
+
+    const leaf = getFilename(directory)
+    if (!leaf) return root
+    if (!root) return leaf
+    if (leaf === root) return root
+    return `${root}/${leaf}`
+  })
+
+  const [branchMenu, setBranchMenu] = createStore({
+    open: false,
+    loading: false,
+    switching: false,
+    branch: "",
+    items: [] as { name: string; remote: boolean; worktree?: string }[],
+  })
+
+  const target = createMemo(() => {
+    const directory = projectDirectory()
+    if (!directory) return
+    return {
+      workspace: workspace(),
+      branch: sync.data.vcs?.branch || branchMenu.branch || "HEAD",
+    }
+  })
+
+  createEffect(() => {
+    const branch = sync.data.vcs?.branch
+    if (!branch) return
+    if (branchMenu.branch === branch) return
+    setBranchMenu("branch", branch)
+  })
+
+  const branches = createMemo(() => branchMenu.items)
+  const currentBranch = createMemo(() => {
+    const branch = sync.data.vcs?.branch || branchMenu.branch
+    if (!branch) return
+    return branches().find((item) => item.name === branch)
+  })
+  const localGroup = () => language.t("session.header.branch.group.local")
+  const remoteGroup = () => language.t("session.header.branch.group.remote")
+
+  createEffect(() => {
+    if (!branchMenu.open) return
+    const directory = projectDirectory()
+    if (!directory) return
+    setBranchMenu("loading", true)
+    void globalSDK.client.vcs
+      .branches({ directory })
+      .then((result) => {
+        setBranchMenu("items", result.data ?? [])
+      })
+      .catch((err: unknown) => {
+        setBranchMenu("items", [])
+        showRequestError(language, err)
+      })
+      .finally(() => {
+        setBranchMenu("loading", false)
+      })
+  })
+
+  const switchBranch = (name: string) => {
+    const directory = projectDirectory()
+    if (!directory) return
+    const current = sync.data.vcs?.branch || branchMenu.branch
+    if (current === name) {
+      setBranchMenu("open", false)
+      return
+    }
+
+    const item = branchMenu.items.find((b) => b.name === name)
+    if (item?.worktree) {
+      showToast({
+        variant: "error",
+        title: language.t("session.header.branch.inUse.title"),
+        description: language.t("session.header.branch.inUse.description", { branch: name }),
+      })
+      return
+    }
+
+    setBranchMenu("switching", true)
+    void globalSDK.client.vcs
+      .checkout({
+        directory,
+        vcsCheckoutInput: { branch: name },
+      })
+      .then((result) => {
+        setBranchMenu("branch", result.data?.branch ?? name)
+        setBranchMenu("open", false)
+      })
+      .catch((err: unknown) => {
+        showRequestError(language, err)
+      })
+      .finally(() => {
+        setBranchMenu("switching", false)
+      })
+  }
+
   const hotkey = createMemo(() => command.keybind("file.open"))
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
@@ -296,12 +422,12 @@ export function SessionHeader() {
     platform,
   })
 
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
+  const leftMount = createMemo(() => document.getElementById("opencode-titlebar-left"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={leftMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <Button
@@ -332,6 +458,85 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              <Show when={target()}>
+                {(value) => (
+                  <div class="hidden lg:flex min-w-0 max-w-sm">
+                    <Popover
+                      open={branchMenu.open}
+                      onOpenChange={(open) => setBranchMenu("open", open)}
+                      placement="bottom-end"
+                      gutter={4}
+                      class="w-96 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha p-2 shadow-md z-50 outline-none overflow-hidden"
+                      triggerAs={Button}
+                      triggerProps={{
+                        variant: "ghost",
+                        size: "small",
+                        disabled: branchMenu.switching,
+                        class:
+                          "h-[24px] min-w-0 max-w-sm items-center gap-1.5 rounded-md border border-border-weak-base bg-surface-panel px-2 shadow-none data-[expanded]:bg-surface-base-active",
+                        "aria-label": value().branch,
+                      }}
+                      trigger={
+                        <>
+                          <Icon name="folder" size="small" class="icon-base shrink-0 size-3.5" />
+                          <span class="min-w-0 truncate text-12-regular text-text-strong">{value().workspace}</span>
+                          <div class="h-3 w-px shrink-0 bg-border-weak-base" />
+                          <Icon name="branch" size="small" class="icon-base shrink-0 size-3.5" />
+                          <span class="min-w-0 truncate text-12-regular text-text-weak">{value().branch}</span>
+                          <Icon name="chevron-down" size="small" class="icon-base shrink-0 size-3.5 text-icon-weak" />
+                        </>
+                      }
+                    >
+                      <List
+                        items={branches}
+                        key={(item) => item.name}
+                        current={currentBranch()}
+                        filterKeys={["name"]}
+                        groupBy={(item) => (item.remote ? remoteGroup() : localGroup())}
+                        sortGroupsBy={(a, b) => {
+                          const local = localGroup()
+                          if (a.category === b.category) return 0
+                          if (a.category === local) return -1
+                          if (b.category === local) return 1
+                          return 0
+                        }}
+                        groupHeader={(group) => (
+                          <div class="flex w-full flex-col">
+                            <Show when={group.category === remoteGroup()}>
+                              <div class="my-1 h-px bg-border-weak-base" />
+                            </Show>
+                            <span class="px-2 py-1 text-11-regular text-text-subtle">{group.category}</span>
+                          </div>
+                        )}
+                        search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
+                        class="flex-1 min-h-0 !gap-2 !px-1.5 [&_[data-slot=list-search-wrapper]]:!mb-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 [&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:!gap-0 [&_[data-slot=list-group]:last-child]:!pb-1 [&_[data-slot=list-header]]:!p-0 [&_[data-slot=list-header]]:!bg-transparent [&_[data-slot=list-header]]:!static [&_[data-slot=list-header]]:after:!hidden [&_[data-slot=list-item]]:overflow-hidden [&_[data-slot=list-item][data-active=true]_[data-slot=list-item-selected-icon]]:!hidden [&_[data-slot=list-item][data-active=true]_[data-slot=branch-badge]]:!hidden"
+                        onSelect={(item) => {
+                          if (!item) return
+                          switchBranch(item.name)
+                        }}
+                      >
+                        {(item) => (
+                          <div
+                            class="w-full min-w-0 flex items-center gap-2 text-13-regular overflow-hidden"
+                            classList={{ "opacity-50": !!item.worktree }}
+                          >
+                            <Icon name="branch" size="small" class="icon-base shrink-0 size-3.5" />
+                            <span class="min-w-0 truncate">{item.name}</span>
+                            <Show when={item.worktree}>
+                              <span data-slot="branch-badge" class="ml-auto shrink-0 text-11-regular text-text-subtle">
+                                {language.t("session.header.branch.inUse.badge")}
+                              </span>
+                            </Show>
+                          </div>
+                        )}
+                      </List>
+                      <Show when={branchMenu.loading}>
+                        <div class="px-2 pt-2 text-12-regular text-text-weak">{language.t("common.loading")}</div>
+                      </Show>
+                    </Popover>
+                  </div>
+                )}
+              </Show>
               <StatusPopover />
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">

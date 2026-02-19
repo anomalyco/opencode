@@ -163,6 +163,11 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  VcsBranchesErrors,
+  VcsBranchesResponses,
+  VcsCheckoutErrors,
+  VcsCheckoutInput,
+  VcsCheckoutResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -3012,6 +3017,60 @@ export class Vcs extends HeyApiClient {
       url: "/vcs",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * List branches
+   *
+   * Retrieve all local and remote branches for the current git project.
+   */
+  public branches<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VcsBranchesResponses, VcsBranchesErrors, ThrowOnError>({
+      url: "/vcs/branches",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Checkout branch
+   *
+   * Switch the current git workspace to the selected branch.
+   */
+  public checkout<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      vcsCheckoutInput?: VcsCheckoutInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "vcsCheckoutInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsCheckoutResponses, VcsCheckoutErrors, ThrowOnError>({
+      url: "/vcs/checkout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

@@ -2198,6 +2198,16 @@ export type VcsInfo = {
   branch: string
 }
 
+export type VcsBranch = {
+  name: string
+  remote: boolean
+  worktree?: string
+}
+
+export type VcsCheckoutInput = {
+  branch: string
+}
+
 export type Command = {
   name: string
   description?: string
@@ -4904,6 +4914,60 @@ export type VcsGetResponses = {
 }
 
 export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs/branches"
+}
+
+export type VcsBranchesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsBranchesError = VcsBranchesErrors[keyof VcsBranchesErrors]
+
+export type VcsBranchesResponses = {
+  /**
+   * List of branches
+   */
+  200: Array<VcsBranch>
+}
+
+export type VcsBranchesResponse = VcsBranchesResponses[keyof VcsBranchesResponses]
+
+export type VcsCheckoutData = {
+  body?: VcsCheckoutInput
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs/checkout"
+}
+
+export type VcsCheckoutErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsCheckoutError = VcsCheckoutErrors[keyof VcsCheckoutErrors]
+
+export type VcsCheckoutResponses = {
+  /**
+   * Current branch after checkout
+   */
+  200: VcsInfo
+}
+
+export type VcsCheckoutResponse = VcsCheckoutResponses[keyof VcsCheckoutResponses]
 
 export type CommandListData = {
   body?: never

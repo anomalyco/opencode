@@ -68,6 +68,7 @@ export namespace Server {
             if (err instanceof NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name.startsWith("Worktree")) status = 400
+            else if (err.name.startsWith("Vcs")) status = 400
             else status = 500
             return c.json(err.toObject(), { status })
           }
@@ -320,6 +321,54 @@ export namespace Server {
             return c.json({
               branch,
             })
+          },
+        )
+        .get(
+          "/vcs/branches",
+          describeRoute({
+            summary: "List branches",
+            description: "Retrieve all local and remote branches for the current git project.",
+            operationId: "vcs.branches",
+            responses: {
+              200: {
+                description: "List of branches",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.array(Vcs.Branch)),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          async (c) => {
+            const branches = await Vcs.branches()
+            return c.json(branches)
+          },
+        )
+        .post(
+          "/vcs/checkout",
+          describeRoute({
+            summary: "Checkout branch",
+            description: "Switch the current git workspace to the selected branch.",
+            operationId: "vcs.checkout",
+            responses: {
+              200: {
+                description: "Current branch after checkout",
+                content: {
+                  "application/json": {
+                    schema: resolver(Vcs.Info),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator("json", Vcs.checkout.schema),
+          async (c) => {
+            const body = c.req.valid("json")
+            const info = await Vcs.checkout(body)
+            return c.json(info)
           },
         )
         .get(

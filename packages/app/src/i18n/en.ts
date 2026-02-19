@@ -524,6 +524,11 @@ export const dict = {
   "session.header.open.ariaLabel": "Open in {{app}}",
   "session.header.open.menu": "Open options",
   "session.header.open.copyPath": "Copy path",
+  "session.header.branch.group.local": "local",
+  "session.header.branch.group.remote": "remote",
+  "session.header.branch.inUse.badge": "in use",
+  "session.header.branch.inUse.title": "Branch in use",
+  "session.header.branch.inUse.description": "{{branch}} is checked out in another worktree",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
