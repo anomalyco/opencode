@@ -58,7 +58,28 @@ opencode also supports reading the `AGENTS.md` file from multiple locations. And
 
 ### Project
 
-Place an `AGENTS.md` in your project root for project-specific rules. These only apply when you are working in this directory or its sub-directories.
+Place an `AGENTS.md` in your project root for project-specific rules. This file is loaded into the system prompt on every LLM turn.
+
+If your project root is inside a git worktree (e.g. a package in a monorepo), opencode also walks upward from the project root to the worktree root, collecting any rule files it finds along the way.
+
+### Subdirectories
+
+You can also place `AGENTS.md` files in subdirectories. These are **not** loaded at startup. Instead, they are loaded dynamically when opencode reads a file in that directory or any of its children.
+
+For example, given this layout:
+
+```
+AGENTS.md
+packages/api/AGENTS.md
+packages/api/routes/AGENTS.md
+```
+
+When opencode reads a file in `packages/api/routes/`, it walks upward from that directory toward (but not including) the project root, loading rule files closest-first:
+
+1. `packages/api/routes/AGENTS.md`
+2. `packages/api/AGENTS.md`
+
+The root `AGENTS.md` is already in the system prompt, so it is not loaded again. Each subdirectory rule file is loaded at most once. If the conversation's context window is compacted, tracking resets and previously loaded files may be reloaded.
 
 ### Global
 
@@ -86,13 +107,16 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ## Precedence
 
-When opencode starts, it looks for rule files in this order:
+In each directory, `AGENTS.md` takes precedence over `CLAUDE.md`. If both exist in the same directory, only `AGENTS.md` is used.
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
-2. **Global file** at `~/.config/opencode/AGENTS.md`
-3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
+For project-level rules (root and upward to worktree), the file name choice applies globally: if any `AGENTS.md` is found in the upward walk, all `AGENTS.md` files from every level are collected and `CLAUDE.md` is ignored entirely. Only if no `AGENTS.md` exists at any level does opencode fall back to `CLAUDE.md`.
 
-The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+For subdirectory rules (loaded on file read), the choice is made per directory: each directory independently uses whichever file name exists, preferring `AGENTS.md`.
+
+For global rules, opencode checks in order and uses the first one found:
+
+1. `~/.config/opencode/AGENTS.md`
+2. `~/.claude/CLAUDE.md` (unless disabled)
 
 ---
 
