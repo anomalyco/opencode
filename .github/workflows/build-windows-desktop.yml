@@ -31,7 +31,7 @@ jobs:
           cd packages/opencode
           bun run build
         env:
-          OPENCODE_VERSION: "1.2.2"
+          OPENCODE_VERSION: "1.2.6"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -73,7 +73,7 @@ jobs:
           cd packages/desktop
           # Update version
           $pkg = Get-Content package.json | ConvertFrom-Json
-          $pkg.version = "1.2.2"
+          $pkg.version = "1.2.6"
           $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
 
           # List downloaded files for debugging
