@@ -5,7 +5,7 @@ import { $ } from "bun"
 
 export const PrCommand = cmd({
   command: "pr <number>",
-  describe: "fetch and checkout a GitHub PR branch, then run opencode",
+  describe: "fetch and checkout a GitHub PR branch, then run codemie-code",
   builder: (yargs) =>
     yargs.positional("number", {
       type: "number",
@@ -88,13 +88,13 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting opencode...")
+        UI.println("Starting codemie-code...")
         UI.println()
 
         // Launch opencode TUI with session ID if available
         const { spawn } = await import("child_process")
         const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = spawn("opencode", opencodeArgs, {
+        const opencodeProcess = spawn("codemie", opencodeArgs, {
           stdio: "inherit",
           cwd: process.cwd(),
         })
@@ -102,7 +102,7 @@ export const PrCommand = cmd({
         await new Promise<void>((resolve, reject) => {
           opencodeProcess.on("exit", (code) => {
             if (code === 0) resolve()
-            else reject(new Error(`opencode exited with code ${code}`))
+            else reject(new Error(`codemie exited with code ${code}`))
           })
           opencodeProcess.on("error", reject)
         })
