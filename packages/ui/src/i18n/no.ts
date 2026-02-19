@@ -98,8 +98,6 @@ export const dict: Record<Keys, string> = {
   "ui.permission.allowAlways": "Tillat alltid",
   "ui.permission.allowOnce": "Tillat én gang",
 
-  "ui.message.expand": "Utvid melding",
-  "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier melding",
   "ui.message.copyResponse": "Kopier svar",

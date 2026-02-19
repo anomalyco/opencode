@@ -99,8 +99,6 @@ export const dict = {
   "ui.permission.allowAlways": "Uvijek dozvoli",
   "ui.permission.allowOnce": "Dozvoli jednom",
 
-  "ui.message.expand": "Proširi poruku",
-  "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
   "ui.message.copyMessage": "Kopiraj poruku",
   "ui.message.copyResponse": "Kopiraj odgovor",

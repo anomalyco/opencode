@@ -145,14 +145,19 @@
     max-width: 100%;
   }
 
-  [data-slot="user-message-copy-wrapper"] {
-    min-height: 24px;
+  [data-slot="user-message-meta-bar"] {
     margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 4px;
     width: 100%;
+    min-height: 24px;
+  }
+
+  [data-slot="user-message-copy-wrapper"] {
+    display: flex;
+    align-items: center;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
@@ -162,47 +167,6 @@
       display: inline-flex;
       width: fit-content;
     }
-
-    [data-component="markdown"] {
-      line-height: var(--line-height-large);
-
-      p {
-        margin: 0;
-      }
-
-      p + p {
-        margin-top: 0.45rem;
-      }
-
-      ul,
-      ol {
-        margin-top: 0.35rem;
-        margin-bottom: 0.5rem;
-      }
-
-      li {
-        margin-bottom: 0.3rem;
-      }
-
-      li:last-child {
-        margin-bottom: 0;
-      }
-
-      pre {
-        margin-top: 0.75rem;
-        margin-bottom: 0.75rem;
-      }
-    }
-  }
-
-  [data-slot="user-message-meta"] {
-    user-select: none;
-    text-align: right;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   [data-slot="user-message-meta-wrap"] {
@@ -212,17 +176,40 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
+    flex-wrap: nowrap;
+  }
+
+  [data-slot="user-message-meta-agent"] {
+    user-select: none;
+    white-space: nowrap;
+    color: var(--syntax-type);
+  }
+
+  [data-slot="user-message-meta-provider"] {
+    user-select: none;
+    white-space: nowrap;
+    color: var(--syntax-info);
+  }
+
+  [data-slot="user-message-meta-model"] {
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--syntax-constant);
+  }
+
+  [data-slot="user-message-meta-sep"] {
+    user-select: none;
+    flex: 0 0 auto;
+    color: var(--text-weaker);
   }
 
   [data-slot="user-message-meta-tail"] {
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
-    text-align: right;
-  }
-
-  [data-slot="user-message-copy-wrapper"][data-interrupted] {
-    gap: 12px;
+    color: var(--text-weaker);
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],

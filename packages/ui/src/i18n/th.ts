@@ -96,8 +96,6 @@ export const dict = {
   "ui.permission.allowAlways": "อนุญาตเสมอ",
   "ui.permission.allowOnce": "อนุญาตครั้งเดียว",
 
-  "ui.message.expand": "ขยายข้อความ",
-  "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
   "ui.message.copyMessage": "คัดลอกข้อความ",
   "ui.message.copyResponse": "คัดลอกคำตอบ",

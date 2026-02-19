@@ -95,8 +95,6 @@ export const dict = {
   "ui.permission.allowAlways": "السماح دائمًا",
   "ui.permission.allowOnce": "السماح مرة واحدة",
 
-  "ui.message.expand": "توسيع الرسالة",
-  "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
   "ui.message.copyMessage": "نسخ الرسالة",
   "ui.message.copyResponse": "نسخ الرد",

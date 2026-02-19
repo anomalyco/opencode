@@ -94,8 +94,6 @@ export const dict = {
   "ui.permission.allowAlways": "常に許可",
   "ui.permission.allowOnce": "今回のみ許可",
 
-  "ui.message.expand": "メッセージを展開",
-  "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
   "ui.message.copyMessage": "メッセージをコピー",
   "ui.message.copyResponse": "応答をコピー",

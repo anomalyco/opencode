@@ -28,7 +28,6 @@ import {
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore } from "solid-js/store"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
@@ -648,28 +647,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
-  const [expanded, setExpanded] = createSignal(false)
-  const [canExpand, setCanExpand] = createSignal(false)
-  let textRef: HTMLDivElement | undefined
-
-  const updateCanExpand = () => {
-    const el = textRef
-    if (!el) return
-    if (expanded()) return
-    setCanExpand(el.scrollHeight > el.clientHeight + 2)
-  }
-
-  const toggleExpanded = () => {
-    if (!canExpand()) return
-    setExpanded((value) => !value)
-  }
-
-  createResizeObserver(
-    () => textRef,
-    () => {
-      updateCanExpand()
-    },
-  )
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -684,10 +661,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     return props.parts?.find((p) => p.type === "text" && (p as TextPart).synthetic) as TextPart | undefined
   })
 
-  createEffect(() => {
-    text()
-    updateCanExpand()
-  })
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() =>
@@ -714,6 +687,19 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     return match?.models?.[modelID]?.name ?? modelID
   })
 
+  const provider = createMemo(() => {
+    const providerID = props.message.model?.providerID
+    if (!providerID) return ""
+    const match = data.store.provider?.all?.find((p) => p.id === providerID)
+    return match?.name ?? providerID
+  })
+
+  const agent = createMemo(() => {
+    const a = props.message.agent
+    if (!a) return ""
+    return a[0]?.toUpperCase() + a.slice(1)
+  })
+
   const stamp = createMemo(() => {
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
@@ -722,12 +708,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     const hour12 = hours % 12 || 12
     const minute = String(date.getMinutes()).padStart(2, "0")
     return `${hour12}:${minute} ${hours < 12 ? "AM" : "PM"}`
-  })
-
-  const metaHead = createMemo(() => {
-    const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
-    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
   const metaTail = createMemo(() => {
@@ -747,12 +727,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   return (
-    <div
-      data-component="user-message"
-      data-expanded={expanded()}
-      data-can-expand={canExpand()}
-      data-interrupted={props.interrupted ? "" : undefined}
-    >
+    <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -786,56 +761,65 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
+        <div data-slot="user-message-text">
           <Markdown text={text()} cacheKey={textPart()?.id} />
-          <button
-            data-slot="user-message-expand"
-            type="button"
-            aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleExpanded()
-            }}
-          >
-            <Icon name="chevron-grabber-vertical" size="normal" />
-          </button>
-          <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleCopy()
-                }}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              />
-            </Tooltip>
+          <div data-slot="user-message-meta-bar">
+            <span data-slot="user-message-meta-wrap">
+              <Show when={agent()}>
+                <span data-slot="user-message-meta-agent" class="text-12-regular cursor-default">
+                  {agent()}
+                </span>
+              </Show>
+              <Show when={agent() && (provider() || model())}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={provider()}>
+                <span data-slot="user-message-meta-provider" class="text-12-regular cursor-default">
+                  {provider()}
+                </span>
+              </Show>
+              <Show when={provider() && model()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={model()}>
+                <span data-slot="user-message-meta-model" class="text-12-regular cursor-default">
+                  {model()}
+                </span>
+              </Show>
+              <Show when={(agent() || provider() || model()) && metaTail()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={metaTail()}>
+                <span data-slot="user-message-meta-tail" class="text-12-regular cursor-default">
+                  {metaTail()}
+                </span>
+              </Show>
+            </span>
+            <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleCopy()
+                  }}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                />
+              </Tooltip>
+            </div>
           </div>
         </div>
       </Show>

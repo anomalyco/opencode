@@ -95,8 +95,6 @@ export const dict = {
   "ui.permission.allowAlways": "Permitir siempre",
   "ui.permission.allowOnce": "Permitir una vez",
 
-  "ui.message.expand": "Expandir mensaje",
-  "ui.message.collapse": "Colapsar mensaje",
   "ui.message.copy": "Copiar",
   "ui.message.copyMessage": "Copiar mensaje",
   "ui.message.copyResponse": "Copiar respuesta",

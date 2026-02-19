@@ -98,8 +98,6 @@ export const dict = {
   "ui.permission.allowAlways": "Immer erlauben",
   "ui.permission.allowOnce": "Einmal erlauben",
 
-  "ui.message.expand": "Nachricht erweitern",
-  "ui.message.collapse": "Nachricht reduzieren",
   "ui.message.copy": "Kopieren",
   "ui.message.copyMessage": "Nachricht kopieren",
   "ui.message.copyResponse": "Antwort kopieren",
