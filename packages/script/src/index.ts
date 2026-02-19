@@ -54,8 +54,13 @@ const team = [
   "kommander",
   "jayair",
   "fwang",
+  "MrMushrooooom",
   "adamdotdevin",
   "iamdavidhill",
+  "Brendonovich",
+  "nexxeln",
+  "Hona",
+  "jlongster",
   "opencode-agent[bot]",
   "R44VC0RP",
 ]
@@ -70,8 +75,8 @@ export const Script = {
   get preview() {
     return IS_PREVIEW
   },
-  get release() {
-    return env.OPENCODE_RELEASE
+  get release(): boolean {
+    return !!env.OPENCODE_RELEASE
   },
   get team() {
     return team

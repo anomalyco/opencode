@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
+import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
 
@@ -42,9 +43,7 @@ if (!(await Bun.file(binPackageJson).exists())) {
 
 const CACHE_VERSION = "21"
 
-const version = await Bun.file(path.join(Global.Path.cache, "version"))
-  .text()
-  .catch(() => "0")
+const version = await Filesystem.readText(path.join(Global.Path.cache, "version")).catch(() => "0")
 
 if (version !== CACHE_VERSION) {
   try {
@@ -58,5 +57,5 @@ if (version !== CACHE_VERSION) {
       ),
     )
   } catch (e) {}
-  await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)
+  await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
 }

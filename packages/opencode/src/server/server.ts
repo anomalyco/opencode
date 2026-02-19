@@ -31,7 +31,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { Storage } from "../storage/storage"
+import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
@@ -65,7 +65,7 @@ export namespace Server {
           })
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
-            if (err instanceof Storage.NotFoundError) status = 404
+            if (err instanceof NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name.startsWith("Worktree")) status = 400
             else status = 500
@@ -78,6 +78,9 @@ export namespace Server {
           })
         })
         .use((c, next) => {
+          // Allow CORS preflight requests to succeed without auth.
+          // Browser clients sending Authorization headers will preflight with OPTIONS.
+          if (c.req.method === "OPTIONS") return next()
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
@@ -107,7 +110,12 @@ export namespace Server {
 
               if (input.startsWith("http://localhost:")) return input
               if (input.startsWith("http://127.0.0.1:")) return input
-              if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
+              if (
+                input === "tauri://localhost" ||
+                input === "http://tauri.localhost" ||
+                input === "https://tauri.localhost"
+              )
+                return input
 
               // *.opencode.ai (https only, adjust if needed)
               if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
@@ -493,6 +501,8 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
+            c.header("X-Accel-Buffering", "no")
+            c.header("X-Content-Type-Options", "nosniff")
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({
@@ -509,7 +519,7 @@ export namespace Server {
                 }
               })
 
-              // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+              // Send heartbeat every 10s to prevent stalled proxy streams.
               const heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
@@ -517,7 +527,7 @@ export namespace Server {
                     properties: {},
                   }),
                 })
-              }, 30000)
+              }, 10_000)
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {
@@ -563,7 +573,13 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    mdnsDomain?: string
+    cors?: string[]
+  }) {
     _corsWhitelist = opts.cors ?? []
 
     const args = {
@@ -591,7 +607,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!)
+      MDNS.publish(server.port!, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }

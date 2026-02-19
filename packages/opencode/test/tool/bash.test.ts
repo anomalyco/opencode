@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
@@ -144,7 +145,42 @@ describe("tool.bash permissions", () => {
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp")
+        expect(extDirReq!.patterns).toContain("/tmp/*")
+      },
+    })
+  })
+
+  test("asks for external_directory permission when file arg is outside project", async () => {
+    await using outerTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "outside.txt"), "x")
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        const filepath = path.join(outerTmp.path, "outside.txt")
+        await bash.execute(
+          {
+            command: `cat ${filepath}`,
+            description: "Read external file",
+          },
+          testCtx,
+        )
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        const expected = path.join(outerTmp.path, "*")
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns).toContain(expected)
+        expect(extDirReq!.always).toContain(expected)
       },
     })
   })
@@ -353,7 +389,7 @@ describe("tool.bash truncation", () => {
         const filepath = (result.metadata as any).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = await Bun.file(filepath).text()
+        const saved = await Filesystem.readText(filepath)
         const lines = saved.trim().split("\n")
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

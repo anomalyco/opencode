@@ -17,7 +17,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
-import { useTheme } from "@tui/context/theme"
+import { selectedForeground, useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
   ScrollBoxRenderable,
@@ -141,7 +141,7 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "hide")
+  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
@@ -149,6 +149,7 @@ export function Session() {
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [showHeader, setShowHeader] = kv.signal("header_visible", true)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
@@ -225,12 +226,21 @@ export function Session() {
   const exit = useExit()
 
   createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    const pad = (text: string) => text.padEnd(10, " ")
+    const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
+    const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
         ``,
-        `  █▀▀█  ${UI.Style.TEXT_DIM}${session()?.title}${UI.Style.TEXT_NORMAL}`,
-        `  █  █  ${UI.Style.TEXT_DIM}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
-        `  ▀▀▀▀  `,
+        `${logo[0] ?? ""}`,
+        `${logo[1] ?? ""}`,
+        `${logo[2] ?? ""}`,
+        `${logo[3] ?? ""}`,
+        ``,
+        `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        ``,
       ].join("\n"),
     )
   })
@@ -313,26 +323,31 @@ export function Session() {
   const command = useCommandDialog()
   command.register(() => [
     {
-      title: "Share session",
+      title: session()?.share?.url ? "Copy share link" : "Share session",
       value: "session.share",
       suggested: route.type === "session",
       keybind: "session_share",
       category: "Session",
-      enabled: sync.data.config.share !== "disabled" && !session()?.share?.url,
+      enabled: sync.data.config.share !== "disabled",
       slash: {
         name: "share",
       },
       onSelect: async (dialog) => {
+        const copy = (url: string) =>
+          Clipboard.copy(url)
+            .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }))
+        const url = session()?.share?.url
+        if (url) {
+          await copy(url)
+          dialog.clear()
+          return
+        }
         await sdk.client.session
           .share({
             sessionID: route.sessionID,
           })
-          .then((res) =>
-            Clipboard.copy(res.data!.share!.url).catch(() =>
-              toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-            ),
-          )
-          .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+          .then((res) => copy(res.data!.share!.url))
           .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
         dialog.clear()
       },
@@ -545,6 +560,7 @@ export function Session() {
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
+      keybind: "display_thinking",
       category: "Session",
       slash: {
         name: "thinking",
@@ -572,6 +588,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowScrollbar((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: showHeader() ? "Hide header" : "Show header",
+      value: "session.toggle.header",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowHeader((prev) => !prev)
         dialog.clear()
       },
     },
@@ -956,7 +981,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible() || !wide()}>
+            <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
             </Show>
             <scrollbox
@@ -1150,7 +1175,8 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
+  const color = createMemo(() => local.agent.color(props.message.agent))
+  const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
@@ -1212,7 +1238,7 @@ function UserMessage(props: {
               }
             >
               <text fg={theme.textMuted}>
-                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
               </text>
             </Show>
           </box>
@@ -1623,6 +1649,7 @@ function BlockTool(props: {
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
+  const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -1663,6 +1690,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
         <BlockTool
           title={title()}
           part={props.part}
+          spinner={isRunning()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
@@ -2022,8 +2050,8 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing apply_patch..." complete={false} part={props.part}>
-          apply_patch
+        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
+          Patch
         </InlineTool>
       </Match>
     </Switch>

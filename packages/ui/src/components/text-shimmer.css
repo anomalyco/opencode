@@ -1,0 +1,43 @@
+[data-component="text-shimmer"] {
+  --text-shimmer-step: 45ms;
+  --text-shimmer-duration: 1200ms;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+  white-space: pre;
+  color: inherit;
+}
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char"] {
+  animation-name: text-shimmer-char;
+  animation-duration: var(--text-shimmer-duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index));
+}
+
+@keyframes text-shimmer-char {
+  0%,
+  100% {
+    color: var(--text-weaker);
+  }
+
+  30% {
+    color: var(--text-weak);
+  }
+
+  55% {
+    color: var(--text-base);
+  }
+
+  75% {
+    color: var(--text-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+    animation: none !important;
+    color: inherit;
+  }
+}

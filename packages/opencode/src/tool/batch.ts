@@ -80,8 +80,8 @@ export const BatchTool = Tool.define("batch", async () => {
           const attachments = result.attachments?.map((attachment) => ({
             ...attachment,
             id: Identifier.ascending("part"),
-            messageID: ctx.messageID,
             sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
           }))
 
           await Session.updatePart({
