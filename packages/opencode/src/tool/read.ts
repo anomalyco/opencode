@@ -10,7 +10,6 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
-import { Filesystem } from "../util/filesystem"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -35,7 +34,8 @@ export const ReadTool = Tool.define("read", {
     }
     const title = path.relative(Instance.worktree, filepath)
 
-    const stat = Filesystem.stat(filepath)
+    const file = Bun.file(filepath)
+    const stat = await file.stat().catch(() => undefined)
 
     await assertExternalDirectory(ctx, filepath, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
@@ -118,10 +118,11 @@ export const ReadTool = Tool.define("read", {
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
-    const mime = Filesystem.mimeType(filepath)
-    const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-    const isPdf = mime === "application/pdf"
+    const isImage =
+      file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
+    const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
+      const mime = file.type
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
@@ -135,13 +136,13 @@ export const ReadTool = Tool.define("read", {
           {
             type: "file",
             mime,
-            url: `data:${mime};base64,${Buffer.from(await Filesystem.readBytes(filepath)).toString("base64")}`,
+            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
           },
         ],
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, Number(stat.size))
+    const isBinary = await isBinaryFile(filepath, stat.size)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const stream = createReadStream(filepath, { encoding: "utf8" })

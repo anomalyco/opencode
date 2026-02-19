@@ -1,7 +1,6 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
-import { Filesystem } from "../util/filesystem"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -54,22 +53,25 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    return Filesystem.readJson<Record<string, Entry>>(filepath).catch(() => ({}))
+    const file = Bun.file(filepath)
+    return file.json().catch(() => ({}))
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
+    const file = Bun.file(filepath)
     const data = await all()
     // Always update serverUrl if provided
     if (serverUrl) {
       entry.serverUrl = serverUrl
     }
-    await Filesystem.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600)
+    await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(mcpName: string): Promise<void> {
+    const file = Bun.file(filepath)
     const data = await all()
     delete data[mcpName]
-    await Filesystem.writeJson(filepath, data, 0o600)
+    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
