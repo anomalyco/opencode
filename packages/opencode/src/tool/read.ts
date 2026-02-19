@@ -35,7 +35,7 @@ export const ReadTool = Tool.define("read", {
     }
     const title = path.relative(Instance.worktree, filepath)
 
-    const stat = await fs.stat(filepath).catch(() => undefined)
+    const stat = Filesystem.stat(filepath)
 
     await assertExternalDirectory(ctx, filepath, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
@@ -141,7 +141,7 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, stat.size)
+    const isBinary = await isBinaryFile(filepath, Number(stat.size))
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const stream = createReadStream(filepath, { encoding: "utf8" })
