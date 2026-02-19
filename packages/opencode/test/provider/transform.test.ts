@@ -620,6 +620,166 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - gemini keyword sanitization", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("strips additionalProperties recursively", () => {
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        nested: {
+          type: "object",
+          additionalProperties: true,
+          properties: {
+            values: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  id: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.additionalProperties).toBeUndefined()
+    expect(result.properties.nested.additionalProperties).toBeUndefined()
+    expect(result.properties.nested.properties.values.items.additionalProperties).toBeUndefined()
+  })
+
+  test("converts nullable type unions to nullable schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        s: { type: ["null", "string"] },
+        n: { type: ["null", "number"] },
+        i: { type: ["null", "integer"] },
+        b: { type: ["null", "boolean"] },
+        a: { type: ["null", "array"], items: { type: "string" } },
+        o: { type: ["null", "object"], properties: { name: { type: "string" } } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.s).toMatchObject({ type: "string", nullable: true })
+    expect(result.properties.n).toMatchObject({ type: "number", nullable: true })
+    expect(result.properties.i).toMatchObject({ type: "integer", nullable: true })
+    expect(result.properties.b).toMatchObject({ type: "boolean", nullable: true })
+    expect(result.properties.a).toMatchObject({ type: "array", nullable: true })
+    expect(result.properties.o).toMatchObject({ type: "object", nullable: true })
+  })
+
+  test("strips schema/range and advanced keywords", () => {
+    const schema = JSON.parse(`
+      {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "minProperties": 1,
+        "maxProperties": 10,
+        "patternProperties": {
+          "^x-": { "type": "string" }
+        },
+        "propertyNames": { "pattern": "^[a-z]+$" },
+        "not": { "type": "null" },
+        "if": { "required": ["count"] },
+        "then": { "properties": { "count": { "minimum": 1 } } },
+        "else": { "properties": { "count": { "maximum": 0 } } },
+        "const": {},
+        "contains": { "type": "string" },
+        "unevaluatedProperties": false,
+        "properties": {
+          "list": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            }
+          },
+          "count": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "exclusiveMinimum": -1,
+            "exclusiveMaximum": 11
+          }
+        }
+      }
+    `) as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.minProperties).toBeUndefined()
+    expect(result.maxProperties).toBeUndefined()
+    expect(result.patternProperties).toBeUndefined()
+    expect(result.propertyNames).toBeUndefined()
+    expect(result.not).toBeUndefined()
+    expect(result.if).toBeUndefined()
+    expect(result.then).toBeUndefined()
+    expect(result.else).toBeUndefined()
+    expect(result.const).toBeUndefined()
+    expect(result.contains).toBeUndefined()
+    expect(result.unevaluatedProperties).toBeUndefined()
+    expect(result.properties.list.minItems).toBeUndefined()
+    expect(result.properties.list.maxItems).toBeUndefined()
+    expect(result.properties.list.items.minLength).toBeUndefined()
+    expect(result.properties.list.items.maxLength).toBeUndefined()
+    expect(result.properties.count.minimum).toBeUndefined()
+    expect(result.properties.count.maximum).toBeUndefined()
+    expect(result.properties.count.exclusiveMinimum).toBeUndefined()
+    expect(result.properties.count.exclusiveMaximum).toBeUndefined()
+  })
+
+  test("strips $defs and resolves local $ref entries", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        Item: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: { type: "string" },
+          },
+          required: ["id"],
+        },
+      },
+      properties: {
+        resolved: {
+          $ref: "#/$defs/Item",
+        },
+        unresolved: {
+          $ref: "#/components/schemas/Unknown",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.$defs).toBeUndefined()
+    expect(result.properties.resolved.$ref).toBeUndefined()
+    expect(result.properties.resolved.type).toBe("object")
+    expect(result.properties.resolved.properties.id.type).toBe("string")
+    expect(result.properties.resolved.additionalProperties).toBeUndefined()
+    expect(result.properties.unresolved.$ref).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [

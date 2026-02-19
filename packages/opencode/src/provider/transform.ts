@@ -410,7 +410,7 @@ export namespace ProviderTransform {
         }
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/github-copilot":
+      case "@ai-sdk/github-copilot": {
         if (model.id.includes("gemini")) {
           // currently github copilot only returns thinking
           return {}
@@ -435,6 +435,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
@@ -449,7 +450,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/openai-compatible":
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/azure":
+      case "@ai-sdk/azure": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
@@ -466,7 +467,8 @@ export namespace ProviderTransform {
             },
           ]),
         )
-      case "@ai-sdk/openai":
+      }
+      case "@ai-sdk/openai": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
@@ -496,6 +498,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
@@ -617,7 +620,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
         return {}
 
-      case "@ai-sdk/groq":
+      case "@ai-sdk/groq": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/groq
         const groqEffort = ["none", ...WIDELY_SUPPORTED_EFFORTS]
         return Object.fromEntries(
@@ -629,6 +632,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/perplexity":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
@@ -876,17 +880,77 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
-      const sanitizeGemini = (obj: any): any => {
+      const sanitizeGemini = (obj: any, defs?: Record<string, unknown>): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
         }
 
         if (Array.isArray(obj)) {
-          return obj.map(sanitizeGemini)
+          return obj.map((item) => sanitizeGemini(item, defs))
         }
 
-        const result: any = {}
+        const localDefs =
+          obj.$defs && typeof obj.$defs === "object" && !Array.isArray(obj.$defs)
+            ? (obj.$defs as Record<string, unknown>)
+            : defs
+
+        const resolveRef = (ref: string): unknown => {
+          if (!localDefs || !ref.startsWith("#/$defs/")) return undefined
+          const path = ref.slice("#/$defs/".length).split("/").filter(Boolean)
+          let current: unknown = localDefs
+          for (const segment of path) {
+            if (current === null || typeof current !== "object" || Array.isArray(current)) return undefined
+            current = (current as Record<string, unknown>)[segment]
+          }
+          return current
+        }
+
+        const resolvedRef = typeof obj.$ref === "string" ? resolveRef(obj.$ref) : undefined
+        const result: any =
+          resolvedRef && typeof resolvedRef === "object" ? sanitizeGemini(resolvedRef, localDefs) : {}
+
+        const stripKeys = new Set([
+          "additionalProperties",
+          "$schema",
+          "$defs",
+          "minItems",
+          "maxItems",
+          "minimum",
+          "maximum",
+          "exclusiveMinimum",
+          "exclusiveMaximum",
+          "minLength",
+          "maxLength",
+          "minProperties",
+          "maxProperties",
+          "patternProperties",
+          "propertyNames",
+          "not",
+          "if",
+          "then",
+          "else",
+          "const",
+          "contains",
+          "unevaluatedProperties",
+        ])
+
         for (const [key, value] of Object.entries(obj)) {
+          if (stripKeys.has(key) || key === "$ref") {
+            continue
+          }
+
+          if (key === "type" && Array.isArray(value)) {
+            const types = value.filter((item): item is string => typeof item === "string")
+            const nonNullTypes = types.filter((item) => item !== "null")
+            if (types.includes("null") && nonNullTypes.length === 1) {
+              result.type = nonNullTypes[0]
+              result.nullable = true
+            } else {
+              result.type = value
+            }
+            continue
+          }
+
           if (key === "enum" && Array.isArray(value)) {
             // Convert all enum values to strings
             result[key] = value.map((v) => String(v))
@@ -895,7 +959,7 @@ export namespace ProviderTransform {
               result.type = "string"
             }
           } else if (typeof value === "object" && value !== null) {
-            result[key] = sanitizeGemini(value)
+            result[key] = sanitizeGemini(value, localDefs)
           } else {
             result[key] = value
           }
