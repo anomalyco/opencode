@@ -463,30 +463,14 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
-      log.error("failed to get tools from client", { key, error: err })
-      return undefined
+    // Tool discovery is deferred to MCP.tools() — don't gate connection on it
+    const capabilities = mcpClient.getServerCapabilities()
+    log.info("create() successfully created client", {
+      key,
+      tools: !!capabilities?.tools,
+      resources: !!capabilities?.resources,
+      prompts: !!capabilities?.prompts,
     })
-    if (!result) {
-      await mcpClient.close().catch((error) => {
-        log.error("Failed to close MCP client", {
-          error,
-        })
-      })
-      status = {
-        status: "failed",
-        error: "Failed to get tools",
-      }
-      return {
-        mcpClient: undefined,
-        status: {
-          status: "failed" as const,
-          error: "Failed to get tools",
-        },
-      }
-    }
-
-    log.info("create() successfully created client", { key, toolCount: result.tools.length })
     return {
       mcpClient,
       status,
