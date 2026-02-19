@@ -1,6 +1,6 @@
 import z from "zod"
-import { stat } from "fs/promises"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
@@ -84,7 +84,7 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const stats = await stat(filePath).catch(() => null)
+      const stats = Filesystem.stat(filePath)
       if (!stats) continue
 
       matches.push({
