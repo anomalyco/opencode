@@ -156,7 +156,23 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
+  // tracks sessions with an active prompt() call to avoid duplicate messages (#6636)
+  const _busy = new Set<string>()
+
   export const prompt = fn(PromptInput, async (input) => {
+    while (_busy.has(input.sessionID)) {
+      const s = state()
+      if (s[input.sessionID]) {
+        return new Promise<MessageV2.WithParts>((resolve, reject) => {
+          s[input.sessionID].callbacks.push({ resolve, reject })
+        })
+      }
+      await new Promise((r) => setTimeout(r, 100))
+    }
+
+    _busy.add(input.sessionID)
+    using _guard = defer(() => void _busy.delete(input.sessionID))
+
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
