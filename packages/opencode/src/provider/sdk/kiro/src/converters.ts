@@ -552,27 +552,53 @@ export function convertToKiroPayload(
     userInputMessage.userInputMessageContext = userInputMessageContext
   }
 
-  // Validate entire history: every assistant toolUses must have matching toolResults
-  // in the next user message. After compaction/pruning, these pairs can become mismatched
+  // Validate entire history: toolUses/toolResults must be paired.
+  // After compaction/pruning, these pairs can become mismatched
   // causing "Improperly formed request" error from Kiro API.
+  // Strategy: delete orphan toolUses/toolResults to avoid model retrying completed tools.
   for (let i = 0; i < history.length - 1; i++) {
     const item = history[i]
-    if (!item.assistantResponseMessage?.toolUses?.length) continue
     const next = history[i + 1]
+    const uses = item.assistantResponseMessage?.toolUses ?? []
     const results = next?.userInputMessage?.userInputMessageContext?.toolResults ?? []
-    if (results.length === 0) {
-      delete item.assistantResponseMessage.toolUses
+
+    if (uses.length > 0 && results.length === 0) {
+      delete item.assistantResponseMessage!.toolUses
+    } else if (uses.length === 0 && results.length > 0) {
+      delete next.userInputMessage!.userInputMessageContext!.toolResults
+    } else if (uses.length > 0 && results.length > 0) {
+      const resultIds = new Set(results.map((r) => r.toolUseId))
+      const useIds = new Set(uses.map((u) => u.toolUseId))
+      item.assistantResponseMessage!.toolUses = uses.filter((u) => resultIds.has(u.toolUseId))
+      next.userInputMessage!.userInputMessageContext!.toolResults = results.filter((r) => useIds.has(r.toolUseId))
+      if (item.assistantResponseMessage!.toolUses.length === 0) delete item.assistantResponseMessage!.toolUses
+      if (next.userInputMessage!.userInputMessageContext!.toolResults!.length === 0)
+        delete next.userInputMessage!.userInputMessageContext!.toolResults
     }
   }
 
-  // Also validate last history item against current message's toolResults
+  // Validate last history item against current message's toolResults
   const lastHistoryItem = history[history.length - 1]
-  if (
-    lastHistoryItem?.assistantResponseMessage?.toolUses &&
-    lastHistoryItem.assistantResponseMessage.toolUses.length > 0 &&
-    lastToolResults.length === 0
-  ) {
-    delete lastHistoryItem.assistantResponseMessage.toolUses
+  const lastUses = lastHistoryItem?.assistantResponseMessage?.toolUses ?? []
+  if (lastUses.length > 0 && lastToolResults.length === 0) {
+    delete lastHistoryItem.assistantResponseMessage!.toolUses
+  } else if (lastUses.length === 0 && lastToolResults.length > 0) {
+    lastToolResults = []
+    delete userInputMessageContext.toolResults
+  } else if (lastUses.length > 0 && lastToolResults.length > 0) {
+    const resultIds = new Set(lastToolResults.map((r) => r.toolUseId))
+    const useIds = new Set(lastUses.map((u) => u.toolUseId))
+    lastHistoryItem.assistantResponseMessage!.toolUses = lastUses.filter((u) => resultIds.has(u.toolUseId))
+    lastToolResults = lastToolResults.filter((r) => useIds.has(r.toolUseId))
+    if (lastHistoryItem.assistantResponseMessage!.toolUses.length === 0)
+      delete lastHistoryItem.assistantResponseMessage!.toolUses
+    if (lastToolResults.length === 0) delete userInputMessageContext.toolResults
+    else userInputMessageContext.toolResults = lastToolResults
+  }
+
+  // First history user item should not have orphan toolResults
+  if (history.length > 0 && history[0].userInputMessage?.userInputMessageContext?.toolResults?.length) {
+    delete history[0].userInputMessage.userInputMessageContext.toolResults
   }
 
   // Build conversationState

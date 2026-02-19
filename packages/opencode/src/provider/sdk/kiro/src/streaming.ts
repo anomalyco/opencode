@@ -608,6 +608,7 @@ export function parseAwsEventStream(stream: ReadableStream<Uint8Array>): Readabl
             input: parsedInput,
           })
         }
+        controller.enqueue({ type: "done" })
       },
     }),
   )
