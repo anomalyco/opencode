@@ -52,7 +52,6 @@ import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
-import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
@@ -60,6 +59,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { LeftSidebar, LEFT_SIDEBAR_WIDTH } from "./left-sidebar"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -108,6 +108,19 @@ function use() {
   return ctx
 }
 
+const RIGHT_SIDEBAR_WIDTH = 42
+const MIN_CONTENT_WIDTH = 80
+const MIN_LEFT_SIDEBAR_WIDTH = 34
+const MAX_LEFT_SIDEBAR_WIDTH = 72
+const LEFT_SIDEBAR_STEP = 4
+const MIN_RIGHT_SIDEBAR_WIDTH = 34
+const MAX_RIGHT_SIDEBAR_WIDTH = 72
+const RIGHT_SIDEBAR_STEP = 4
+const CODE_PRESET_LEFT_WIDTH = 36
+const CODE_PRESET_RIGHT_WIDTH = 36
+const REVIEW_PRESET_LEFT_WIDTH = 56
+const REVIEW_PRESET_RIGHT_WIDTH = 56
+
 export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
@@ -141,8 +154,13 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [rightSidebar, setRightSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
+  const [rightSidebarOpen, setRightSidebarOpen] = createSignal(false)
+  const [rightSidebarWidth, setRightSidebarWidth] = kv.signal("right_sidebar_width", RIGHT_SIDEBAR_WIDTH)
+  const [leftSidebar, setLeftSidebar] = kv.signal<"auto" | "hide">("left_sidebar", "hide")
+  const [leftSidebarOpen, setLeftSidebarOpen] = createSignal(false)
+  const [leftSidebarWidth, setLeftSidebarWidth] = kv.signal("left_sidebar_width", LEFT_SIDEBAR_WIDTH)
+  const [panelResizeMode, setPanelResizeMode] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
@@ -154,14 +172,47 @@ export function Session() {
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
-  const sidebarVisible = createMemo(() => {
+  const rightSidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
-    if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
+    if (rightSidebarOpen()) return true
+    if (rightSidebar() === "auto" && wide()) return true
     return false
   })
+  const leftSidebarVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    if (leftSidebarOpen()) return true
+    if (leftSidebar() === "auto" && wide()) return true
+    return false
+  })
+  const clampedLeftSidebarRawWidth = createMemo(() =>
+    Math.max(MIN_LEFT_SIDEBAR_WIDTH, Math.min(leftSidebarWidth(), MAX_LEFT_SIDEBAR_WIDTH)),
+  )
+  const clampedRightSidebarRawWidth = createMemo(() =>
+    Math.max(MIN_RIGHT_SIDEBAR_WIDTH, Math.min(rightSidebarWidth(), MAX_RIGHT_SIDEBAR_WIDTH)),
+  )
+  const effectiveLeftSidebarWidth = createMemo(() => {
+    const raw = clampedLeftSidebarRawWidth()
+    const rightReserved = rightSidebarVisible() && wide() ? clampedRightSidebarRawWidth() : 0
+    const wideMax = Math.max(MIN_LEFT_SIDEBAR_WIDTH, dimensions().width - rightReserved - MIN_CONTENT_WIDTH - 4)
+    const narrowMax = Math.max(MIN_LEFT_SIDEBAR_WIDTH, dimensions().width - 8)
+    const cap = Math.min(MAX_LEFT_SIDEBAR_WIDTH, wide() ? wideMax : narrowMax)
+    return Math.max(MIN_LEFT_SIDEBAR_WIDTH, Math.min(raw, cap))
+  })
+  const effectiveRightSidebarWidth = createMemo(() => {
+    const raw = clampedRightSidebarRawWidth()
+    const leftReserved = leftSidebarVisible() && wide() ? clampedLeftSidebarRawWidth() : 0
+    const wideMax = Math.max(MIN_RIGHT_SIDEBAR_WIDTH, dimensions().width - leftReserved - MIN_CONTENT_WIDTH - 4)
+    const narrowMax = Math.max(MIN_RIGHT_SIDEBAR_WIDTH, dimensions().width - 8)
+    const cap = Math.min(MAX_RIGHT_SIDEBAR_WIDTH, wide() ? wideMax : narrowMax)
+    return Math.max(MIN_RIGHT_SIDEBAR_WIDTH, Math.min(raw, cap))
+  })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const reservedSidebarWidth = createMemo(
+    () =>
+      (leftSidebarVisible() && wide() ? effectiveLeftSidebarWidth() : 0) +
+      (rightSidebarVisible() && wide() ? effectiveRightSidebarWidth() : 0),
+  )
+  const contentWidth = createMemo(() => Math.max(MIN_CONTENT_WIDTH, dimensions().width - reservedSidebarWidth() - 4))
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui
@@ -221,6 +272,67 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+  const dialog = useDialog()
+
+  const toggleRightSidebar = () => {
+    batch(() => {
+      const next = !rightSidebarVisible()
+      setRightSidebar(() => (next ? "auto" : "hide"))
+      setRightSidebarOpen(next)
+      if (!wide() && next) {
+        setLeftSidebar(() => "hide")
+        setLeftSidebarOpen(false)
+      }
+    })
+  }
+
+  const toggleLeftSidebar = () => {
+    batch(() => {
+      const next = !leftSidebarVisible()
+      setLeftSidebar(() => (next ? "auto" : "hide"))
+      setLeftSidebarOpen(next)
+      if (!wide() && next) {
+        setRightSidebar(() => "hide")
+        setRightSidebarOpen(false)
+      }
+    })
+  }
+
+  const setLeftSidebarWidthDelta = (delta: number) => {
+    const next = leftSidebarWidth() + delta
+    const clamped = Math.max(MIN_LEFT_SIDEBAR_WIDTH, Math.min(MAX_LEFT_SIDEBAR_WIDTH, next))
+    setLeftSidebarWidth(() => clamped)
+  }
+  const setRightSidebarWidthDelta = (delta: number) => {
+    const next = rightSidebarWidth() + delta
+    const clamped = Math.max(MIN_RIGHT_SIDEBAR_WIDTH, Math.min(MAX_RIGHT_SIDEBAR_WIDTH, next))
+    setRightSidebarWidth(() => clamped)
+  }
+  const setPanelPreset = (preset: "reset" | "code" | "review") => {
+    if (preset === "reset") {
+      setLeftSidebarWidth(() => LEFT_SIDEBAR_WIDTH)
+      setRightSidebarWidth(() => RIGHT_SIDEBAR_WIDTH)
+      return
+    }
+    if (preset === "code") {
+      setLeftSidebarWidth(() => CODE_PRESET_LEFT_WIDTH)
+      setRightSidebarWidth(() => CODE_PRESET_RIGHT_WIDTH)
+      return
+    }
+    setLeftSidebarWidth(() => REVIEW_PRESET_LEFT_WIDTH)
+    setRightSidebarWidth(() => REVIEW_PRESET_RIGHT_WIDTH)
+  }
+  const togglePanelResizeMode = () => {
+    const next = !panelResizeMode()
+    setPanelResizeMode(next)
+    toast.show({
+      variant: "info",
+      duration: 3000,
+      message: next
+        ? "패널 조절 모드: h/l 왼쪽 · j/k 오른쪽 · 0 리셋 · 1 코드 · 2 리뷰 · esc 종료"
+        : "패널 조절 모드 종료",
+    })
+  }
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -249,6 +361,54 @@ export function Session() {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
       exit()
+    }
+  })
+
+  useKeyboard((evt) => {
+    if (!panelResizeMode()) return
+    if (dialog.stack.length > 0) return
+    const name = evt.name?.toLowerCase()
+
+    if (name === "escape" || name === "return") {
+      evt.preventDefault()
+      setPanelResizeMode(false)
+      return
+    }
+
+    if (name === "h" || name === "left") {
+      evt.preventDefault()
+      setLeftSidebarWidthDelta(-LEFT_SIDEBAR_STEP)
+      return
+    }
+    if (name === "l" || name === "right") {
+      evt.preventDefault()
+      setLeftSidebarWidthDelta(LEFT_SIDEBAR_STEP)
+      return
+    }
+    if (name === "j" || name === "down") {
+      evt.preventDefault()
+      setRightSidebarWidthDelta(-RIGHT_SIDEBAR_STEP)
+      return
+    }
+    if (name === "k" || name === "up") {
+      evt.preventDefault()
+      setRightSidebarWidthDelta(RIGHT_SIDEBAR_STEP)
+      return
+    }
+    if (name === "0") {
+      evt.preventDefault()
+      setPanelPreset("reset")
+      return
+    }
+    if (name === "1") {
+      evt.preventDefault()
+      setPanelPreset("code")
+      return
+    }
+    if (name === "2") {
+      evt.preventDefault()
+      setPanelPreset("review")
+      return
     }
   })
 
@@ -521,16 +681,105 @@ export function Session() {
       },
     },
     {
-      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
+      title: rightSidebarVisible() ? "Hide right sidebar" : "Show right sidebar",
       value: "session.sidebar.toggle",
       keybind: "sidebar_toggle",
       category: "Session",
       onSelect: (dialog) => {
-        batch(() => {
-          const isVisible = sidebarVisible()
-          setSidebar(() => (isVisible ? "hide" : "auto"))
-          setSidebarOpen(!isVisible)
-        })
+        toggleRightSidebar()
+        dialog.clear()
+      },
+    },
+    {
+      title: panelResizeMode() ? "Exit panel resize mode" : "Enter panel resize mode",
+      value: "session.sidebar.resize.mode",
+      keybind: "panel_resize_mode" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        togglePanelResizeMode()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Reset panel widths",
+      value: "session.sidebar.resize.reset",
+      keybind: "panel_resize_reset" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setPanelPreset("reset")
+        dialog.clear()
+      },
+    },
+    {
+      title: "Preset: code focus",
+      value: "session.sidebar.resize.preset.code",
+      keybind: "panel_resize_preset_code" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setPanelPreset("code")
+        dialog.clear()
+      },
+    },
+    {
+      title: "Preset: review focus",
+      value: "session.sidebar.resize.preset.review",
+      keybind: "panel_resize_preset_review" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setPanelPreset("review")
+        dialog.clear()
+      },
+    },
+    {
+      title: `Narrow right sidebar (${effectiveRightSidebarWidth()})`,
+      value: "session.sidebar.right.narrow",
+      keybind: "right_sidebar_narrow" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setRightSidebarWidthDelta(-RIGHT_SIDEBAR_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: `Widen right sidebar (${effectiveRightSidebarWidth()})`,
+      value: "session.sidebar.right.widen",
+      keybind: "right_sidebar_widen" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setRightSidebarWidthDelta(RIGHT_SIDEBAR_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: leftSidebarVisible() ? "Hide left sidebar" : "Show left sidebar",
+      value: "session.sidebar.left.toggle",
+      keybind: "left_sidebar_toggle" as any,
+      category: "Session",
+      slash: {
+        name: "left-sidebar",
+      },
+      onSelect: (dialog) => {
+        toggleLeftSidebar()
+        dialog.clear()
+      },
+    },
+    {
+      title: `Narrow left sidebar (${effectiveLeftSidebarWidth()})`,
+      value: "session.sidebar.left.narrow",
+      keybind: "left_sidebar_narrow" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setLeftSidebarWidthDelta(-LEFT_SIDEBAR_STEP)
+        dialog.clear()
+      },
+    },
+    {
+      title: `Widen left sidebar (${effectiveLeftSidebarWidth()})`,
+      value: "session.sidebar.left.widen",
+      keybind: "left_sidebar_widen" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        setLeftSidebarWidthDelta(LEFT_SIDEBAR_STEP)
         dialog.clear()
       },
     },
@@ -957,7 +1206,6 @@ export function Session() {
     }
   })
 
-  const dialog = useDialog()
   const renderer = useRenderer()
 
   // snap to bottom when session changes
@@ -979,9 +1227,40 @@ export function Session() {
       }}
     >
       <box flexDirection="row">
+        <Show when={leftSidebarVisible()}>
+          <Switch>
+            <Match when={wide()}>
+              <LeftSidebar
+                sessionID={route.sessionID}
+                width={effectiveLeftSidebarWidth()}
+                onNarrow={() => setLeftSidebarWidthDelta(-LEFT_SIDEBAR_STEP)}
+                onWiden={() => setLeftSidebarWidthDelta(LEFT_SIDEBAR_STEP)}
+              />
+            </Match>
+            <Match when={!wide()}>
+              <box
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                alignItems="flex-start"
+                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+              >
+                <LeftSidebar
+                  sessionID={route.sessionID}
+                  overlay
+                  width={effectiveLeftSidebarWidth()}
+                  onNarrow={() => setLeftSidebarWidthDelta(-LEFT_SIDEBAR_STEP)}
+                  onWiden={() => setLeftSidebarWidthDelta(LEFT_SIDEBAR_STEP)}
+                />
+              </box>
+            </Match>
+          </Switch>
+        </Show>
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={showHeader() && (!sidebarVisible() || !wide())}>
+            <Show when={showHeader() && (!(rightSidebarVisible() || leftSidebarVisible()) || !wide())}>
               <Header />
             </Show>
             <scrollbox
@@ -1105,6 +1384,17 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length > 0}>
                 <QuestionPrompt request={questions()[0]} />
               </Show>
+              <Show when={panelResizeMode() && permissions().length === 0 && questions().length === 0}>
+                <box paddingLeft={1} paddingRight={1} paddingBottom={1}>
+                  <text fg={theme.text}>
+                    <span style={{ fg: theme.warning, bold: true }}>패널 조절 모드</span>
+                    <span style={{ fg: theme.textMuted }}>
+                      {" "}
+                      h/l 왼쪽 · j/k 오른쪽 · 0 리셋 · 1 코드 · 2 리뷰 · esc/enter 종료
+                    </span>
+                  </text>
+                </box>
+              </Show>
               <Prompt
                 visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
                 ref={(r) => {
@@ -1125,10 +1415,16 @@ export function Session() {
           </Show>
           <Toast />
         </box>
-        <Show when={sidebarVisible()}>
+        <Show when={rightSidebarVisible()}>
           <Switch>
             <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
+              <Sidebar
+                sessionID={route.sessionID}
+                progressPlaceholder
+                width={effectiveRightSidebarWidth()}
+                onNarrow={() => setRightSidebarWidthDelta(-RIGHT_SIDEBAR_STEP)}
+                onWiden={() => setRightSidebarWidthDelta(RIGHT_SIDEBAR_STEP)}
+              />
             </Match>
             <Match when={!wide()}>
               <box
@@ -1140,7 +1436,13 @@ export function Session() {
                 alignItems="flex-end"
                 backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
               >
-                <Sidebar sessionID={route.sessionID} />
+                <Sidebar
+                  sessionID={route.sessionID}
+                  progressPlaceholder
+                  width={effectiveRightSidebarWidth()}
+                  onNarrow={() => setRightSidebarWidthDelta(-RIGHT_SIDEBAR_STEP)}
+                  onWiden={() => setRightSidebarWidthDelta(RIGHT_SIDEBAR_STEP)}
+                />
               </box>
             </Match>
           </Switch>
@@ -2059,23 +2361,13 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
 }
 
 function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+  const count = createMemo(() => props.metadata.todos?.length ?? 0)
   return (
-    <Switch>
-      <Match when={props.metadata.todos?.length}>
-        <BlockTool title="# Todos" part={props.part}>
-          <box>
-            <For each={props.input.todos ?? []}>
-              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
-            </For>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="⚙" pending="Updating todos..." complete={false} part={props.part}>
-          Updating todos...
-        </InlineTool>
-      </Match>
-    </Switch>
+    <InlineTool icon="⚙" pending="Updating todos..." complete={count()} part={props.part}>
+      <Show when={count() > 0} fallback={<>Updating todos...</>}>
+        Updated {count()} todo{count() !== 1 ? "s" : ""}
+      </Show>
+    </InlineTool>
   )
 }
 
