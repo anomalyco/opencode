@@ -5,7 +5,6 @@
 
 import z from "zod"
 import * as path from "path"
-import { stat } from "fs/promises"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -74,7 +73,7 @@ export const EditTool = Tool.define("edit", {
         return
       }
 
-      const stats = await stat(filePath).catch(() => {})
+      const stats = Filesystem.stat(filePath)
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
