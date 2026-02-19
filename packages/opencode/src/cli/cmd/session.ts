@@ -38,8 +38,32 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).demandCommand(),
+  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
   async handler() {},
+})
+
+export const SessionDeleteCommand = cmd({
+  command: "delete <sessionID>",
+  describe: "delete a session",
+  builder: (yargs: Argv) => {
+    return yargs.positional("sessionID", {
+      describe: "session ID to delete",
+      type: "string",
+      demandOption: true,
+    })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      try {
+        await Session.get(args.sessionID)
+      } catch {
+        UI.error(`Session not found: ${args.sessionID}`)
+        process.exit(1)
+      }
+      await Session.remove(args.sessionID)
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+    })
+  },
 })
 
 export const SessionListCommand = cmd({
@@ -61,26 +85,17 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = []
-      for await (const session of Session.list()) {
-        if (!session.parentID) {
-          sessions.push(session)
-        }
-      }
+      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
 
-      sessions.sort((a, b) => b.time.updated - a.time.updated)
-
-      const limitedSessions = args.maxCount ? sessions.slice(0, args.maxCount) : sessions
-
-      if (limitedSessions.length === 0) {
+      if (sessions.length === 0) {
         return
       }
 
       let output: string
       if (args.format === "json") {
-        output = formatSessionJSON(limitedSessions)
+        output = formatSessionJSON(sessions)
       } else {
-        output = formatSessionTable(limitedSessions)
+        output = formatSessionTable(sessions)
       }
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
