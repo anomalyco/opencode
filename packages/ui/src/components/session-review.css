@@ -213,6 +213,17 @@
     justify-content: flex-end;
   }
 
+  [data-slot="session-review-diff-chevron"] {
+    display: inline-flex;
+    color: var(--icon-weaker);
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="session-review-diff-chevron"] {
+    transform: rotate(0deg);
+  }
+
   [data-slot="session-review-change-group"] {
     display: inline-flex;
     align-items: center;

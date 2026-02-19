@@ -570,7 +570,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <DiffChanges changes={diff} />
                                 </Match>
                               </Switch>
-                              <Icon name="chevron-grabber-vertical" size="small" />
+                              <span data-slot="session-review-diff-chevron">
+                                <Icon name="chevron-down" size="small" />
+                              </span>
                             </div>
                           </div>
                         </Accordion.Trigger>
