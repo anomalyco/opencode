@@ -4,7 +4,6 @@ import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
@@ -16,6 +15,28 @@ export namespace Pty {
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
   const encoder = new TextEncoder()
+
+  type Socket = {
+    readyState: number
+    data: object
+    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    close: (code?: number, reason?: string) => void
+  }
+
+  // Bun's ServerWebSocket has a per-connection `.data` object (set during
+  // `server.upgrade`) that changes when the underlying connection is recycled.
+  // We keep a reference to a stable part of it so output can't leak even when
+  // websocket objects are reused.
+  const token = (ws: Socket) => {
+    const data = ws.data
+    const events = (data as { events?: unknown }).events
+    if (events && typeof events === "object") return events
+
+    const url = (data as { url?: unknown }).url
+    if (url && typeof url === "object") return url
+
+    return data
+  }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
   const meta = (cursor: number) => {
@@ -81,7 +102,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Set<WSContext>
+    subscribers: Map<Socket, object>
   }
 
   const state = Instance.state(
@@ -91,8 +112,12 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers) {
-          ws.close()
+        for (const ws of session.subscribers.keys()) {
+          try {
+            ws.close()
+          } catch {
+            // ignore
+          }
         }
       }
       sessions.clear()
@@ -154,21 +179,30 @@ export namespace Pty {
       buffer: "",
       bufferCursor: 0,
       cursor: 0,
-      subscribers: new Set(),
+      subscribers: new Map(),
     }
     state().set(id, session)
-    ptyProcess.onData((data) => {
-      session.cursor += data.length
+    ptyProcess.onData((chunk) => {
+      session.cursor += chunk.length
 
-      for (const ws of session.subscribers) {
+      for (const [ws, data] of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
-        ws.send(data)
+
+        if (token(ws) !== data) {
+          session.subscribers.delete(ws)
+          continue
+        }
+        try {
+          ws.send(chunk)
+        } catch {
+          session.subscribers.delete(ws)
+        }
       }
 
-      session.buffer += data
+      session.buffer += chunk
       if (session.buffer.length <= BUFFER_LIMIT) return
       const excess = session.buffer.length - BUFFER_LIMIT
       session.buffer = session.buffer.slice(excess)
@@ -177,14 +211,15 @@ export namespace Pty {
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const ws of session.subscribers) {
-        ws.close()
+      for (const ws of session.subscribers.keys()) {
+        try {
+          ws.close()
+        } catch {
+          // ignore
+        }
       }
       session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
-      for (const ws of session.subscribers) {
-        ws.close()
-      }
       state().delete(id)
     })
     Bus.publish(Event.Created, { info })
@@ -211,9 +246,14 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers) {
-      ws.close()
+    for (const ws of session.subscribers.keys()) {
+      try {
+        ws.close()
+      } catch {
+        // ignore
+      }
     }
+    session.subscribers.clear()
     state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
@@ -232,7 +272,7 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext, cursor?: number) {
+  export function connect(id: string, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
@@ -272,7 +312,12 @@ export namespace Pty {
       return
     }
 
-    session.subscribers.add(ws)
+    if (!ws.data || typeof ws.data !== "object") {
+      ws.close()
+      return
+    }
+
+    session.subscribers.set(ws, token(ws))
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))
