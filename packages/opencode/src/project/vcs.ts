@@ -80,9 +80,68 @@ export namespace Vcs {
       .filter(Boolean)
       .join("\n")
 
+  type Worktree = {
+    path?: string
+    branch?: string
+    head?: string
+    detached?: boolean
+  }
+
+  const parseWorktrees = (value: string) =>
+    value
+      .split("\n")
+      .map((line) => line.replace(/\r$/, ""))
+      .reduce<Worktree[]>((all, line) => {
+        if (!line.trim()) return all
+        if (line.startsWith("worktree ")) {
+          all.push({ path: line.slice("worktree ".length) })
+          return all
+        }
+        const item = all[all.length - 1]
+        if (!item) return all
+        if (line.startsWith("branch refs/heads/")) {
+          item.branch = line.slice("branch refs/heads/".length)
+          return all
+        }
+        if (line.startsWith("HEAD ")) {
+          item.head = line.slice("HEAD ".length)
+          return all
+        }
+        if (line === "detached") {
+          item.detached = true
+        }
+        return all
+      }, [])
+
+  const occupied = (value: string) =>
+    parseWorktrees(value).reduce<Map<string, string>>((all, item) => {
+      if (!item.path || !item.branch) return all
+      all.set(item.branch, item.path)
+      return all
+    }, new Map())
+
   const has = async (ref: string) => {
     const result = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
     return result.exitCode === 0
+  }
+
+  const upstream = async (name: string) => {
+    const result = await $`git for-each-ref --format=%(upstream:short) refs/heads/${name}`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
+    if (result.exitCode !== 0) return
+    const ref = output(result.stdout).trim()
+    if (!ref) return
+    return ref
+  }
+
+  const revision = async (ref: string) => {
+    const result = await $`git rev-parse --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
+    if (result.exitCode !== 0) return
+    const hash = output(result.stdout).trim()
+    if (!hash) return
+    return hash
   }
 
   async function currentBranch() {
@@ -153,28 +212,11 @@ export namespace Vcs {
       throw new BranchListFailedError({ message: message(remote) || "Failed to list remote git branches" })
     }
 
-    const occupied = new Map<string, string>()
+    const inuse = new Map<string, string>()
     if (worktrees.exitCode === 0) {
-      output(worktrees.stdout)
-        .split("\n")
-        .map((line) => line.replace(/\r$/, ""))
-        .reduce<{ path?: string; branch?: string }[]>((acc, line) => {
-          if (!line.trim()) return acc
-          if (line.startsWith("worktree ")) {
-            acc.push({ path: line.slice("worktree ".length) })
-            return acc
-          }
-          const item = acc[acc.length - 1]
-          if (!item) return acc
-          if (line.startsWith("branch refs/heads/")) {
-            item.branch = line.slice("branch refs/heads/".length)
-          }
-          return acc
-        }, [])
-        .forEach((item) => {
-          if (!item.path || !item.branch) return
-          occupied.set(item.branch, item.path)
-        })
+      occupied(output(worktrees.stdout)).forEach((dir, name) => {
+        inuse.set(name, dir)
+      })
     }
 
     const current = Instance.worktree
@@ -193,7 +235,7 @@ export namespace Vcs {
 
     return [
       ...localBranches.map((name) => {
-        const dir = occupied.get(name)
+        const dir = inuse.get(name)
         const worktree = dir && dir !== current ? dir : undefined
         return Branch.parse({ name, remote: false, worktree })
       }),
@@ -214,6 +256,16 @@ export namespace Vcs {
       throw new BranchCheckoutFailedError({ message: "Branch name is required" })
     }
 
+    const worktrees = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    const inuse = worktrees.exitCode === 0 ? occupied(output(worktrees.stdout)) : new Map<string, string>()
+    const ensureFree = (name: string) => {
+      const dir = inuse.get(name)
+      if (!dir || dir === Instance.worktree) return
+      throw new BranchCheckoutFailedError({
+        message: `Branch "${name}" is checked out in another worktree: ${dir}`,
+      })
+    }
+
     const current = await currentBranch()
     if (current === target) {
       return Info.parse({ branch: target })
@@ -221,6 +273,7 @@ export namespace Vcs {
 
     const local = await has(`refs/heads/${target}`)
     if (local) {
+      ensureFree(target)
       const switched = await $`git switch ${target}`.quiet().nothrow().cwd(Instance.worktree)
       if (switched.exitCode !== 0) {
         throw new BranchCheckoutFailedError({
@@ -236,7 +289,8 @@ export namespace Vcs {
       return Info.parse({ branch })
     }
 
-    const remote = target.includes("/") ? target : `origin/${target}`
+    const explicit = target.includes("/")
+    const remote = explicit ? target : `origin/${target}`
     const remoteRef = `refs/remotes/${remote}`
     const exists = await has(remoteRef)
     if (!exists) {
@@ -249,8 +303,28 @@ export namespace Vcs {
       throw new BranchCheckoutFailedError({ message: `Invalid branch: ${target}` })
     }
 
+    ensureFree(localName)
+
     const localRef = `refs/heads/${localName}`
     const localExists = await has(localRef)
+
+    if (explicit && localExists) {
+      const tracked = await upstream(localName)
+      if (tracked && tracked !== remote) {
+        throw new BranchCheckoutFailedError({
+          message: `Local branch "${localName}" tracks "${tracked}", not "${remote}"`,
+        })
+      }
+      if (!tracked) {
+        const [a, b] = await Promise.all([revision(localRef), revision(remoteRef)])
+        if (a && b && a !== b) {
+          throw new BranchCheckoutFailedError({
+            message: `Local branch "${localName}" differs from "${remote}"`,
+          })
+        }
+      }
+    }
+
     const switched = localExists
       ? await $`git switch ${localName}`.quiet().nothrow().cwd(Instance.worktree)
       : await $`git switch --track -c ${localName} ${remote}`.quiet().nothrow().cwd(Instance.worktree)
