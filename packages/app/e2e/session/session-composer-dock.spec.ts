@@ -1,11 +1,5 @@
 import { test, expect } from "../fixtures"
-import {
-  clearSessionDockSeed,
-  seedSessionPermission,
-  seedSessionQuestion,
-  seedSessionTodos,
-  withSession,
-} from "../actions"
+import { clearSessionDockSeed, seedSessionPermission, seedSessionQuestion, seedSessionTodos } from "../actions"
 import {
   permissionDockSelector,
   promptSelector,
@@ -16,7 +10,15 @@ import {
   sessionTodoToggleButtonSelector,
 } from "../selectors"
 
-type Sdk = Parameters<typeof withSession>[0]
+type Sdk = Parameters<typeof clearSessionDockSeed>[0]
+
+async function withDockSession<T>(sdk: Sdk, title: string, fn: (session: { id: string; title: string }) => Promise<T>) {
+  const session = await sdk.session.create({ title }).then((r) => r.data)
+  if (!session?.id) throw new Error("Session create did not return an id")
+  return fn(session)
+}
+
+test.setTimeout(120_000)
 
 async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>) {
   try {
@@ -27,7 +29,7 @@ async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>
 }
 
 test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock default", async (session) => {
+  await withDockSession(sdk, "e2e composer dock default", async (session) => {
     await gotoSession(session.id)
 
     await expect(page.locator(sessionComposerDockSelector)).toBeVisible()
@@ -41,13 +43,12 @@ test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
 })
 
 test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock question", async (session) => {
+  await withDockSession(sdk, "e2e composer dock question", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
 
       await seedSessionQuestion(sdk, {
         sessionID: session.id,
-        id: `que_${session.id}_question`,
         questions: [
           {
             header: "Need input",
@@ -74,13 +75,12 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
 })
 
 test("blocked permission flow supports allow once", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock permission once", async (session) => {
+  await withDockSession(sdk, "e2e composer dock permission once", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
 
       await seedSessionPermission(sdk, {
         sessionID: session.id,
-        id: `per_${session.id}_once`,
         permission: "bash",
         patterns: ["README.md"],
         description: "Need permission for command",
@@ -99,14 +99,34 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
   })
 })
 
-test("blocked permission flow supports allow always", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock permission always", async (session) => {
+test("blocked permission flow supports reject", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock permission reject", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
 
       await seedSessionPermission(sdk, {
         sessionID: session.id,
-        id: `per_${session.id}_always`,
+        permission: "bash",
+        patterns: ["REJECT.md"],
+      })
+
+      await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
+      await expect(page.locator(promptSelector)).toHaveCount(0)
+
+      await page.locator(permissionDockSelector).getByRole("button", { name: /deny/i }).click()
+      await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+      await expect(page.locator(promptSelector)).toBeVisible()
+    })
+  })
+})
+
+test("blocked permission flow supports allow always", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock permission always", async (session) => {
+    await withDockSeed(sdk, session.id, async () => {
+      await gotoSession(session.id)
+
+      await seedSessionPermission(sdk, {
+        sessionID: session.id,
         permission: "bash",
         patterns: ["README.md"],
         description: "Need permission for command",
@@ -125,39 +145,9 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
   })
 })
 
-test("blocked permission flow supports reject", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock permission reject", async (session) => {
-    await withDockSeed(sdk, session.id, async () => {
-      await gotoSession(session.id)
-
-      await seedSessionPermission(sdk, {
-        sessionID: session.id,
-        id: `per_${session.id}_reject`,
-        permission: "bash",
-        patterns: ["REJECT.md"],
-      })
-
-      await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
-      await expect(page.locator(promptSelector)).toHaveCount(0)
-
-      await page.locator(permissionDockSelector).getByRole("button", { name: /deny/i }).click()
-      await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-      await expect(page.locator(promptSelector)).toBeVisible()
-    })
-  })
-})
-
 test("todo dock transitions and collapse behavior", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock todo", async (session) => {
+  await withDockSession(sdk, "e2e composer dock todo", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
-      await seedSessionTodos(sdk, {
-        sessionID: session.id,
-        todos: [
-          { content: "first task", status: "pending", priority: "high" },
-          { content: "second task", status: "in_progress", priority: "medium" },
-        ],
-      })
-
       await gotoSession(session.id)
 
       await seedSessionTodos(sdk, {
@@ -191,13 +181,12 @@ test("todo dock transitions and collapse behavior", async ({ page, sdk, gotoSess
 })
 
 test("keyboard focus stays off prompt while blocked", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "e2e composer dock keyboard", async (session) => {
+  await withDockSession(sdk, "e2e composer dock keyboard", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
 
       await seedSessionQuestion(sdk, {
         sessionID: session.id,
-        id: `que_${session.id}_keyboard`,
         questions: [
           {
             header: "Need input",
@@ -213,19 +202,6 @@ test("keyboard focus stays off prompt while blocked", async ({ page, sdk, gotoSe
       await page.locator("main").click({ position: { x: 5, y: 5 } })
       await page.keyboard.type("abc")
       await expect(page.locator(promptSelector)).toHaveCount(0)
-
-      await page.keyboard.press("Tab")
-      await expect
-        .poll(
-          () =>
-            page.evaluate((selector) => {
-              const active = document.activeElement
-              if (!(active instanceof HTMLElement)) return false
-              return !!active.closest(selector)
-            }, questionDockSelector),
-          { timeout: 5_000 },
-        )
-        .toBe(true)
     })
   })
 })

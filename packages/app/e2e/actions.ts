@@ -332,41 +332,47 @@ export async function withSession<T>(
   }
 }
 
-async function dockRequest<T>(
-  sdk: ReturnType<typeof createSdk>,
-  sessionID: string,
-  method: "POST" | "DELETE",
-  path: string,
-  body?: unknown,
-) {
-  const info = await sdk.path.get().then((x) => x.data)
-  const directory = info?.directory
-  if (!directory) throw new Error("Failed to resolve directory for e2e dock request")
+const seedSystem = [
+  "You are seeding deterministic e2e UI state.",
+  "Follow the user's instruction exactly.",
+  "When asked to call a tool, call exactly that tool exactly once with the exact JSON input.",
+  "Do not call any extra tools.",
+].join(" ")
 
-  const url = path ? `${serverUrl}/e2e/session/${sessionID}/${path}` : `${serverUrl}/e2e/session/${sessionID}`
-
-  const response = await fetch(url, {
-    method,
-    headers: {
-      "content-type": "application/json",
-      "x-opencode-directory": encodeURIComponent(directory),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Dock e2e request failed (${response.status}): ${text}`)
+const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: number }) => {
+  const timeout = input.timeout ?? 30_000
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await input.probe()
+    if (value !== undefined) return value
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
+}
 
-  return (await response.json()) as T
+const seed = async <T>(input: {
+  sessionID: string
+  prompt: string
+  sdk: ReturnType<typeof createSdk>
+  probe: () => Promise<T | undefined>
+  timeout?: number
+  attempts?: number
+}) => {
+  for (let i = 0; i < (input.attempts ?? 2); i++) {
+    await input.sdk.session.promptAsync({
+      sessionID: input.sessionID,
+      agent: "build",
+      system: seedSystem,
+      parts: [{ type: "text", text: input.prompt }],
+    })
+    const value = await wait({ probe: input.probe, timeout: input.timeout })
+    if (value !== undefined) return value
+  }
 }
 
 export async function seedSessionQuestion(
   sdk: ReturnType<typeof createSdk>,
   input: {
     sessionID: string
-    id?: string
     questions: Array<{
       header: string
       question: string
@@ -376,32 +382,63 @@ export async function seedSessionQuestion(
     }>
   },
 ) {
-  return dockRequest<{ id: string }>(sdk, input.sessionID, "POST", "question", {
-    id: input.id,
-    questions: input.questions,
+  const first = input.questions[0]
+  if (!first) throw new Error("Question seed requires at least one question")
+
+  const text = [
+    "Your only valid response is one question tool call.",
+    `Use this JSON input: ${JSON.stringify({ questions: input.questions })}`,
+    "Do not output plain text.",
+    "After calling the tool, wait for the user response.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.question.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
+    },
   })
+
+  if (!result) throw new Error("Timed out seeding question request")
+  return { id: result.id }
 }
 
 export async function seedSessionPermission(
   sdk: ReturnType<typeof createSdk>,
   input: {
     sessionID: string
-    id?: string
     permission: string
     patterns: string[]
-    always?: string[]
-    metadata?: Record<string, unknown>
     description?: string
   },
 ) {
-  return dockRequest<{ id: string }>(sdk, input.sessionID, "POST", "permission", {
-    id: input.id,
-    permission: input.permission,
-    patterns: input.patterns,
-    always: input.always,
-    metadata: input.metadata,
-    description: input.description,
+  const text = [
+    "Your only valid response is one bash tool call.",
+    `Use this JSON input: ${JSON.stringify({
+      command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
+      workdir: "/",
+      description: input.description ?? `seed ${input.permission} permission request`,
+    })}`,
+    "Do not output plain text.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.permission.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID)
+    },
   })
+
+  if (!result) throw new Error("Timed out seeding permission request")
+  return { id: result.id }
 }
 
 export async function seedSessionTodos(
@@ -411,13 +448,45 @@ export async function seedSessionTodos(
     todos: Array<{ content: string; status: string; priority: string }>
   },
 ) {
-  return dockRequest<boolean>(sdk, input.sessionID, "POST", "todo", {
-    todos: input.todos,
+  const text = [
+    "Your only valid response is one todowrite tool call.",
+    `Use this JSON input: ${JSON.stringify({ todos: input.todos })}`,
+    "Do not output plain text.",
+  ].join("\n")
+  const target = JSON.stringify(input.todos)
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const todos = await sdk.session.todo({ sessionID: input.sessionID }).then((x) => x.data ?? [])
+      if (JSON.stringify(todos) !== target) return
+      return true
+    },
   })
+
+  if (!result) throw new Error("Timed out seeding todos")
+  return true
 }
 
 export async function clearSessionDockSeed(sdk: ReturnType<typeof createSdk>, sessionID: string) {
-  return dockRequest<boolean>(sdk, sessionID, "DELETE", "")
+  const [questions, permissions] = await Promise.all([
+    sdk.question.list().then((x) => x.data ?? []),
+    sdk.permission.list().then((x) => x.data ?? []),
+  ])
+
+  await Promise.all([
+    ...questions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.question.reject({ requestID: item.id }).catch(() => undefined)),
+    ...permissions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.permission.reply({ requestID: item.id, reply: "reject" }).catch(() => undefined)),
+  ])
+
+  return true
 }
 
 export async function openStatusPopover(page: Page) {
