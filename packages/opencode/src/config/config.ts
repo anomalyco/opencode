@@ -1251,12 +1251,7 @@ export namespace Config {
     return load(text, { path: filepath })
   }
 
-  async function load(
-    text: string,
-    options:
-      | { path: string }
-      | { dir: string; source: string },
-  ) {
+  async function load(text: string, options: { path: string } | { dir: string; source: string }) {
     const original = text
     const configDir = "path" in options ? path.dirname(options.path) : options.dir
     const source = "path" in options ? options.path : options.source
