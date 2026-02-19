@@ -69,7 +69,7 @@ function getDiagnostics(
   return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
 }
 
-export const isRtlText = (text: string) => {
+const isRtlText = (text: string) => {
   const rtlChars = /[\u0590-\u05FF\u0600-\u06FF]/
   let rtlCount = 0
   let totalCount = 0
