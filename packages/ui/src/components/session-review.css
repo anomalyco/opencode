@@ -1,7 +1,7 @@
 [data-component="session-review"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0px;
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
@@ -19,7 +19,8 @@
     top: 0;
     z-index: 20;
     background-color: var(--background-stronger);
-    height: 32px;
+    height: 40px;
+    padding-bottom: 8px;
     flex-shrink: 0;
     display: flex;
     justify-content: space-between;
@@ -57,70 +58,13 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    top: 40px;
+    --sticky-accordion-top: 40px;
   }
 
-  [data-component="sticky-accordion-header"][data-expanded]::before,
-  [data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
-    top: -40px;
-  }
-
-  [data-slot="session-review-diffs-group"] {
-    background-color: var(--background-stronger);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-weak-base);
-    overflow: clip;
-
-    [data-component="accordion"] {
-      gap: 0;
-    }
-
-    [data-component="accordion"] [data-slot="accordion-item"] {
-      overflow: visible;
-    }
-
-    [data-component="accordion"]
-      [data-slot="accordion-item"]
-      [data-slot="accordion-header"]
-      [data-slot="accordion-trigger"] {
-      border: 0;
-      border-radius: 0;
-      box-shadow: none;
-      background-color: transparent;
-
-      &:hover {
-        background-color: var(--surface-base-hover);
-      }
-
-      &:active {
-        background-color: var(--surface-base-active);
-      }
-    }
-
-    [data-component="accordion"]
-      [data-slot="accordion-item"]
-      + [data-slot="accordion-item"]
-      [data-slot="accordion-header"]
-      [data-slot="accordion-trigger"] {
-      border-top: 1px solid var(--border-weak-base);
-    }
-
-    [data-component="accordion"] [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
-      border: 0;
-      border-top: 1px solid var(--border-weak-base);
-      border-radius: 0;
-    }
-
-    [data-component="sticky-accordion-header"][data-expanded]::before,
-    [data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
-      top: 0;
-    }
-
-    [data-slot="session-review-accordion-item"][data-selected]
-      [data-slot="accordion-header"]
-      [data-slot="accordion-trigger"] {
-      background-color: var(--surface-base-active);
-    }
+  [data-slot="session-review-accordion-item"][data-selected]
+    [data-slot="accordion-header"]
+    [data-slot="accordion-trigger"] {
+    background-color: var(--surface-base-active);
   }
 
   [data-slot="accordion-item"] {

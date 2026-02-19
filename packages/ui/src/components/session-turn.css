@@ -81,6 +81,17 @@
     min-width: 0;
   }
 
+  [data-slot="session-turn-diffs"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    height: 40px;
+    padding-bottom: 8px;
+    background-color: var(--background-stronger);
+  }
+
   [data-component="session-turn-diffs-trigger"] {
     width: 100%;
     display: flex;
@@ -124,52 +135,9 @@
   }
 
   [data-component="session-turn-diffs-content"] {
-    padding-top: 8px;
+    padding-top: 0px;
     display: flex;
     flex-direction: column;
-  }
-
-  [data-slot="session-turn-diffs-group"] {
-    background-color: var(--background-stronger);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-weak-base);
-    overflow: clip;
-
-    [data-component="accordion"] {
-      gap: 0;
-    }
-
-    [data-component="accordion"]
-      [data-slot="accordion-item"]
-      [data-slot="accordion-header"]
-      [data-slot="accordion-trigger"] {
-      border: 0;
-      border-radius: 0;
-      box-shadow: none;
-      background-color: transparent;
-
-      &:hover {
-        background-color: var(--surface-base-hover);
-      }
-
-      &:active {
-        background-color: var(--surface-base-active);
-      }
-    }
-
-    [data-component="accordion"]
-      [data-slot="accordion-item"]
-      + [data-slot="accordion-item"]
-      [data-slot="accordion-header"]
-      [data-slot="accordion-trigger"] {
-      border-top: 1px solid var(--border-weak-base);
-    }
-
-    [data-component="accordion"] [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
-      border: 0;
-      border-top: 1px solid var(--border-weak-base);
-      border-radius: 0;
-    }
   }
 
   [data-slot="session-turn-diff-trigger"] {
@@ -230,7 +198,6 @@
     background-color: var(--surface-inset-base);
     width: 100%;
     min-width: 0;
-    max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;
