@@ -10,7 +10,8 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, statSync } from "fs"
+import { readFileSync, readdirSync } from "fs"
+import { Filesystem } from "../util/filesystem"
 import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
@@ -54,7 +55,7 @@ export namespace Database {
     const sql = dirs
       .map((name) => {
         const file = path.join(dir, name, "migration.sql")
-        if (!statSync(file).size) return
+        if (!Filesystem.stat(file)?.size) return
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
