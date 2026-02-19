@@ -736,6 +736,11 @@ export namespace SessionPrompt {
       }
       continue
     }
+    // set idle before post-loop cleanup so messages don't sit as QUEUED
+    // while we run compaction and stream reads
+    _busy.delete(sessionID)
+    SessionStatus.set(sessionID, { type: "idle" })
+
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
