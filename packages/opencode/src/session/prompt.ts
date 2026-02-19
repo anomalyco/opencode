@@ -32,6 +32,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath, pathToFileURL } from "bun"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -744,6 +745,15 @@ export namespace SessionPrompt {
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+    const cfg = await Config.get()
+    const mcpConfig = cfg.mcp ?? {}
+    const mcpServers = Object.entries(mcpConfig).map(([serverName, serverConfig]) => ({
+      serverName,
+      sanitizedServerName: serverName.replace(/[^a-zA-Z0-9_-]/g, "_"),
+      includeTools: "includeTools" in serverConfig ? serverConfig.includeTools : undefined,
+      excludeTools: "excludeTools" in serverConfig ? serverConfig.excludeTools : undefined,
+      seenTools: new Set<string>(),
+    }))
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -831,6 +841,33 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
 
+      const matchedServer = mcpServers
+        .filter((server) => key.startsWith(server.sanitizedServerName + "_"))
+        .sort((a, b) => b.sanitizedServerName.length - a.sanitizedServerName.length)[0]
+
+      if (matchedServer) {
+        const toolName = key.slice(matchedServer.sanitizedServerName.length + 1)
+        matchedServer.seenTools.add(toolName)
+
+        if (matchedServer.excludeTools?.includes(toolName)) {
+          log.warn("filtered MCP tool", {
+            serverName: matchedServer.serverName,
+            toolName,
+            reason: "excludeTools",
+          })
+          continue
+        }
+
+        if (matchedServer.includeTools && !matchedServer.includeTools.includes(toolName)) {
+          log.warn("filtered MCP tool", {
+            serverName: matchedServer.serverName,
+            toolName,
+            reason: "not_in_includeTools",
+          })
+          continue
+        }
+      }
+
       const transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
       item.inputSchema = jsonSchema(transformed)
       // Wrap execute to add plugin hooks and format output
@@ -913,6 +950,18 @@ export namespace SessionPrompt {
         }
       }
       tools[key] = item
+    }
+
+    for (const server of mcpServers) {
+      if (!server.includeTools) continue
+      for (const toolName of server.includeTools) {
+        if (server.seenTools.has(toolName)) continue
+        log.warn("includeTools references unknown MCP tool", {
+          serverName: server.serverName,
+          toolName,
+          reason: "missing_from_server",
+        })
+      }
     }
 
     return tools
@@ -1077,7 +1126,7 @@ export namespace SessionPrompt {
                 ]
               }
               break
-            case "file:":
+            case "file:": {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
@@ -1254,6 +1303,7 @@ export namespace SessionPrompt {
                   source: part.source,
                 },
               ]
+            }
           }
         }
 
