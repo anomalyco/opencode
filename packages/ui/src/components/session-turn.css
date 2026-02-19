@@ -127,7 +127,6 @@
     padding-top: 8px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
   }
 
   [data-slot="session-turn-diff-trigger"] {
@@ -140,12 +139,11 @@
   }
 
   [data-slot="session-turn-diff-path"] {
-    display: inline-flex;
+    display: flex;
     min-width: 0;
     align-items: baseline;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
@@ -153,6 +151,13 @@
 
   [data-slot="session-turn-diff-directory"] {
     color: var(--text-weak);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    unicode-bidi: plaintext;
+    text-align: left;
   }
 
   [data-slot="session-turn-diff-filename"] {
@@ -182,7 +187,6 @@
     background-color: var(--surface-inset-base);
     width: 100%;
     min-width: 0;
-    max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;

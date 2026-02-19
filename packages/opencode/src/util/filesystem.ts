@@ -41,11 +41,16 @@ export namespace Filesystem {
     return readFile(p)
   }
 
+  export async function readArrayBuffer(p: string): Promise<ArrayBuffer> {
+    const buf = await readFile(p)
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+  }
+
   function isEnoent(e: unknown): e is { code: "ENOENT" } {
     return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
   }
 
-  export async function write(p: string, content: string | Buffer, mode?: number): Promise<void> {
+  export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
     try {
       if (mode) {
         await writeFile(p, content, { mode })
