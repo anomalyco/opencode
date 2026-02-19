@@ -409,10 +409,8 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
-          if (needsCompaction) return "compact"
-          if (blocked) return "stop"
-          if (input.assistantMessage.error) return "stop"
-          return "continue"
+          const exitReason = needsCompaction ? "compact" : blocked ? "stop" : input.assistantMessage.error ? "stop" : "continue"
+          return exitReason as any
         }
       },
     }

@@ -7,6 +7,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message } from "./message-part"
+import { findAssistantMessages } from "./find-assistant-messages"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { Collapsible } from "./collapsible"
@@ -198,14 +199,7 @@ export function SessionTurn(
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
-      const result: AssistantMessage[] = []
-      for (let i = index + 1; i < messages.length; i++) {
-        const item = messages[i]
-        if (!item) continue
-        if (item.role === "user") break
-        if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
-      }
-      return result
+      return findAssistantMessages(messages, index, msg.id)
     },
     emptyAssistant,
     { equals: same },
