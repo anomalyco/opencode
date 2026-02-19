@@ -49,6 +49,19 @@ type CopyLabels = {
   copied: string
 }
 
+const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
+
+function codeUrl(text: string) {
+  const href = text.trim().replace(/[),.;!?]+$/, "")
+  if (!urlPattern.test(href)) return
+  try {
+    const url = new URL(href)
+    return url.toString()
+  } catch {
+    return
+  }
+}
+
 function createIcon(path: string, slot: string) {
   const icon = document.createElement("div")
   icon.setAttribute("data-component", "icon")
@@ -72,7 +85,7 @@ function createCopyButton(labels: CopyLabels) {
   button.setAttribute("data-size", "small")
   button.setAttribute("data-slot", "markdown-copy-button")
   button.setAttribute("aria-label", labels.copy)
-  button.setAttribute("title", labels.copy)
+  button.setAttribute("data-tooltip", labels.copy)
   button.appendChild(createIcon(iconPaths.copy, "copy-icon"))
   button.appendChild(createIcon(iconPaths.check, "check-icon"))
   return button
@@ -82,12 +95,12 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   if (copied) {
     button.setAttribute("data-copied", "true")
     button.setAttribute("aria-label", labels.copied)
-    button.setAttribute("title", labels.copied)
+    button.setAttribute("data-tooltip", labels.copied)
     return
   }
   button.removeAttribute("data-copied")
   button.setAttribute("aria-label", labels.copy)
-  button.setAttribute("title", labels.copy)
+  button.setAttribute("data-tooltip", labels.copy)
 }
 
 function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
@@ -110,9 +123,39 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     wrapper.appendChild(createCopyButton(labels))
   }
 
+  const markCodeLinks = () => {
+    const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+    for (const code of codeNodes) {
+      const href = codeUrl(code.textContent ?? "")
+      const parentLink =
+        code.parentElement instanceof HTMLAnchorElement && code.parentElement.classList.contains("external-link")
+          ? code.parentElement
+          : null
+
+      if (!href) {
+        if (parentLink) parentLink.replaceWith(code)
+        continue
+      }
+
+      if (parentLink) {
+        parentLink.href = href
+        continue
+      }
+
+      const link = document.createElement("a")
+      link.href = href
+      link.className = "external-link"
+      link.target = "_blank"
+      link.rel = "noopener noreferrer"
+      code.parentNode?.replaceChild(link, code)
+      link.appendChild(code)
+    }
+  }
+
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
+
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
@@ -132,6 +175,7 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureWrapper(block)
   }
+  markCodeLinks()
 
   const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
   for (const button of buttons) {

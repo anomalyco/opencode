@@ -7,6 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 import { ModelsDev } from "../../src/provider/models"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
@@ -185,7 +186,7 @@ function createChatStream(text: string) {
 
 async function loadFixture(providerID: string, modelID: string) {
   const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
-  const data = (await Bun.file(fixturePath).json()) as Record<string, ModelsDev.Provider>
+  const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(fixturePath)
   const provider = data[providerID]
   if (!provider) {
     throw new Error(`Missing provider in fixture: ${providerID}`)
