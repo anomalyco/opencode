@@ -1422,108 +1422,71 @@ export function MessageTimeline(props: {
                         </DropdownMenu.Portal>
                       </DropdownMenu>
 
-                      <KobaltePopover
-                        open={share.open}
-                        anchorRef={() => more}
-                        placement="bottom-end"
-                        gutter={4}
-                        modal={false}
-                        onOpenChange={(open) => {
-                          if (open) setShare("dismiss", null)
-                          setShare("open", open)
-                        }}
-                      >
-                        <KobaltePopover.Portal>
-                          <KobaltePopover.Content
-                            data-component="popover-content"
-                            style={{ "min-width": "320px" }}
-                            onEscapeKeyDown={(event) => {
-                              setShare({ dismiss: "escape", open: false })
-                              event.preventDefault()
-                              event.stopPropagation()
-                            }}
-                            onPointerDownOutside={() => {
-                              setShare({ dismiss: "outside", open: false })
-                            }}
-                            onFocusOutside={() => {
-                              setShare({ dismiss: "outside", open: false })
-                            }}
-                            onCloseAutoFocus={(event) => {
-                              if (share.dismiss === "outside") event.preventDefault()
-                              setShare("dismiss", null)
-                            }}
-                          >
-                            <div class="flex flex-col p-3">
-                              <div class="flex flex-col gap-1">
-                                <div class="text-13-medium text-text-strong">
-                                  {language.t("session.share.popover.title")}
-                                </div>
-                                <div class="text-12-regular text-text-weak">
-                                  {shareUrl()
-                                    ? language.t("session.share.popover.description.shared")
-                                    : language.t("session.share.popover.description.unshared")}
-                                </div>
-                              </div>
-                              <div class="mt-3 flex flex-col gap-2">
-                                <Show
-                                  when={shareUrl()}
-                                  fallback={
-                                    <Button
-                                      size="large"
-                                      variant="primary"
-                                      class="w-full"
-                                      onClick={shareSession}
-                                      disabled={shareMutation.isPending}
-                                    >
-                                      {shareMutation.isPending
-                                        ? language.t("session.share.action.publishing")
-                                        : language.t("session.share.action.publish")}
-                                    </Button>
-                                  }
-                                >
-                                  <div class="flex flex-col gap-2">
-                                    <TextField
-                                      value={shareUrl() ?? ""}
-                                      readOnly
-                                      copyable
-                                      copyKind="link"
-                                      tabIndex={-1}
-                                      class="w-full"
-                                    />
-                                    <div class="grid grid-cols-2 gap-2">
-                                      <Button
-                                        size="large"
-                                        variant="secondary"
-                                        class="w-full shadow-none border border-border-weak-base"
-                                        onClick={unshareSession}
-                                        disabled={unshareMutation.isPending}
-                                      >
-                                        {unshareMutation.isPending
-                                          ? language.t("session.share.action.unpublishing")
-                                          : language.t("session.share.action.unpublish")}
-                                      </Button>
-                                      <Button
-                                        size="large"
-                                        variant="primary"
-                                        class="w-full"
-                                        onClick={viewShare}
-                                        disabled={unshareMutation.isPending}
-                                      >
-                                        {language.t("session.share.action.view")}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </Show>
-                              </div>
-                            </div>
-                          </KobaltePopover.Content>
-                        </KobaltePopover.Portal>
-                      </KobaltePopover>
-                    </Show>
-                  </div>
-                )}
-              </Show>
-            </div>
+          <div
+            ref={props.setContentRef}
+            role="log"
+            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+            classList={{
+              "w-full": true,
+              "md:mx-auto": props.centered,
+              "mt-0.5": props.centered,
+              "mt-0": !props.centered,
+            }}
+            style={{
+              "max-width": props.centered ? "var(--session-content-width)" : undefined,
+            }}
+          >
+            <Show when={props.turnStart > 0}>
+              <div class="w-full flex justify-center">
+                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
+                  {language.t("session.messages.renderEarlier")}
+                </Button>
+              </div>
+            </Show>
+            <Show when={props.historyMore}>
+              <div class="w-full flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="large"
+                  class="text-12-medium opacity-50"
+                  disabled={props.historyLoading}
+                  onClick={props.onLoadEarlier}
+                >
+                  {props.historyLoading
+                    ? language.t("session.messages.loadingEarlier")
+                    : language.t("session.messages.loadEarlier")}
+                </Button>
+              </div>
+            </Show>
+            <For each={props.renderedUserMessages}>
+              {(message) => (
+                <div
+                  id={props.anchor(message.id)}
+                  data-message-id={message.id}
+                  ref={(el) => {
+                    props.onRegisterMessage(el, message.id)
+                    onCleanup(() => props.onUnregisterMessage(message.id))
+                  }}
+                  classList={{
+                    "min-w-0 w-full max-w-full": true,
+                  }}
+                  style={{
+                    "max-width": props.centered ? "var(--session-content-width)" : undefined,
+                  }}
+                >
+                  <SessionTurn
+                    sessionID={sessionID() ?? ""}
+                    messageID={message.id}
+                    lastUserMessageID={props.lastUserMessageID}
+                    classes={{
+                      root: "min-w-0 w-full relative",
+                      content: "flex flex-col justify-between !overflow-visible",
+                      container: "w-full px-4 md:px-5",
+                    }}
+                  />
+                </div>
+              )}
+            </For>
           </div>
         </Show>
         <Show when={scrollRoot()}>

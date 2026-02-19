@@ -9,8 +9,14 @@
   overflow: visible;
 
   &.tool-collapsible {
-    --tool-content-gap: 4px;
-    gap: var(--tool-content-gap);
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background-color: light-dark(
+      color-mix(in oklch, var(--surface-inset-base) 60%, transparent),
+      color-mix(in oklch, var(--surface-inset-base) 40%, transparent)
+    );
+    border: 1px solid var(--border-weaker-base);
   }
 
   [data-slot="collapsible-trigger"] {

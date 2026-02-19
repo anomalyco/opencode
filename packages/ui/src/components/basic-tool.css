@@ -83,20 +83,19 @@
 
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-family: var(--font-family-mono);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-strong);
+    color: var(--text-weak);
 
     &.capitalize {
       text-transform: capitalize;
     }
 
     &.agent-title {
-      color: var(--text-strong);
+      color: var(--text-base);
       font-weight: var(--font-weight-medium);
     }
   }
@@ -107,9 +106,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-family: var(--font-family-mono);
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -153,9 +150,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-family: var(--font-family-mono);
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
