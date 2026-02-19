@@ -359,13 +359,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const syntax = createMemo(() => generateSyntax(values()))
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
-    const appBackground = createMemo(() => {
-      const bg = values().background
-      if (store.active !== "system") return bg
-      // Preserve RGB at alpha 0 to avoid transparent-black artifacts.
-      return RGBA.fromValues(bg.r, bg.g, bg.b, 0)
-    })
-
     return {
       theme: new Proxy(values(), {
         get(_target, prop) {
@@ -379,7 +372,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       all() {
         return store.themes
       },
-      appBackground,
       syntax,
       subtleSyntax,
       mode() {

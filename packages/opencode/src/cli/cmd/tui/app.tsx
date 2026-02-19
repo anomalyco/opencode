@@ -1,7 +1,7 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
-import { MouseButton, TextAttributes } from "@opentui/core"
+import { MouseButton, RGBA, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
@@ -206,10 +206,19 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { appBackground, theme, mode, setMode } = useTheme()
+  const t = useTheme()
+  const { theme, mode, setMode } = t
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  // Return the root app background color, applying terminal transparency only for system theme.
+  const background = () => {
+    const bg = theme.background
+    if (t.selected !== "system") return bg
+    // Preserve RGB at alpha 0 to avoid transparent-black artifacts.
+    return RGBA.fromValues(bg.r, bg.g, bg.b, 0)
+  }
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -733,7 +742,7 @@ function App() {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={appBackground()}
+      backgroundColor={background()}
       onMouseDown={(evt) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
