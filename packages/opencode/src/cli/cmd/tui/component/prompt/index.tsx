@@ -58,6 +58,9 @@ export type PromptRef = {
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
+// Per-session draft input storage
+export const drafts = new Map<string, PromptInfo>()
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -137,10 +140,33 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
+  let previousSessionID: string | undefined = props.sessionID
   createEffect(
     on(
       () => props.sessionID,
-      () => {
+      (nextSessionID) => {
+        // Save current draft for the previous session
+        if (previousSessionID && store.prompt.input) {
+          drafts.set(previousSessionID, { input: store.prompt.input, parts: [...store.prompt.parts] })
+        } else if (previousSessionID) {
+          drafts.delete(previousSessionID)
+        }
+
+        // Restore draft for the new session or clear
+        const draft = nextSessionID ? drafts.get(nextSessionID) : undefined
+        if (draft) {
+          input.setText(draft.input)
+          setStore("prompt", { input: draft.input, parts: draft.parts })
+          restoreExtmarksFromParts(draft.parts)
+          input.gotoBufferEnd()
+        } else {
+          input.clear()
+          input.extmarks.clear()
+          setStore("prompt", { input: "", parts: [] })
+          setStore("extmarkToPartIndex", new Map())
+        }
+
+        previousSessionID = nextSessionID
         setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
       },
       { defer: true },
@@ -645,6 +671,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    if (props.sessionID) drafts.delete(props.sessionID)
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent

@@ -11,6 +11,8 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
+import { usePromptRef } from "../context/prompt"
+import { drafts } from "./prompt"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -20,6 +22,7 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const kv = useKV()
+  const promptRef = usePromptRef()
 
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -74,6 +77,15 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
+        // Save current prompt as draft for the current session
+        if (route.data.type === "session") {
+          const current = promptRef.current
+          if (current?.current?.input) {
+            drafts.set(route.data.sessionID, { input: current.current.input, parts: [...current.current.parts] })
+          } else {
+            drafts.delete(route.data.sessionID)
+          }
+        }
         route.navigate({
           type: "session",
           sessionID: option.value,
