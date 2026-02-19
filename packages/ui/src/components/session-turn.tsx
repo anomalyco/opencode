@@ -318,6 +318,7 @@ export function SessionTurn(
                           <div data-component="session-turn-diffs-content">
                             <Accordion
                               multiple
+                              style={{ "--sticky-accordion-offset": "40px" }}
                               value={expanded()}
                               onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
                             >
