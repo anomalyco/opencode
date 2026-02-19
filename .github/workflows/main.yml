@@ -1,0 +1,128 @@
+name: Sync fork with upstream (fail on conflicts)
+
+on:
+  schedule:
+    # vsak dan ob 03:17 UTC (prilagodi po želji)
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  # URL originalnega (upstream) repozitorija
+  UPSTREAM_REPO: https://github.com/ORIGINAL_OWNER/ORIGINAL_REPO.git
+  # branch v upstreamu, ki ga želiš syncat
+  UPSTREAM_BRANCH: main
+  # branch v tvojem forku, kamor syncaš
+  FORK_BRANCH: dev
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream "${UPSTREAM_REPO}"
+          git remote -v
+
+      - name: Fetch upstream
+        run: |
+          git fetch upstream --prune
+
+      - name: Ensure fork branch checked out
+        run: |
+          git checkout "${FORK_BRANCH}"
+          git pull --ff-only origin "${FORK_BRANCH}"
+
+      - name: Merge upstream into fork (fail if conflicts)
+        run: |
+          set -e
+          echo "Merging upstream/${UPSTREAM_BRANCH} into ${FORK_BRANCH}..."
+          # merge ohrani tvoje edite; če upstream poseže v iste dele, dobiš konflikt -> fail
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"
+
+      - name: Push changes to fork
+        run: |
+          git push origin "${FORK_BRANCH}"
+
+  notify_on_failure:
+    runs-on: ubuntu-latest
+    needs: [sync]
+    if: failure()
+
+    steps:
+      - name: Create or update an issue about sync failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = "upstream-sync-failed";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Ensure label exists (best effort)
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: label });
+            } catch (e) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner, repo,
+                  name: label,
+                  color: "d73a4a",
+                  description: "Daily upstream sync failed (likely merge conflicts)."
+                });
+              } catch (_) {}
+            }
+
+            // Find open issue with this label
+            const issues = await github.rest.issues.listForRepo({
+              owner, repo,
+              state: "open",
+              labels: label,
+              per_page: 10
+            });
+
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body = [
+              "Daily upstream sync failed. This usually means upstream changes conflict with your fork edits.",
+              "",
+              `**Workflow run:** ${runUrl}`,
+              "",
+              "Next steps:",
+              "- Pull latest changes locally",
+              "- Add upstream remote (if not already)",
+              "- Try merge/rebase and resolve conflicts",
+              "- Push fixes to your fork branch"
+            ].join("\n");
+
+            if (issues.data.length > 0) {
+              const issue = issues.data[0];
+              await github.rest.issues.createComment({
+                owner, repo,
+                issue_number: issue.number,
+                body: `🔴 Sync failed again on ${new Date().toISOString()}\n\n${body}`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo,
+                title: "🔴 Upstream sync failed (merge conflicts likely)",
+                body,
+                labels: [label]
+              });
+            }
