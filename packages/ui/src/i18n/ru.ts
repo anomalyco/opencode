@@ -12,7 +12,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Загрузка...",
   "ui.sessionReview.image.placeholder": "Изображение",
   "ui.sessionReview.largeDiff.title": "Diff слишком большой для отображения",
-  "ui.sessionReview.largeDiff.meta": "Лимит: {{lines}} строк / {{limit}}. Текущий: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Лимит: {{limit}} изменённых строк. Текущий: {{current}} изменённых строк.",
   "ui.sessionReview.largeDiff.renderAnyway": "Отобразить всё равно",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
@@ -32,7 +32,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",
-  "ui.sessionTurn.status.gatheringContext": "Исследование...",
+  "ui.sessionTurn.status.gatheringContext": "Исследование",
   "ui.sessionTurn.status.gatheredContext": "Исследовано",
   "ui.sessionTurn.status.searchingCodebase": "Поиск в кодовой базе",
   "ui.sessionTurn.status.searchingWeb": "Поиск в интернете",

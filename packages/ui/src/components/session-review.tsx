@@ -6,6 +6,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { Tooltip } from "./tooltip"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -17,25 +18,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 
-const MAX_DIFF_LINES = 20_000
-const MAX_DIFF_BYTES = 2_000_000
-
-function linesOver(text: string, max: number) {
-  let lines = 1
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) !== 10) continue
-    lines++
-    if (lines > max) return true
-  }
-  return lines > max
-}
-
-function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round((bytes / 1024) * 10) / 10} KB`
-  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`
-}
+const MAX_DIFF_CHANGED_LINES = 500
 
 export type SessionReviewDiffStyle = "unified" | "split"
 
@@ -304,18 +287,14 @@ export const SessionReview = (props: SessionReviewProps) => {
         [props.class ?? ""]: !!props.class,
       }}
     >
-      <div
-        data-slot="session-review-header"
-        classList={{
-          [props.classes?.header ?? ""]: !!props.classes?.header,
-        }}
-      >
+      <div data-slot="session-review-header" class={props.classes?.header}>
         <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <RadioGroup
               options={["unified", "split"] as const}
               current={diffStyle()}
+              size="small"
               value={(style) => style}
               label={(style) =>
                 i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
@@ -324,7 +303,12 @@ export const SessionReview = (props: SessionReviewProps) => {
             />
           </Show>
           <Show when={hasDiffs()}>
-            <Button size="normal" icon="chevron-grabber-vertical" onClick={handleExpandOrCollapseAll}>
+            <Button
+              size="small"
+              icon="chevron-grabber-vertical"
+              class="w-[106px] justify-start"
+              onClick={handleExpandOrCollapseAll}
+            >
               <Switch>
                 <Match when={open().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
                 <Match when={true}>{i18n.t("ui.sessionReview.expandAll")}</Match>
@@ -334,12 +318,7 @@ export const SessionReview = (props: SessionReviewProps) => {
           {props.actions}
         </div>
       </div>
-      <div
-        data-slot="session-review-container"
-        classList={{
-          [props.classes?.container ?? ""]: !!props.classes?.container,
-        }}
-      >
+      <div data-slot="session-review-container" class={props.classes?.container}>
         <Show when={hasDiffs()} fallback={props.empty}>
           <Accordion multiple value={open()} onChange={handleChange}>
             <For each={props.diffs}>
@@ -354,18 +333,13 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                 const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
                 const afterText = () => (typeof diff.after === "string" ? diff.after : "")
+                const changedLines = () => diff.additions + diff.deletions
 
                 const tooLarge = createMemo(() => {
                   if (!expanded()) return false
                   if (force()) return false
                   if (isImageFile(diff.file)) return false
-
-                  const before = beforeText()
-                  const after = afterText()
-
-                  if (before.length > MAX_DIFF_BYTES || after.length > MAX_DIFF_BYTES) return true
-                  if (linesOver(before, MAX_DIFF_LINES) || linesOver(after, MAX_DIFF_LINES)) return true
-                  return false
+                  return changedLines() > MAX_DIFF_CHANGED_LINES
                 })
 
                 const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
@@ -559,25 +533,31 @@ export const SessionReview = (props: SessionReviewProps) => {
                               </Show>
                               <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
                               <Show when={props.onViewFile}>
-                                <button
-                                  data-slot="session-review-view-button"
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    props.onViewFile?.(diff.file)
-                                  }}
-                                >
-                                  <Icon name="eye" size="small" />
-                                </button>
+                                <Tooltip value="Open file" placement="top" gutter={4}>
+                                  <button
+                                    data-slot="session-review-view-button"
+                                    type="button"
+                                    aria-label="Open file"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      props.onViewFile?.(diff.file)
+                                    }}
+                                  >
+                                    <Icon name="open-file" size="small" />
+                                  </button>
+                                </Tooltip>
                               </Show>
                             </div>
                           </div>
                           <div data-slot="session-review-trigger-actions">
                             <Switch>
                               <Match when={isAdded()}>
-                                <span data-slot="session-review-change" data-type="added">
-                                  {i18n.t("ui.sessionReview.change.added")}
-                                </span>
+                                <div data-slot="session-review-change-group" data-type="added">
+                                  <span data-slot="session-review-change" data-type="added">
+                                    {i18n.t("ui.sessionReview.change.added")}
+                                  </span>
+                                  <DiffChanges changes={diff} />
+                                </div>
                               </Match>
                               <Match when={isDeleted()}>
                                 <span data-slot="session-review-change" data-type="removed">
@@ -593,7 +573,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <DiffChanges changes={diff} />
                               </Match>
                             </Switch>
-                            <Icon name="chevron-grabber-vertical" size="small" />
+                            <span data-slot="session-review-diff-chevron">
+                              <Icon name="chevron-down" size="small" />
+                            </span>
                           </div>
                         </div>
                       </Accordion.Trigger>
@@ -636,8 +618,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   {i18n.t("ui.sessionReview.largeDiff.title")}
                                 </div>
                                 <div data-slot="session-review-large-diff-meta">
-                                  Limit: {MAX_DIFF_LINES.toLocaleString()} lines / {formatBytes(MAX_DIFF_BYTES)}.
-                                  Current: {formatBytes(Math.max(beforeText().length, afterText().length))}.
+                                  {i18n.t("ui.sessionReview.largeDiff.meta", {
+                                    limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
+                                    current: changedLines().toLocaleString(),
+                                  })}
                                 </div>
                                 <div data-slot="session-review-large-diff-actions">
                                   <Button size="normal" variant="secondary" onClick={() => setForce(true)}>
