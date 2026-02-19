@@ -16,6 +16,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
+import { Filesystem } from "../util/filesystem"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -574,6 +575,17 @@ export namespace Provider {
         options: {
           headers: {
             "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
+    kilo: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
           },
         },
       }
@@ -1280,8 +1292,9 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
-      .json()
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
+      path.join(Global.Path.state, "model.json"),
+    )
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
       .catch(() => [])) as { providerID: string; modelID: string }[]
     for (const entry of recent) {
