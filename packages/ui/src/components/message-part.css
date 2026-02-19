@@ -1219,6 +1219,21 @@
   }
 }
 
+[data-component="apply-patch-tool"] {
+  > [data-component="collapsible"].tool-collapsible {
+    gap: 0px;
+  }
+
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    height: 40px;
+    padding-bottom: 8px;
+    background-color: var(--background-stronger);
+  }
+}
+
 [data-component="accordion"][data-scope="apply-patch"] {
   [data-slot="accordion-trigger"] {
     background-color: var(--background-stronger) !important;
