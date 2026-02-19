@@ -20,6 +20,7 @@ type PermissionStage = "permission" | "always" | "reject"
 
 function normalizePath(input?: string) {
   if (!input) return ""
+  if (typeof input !== "string") return String(input)
 
   const cwd = process.cwd()
   const home = Global.Path.home

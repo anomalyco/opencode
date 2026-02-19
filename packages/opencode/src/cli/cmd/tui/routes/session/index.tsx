@@ -2123,6 +2123,7 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 
 function normalizePath(input?: string) {
   if (!input) return ""
+  if (typeof input !== "string") return String(input)
   if (path.isAbsolute(input)) {
     return path.relative(process.cwd(), input) || "."
   }
