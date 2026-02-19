@@ -18,8 +18,8 @@ export type LspContext = {
   diagnostics(): Promise<Record<string, LspDiagnostic[]>>
   /** Format a diagnostic into a human-readable string (e.g. "ERROR [12:5] message"). */
   diagnosticPretty(diagnostic: LspDiagnostic): string
-  /** Get hover information at a position. */
-  hover(input: { file: string; line: number; character: number }): Promise<any>
+  /** Get hover information at a position (one result per active LSP client; entries may be null). */
+  hover(input: { file: string; line: number; character: number }): Promise<(unknown | null)[]>
 }
 
 export type ToolContext = {
@@ -40,7 +40,7 @@ export type ToolContext = {
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>
   /** Access to LSP functionality (language server diagnostics, hover, etc.) */
-  lsp: LspContext
+  lsp?: LspContext
 }
 
 type AskInput = {

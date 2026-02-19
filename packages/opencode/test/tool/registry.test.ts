@@ -74,6 +74,57 @@ describe("tool.registry", () => {
     })
   })
 
+  test("provides lsp context to custom tools", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolDir = path.join(opencodeDir, "tool")
+        await fs.mkdir(toolDir, { recursive: true })
+
+        await Bun.write(
+          path.join(toolDir, "lspcheck.ts"),
+          [
+            "export default {",
+            "  description: 'checks lsp context',",
+            "  args: {},",
+            "  execute: async (_args: any, ctx: any) => {",
+            "    const has = typeof ctx.lsp === 'object' && ctx.lsp !== null",
+            "    const fns = has ? ['touchFile','diagnostics','diagnosticPretty','hover'].every(k => typeof ctx.lsp[k] === 'function') : false",
+            "    return JSON.stringify({ has, fns })",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = { providerID: "test", modelID: "test" }
+        const tools = await ToolRegistry.tools(model)
+        const lspcheck = tools.find((t) => t.id === "lspcheck")
+        expect(lspcheck).toBeDefined()
+
+        const ctx = {
+          sessionID: "test",
+          messageID: "test",
+          abort: new AbortController().signal,
+          metadata: () => {},
+          ask: async () => {},
+        } as any
+
+        const result = await lspcheck!.execute({}, ctx)
+        const parsed = JSON.parse(result.output)
+        expect(parsed.has).toBe(true)
+        expect(parsed.fns).toBe(true)
+      },
+    })
+  })
+
   test("loads tools with external dependencies without crashing", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
