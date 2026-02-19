@@ -389,6 +389,8 @@ function App() {
         // Save draft for the current session instead of carrying it to home
         if (current?.current?.input && route.data.type === "session") {
           drafts.set(route.data.sessionID, { input: current.current.input, parts: [...current.current.parts] })
+        } else if (route.data.type === "session") {
+          drafts.delete(route.data.sessionID)
         }
         route.navigate({
           type: "home",

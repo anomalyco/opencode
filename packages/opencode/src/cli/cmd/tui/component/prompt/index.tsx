@@ -140,16 +140,15 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
-  let previousSessionID: string | undefined = props.sessionID
   createEffect(
     on(
       () => props.sessionID,
-      (nextSessionID) => {
+      (nextSessionID, prev) => {
         // Save current draft for the previous session
-        if (previousSessionID && store.prompt.input) {
-          drafts.set(previousSessionID, { input: store.prompt.input, parts: [...store.prompt.parts] })
-        } else if (previousSessionID) {
-          drafts.delete(previousSessionID)
+        if (prev && store.prompt.input) {
+          drafts.set(prev, { input: store.prompt.input, parts: [...store.prompt.parts] })
+        } else if (prev) {
+          drafts.delete(prev)
         }
 
         // Restore draft for the new session or clear
@@ -159,17 +158,16 @@ export function Prompt(props: PromptProps) {
           setStore("prompt", { input: draft.input, parts: draft.parts })
           restoreExtmarksFromParts(draft.parts)
           input.gotoBufferEnd()
-        } else {
+        } else if (prev) {
           input.clear()
           input.extmarks.clear()
           setStore("prompt", { input: "", parts: [] })
           setStore("extmarkToPartIndex", new Map())
         }
 
-        previousSessionID = nextSessionID
+        setStore("mode", "normal")
         setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
       },
-      { defer: true },
     ),
   )
 
