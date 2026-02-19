@@ -29,11 +29,10 @@
     }
 
     [data-slot="collapsible-arrow-icon"] {
-      display: none;
-    }
-
-    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
       display: inline-flex;
+      color: var(--icon-weaker);
+      transform: rotate(-90deg);
+      transition: transform 0.15s ease;
     }
 
     &:hover [data-slot="collapsible-arrow"] {
@@ -74,12 +73,8 @@
       opacity: 1;
     }
 
-    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
-      display: none;
-    }
-
-    [data-slot="collapsible-arrow-icon"][data-direction="down"] {
-      display: inline-flex;
+    [data-slot="collapsible-arrow-icon"] {
+      transform: rotate(0deg);
     }
   }
 

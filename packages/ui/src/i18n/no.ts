@@ -36,7 +36,7 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",
-  "ui.sessionTurn.status.gatheringContext": "Utforsker...",
+  "ui.sessionTurn.status.gatheringContext": "Utforsker",
   "ui.sessionTurn.status.gatheredContext": "Utforsket",
   "ui.sessionTurn.status.searchingCodebase": "Søker i kodebasen",
   "ui.sessionTurn.status.searchingWeb": "Søker på nettet",

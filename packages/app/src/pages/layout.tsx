@@ -72,7 +72,6 @@ import { DialogSelectTheme } from "@/components/dialog-select-theme"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogSwitchProject } from "@/components/dialog-switch-project"
@@ -221,6 +220,13 @@ export default function Layout(props: ParentProps) {
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
+  const setHoverProject = (value: string | undefined) => {
+    setState("hoverProject", value)
+    if (value !== undefined) return
+    aim.reset()
+  }
+  const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
+  const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
   const hoverProjectData = createMemo(() => {
     const id = state.hoverProject
@@ -230,13 +236,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
-    aim.reset()
-    setState("hoverProject", undefined)
-  })
-
-  createEffect(() => {
-    if (state.hoverProject !== undefined) return
-    aim.reset()
+    setHoverProject(undefined)
   })
 
   const autoselecting = createMemo(() => {
@@ -355,7 +355,7 @@ export default function Layout(props: ParentProps) {
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
     setState("hoverSession", undefined)
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -958,14 +958,6 @@ export default function Layout(props: ParentProps) {
       if (next) prefetchSession(next)
     }
 
-    if (import.meta.env.DEV) {
-      navStart({
-        dir: base64Encode(session.directory),
-        from: params.id,
-        to: session.id,
-        trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
-      })
-    }
     navigateToSession(session)
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
@@ -999,15 +991,6 @@ export default function Layout(props: ParentProps) {
       if (offset < 0) {
         if (prev) prefetchSession(prev, "high")
         if (next) prefetchSession(next)
-      }
-
-      if (import.meta.env.DEV) {
-        navStart({
-          dir: base64Encode(session.directory),
-          from: params.id,
-          to: session.id,
-          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
-        })
       }
 
       navigateToSession(session)
@@ -2039,7 +2022,7 @@ export default function Layout(props: ParentProps) {
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
-    setState("hoverProject", undefined)
+    setHoverProject(undefined)
     setStore("activeProject", id)
   }
 
@@ -3356,7 +3339,7 @@ export default function Layout(props: ParentProps) {
             if (navLeave.current !== undefined) clearTimeout(navLeave.current)
             navLeave.current = window.setTimeout(() => {
               navLeave.current = undefined
-              setState("hoverProject", undefined)
+              setHoverProject(undefined)
               setState("hoverSession", undefined)
             }, 300)
           }}

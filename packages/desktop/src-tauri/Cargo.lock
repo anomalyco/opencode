@@ -3136,6 +3136,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "webkit2gtk",
+ "windows 0.62.2",
 ]
 
 [[package]]
