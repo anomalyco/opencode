@@ -950,6 +950,12 @@ export namespace Config {
           }),
         )
         .optional(),
+      fetchModels: z
+        .boolean()
+        .optional()
+        .describe(
+          "Dynamically fetch available models from the provider's OpenAI-compatible /models endpoint at startup. Fetched models are merged with manually configured ones (manual config takes precedence).",
+        ),
       options: z
         .object({
           apiKey: z.string().optional(),

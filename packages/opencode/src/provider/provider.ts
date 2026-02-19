@@ -754,6 +754,129 @@ export namespace Provider {
     }
   }
 
+  const DEFAULT_CONTEXT = 128000
+  const DEFAULT_OUTPUT = 32000
+
+  function emptyModel(providerID: string, id: string, npm: string, baseURL: string): Model {
+    return {
+      id,
+      providerID,
+      name: id,
+      api: { id, npm, url: baseURL },
+      status: "active",
+      family: "",
+      release_date: "",
+      headers: {},
+      options: {},
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: DEFAULT_CONTEXT, output: DEFAULT_OUTPUT },
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      variants: {},
+    }
+  }
+
+  async function fetchModelInfo(providerID: string, baseURL: string, npm: string, headers: Record<string, string>) {
+    const response = await fetch(`${baseURL}/model/info`, { headers, signal: AbortSignal.timeout(10_000) }).catch(
+      () => undefined,
+    )
+    if (!response?.ok) return undefined
+
+    const body = (await response.json()) as {
+      data?: Array<{
+        model_name: string
+        model_info?: {
+          max_input_tokens?: number | null
+          max_output_tokens?: number | null
+          max_tokens?: number | null
+          input_cost_per_token?: number | null
+          output_cost_per_token?: number | null
+          supports_vision?: boolean | null
+          supports_function_calling?: boolean | null
+          supports_reasoning?: boolean | null
+          supports_pdf_input?: boolean | null
+        }
+      }>
+    }
+    const items = body.data ?? []
+    if (items.length === 0) return undefined
+
+    const models: Record<string, Model> = {}
+    for (const item of items) {
+      if (!item.model_name || models[item.model_name]) continue
+      const info = item.model_info ?? {}
+      const vision = info.supports_vision === true
+      const model = emptyModel(providerID, item.model_name, npm, baseURL)
+      model.limit = {
+        context: info.max_input_tokens ?? DEFAULT_CONTEXT,
+        output: info.max_output_tokens ?? info.max_tokens ?? DEFAULT_OUTPUT,
+      }
+      model.cost = {
+        input: info.input_cost_per_token ?? 0,
+        output: info.output_cost_per_token ?? 0,
+        cache: { read: 0, write: 0 },
+      }
+      model.capabilities = {
+        ...model.capabilities,
+        reasoning: info.supports_reasoning === true,
+        toolcall: info.supports_function_calling !== false,
+        attachment: vision,
+        input: { ...model.capabilities.input, image: vision, pdf: info.supports_pdf_input === true },
+      }
+      models[item.model_name] = model
+    }
+
+    log.info("fetchModels: fetched from /model/info", { providerID, count: Object.keys(models).length })
+    return models
+  }
+
+  async function fetchModelList(providerID: string, baseURL: string, npm: string, headers: Record<string, string>) {
+    const response = await fetch(`${baseURL}/models`, { headers, signal: AbortSignal.timeout(10_000) }).catch(
+      (e: unknown) => {
+        log.warn("fetchModels: error fetching /models", { providerID, error: e })
+        return undefined
+      },
+    )
+    if (!response?.ok) {
+      if (response) log.warn("fetchModels: failed to fetch /models", { providerID, status: response.status })
+      return {}
+    }
+
+    const body = (await response.json()) as { data?: Array<{ id: string }> }
+    const models: Record<string, Model> = {}
+    for (const item of body.data ?? []) {
+      if (!item.id) continue
+      models[item.id] = emptyModel(providerID, item.id, npm, baseURL)
+    }
+
+    log.info("fetchModels: fetched from /models", { providerID, count: Object.keys(models).length })
+    return models
+  }
+
+  async function fetchModels(providerID: string, options: Record<string, any>) {
+    const baseURL = options["baseURL"]?.replace(/\/+$/, "")
+    if (!baseURL) {
+      log.warn("fetchModels: no baseURL for provider", { providerID })
+      return {} as Record<string, Model>
+    }
+
+    const npm = options["npm"] ?? "@ai-sdk/openai-compatible"
+    const headers: Record<string, string> = { Accept: "application/json" }
+    if (options["apiKey"]) headers["Authorization"] = `Bearer ${options["apiKey"]}`
+
+    // try LiteLLM /model/info first (has limits, costs, capabilities), fall back to /models
+    const rich = await fetchModelInfo(providerID, baseURL, npm, headers)
+    if (rich && Object.keys(rich).length > 0) return rich
+    return fetchModelList(providerID, baseURL, npm, headers)
+  }
+
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
@@ -888,6 +1011,20 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+    }
+
+    // fetch models dynamically for providers with fetchModels enabled
+    for (const [providerID, provider] of configProviders) {
+      if (!provider.fetchModels) continue
+      const options = database[providerID]?.options ?? provider.options ?? {}
+      const npm =
+        provider.npm ?? database[providerID]?.models[Object.keys(database[providerID]?.models ?? {})[0]]?.api.npm
+      const fetched = await fetchModels(providerID, { ...options, npm })
+      if (Object.keys(fetched).length === 0) continue
+      const existing = database[providerID]
+      if (!existing) continue
+      // merge fetched models as base, existing manual models override
+      existing.models = { ...fetched, ...existing.models }
     }
 
     // load env
