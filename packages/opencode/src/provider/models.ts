@@ -5,6 +5,7 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
+import { Filesystem } from "../util/filesystem"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -85,8 +86,7 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
-    const result = await file.json().catch(() => {})
+    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
     if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
@@ -104,7 +104,6 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
-    const file = Bun.file(filepath)
     const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
@@ -116,7 +115,7 @@ export namespace ModelsDev {
       })
     })
     if (result && result.ok) {
-      await Bun.write(file, await result.text())
+      await Filesystem.write(filepath, await result.text())
       ModelsDev.Data.reset()
     }
   }
