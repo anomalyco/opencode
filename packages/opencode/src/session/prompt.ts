@@ -262,6 +262,14 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
+    // Settle any queued callbacks before removing state so waiting callers
+    // (e.g. parent session awaiting a subagent result) don't hang indefinitely.
+    const pending = match.callbacks.splice(0)
+    if (pending.length > 0) {
+      log.info("cancel: rejecting queued callbacks", { sessionID, count: pending.length })
+      const err = new Error(`Session ${sessionID} was cancelled`)
+      for (const cb of pending) cb.reject(err)
+    }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
@@ -276,6 +284,7 @@ export namespace SessionPrompt {
 
     const abort = resume_existing ? resume(sessionID) : start(sessionID)
     if (!abort) {
+      log.info("loop: session already running, queuing callback", { sessionID })
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
         callbacks.push({ resolve, reject })
@@ -290,7 +299,9 @@ export namespace SessionPrompt {
     let structuredOutput: unknown | undefined
 
     let step = 0
+    const loopStart = Date.now()
     const session = await Session.get(sessionID)
+    log.info("loop: start", { sessionID, parentID: session.parentID })
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -715,12 +726,18 @@ export namespace SessionPrompt {
       continue
     }
     SessionCompaction.prune({ sessionID })
+    log.info("loop: exited", { sessionID, steps: step, elapsedMs: Date.now() - loopStart })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []
+      if (queued.length > 0) {
+        log.info("loop: resolving queued callbacks", { sessionID, count: queued.length })
+      }
       for (const q of queued) {
         q.resolve(item)
       }
+      const textLen = item.parts.findLast((p) => p.type === "text")?.text?.length ?? 0
+      log.info("loop: returning result", { sessionID, finish: (item.info as any).finish, textLen })
       return item
     }
     throw new Error("Impossible")

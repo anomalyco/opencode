@@ -10,6 +10,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { Log } from "../util/log"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -25,6 +26,7 @@ const parameters = z.object({
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
+  const log = Log.create({ service: "tool.task" })
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
   // Filter agents by permissions if agent provided
@@ -125,6 +127,31 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
+      // Default timeout: 5 minutes, configurable via config.experimental.task_timeout_ms
+      const DEFAULT_TASK_TIMEOUT_MS = 5 * 60 * 1000
+      const timeoutMs = (config.experimental as any)?.task_timeout_ms ?? DEFAULT_TASK_TIMEOUT_MS
+
+      log.info("task: starting subagent", {
+        sessionID: ctx.sessionID,
+        subSessionID: session.id,
+        agent: agent.name,
+        model,
+        description: params.description,
+        timeoutMs,
+      })
+
+      const taskStart = Date.now()
+      let timedOut = false
+      const timeoutHandle = setTimeout(() => {
+        timedOut = true
+        log.info("task: timeout reached, cancelling subagent", {
+          subSessionID: session.id,
+          agent: agent.name,
+          timeoutMs,
+        })
+        SessionPrompt.cancel(session.id)
+      }, timeoutMs)
+
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -140,9 +167,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      })
+      }).finally(() => clearTimeout(timeoutHandle))
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      const elapsedMs = Date.now() - taskStart
+      const textPart = result.parts.findLast((x) => x.type === "text")
+      const text = textPart?.text ?? ""
+      log.info("task: subagent completed", {
+        subSessionID: session.id,
+        agent: agent.name,
+        elapsedMs,
+        timedOut,
+        finish: (result.info as any).finish,
+        textLen: text.length,
+        partsCount: result.parts.length,
+      })
 
       const output = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,
