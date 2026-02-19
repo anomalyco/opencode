@@ -1,7 +1,6 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { stat } from "fs/promises"
 import { Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
@@ -378,7 +377,7 @@ export namespace Project {
     const data = fromRow(row)
     const valid: string[] = []
     for (const dir of data.sandboxes) {
-      const s = await stat(dir).catch(() => undefined)
+      const s = Filesystem.stat(dir)
       if (s?.isDirectory()) valid.push(dir)
     }
     return valid
