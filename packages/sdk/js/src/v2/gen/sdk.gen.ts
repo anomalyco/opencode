@@ -22,6 +22,10 @@ import type {
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
+  EventTuiRendererResumeAck,
+  EventTuiRendererResumeRequest,
+  EventTuiRendererSuspendAck,
+  EventTuiRendererSuspendRequest,
   EventTuiSessionSelect,
   EventTuiToastShow,
   ExperimentalResourceListResponses,
@@ -3681,7 +3685,15 @@ export class Tui extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?:
+        | EventTuiPromptAppend
+        | EventTuiCommandExecute
+        | EventTuiToastShow
+        | EventTuiSessionSelect
+        | EventTuiRendererSuspendRequest
+        | EventTuiRendererSuspendAck
+        | EventTuiRendererResumeRequest
+        | EventTuiRendererResumeAck
     },
     options?: Options<never, ThrowOnError>,
   ) {

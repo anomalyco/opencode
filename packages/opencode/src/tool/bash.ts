@@ -14,6 +14,7 @@ import { Process } from "@/util/process"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
+import { TerminalControl } from "@/terminal/control"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"

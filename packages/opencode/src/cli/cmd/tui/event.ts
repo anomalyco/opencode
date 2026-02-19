@@ -46,4 +46,31 @@ export const TuiEvent = {
       sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
+  RendererSuspendRequest: BusEvent.define(
+    "tui.renderer.suspend.request",
+    z.object({
+      token: z.string(),
+      sessionID: z.string().optional(),
+      callID: z.string().optional(),
+      reason: z.string().optional(),
+    }),
+  ),
+  RendererSuspendAck: BusEvent.define(
+    "tui.renderer.suspend.ack",
+    z.object({
+      token: z.string(),
+    }),
+  ),
+  RendererResumeRequest: BusEvent.define(
+    "tui.renderer.resume.request",
+    z.object({
+      token: z.string(),
+    }),
+  ),
+  RendererResumeAck: BusEvent.define(
+    "tui.renderer.resume.ack",
+    z.object({
+      token: z.string(),
+    }),
+  ),
 }

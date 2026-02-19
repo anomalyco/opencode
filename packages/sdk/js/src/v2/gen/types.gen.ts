@@ -322,6 +322,37 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventTuiRendererSuspendRequest = {
+  type: "tui.renderer.suspend.request"
+  properties: {
+    token: string
+    sessionID?: string
+    callID?: string
+    reason?: string
+  }
+}
+
+export type EventTuiRendererSuspendAck = {
+  type: "tui.renderer.suspend.ack"
+  properties: {
+    token: string
+  }
+}
+
+export type EventTuiRendererResumeRequest = {
+  type: "tui.renderer.resume.request"
+  properties: {
+    token: string
+  }
+}
+
+export type EventTuiRendererResumeAck = {
+  type: "tui.renderer.resume.ack"
+  properties: {
+    token: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -988,6 +1019,12 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventTuiRendererSuspendRequest
+  | EventTuiRendererSuspendAck
+  | EventTuiRendererResumeRequest
+  | EventTuiRendererResumeAck
+  | EventFileWatcherUpdated
+  | EventTodoUpdated
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -4902,7 +4939,15 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?:
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventTuiRendererSuspendRequest
+    | EventTuiRendererSuspendAck
+    | EventTuiRendererResumeRequest
+    | EventTuiRendererResumeAck
   path?: never
   query?: {
     directory?: string
