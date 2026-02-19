@@ -34,7 +34,6 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         renderer.setTerminalTitle("")
         renderer.destroy()
         win32FlushInputBuffer()
-        await input.onExit?.()
         if (reason) {
           const formatted = FormatError(reason) ?? FormatUnknownError(reason)
           if (formatted) {
@@ -43,7 +42,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         }
         const text = store.get()
         if (text) process.stdout.write(text + "\n")
-        process.exit(0)
+        await input.onExit?.()
       },
       {
         message: store,
