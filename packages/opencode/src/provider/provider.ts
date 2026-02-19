@@ -397,8 +397,7 @@ export namespace Provider {
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
             const auth = new GoogleAuth()
             const client = await auth.getApplicationDefault()
-            const credentials = await client.credential
-            const token = await credentials.getAccessToken()
+            const token = await client.credential.getAccessToken()
 
             const headers = new Headers(init?.headers)
             headers.set("Authorization", `Bearer ${token.token}`)
