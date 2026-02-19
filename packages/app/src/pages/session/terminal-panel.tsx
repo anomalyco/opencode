@@ -38,8 +38,33 @@ export function TerminalPanel() {
 
   const [store, setStore] = createStore({
     autoCreated: false,
+    everOpened: false,
     activeDraggable: undefined as string | undefined,
   })
+
+  const rendered = createMemo(() => isDesktop() && (opened() || store.everOpened))
+
+  createEffect(
+    on(open, (isOpen, prev) => {
+      if (isOpen) {
+        if (!store.everOpened) setStore("everOpened", true)
+        const activeId = terminal.active()
+        if (!activeId) return
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        setTimeout(() => focusTerminalById(activeId), 0)
+        return
+      }
+
+      if (!prev) return
+      const panel = document.getElementById("terminal-panel")
+      const activeElement = document.activeElement
+      if (!panel || !(activeElement instanceof HTMLElement)) return
+      if (!panel.contains(activeElement)) return
+      activeElement.blur()
+    }),
+  )
 
   createEffect(() => {
     if (!opened()) {
@@ -67,7 +92,7 @@ export function TerminalPanel() {
     on(
       () => terminal.active(),
       (activeId) => {
-        if (!activeId || !opened()) return
+        if (!activeId || !open()) return
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur()
         }
@@ -133,23 +158,32 @@ export function TerminalPanel() {
   }
 
   return (
-    <Show when={open()}>
+    <Show when={rendered()}>
       <div
         id="terminal-panel"
         role="region"
         aria-label={language.t("terminal.title")}
-        class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
-        style={{ height: `${height()}px` }}
+        classList={{
+          "relative w-full flex flex-col shrink-0 overflow-hidden": true,
+          "border-t border-border-weak-base": open(),
+          "pointer-events-none": !open(),
+        }}
+        style={{
+          height: `${height()}px`,
+          display: open() ? "flex" : "none",
+        }}
       >
-        <ResizeHandle
-          direction="vertical"
-          size={height()}
-          min={100}
-          max={typeof window === "undefined" ? 1000 : window.innerHeight * 0.6}
-          collapseThreshold={50}
-          onResize={layout.terminal.resize}
-          onCollapse={close}
-        />
+        <Show when={open()}>
+          <ResizeHandle
+            direction="vertical"
+            size={height()}
+            min={100}
+            max={typeof window === "undefined" ? 1000 : window.innerHeight * 0.6}
+            collapseThreshold={50}
+            onResize={layout.terminal.resize}
+            onCollapse={close}
+          />
+        </Show>
         <Show
           when={terminal.ready()}
           fallback={

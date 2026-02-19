@@ -36,6 +36,7 @@ import { useI18n } from "../context/i18n"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Button } from "./button"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
@@ -1645,7 +1646,7 @@ ToolRegistry.register({
 
                 return (
                   <Accordion.Item value={file.filePath} data-type={file.type}>
-                    <Accordion.Header>
+                    <StickyAccordionHeader>
                       <Accordion.Trigger>
                         <div data-slot="apply-patch-trigger-content">
                           <div data-slot="apply-patch-file-info">
@@ -1682,7 +1683,7 @@ ToolRegistry.register({
                           </div>
                         </div>
                       </Accordion.Trigger>
-                    </Accordion.Header>
+                    </StickyAccordionHeader>
                     <Accordion.Content>
                       <Show when={visible()}>
                         <div data-component="apply-patch-file-diff">
