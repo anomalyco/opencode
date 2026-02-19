@@ -16,6 +16,7 @@ export function SessionComposerRegion(props: {
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
+  onResponseSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
   const params = useParams()
@@ -57,7 +58,7 @@ export function SessionComposerRegion(props: {
         <Show when={props.state.questionRequest()} keyed>
           {(request) => (
             <div>
-              <SessionQuestionDock request={request} />
+              <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
             </div>
           )}
         </Show>
@@ -68,7 +69,10 @@ export function SessionComposerRegion(props: {
               <SessionPermissionDock
                 request={request}
                 responding={props.state.permissionResponding()}
-                onDecide={props.state.decide}
+                onDecide={(response) => {
+                  props.onResponseSubmit()
+                  props.state.decide(response)
+                }}
               />
             </div>
           )}

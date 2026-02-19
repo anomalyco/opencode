@@ -8,7 +8,7 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 
-export const SessionQuestionDock: Component<{ request: QuestionRequest }> = (props) => {
+export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
 
@@ -115,6 +115,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest }> = (pro
   const reply = async (answers: QuestionAnswer[]) => {
     if (store.sending) return
 
+    props.onSubmit()
     setStore("sending", true)
     try {
       await sdk.client.question.reply({ requestID: props.request.id, answers })
@@ -128,6 +129,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest }> = (pro
   const reject = async () => {
     if (store.sending) return
 
+    props.onSubmit()
     setStore("sending", true)
     try {
       await sdk.client.question.reject({ requestID: props.request.id })

@@ -1098,6 +1098,7 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
+            onResponseSubmit={resumeScroll}
             setPromptDockRef={(el) => {
               promptDock = el
             }}
