@@ -1602,6 +1602,117 @@ describe("deduplicatePlugins", () => {
   })
 })
 
+describe("MCP includeTools and excludeTools config", () => {
+  test("parses MCP local config with includeTools", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "local",
+              command: ["npx", "my-mcp"],
+              includeTools: ["tool_a", "tool_b"],
+            },
+          },
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.myserver).toEqual({
+          type: "local",
+          command: ["npx", "my-mcp"],
+          includeTools: ["tool_a", "tool_b"],
+        })
+      },
+    })
+  })
+
+  test("parses MCP remote config with excludeTools", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            remote: {
+              type: "remote",
+              url: "https://remote.example.com/mcp",
+              excludeTools: ["tool_x"],
+            },
+          },
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.remote).toEqual({
+          type: "remote",
+          url: "https://remote.example.com/mcp",
+          excludeTools: ["tool_x"],
+        })
+      },
+    })
+  })
+
+  test("parses MCP config with both includeTools and excludeTools", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "local",
+              command: ["npx", "my-mcp"],
+              includeTools: ["tool_a", "tool_b"],
+              excludeTools: ["tool_x"],
+            },
+          },
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.myserver).toEqual({
+          type: "local",
+          command: ["npx", "my-mcp"],
+          includeTools: ["tool_a", "tool_b"],
+          excludeTools: ["tool_x"],
+        })
+      },
+    })
+  })
+
+  test("MCP strict schema still rejects unknown fields", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "local",
+              command: ["npx", "my-mcp"],
+              unknownField: "should fail",
+            },
+          },
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(Config.get()).rejects.toThrow()
+      },
+    })
+  })
+})
+
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]

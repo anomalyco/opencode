@@ -537,6 +537,16 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+      includeTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("Allowlist: only expose these tool names from this MCP server to the model"),
+      excludeTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("Denylist: exclude these tool names from this MCP server (takes precedence over includeTools)"),
     })
     .strict()
     .meta({
@@ -576,6 +586,16 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+      includeTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("Allowlist: only expose these tool names from this MCP server to the model"),
+      excludeTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("Denylist: exclude these tool names from this MCP server (takes precedence over includeTools)"),
     })
     .strict()
     .meta({
