@@ -3,5 +3,5 @@ import * as mod from "./dropdown-menu"
 import { create } from "../storybook/scaffold"
 
 const story = create({ title: "UI/DropdownMenu", mod })
-export default { ...story.meta }
+export default { title: "UI/DropdownMenu", component: story.meta.component }
 export const Basic = story.Basic

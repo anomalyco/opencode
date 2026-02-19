@@ -12,5 +12,5 @@ const story = create({
     search: true,
   },
 })
-export default { ...story.meta }
+export default { title: "UI/List", component: story.meta.component }
 export const Basic = story.Basic

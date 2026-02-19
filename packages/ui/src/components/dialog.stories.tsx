@@ -7,5 +7,5 @@ const story = create({
   mod,
   args: { title: "Dialog", description: "Description", children: "Body" },
 })
-export default { ...story.meta }
+export default { title: "UI/Dialog", component: story.meta.component }
 export const Basic = story.Basic

@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { ErrorBoundary, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
 

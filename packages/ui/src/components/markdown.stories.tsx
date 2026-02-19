@@ -9,5 +9,5 @@ const story = create({
     text: "# Markdown\n\nSome *markdown* with `inline code`.\n\n```ts\nconst hello = 'world'\n```",
   },
 })
-export default { ...story.meta }
+export default { title: "UI/Markdown", component: story.meta.component }
 export const Basic = story.Basic

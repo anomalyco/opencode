@@ -13,5 +13,5 @@ const story = create({
     size: "normal",
   },
 })
-export default { ...story.meta }
+export default { title: "UI/Select", component: story.meta.component }
 export const Basic = story.Basic

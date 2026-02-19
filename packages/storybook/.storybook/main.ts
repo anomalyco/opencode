@@ -24,6 +24,9 @@ export default defineMain({
       resolve: {
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta"],
       },
+      worker: {
+        format: "es",
+      },
       server: {
         fs: {
           allow: [searchForWorkspaceRoot(process.cwd()), ui],

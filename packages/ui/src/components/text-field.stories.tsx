@@ -11,5 +11,5 @@ const story = create({
     defaultValue: "Hello",
   },
 })
-export default { ...story.meta }
+export default { title: "UI/TextField", component: story.meta.component }
 export const Basic = story.Basic

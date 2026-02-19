@@ -10,5 +10,5 @@ const story = create({
     alt: "Preview",
   },
 })
-export default { ...story.meta }
+export default { title: "UI/ImagePreview", component: story.meta.component }
 export const Basic = story.Basic

@@ -12,5 +12,5 @@ const story = create({
     footer: "Footer",
   },
 })
-export default { ...story.meta }
+export default { title: "UI/DockPrompt", component: story.meta.component }
 export const Basic = story.Basic

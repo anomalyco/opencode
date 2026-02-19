@@ -1,5 +1,4 @@
 // @ts-nocheck
-/** @jsxImportSource solid-js */
 import { Card } from "./card"
 import { Button } from "./button"
 

@@ -3,5 +3,5 @@ import * as mod from "./font"
 import { create } from "../storybook/scaffold"
 
 const story = create({ title: "UI/Font", mod })
-export default { ...story.meta }
+export default { title: "UI/Font", component: story.meta.component }
 export const Basic = story.Basic

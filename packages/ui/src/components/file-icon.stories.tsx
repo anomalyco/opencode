@@ -10,5 +10,5 @@ const story = create({
     mono: true,
   },
 })
-export default { ...story.meta }
+export default { title: "UI/FileIcon", component: story.meta.component }
 export const Basic = story.Basic
