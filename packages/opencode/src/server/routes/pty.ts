@@ -3,7 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
-import { Storage } from "../../storage/storage"
+import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -76,7 +76,7 @@ export const PtyRoutes = lazy(() =>
       async (c) => {
         const info = Pty.get(c.req.valid("param").ptyID)
         if (!info) {
-          throw new Storage.NotFoundError({ message: "Session not found" })
+          throw new NotFoundError({ message: "Session not found" })
         }
         return c.json(info)
       },
@@ -160,14 +160,43 @@ export const PtyRoutes = lazy(() =>
         })()
         let handler: ReturnType<typeof Pty.connect>
         if (!Pty.get(id)) throw new Error("Session not found")
+
+        type Socket = {
+          readyState: number
+          data: object
+          send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+          close: (code?: number, reason?: string) => void
+        }
+
+        const isSocket = (value: unknown): value is Socket => {
+          if (!value || typeof value !== "object") return false
+          if (!("readyState" in value)) return false
+          if (!("data" in value)) return false
+          if (!((value as { data?: unknown }).data && typeof (value as { data?: unknown }).data === "object")) {
+            return false
+          }
+          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
+          if (!("close" in value) || typeof (value as { close?: unknown }).close !== "function") return false
+          return typeof (value as { readyState?: unknown }).readyState === "number"
+        }
+
         return {
           onOpen(_event, ws) {
-            handler = Pty.connect(id, ws, cursor)
+            const raw = ws.raw
+            if (!isSocket(raw)) {
+              ws.close()
+              return
+            }
+            handler = Pty.connect(id, raw, cursor)
           },
           onMessage(event) {
-            handler?.onMessage(String(event.data))
+            if (typeof event.data !== "string") return
+            handler?.onMessage(event.data)
           },
           onClose() {
+            handler?.onClose()
+          },
+          onError() {
             handler?.onClose()
           },
         }
