@@ -285,7 +285,15 @@ export function Sidebar(props: {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
-        <scrollbox flexGrow={1}>
+        <scrollbox
+          flexGrow={1}
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.background,
+              foregroundColor: theme.borderActive,
+            },
+          }}
+        >
           <box flexShrink={0} gap={1} paddingRight={1}>
             <Show when={session().share?.url}>
               <text fg={theme.textMuted}>{session().share!.url}</text>

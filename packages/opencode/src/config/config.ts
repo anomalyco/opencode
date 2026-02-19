@@ -89,7 +89,13 @@ export namespace Config {
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = merge(result, await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`))
+        result = merge(
+          result,
+          await load(JSON.stringify(remoteConfig), {
+            dir: path.dirname(`${key}/.well-known/opencode`),
+            source: `${key}/.well-known/opencode`,
+          }),
+        )
         log.debug("loaded remote config from well-known", { url: key })
       }
     }
@@ -177,8 +183,14 @@ export namespace Config {
     }
 
     // Inline config content overrides all non-managed config sources.
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = merge(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+    if (process.env.OPENCODE_CONFIG_CONTENT) {
+      result = merge(
+        result,
+        await load(process.env.OPENCODE_CONFIG_CONTENT, {
+          dir: Instance.directory,
+          source: "OPENCODE_CONFIG_CONTENT",
+        }),
+      )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -255,19 +267,20 @@ export namespace Config {
     const pkg = path.join(dir, "package.json")
     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
-    const json = await Bun.file(pkg)
-      .json()
-      .catch(() => ({}))
+    const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
+      dependencies: {},
+    }))
     json.dependencies = {
       ...json.dependencies,
       "@opencode-ai/plugin": targetVersion,
     }
-    await Bun.write(pkg, JSON.stringify(json, null, 2))
+    await Filesystem.writeJson(pkg, json)
     await new Promise((resolve) => setTimeout(resolve, 3000))
 
     const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Bun.file(gitignore).exists()
-    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+    const hasGitIgnore = await Filesystem.exists(gitignore)
+    if (!hasGitIgnore)
+      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
@@ -303,11 +316,10 @@ export namespace Config {
     if (!existsSync(nodeModules)) return true
 
     const pkg = path.join(dir, "package.json")
-    const pkgFile = Bun.file(pkg)
-    const pkgExists = await pkgFile.exists()
+    const pkgExists = await Filesystem.exists(pkg)
     if (!pkgExists) return true
 
-    const parsed = await pkgFile.json().catch(() => null)
+    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
     const dependencies = parsed?.dependencies ?? {}
     const depVersion = dependencies["@opencode-ai/plugin"]
     if (!depVersion) return true
@@ -1229,7 +1241,7 @@ export namespace Config {
           if (provider && model) result.model = `${provider}/${model}`
           result["$schema"] = "https://opencode.ai/config.json"
           result = mergeDeep(result, rest)
-          await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+          await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
           await fs.unlink(legacy)
         })
         .catch(() => {})
@@ -1240,31 +1252,32 @@ export namespace Config {
 
   async function loadFile(filepath: string): Promise<Info> {
     log.info("loading", { path: filepath })
-    let text = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return
-        throw new JsonError({ path: filepath }, { cause: err })
-      })
+    let text = await Filesystem.readText(filepath).catch((err: any) => {
+      if (err.code === "ENOENT") return
+      throw new JsonError({ path: filepath }, { cause: err })
+    })
     if (!text) return {}
-    return load(text, filepath)
+    return load(text, { path: filepath })
   }
 
-  async function load(text: string, configFilepath: string) {
+  async function load(text: string, options: { path: string } | { dir: string; source: string }) {
     const original = text
+    const configDir = "path" in options ? path.dirname(options.path) : options.dir
+    const source = "path" in options ? options.path : options.source
+    const isFile = "path" in options
+
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configFilepath)
       const lines = text.split("\n")
 
       for (const match of fileMatches) {
         const lineIndex = lines.findIndex((line) => line.includes(match))
         if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue // Skip if line is commented
+          continue
         }
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
@@ -1279,16 +1292,15 @@ export namespace Config {
               if (error.code === "ENOENT") {
                 throw new InvalidError(
                   {
-                    path: configFilepath,
+                    path: source,
                     message: errMsg + ` ${resolvedPath} does not exist`,
                   },
                   { cause: error },
                 )
               }
-              throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
+              throw new InvalidError({ path: source, message: errMsg }, { cause: error })
             })
         ).trim()
-        // escape newlines/quotes, strip outer quotes
         text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
@@ -1312,25 +1324,24 @@ export namespace Config {
         .join("\n")
 
       throw new JsonError({
-        path: configFilepath,
+        path: source,
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
-      if (!parsed.data.$schema) {
+      if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
-      if (data.plugin) {
+      if (data.plugin && isFile) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
+            data.plugin[i] = import.meta.resolve!(plugin, options.path)
           } catch (err) {}
         }
       }
@@ -1338,7 +1349,7 @@ export namespace Config {
     }
 
     throw new InvalidError({
-      path: configFilepath,
+      path: source,
       issues: parsed.error.issues,
     })
   }
@@ -1379,7 +1390,7 @@ export namespace Config {
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()
   }
 
@@ -1450,24 +1461,22 @@ export namespace Config {
 
   export async function updateGlobal(config: Info) {
     const filepath = globalConfigFile()
-    const before = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return "{}"
-        throw new JsonError({ path: filepath }, { cause: err })
-      })
+    const before = await Filesystem.readText(filepath).catch((err: any) => {
+      if (err.code === "ENOENT") return "{}"
+      throw new JsonError({ path: filepath }, { cause: err })
+    })
 
     const next = await (async () => {
       if (!filepath.endsWith(".jsonc")) {
         const existing = parseConfig(before, filepath)
         const merged = mergeDeep(existing, config)
-        await Bun.write(filepath, JSON.stringify(merged, null, 2))
+        await Filesystem.writeJson(filepath, merged)
         return merged
       }
 
       const updated = patchJsonc(before, config)
       const merged = parseConfig(updated, filepath)
-      await Bun.write(filepath, updated)
+      await Filesystem.write(filepath, updated)
       return merged
     })()
 
