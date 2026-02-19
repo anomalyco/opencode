@@ -198,6 +198,7 @@ for (const item of targets) {
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
+        license: "Apache-2.0",
       },
       null,
       2,
