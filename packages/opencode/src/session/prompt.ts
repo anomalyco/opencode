@@ -1246,8 +1246,7 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url:
-                    `data:${part.mime};base64,` + Buffer.from(await Filesystem.readBytes(filepath)).toString("base64"),
+                  url: `data:${part.mime};base64,` + (await Filesystem.readBytes(filepath)).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -1617,7 +1616,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const args = matchingInvocation?.args
 
     const cwd = Instance.directory
-    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const shellEnv = await Plugin.trigger(
+      "shell.env",
+      { cwd, sessionID: input.sessionID, callID: part.callID },
+      { env: {} },
+    )
     const proc = spawn(shell, args, {
       cwd,
       detached: process.platform !== "win32",

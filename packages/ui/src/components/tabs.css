@@ -253,16 +253,20 @@
       }
 
       &:hover:not(:disabled) {
-        background-color: var(--surface-raised-base-hover);
+        background-color: var(--surface-base-hover);
         color: var(--text-strong);
       }
 
+      &:active:not(:disabled) {
+        background-color: var(--surface-base-active);
+      }
+
       &:has([data-selected]) {
-        background-color: var(--surface-raised-base-active);
+        background-color: var(--surface-base-active);
         color: var(--text-strong);
 
         &:hover:not(:disabled) {
-          background-color: var(--surface-raised-base-active);
+          background-color: var(--surface-base-active);
         }
       }
     }
@@ -274,10 +278,11 @@
       padding-inline: 12px;
       gap: 8px;
       align-items: center;
+      background-color: var(--background-stronger);
     }
 
     [data-slot="tabs-trigger-wrapper"] {
-      height: 26px;
+      height: 24px;
       border-radius: 6px;
       color: var(--text-weak);
 
@@ -325,11 +330,11 @@
       }
 
       &:hover:not(:disabled) {
-        background-color: var(--surface-raised-base-hover);
+        background-color: var(--surface-base-hover);
       }
 
       &:has([data-selected]) {
-        background-color: var(--surface-raised-base-active);
+        background-color: var(--surface-base-active);
         color: var(--text-strong);
       }
     }
@@ -363,11 +368,11 @@
         }
 
         &:hover:not(:disabled) {
-          background-color: var(--surface-raised-base-hover);
+          background-color: var(--surface-base-hover);
         }
 
         &:has([data-selected]) {
-          background-color: var(--surface-raised-base-hover);
+          background-color: var(--surface-base-hover);
           color: var(--text-strong);
         }
       }
@@ -426,16 +431,16 @@
         }
 
         &:hover:not(:disabled) {
-          background-color: var(--surface-raised-base-hover);
+          background-color: var(--surface-base-hover);
         }
 
         &:has([data-slot="tabs-trigger"]:focus-visible) {
-          background-color: var(--surface-raised-base-hover);
+          background-color: var(--surface-base-hover);
           box-shadow: var(--shadow-xs-border-focus);
         }
 
         &:has([data-selected]) {
-          background-color: var(--surface-raised-base-active);
+          background-color: var(--surface-base-active);
           color: var(--text-strong);
 
           [data-component="icon"] {
@@ -443,13 +448,13 @@
           }
 
           &:hover:not(:disabled) {
-            background-color: var(--surface-raised-base-active);
+            background-color: var(--surface-base-active);
           }
         }
       }
 
       [data-slot="tabs-content"] {
-        background-color: var(--surface-raised-stronger-non-alpha);
+        background-color: var(--surface-stronger-non-alpha);
       }
     }
   }
