@@ -608,7 +608,16 @@ export namespace Session {
     async (input) => {
       // CASCADE delete handles parts automatically
       Database.use((db) => {
-        db.delete(MessageTable).where(eq(MessageTable.id, input.messageID)).run()
+        const row = db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+          .get()
+        if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
+
+        db.delete(MessageTable)
+          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
