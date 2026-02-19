@@ -3,7 +3,7 @@ name: Sync fork with upstream (fail on conflicts)
 on:
   schedule:
     # vsak dan ob 03:17 UTC (prilagodi po želji)
-    - cron: "17 3 * * *"
+    - cron: "17 */4 * * *"
   workflow_dispatch: {}
 
 permissions:
