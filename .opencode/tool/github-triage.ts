@@ -68,17 +68,7 @@ export default tool({
       results.push("Dropped label: nix (issue does not mention nix)")
     }
 
-    const assignee = nix
-      ? "rekram1-node"
-      : web
-        ? pick(TEAM.desktop)
-        : args.assignee === "jlongster"
-          ? "thdxr"
-          : args.assignee
-
-    if (args.assignee === "jlongster" && assignee === "thdxr") {
-      results.push("Remapped assignee: jlongster -> thdxr (jlongster not assignable yet)")
-    }
+    const assignee = nix ? "rekram1-node" : web ? pick(TEAM.desktop) : args.assignee
 
     if (labels.includes("zen") && !zen) {
       throw new Error("Only add the zen label when issue title/body contains 'zen'")

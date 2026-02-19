@@ -14,7 +14,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.image.loading": "Laster...",
   "ui.sessionReview.image.placeholder": "Bilde",
   "ui.sessionReview.largeDiff.title": "Diff er for stor til å gjengi",
-  "ui.sessionReview.largeDiff.meta": "Grense: {{lines}} linjer / {{limit}}. Nåværende: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Grense: {{limit}} endrede linjer. Nåværende: {{current}} endrede linjer.",
   "ui.sessionReview.largeDiff.renderAnyway": "Gjengi likevel",
 
   "ui.lineComment.label.prefix": "Kommenter på ",
@@ -36,7 +36,8 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",
-  "ui.sessionTurn.status.gatheringContext": "Samler inn kontekst",
+  "ui.sessionTurn.status.gatheringContext": "Utforsker",
+  "ui.sessionTurn.status.gatheredContext": "Utforsket",
   "ui.sessionTurn.status.searchingCodebase": "Søker i kodebasen",
   "ui.sessionTurn.status.searchingWeb": "Søker på nettet",
   "ui.sessionTurn.status.makingEdits": "Gjør endringer",
@@ -100,6 +101,8 @@ export const dict: Record<Keys, string> = {
   "ui.message.expand": "Utvid melding",
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
+  "ui.message.copyMessage": "Kopier melding",
+  "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
   "ui.message.attachment.alt": "vedlegg",

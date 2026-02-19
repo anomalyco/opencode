@@ -267,14 +267,14 @@ export function Titlebar() {
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
-      <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
+      <div class="min-w-0 flex items-center justify-center pointer-events-none">
         <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
       </div>
 
       <div
         classList={{
           "flex items-center min-w-0 justify-end": true,
-          "pr-6": !windows(),
+          "pr-2": !windows(),
         }}
         onMouseDown={drag}
       >
