@@ -16,7 +16,7 @@ concurrency:
 
 env:
   # URL originalnega (upstream) repozitorija
-  UPSTREAM_REPO: https://github.com/ORIGINAL_OWNER/ORIGINAL_REPO.git
+  UPSTREAM_REPO: https://github.com/anomalyco/opencode.git
   # branch v upstreamu, ki ga želiš syncat
   UPSTREAM_BRANCH: main
   # branch v tvojem forku, kamor syncaš
