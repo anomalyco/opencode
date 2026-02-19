@@ -69,6 +69,25 @@ function getDiagnostics(
   return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
 }
 
+const isRtlText = (text: string) => {
+  const rtlChars = /[\u0590-\u05FF\u0600-\u06FF]/
+  let rtlCount = 0
+  let totalCount = 0
+
+  for (const char of text) {
+    if (char.trim() !== "") {
+      totalCount++
+      if (rtlChars.test(char)) {
+        rtlCount++
+      }
+    }
+  }
+
+  if (totalCount < 3) return false
+
+  return rtlCount / totalCount > 0.5
+}
+
 function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
   const i18n = useI18n()
   return (
@@ -653,6 +672,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 
   const text = createMemo(() => textPart()?.text || "")
+  const [isRTL, setIsRTL] = createSignal(false)
+  createEffect(() => {
+    setIsRTL(isRtlText(text()))
+  })
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
@@ -750,7 +773,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Show when={text()}>
         <>
           <div data-slot="user-message-body">
-            <div data-slot="user-message-text">
+            <div data-slot="user-message-text" dir={isRTL() ? "rtl" : "ltr"} classList={{ "text-right": isRTL() }}>
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             </div>
           </div>
@@ -1082,6 +1105,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
 
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+  const [isRTL, setIsRTL] = createSignal(false)
+  createEffect(() => {
+    setIsRTL(isRtlText(displayText()))
+  })
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
@@ -1107,7 +1134,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   return (
     <Show when={throttledText()}>
-      <div data-component="text-part">
+      <div data-component="text-part" dir={isRTL() ? "rtl" : "ltr"} classList={{ "text-right": isRTL() }}>
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>

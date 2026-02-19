@@ -403,6 +403,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
+  const [isRTL, setIsRTL] = createSignal(false)
+  const isRtlText = (text: string) => {
+    const rtlChars = /[\u0590-\u05FF\u0600-\u06FF]/
+    let rtlCount = 0
+    let totalCount = 0
+
+    for (const char of text) {
+      if (char.trim() !== "") {
+        totalCount++
+        if (rtlChars.test(char)) {
+          rtlCount++
+        }
+      }
+    }
+
+    if (totalCount < 3) return false
+
+    return rtlCount / totalCount > 0.5
+  }
+
+  createEffect(() => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    setIsRTL(isRtlText(text))
+  })
+
   createEffect(() => {
     if (!isFocused()) closePopover()
   })
@@ -1119,12 +1147,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
               onKeyDown={handleKeyDown}
+              dir={isRTL() ? "rtl" : "ltr"}
               classList={{
                 "select-text": true,
                 "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
+                "text-right": isRTL(),
               }}
             />
             <Show when={!prompt.dirty()}>
