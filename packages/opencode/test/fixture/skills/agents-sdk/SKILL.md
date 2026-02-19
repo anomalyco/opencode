@@ -11,21 +11,21 @@ description: Build AI agents on Cloudflare Workers using the Agents SDK. Load wh
 
 Fetch current docs from `https://github.com/cloudflare/agents/tree/main/docs` before implementing.
 
-| Topic | Doc | Use for |
-|-------|-----|---------|
-| Getting started | `docs/getting-started.md` | First agent, project setup |
-| State | `docs/state.md` | `setState`, `validateStateChange`, persistence |
-| Routing | `docs/routing.md` | URL patterns, `routeAgentRequest`, `basePath` |
-| Callable methods | `docs/callable-methods.md` | `@callable`, RPC, streaming, timeouts |
-| Scheduling | `docs/scheduling.md` | `schedule()`, `scheduleEvery()`, cron |
-| Workflows | `docs/workflows.md` | `AgentWorkflow`, durable multi-step tasks |
-| HTTP/WebSockets | `docs/http-websockets.md` | Lifecycle hooks, hibernation |
-| Email | `docs/email.md` | Email routing, secure reply resolver |
-| MCP client | `docs/mcp-client.md` | Connecting to MCP servers |
-| MCP server | `docs/mcp-servers.md` | Building MCP servers with `McpAgent` |
-| Client SDK | `docs/client-sdk.md` | `useAgent`, `useAgentChat`, React hooks |
-| Human-in-the-loop | `docs/human-in-the-loop.md` | Approval flows, pausing workflows |
-| Resumable streaming | `docs/resumable-streaming.md` | Stream recovery on disconnect |
+| Topic               | Doc                           | Use for                                        |
+| ------------------- | ----------------------------- | ---------------------------------------------- |
+| Getting started     | `docs/getting-started.md`     | First agent, project setup                     |
+| State               | `docs/state.md`               | `setState`, `validateStateChange`, persistence |
+| Routing             | `docs/routing.md`             | URL patterns, `routeAgentRequest`, `basePath`  |
+| Callable methods    | `docs/callable-methods.md`    | `@callable`, RPC, streaming, timeouts          |
+| Scheduling          | `docs/scheduling.md`          | `schedule()`, `scheduleEvery()`, cron          |
+| Workflows           | `docs/workflows.md`           | `AgentWorkflow`, durable multi-step tasks      |
+| HTTP/WebSockets     | `docs/http-websockets.md`     | Lifecycle hooks, hibernation                   |
+| Email               | `docs/email.md`               | Email routing, secure reply resolver           |
+| MCP client          | `docs/mcp-client.md`          | Connecting to MCP servers                      |
+| MCP server          | `docs/mcp-servers.md`         | Building MCP servers with `McpAgent`           |
+| Client SDK          | `docs/client-sdk.md`          | `useAgent`, `useAgentChat`, React hooks        |
+| Human-in-the-loop   | `docs/human-in-the-loop.md`   | Approval flows, pausing workflows              |
+| Resumable streaming | `docs/resumable-streaming.md` | Stream recovery on disconnect                  |
 
 Cloudflare docs: https://developers.cloudflare.com/agents/
 
@@ -49,6 +49,7 @@ npm ls agents  # Should show agents package
 ```
 
 If not installed:
+
 ```bash
 npm install agents
 ```
@@ -58,89 +59,85 @@ npm install agents
 ```jsonc
 {
   "durable_objects": {
-    "bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }]
+    "bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }],
 }
 ```
 
 ## Agent Class
 
 ```typescript
-import { Agent, routeAgentRequest, callable } from "agents";
+import { Agent, routeAgentRequest, callable } from "agents"
 
-type State = { count: number };
+type State = { count: number }
 
 export class Counter extends Agent<Env, State> {
-  initialState = { count: 0 };
+  initialState = { count: 0 }
 
   // Validation hook - runs before state persists (sync, throwing rejects the update)
   validateStateChange(nextState: State, source: Connection | "server") {
-    if (nextState.count < 0) throw new Error("Count cannot be negative");
+    if (nextState.count < 0) throw new Error("Count cannot be negative")
   }
 
   // Notification hook - runs after state persists (async, non-blocking)
   onStateUpdate(state: State, source: Connection | "server") {
-    console.log("State updated:", state);
+    console.log("State updated:", state)
   }
 
   @callable()
   increment() {
-    this.setState({ count: this.state.count + 1 });
-    return this.state.count;
+    this.setState({ count: this.state.count + 1 })
+    return this.state.count
   }
 }
 
 export default {
-  fetch: (req, env) => routeAgentRequest(req, env) ?? new Response("Not found", { status: 404 })
-};
+  fetch: (req, env) => routeAgentRequest(req, env) ?? new Response("Not found", { status: 404 }),
+}
 ```
 
 ## Routing
 
 Requests route to `/agents/{agent-name}/{instance-name}`:
 
-| Class | URL |
-|-------|-----|
-| `Counter` | `/agents/counter/user-123` |
-| `ChatRoom` | `/agents/chat-room/lobby` |
+| Class      | URL                        |
+| ---------- | -------------------------- |
+| `Counter`  | `/agents/counter/user-123` |
+| `ChatRoom` | `/agents/chat-room/lobby`  |
 
 Client: `useAgent({ agent: "Counter", name: "user-123" })`
 
 ## Core APIs
 
-| Task | API |
-|------|-----|
-| Read state | `this.state.count` |
-| Write state | `this.setState({ count: 1 })` |
-| SQL query | `` this.sql`SELECT * FROM users WHERE id = ${id}` `` |
-| Schedule (delay) | `await this.schedule(60, "task", payload)` |
-| Schedule (cron) | `await this.schedule("0 * * * *", "task", payload)` |
-| Schedule (interval) | `await this.scheduleEvery(30, "poll")` |
-| RPC method | `@callable() myMethod() { ... }` |
-| Streaming RPC | `@callable({ streaming: true }) stream(res) { ... }` |
-| Start workflow | `await this.runWorkflow("ProcessingWorkflow", params)` |
+| Task                | API                                                    |
+| ------------------- | ------------------------------------------------------ |
+| Read state          | `this.state.count`                                     |
+| Write state         | `this.setState({ count: 1 })`                          |
+| SQL query           | `` this.sql`SELECT * FROM users WHERE id = ${id}` ``   |
+| Schedule (delay)    | `await this.schedule(60, "task", payload)`             |
+| Schedule (cron)     | `await this.schedule("0 * * * *", "task", payload)`    |
+| Schedule (interval) | `await this.scheduleEvery(30, "poll")`                 |
+| RPC method          | `@callable() myMethod() { ... }`                       |
+| Streaming RPC       | `@callable({ streaming: true }) stream(res) { ... }`   |
+| Start workflow      | `await this.runWorkflow("ProcessingWorkflow", params)` |
 
 ## React Client
 
 ```tsx
-import { useAgent } from "agents/react";
+import { useAgent } from "agents/react"
 
 function App() {
-  const [state, setLocalState] = useState({ count: 0 });
+  const [state, setLocalState] = useState({ count: 0 })
 
   const agent = useAgent({
     agent: "Counter",
     name: "my-instance",
     onStateUpdate: (newState) => setLocalState(newState),
-    onIdentity: (name, agentType) => console.log(`Connected to ${name}`)
-  });
+    onIdentity: (name, agentType) => console.log(`Connected to ${name}`),
+  })
 
-  return (
-    <button onClick={() => agent.setState({ count: state.count + 1 })}>
-      Count: {state.count}
-    </button>
-  );
+  return <button onClick={() => agent.setState({ count: state.count + 1 })}>Count: {state.count}</button>
 }
 ```
 
