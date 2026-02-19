@@ -1354,7 +1354,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </TooltipKeybind>
               </Show>
             </div>
-            <div class="shrink-0" data-component="prompt-mode-toggle">
+            <div class="shrink-0">
               <RadioGroup
                 options={["shell", "normal"] as const}
                 current={store.mode}
