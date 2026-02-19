@@ -80,6 +80,7 @@ export const isRtlText = (text: string) => {
       totalCount++
       if (rtlChars.test(char)) {
         rtlCount++
+
       }
     }
   }
