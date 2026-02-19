@@ -51,6 +51,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { isRtlText } from "@opencode-ai/ui/message-part"
 
 interface PromptInputProps {
   class?: string
@@ -402,6 +403,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
+
+  const [isRTL, setIsRTL] = createSignal(false)
+  createEffect(() => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    setIsRTL(isRtlText(text))
+  })
 
   createEffect(() => {
     if (!isFocused()) closePopover()
@@ -1119,12 +1129,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
               onKeyDown={handleKeyDown}
+              dir={isRTL() ? "rtl" : "ltr"}
               classList={{
                 "select-text": true,
                 "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
+                "text-right": isRTL(),
               }}
             />
             <Show when={!prompt.dirty()}>
