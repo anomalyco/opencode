@@ -33,7 +33,8 @@
   <a href="README.br.md">Português (Brasil)</a> |
   <a href="README.th.md">ไทย</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a>
+  <a href="README.uk.md">Українська</a> |
+  <a href="README.bn.md">বাংলা</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
