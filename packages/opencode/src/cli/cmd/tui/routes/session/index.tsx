@@ -81,6 +81,36 @@ import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
 
+// Register language aliases so common code fence names resolve to existing parsers.
+// For example, ```jsonc should highlight using the json parser.
+const LANGUAGE_ALIASES: Record<string, string> = {
+  jsonc: "json",
+  json5: "json",
+  jsonl: "json",
+  sh: "bash",
+  zsh: "bash",
+  shell: "bash",
+  "c++": "cpp",
+  "c#": "csharp",
+  yml: "yaml",
+  py: "python",
+  rb: "ruby",
+  rs: "rust",
+  hs: "haskell",
+  js: "javascript",
+  jsx: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  md: "markdown",
+}
+
+for (const [alias, target] of Object.entries(LANGUAGE_ALIASES)) {
+  const targetParser = parsers.parsers.find((p: { filetype: string }) => p.filetype === target)
+  if (targetParser) {
+    addDefaultParsers([{ ...targetParser, filetype: alias }])
+  }
+}
+
 class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
 
