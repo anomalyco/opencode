@@ -8,7 +8,7 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 
-export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => {
+export const SessionQuestionDock: Component<{ request: QuestionRequest }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
 
