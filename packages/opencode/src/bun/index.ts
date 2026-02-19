@@ -69,13 +69,13 @@ export namespace BunProc {
   )
 
   async function readPackageJson(): Promise<PackageJson> {
-    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
-    return file.json().catch(() => ({}))
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    return Filesystem.readJson<PackageJson>(pkgjsonPath).catch(() => ({}))
   }
 
   async function writePackageJson(parsed: PackageJson) {
-    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
-    await Bun.write(file.name!, JSON.stringify(parsed, null, 2))
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    await Filesystem.writeJson(pkgjsonPath, parsed)
   }
 
   async function track(provider: string, pkg: string) {
@@ -97,8 +97,7 @@ export namespace BunProc {
 
   async function resolveVersion(mod: string, version: string) {
     if (version !== "latest") return version
-    const file = Bun.file(path.join(mod, "package.json"))
-    const pkg = await file.json().catch(() => null)
+    const pkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(() => null)
     return pkg?.version ?? version
   }
 
