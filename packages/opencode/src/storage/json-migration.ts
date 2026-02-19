@@ -7,6 +7,7 @@ import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } fro
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
+import { Filesystem } from "../util/filesystem"
 
 export namespace JsonMigration {
   const log = Log.create({ service: "json-migration" })
@@ -82,7 +83,7 @@ export namespace JsonMigration {
       const count = end - start
       const tasks = new Array(count)
       for (let i = 0; i < count; i++) {
-        tasks[i] = Bun.file(files[start + i]).json()
+        tasks[i] = Filesystem.readJson(files[start + i])
       }
       const results = await Promise.allSettled(tasks)
       const items = new Array(count)

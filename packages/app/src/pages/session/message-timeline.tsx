@@ -368,7 +368,7 @@ export function MessageTimeline(props: {
           class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
           style={{
             "--session-title-height": showHeader() ? "40px" : "0px",
-            "--sticky-accordion-top": showHeader() ? "64px" : "0px",
+            "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
           <Show when={showHeader()}>
