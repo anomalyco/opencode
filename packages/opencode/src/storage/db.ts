@@ -26,6 +26,19 @@ const log = Log.create({ service: "db" })
 
 export namespace Database {
   export const Path = path.join(Global.Path.data, "opencode.db")
+
+  export async function backup(tag: string) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "")
+    const backup = path.join(Global.Path.data, `opencode.db.before-${tag}.${stamp}.bak`)
+
+    await Bun.write(backup, Bun.file(Path))
+    for (const ext of ["-wal", "-shm"]) {
+      const file = `${Path}${ext}`
+      if (Bun.file(file).size) await Bun.write(`${backup}${ext}`, Bun.file(file))
+    }
+
+    return backup
+  }
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 

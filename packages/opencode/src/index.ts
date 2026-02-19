@@ -33,6 +33,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { Project } from "./project/project"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -118,6 +119,8 @@ let cli = yargs(hideBin(process.argv))
       }
       process.stderr.write("Database migration complete." + EOL)
     }
+
+    await Project.repairAll()
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")

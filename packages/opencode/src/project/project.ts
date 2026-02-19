@@ -1,9 +1,9 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { Database, eq } from "../storage/db"
+import { Database, eq, inArray, sql } from "../storage/db"
 import { ProjectTable } from "./project.sql"
-import { SessionTable } from "../session/session.sql"
+import { PermissionTable, SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { work } from "../util/queue"
@@ -13,6 +13,7 @@ import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
+import { EOL } from "os"
 import { Glob } from "../util/glob"
 
 export namespace Project {
@@ -66,6 +67,145 @@ export namespace Project {
 
   type Row = typeof ProjectTable.$inferSelect
 
+  function canonical(worktree: string) {
+    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all())
+    if (projects.length === 0) return
+    if (projects.length === 1) return projects[0]
+
+    // Prefer git-backed projects when present. Worktrees/sandboxes are a git feature and
+    // the split-brain project ID issue only occurs for git repos.
+    const gitProjects = projects.filter((p) => p.vcs === "git")
+    const pool = gitProjects.length ? gitProjects : projects
+
+    return Database.use((db) =>
+      pool
+        .map((p) => ({
+          p,
+          sessions:
+            db
+              .select({ count: sql<number>`count(*)` })
+              .from(SessionTable)
+              .where(eq(SessionTable.project_id, p.id))
+              .get()?.count ?? 0,
+        }))
+        .toSorted((a, b) => b.sessions - a.sessions || a.p.time_created - b.p.time_created)[0]?.p,
+    )
+  }
+
+  function duplicateWorktrees() {
+    return Database.use((db) =>
+      db
+        .select({ worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .groupBy(ProjectTable.worktree)
+        // Only consider worktrees that have at least one git-backed project row.
+        // Non-git projects can share a `worktree` path, but they don't participate in
+        // git worktrees/sandboxes and shouldn't be modified by this repair.
+        .having(sql`count(*) > 1 AND sum(case when ${ProjectTable.vcs} = 'git' then 1 else 0 end) > 0`)
+        .all()
+        .map((x) => x.worktree),
+    )
+  }
+
+  function cachePath(commonDir: string) {
+    return path.join(commonDir, "opencode")
+  }
+
+  function merge(existing: Info, dupes: Row[]) {
+    return {
+      name: existing.name ?? dupes.map((d) => d.name).find(Boolean) ?? undefined,
+      commands: existing.commands ?? dupes.map((d) => d.commands).find(Boolean) ?? undefined,
+      icon_url: existing.icon?.url ?? dupes.map((d) => d.icon_url).find(Boolean) ?? undefined,
+      icon_color: existing.icon?.color ?? dupes.map((d) => d.icon_color).find(Boolean) ?? undefined,
+      sandboxes: [...new Set([...existing.sandboxes, ...dupes.flatMap((d) => d.sandboxes)])],
+    }
+  }
+
+  async function commonDir(worktree: string) {
+    if (!Bun.which("git")) return
+    const common = await git(["rev-parse", "--git-common-dir"], { cwd: worktree })
+      .then(async (result) => (await result.text()).trim())
+      .catch(() => undefined)
+    if (!common) return
+    return path.isAbsolute(common) ? common : path.resolve(worktree, common)
+  }
+
+  function writeCache(commonDir: string, id: string) {
+    void Bun.file(cachePath(commonDir))
+      .write(id)
+      .catch(() => undefined)
+  }
+
+  async function repairWorktree(worktree: string) {
+    const row = canonical(worktree)
+    if (!row) return
+    if (row.vcs !== "git") return
+
+    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all())
+    const dupes = projects.filter((p) => p.id !== row.id)
+    if (dupes.length === 0) return
+
+    const meta = merge(fromRow(row), dupes)
+    Database.transaction((db) => {
+      const ids = dupes.map((d) => d.id)
+      const now = Date.now()
+
+      db.update(SessionTable)
+        .set({ project_id: row.id })
+        .where(inArray(SessionTable.project_id, ids))
+        .run()
+
+      const keep = db.select().from(PermissionTable).where(eq(PermissionTable.project_id, row.id)).get()
+      if (!keep) {
+        const first = db.select().from(PermissionTable).where(inArray(PermissionTable.project_id, ids)).get()
+        if (first) {
+          db.insert(PermissionTable)
+            .values({
+              project_id: row.id,
+              data: first.data,
+              time_created: now,
+              time_updated: now,
+            })
+            .run()
+        }
+      }
+      db.delete(PermissionTable)
+        .where(inArray(PermissionTable.project_id, ids))
+        .run()
+
+      db.update(ProjectTable)
+        .set({
+          name: meta.name,
+          icon_url: meta.icon_url,
+          icon_color: meta.icon_color,
+          commands: meta.commands,
+          sandboxes: meta.sandboxes,
+          time_updated: now,
+        })
+        .where(eq(ProjectTable.id, row.id))
+        .run()
+
+      db.delete(ProjectTable)
+        .where(inArray(ProjectTable.id, ids))
+        .run()
+    })
+
+    const common = await commonDir(worktree)
+    if (common) writeCache(common, row.id)
+  }
+
+  export async function repairAll() {
+    const worktrees = duplicateWorktrees()
+    if (worktrees.length === 0) return
+    process.stderr.write(`Found duplicate projects. Creating DB backup...${EOL}`)
+    const backup = await Database.backup("project-repair")
+    process.stderr.write(`DB backup created at: ${backup}${EOL}`)
+    for (const worktree of worktrees) await repairWorktree(worktree)
+    process.stderr.write(
+      `Duplicate project repair complete. To revert: stop opencode and restore ${backup} (and .bak-wal/.bak-shm if present).${EOL}`,
+    )
+  }
+
   export function fromRow(row: Row): Info {
     const icon =
       row.icon_url || row.icon_color
@@ -99,8 +239,9 @@ export namespace Project {
 
         const gitBinary = Bun.which("git")
 
-        // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
+        // cached id calculation (fallback for non-git environments)
+        let id = await Bun.file(path.join(dotgit, "opencode"))
+          .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -113,10 +254,68 @@ export namespace Project {
           }
         }
 
-        // generate id from root commit
+        // Resolve the worktree root for this directory.
+        // NOTE: This must happen before computing a project ID. In worktrees, `.git` can be
+        // per-worktree and `git rev-list ...` can observe different refs depending on cwd.
+        // Normalizing to the top-level and using the git common dir keeps the computed ID
+        // stable across all worktrees for the same repo.
+        const top = await git(["rev-parse", "--show-toplevel"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+          .catch(() => undefined)
+
+        if (!top) {
+          return {
+            id: id ?? "global",
+            sandbox,
+            worktree: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
+        sandbox = top
+
+        // Resolve the git *common* dir so all worktrees share the same project ID cache.
+        const common = await git(["rev-parse", "--git-common-dir"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => (await result.text()).trim())
+          .catch(() => undefined)
+
+        if (!common) {
+          return {
+            id: id ?? "global",
+            sandbox,
+            worktree: sandbox,
+            vcs: "git",
+          }
+        }
+
+        const commonDir = path.isAbsolute(common) ? common : path.resolve(sandbox, common)
+        const worktree = path.dirname(commonDir)
+        const cacheFile = cachePath(commonDir)
+
+        // NOTE: Cache the project ID in the git *common* dir. In git worktrees `.git` is
+        // per-worktree, so caching in `.git/opencode` can cause split-brain project IDs.
+        id =
+          (await Bun.file(cacheFile)
+            .text()
+            .then((x) => x.trim())
+            .catch(() => undefined)) ?? id
+
+        if (id) writeCache(commonDir, id)
+
         if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+          // Generate a stable ID seed for this repo. Using HEAD avoids `--all` ref differences
+          // across worktrees while still resolving the same root commit for the repo history.
+          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
             cwd: sandbox,
+            env: {
+              // Ensure the git command is evaluated against the common dir, not the worktree.
+              GIT_DIR: commonDir,
+              GIT_WORK_TREE: sandbox,
+            },
           })
             .then(async (result) =>
               (await result.text())
@@ -127,71 +326,27 @@ export namespace Project {
             )
             .catch(() => undefined)
 
-          if (!roots) {
-            return {
-              id: "global",
-              worktree: sandbox,
-              sandbox: sandbox,
-              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-            }
-          }
-
-          id = roots[0]
+          id = roots?.[0]
           if (id) {
-            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            writeCache(commonDir, id)
           }
         }
 
         if (!id) {
           return {
             id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
+            sandbox,
+            worktree,
             vcs: "git",
-          }
-        }
-
-        const top = await git(["rev-parse", "--show-toplevel"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => gitpath(sandbox, await result.text()))
-          .catch(() => undefined)
-
-        if (!top) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
-        }
-
-        sandbox = top
-
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
-            // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
-          })
-          .catch(() => undefined)
-
-        if (!worktree) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
         return {
           id,
-          sandbox,
           worktree,
+          sandbox,
           vcs: "git",
+          cache: cacheFile,
         }
       }
 
@@ -203,11 +358,22 @@ export namespace Project {
       }
     })
 
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+    // If the DB already has a project row for this worktree, reuse it to keep existing
+    // sessions/icons/permissions compatible.
+    const canonicalRow = data.id === "global" ? undefined : canonical(data.worktree)
+
+    const id = canonicalRow?.id ?? data.id
+    if (id !== data.id && data.cache) {
+      void Bun.file(data.cache)
+        .write(id)
+        .catch(() => undefined)
+    }
+
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     const existing = await iife(async () => {
       if (row) return fromRow(row)
       const fresh: Info = {
-        id: data.id,
+        id,
         worktree: data.worktree,
         vcs: data.vcs as Info["vcs"],
         sandboxes: [],
@@ -216,8 +382,8 @@ export namespace Project {
           updated: Date.now(),
         },
       }
-      if (data.id !== "global") {
-        await migrateFromGlobal(data.id, data.worktree)
+      if (id !== "global") {
+        await migrateFromGlobal(id, data.worktree)
       }
       return fresh
     })
