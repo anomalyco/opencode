@@ -130,8 +130,6 @@ export const dict = {
   "ui.permission.allowAlways": "Toujours autoriser",
   "ui.permission.allowOnce": "Autoriser une fois",
 
-  "ui.message.expand": "Développer le message",
-  "ui.message.collapse": "Réduire le message",
   "ui.message.copy": "Copier",
   "ui.message.copyMessage": "Copier le message",
   "ui.message.forkMessage": "Bifurquer vers une nouvelle session",

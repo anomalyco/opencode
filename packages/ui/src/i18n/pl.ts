@@ -129,8 +129,6 @@ export const dict = {
   "ui.permission.allowAlways": "Zezwalaj zawsze",
   "ui.permission.allowOnce": "Zezwól raz",
 
-  "ui.message.expand": "Rozwiń wiadomość",
-  "ui.message.collapse": "Zwiń wiadomość",
   "ui.message.copy": "Kopiuj",
   "ui.message.copyMessage": "Kopiuj wiadomość",
   "ui.message.forkMessage": "Rozwidlij do nowej sesji",

@@ -133,8 +133,6 @@ export const dict = {
   "ui.permission.allowAlways": "永遠允許",
   "ui.permission.allowOnce": "允許一次",
 
-  "ui.message.expand": "展開訊息",
-  "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
   "ui.message.copyMessage": "複製訊息",
   "ui.message.forkMessage": "分支到新工作階段",

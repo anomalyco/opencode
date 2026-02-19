@@ -129,8 +129,6 @@ export const dict = {
   "ui.permission.allowAlways": "Tillad altid",
   "ui.permission.allowOnce": "Tillad én gang",
 
-  "ui.message.expand": "Udvid besked",
-  "ui.message.collapse": "Skjul besked",
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier besked",
   "ui.message.forkMessage": "Forgren til ny session",
