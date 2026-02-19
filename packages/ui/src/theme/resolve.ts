@@ -229,7 +229,12 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-on-brand-weaker"] = on(brandb)
   tokens["text-on-brand-strong"] = on(brandh)
 
-  tokens["button-primary-base"] = neutral[11]
+  tokens["text-interactive-weak"] = interactive[isDark ? 8 : 7]
+  tokens["text-success-base"] = success[isDark ? 8 : 7]
+  tokens["text-warning-base"] = warning[isDark ? 8 : 7]
+  tokens["text-critical-base"] = error[isDark ? 8 : 8]
+  tokens["text-info-base"] = info[isDark ? 8 : 7]
+
   tokens["button-secondary-base"] = isDark ? neutral[2] : neutral[0]
   tokens["button-secondary-hover"] = isDark ? neutral[3] : neutral[1]
   tokens["button-ghost-hover"] = neutralAlpha[1]

@@ -3,7 +3,9 @@ import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "./collapsible"
-import { Icon, IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
+import { Spinner } from "./spinner"
+import { TextShimmer } from "./text-shimmer"
 import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
 
 export type TriggerTitle = {
@@ -170,29 +172,22 @@ export function BasicTool(props: BasicToolProps) {
     setOpen(value)
   }
 
-  const trigger = () => (
-    <div
-      data-component="tool-trigger"
-      data-clickable={props.clickable ? "true" : undefined}
-      data-hide-details={props.hideDetails ? "true" : undefined}
-    >
-      <div data-slot="basic-tool-tool-trigger-content">
-        <div data-slot="basic-tool-tool-info">
-          <Switch>
-            <Match when={isTriggerTitle(props.trigger) && props.trigger}>
-              {(title) => (
-                <div data-slot="basic-tool-tool-info-structured">
-                  <div data-slot="basic-tool-tool-info-main">
-                    <span
-                      data-slot="basic-tool-tool-title"
-                      classList={{
-                        [title().titleClass ?? ""]: !!title().titleClass,
-                      }}
-                    >
-                      <TextShimmer text={title().title} active={pending()} />
-                    </span>
-                    <Show when={!pending()}>
-                      <Show when={title().subtitle}>
+  return (
+    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+      <Collapsible.Trigger>
+        <div data-component="tool-trigger">
+          <div data-slot="basic-tool-tool-trigger-content">
+            <div data-slot="basic-tool-tool-indicator">
+              <Show when={pending()} fallback={<Icon name={props.icon} size="small" />}>
+                <Spinner />
+              </Show>
+            </div>
+            <div data-slot="basic-tool-tool-info">
+              <Switch>
+                <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+                  {(trigger) => (
+                    <div data-slot="basic-tool-tool-info-structured">
+                      <div data-slot="basic-tool-tool-info-main">
                         <span
                           data-slot="basic-tool-tool-subtitle"
                           classList={{

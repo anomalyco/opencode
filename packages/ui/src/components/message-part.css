@@ -174,6 +174,52 @@
     }
 
     max-width: 100%;
+
+    [data-component="markdown"] {
+      white-space: normal;
+      line-height: var(--line-height-large);
+
+      p {
+        margin-bottom: 0.5rem;
+      }
+
+      ul,
+      ol {
+        margin-top: 0.25rem;
+        margin-bottom: 0.5rem;
+      }
+
+      li {
+        margin-bottom: 0.25rem;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin-top: 1rem;
+        margin-bottom: 0.375rem;
+      }
+
+      blockquote {
+        margin: 0.75rem 0;
+      }
+
+      pre {
+        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      table {
+        margin: 0.75rem 0;
+      }
+
+      hr {
+        margin: 1rem 0;
+      }
+    }
   }
 
   [data-slot="user-message-meta-bar"] {
@@ -543,6 +589,10 @@
     flex-shrink: 0;
     text-transform: capitalize;
     color: var(--text-strong);
+
+    &.tool-edit {
+      color: var(--text-warning-base);
+    }
   }
 
   [data-slot="message-part-title-filename"] {
@@ -708,6 +758,23 @@
   cursor: default;
 
   [data-slot="context-tool-group-title"] {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-strong);
+  }
+
+  [data-slot="context-tool-group-label"] {
+    flex-shrink: 0;
+    color: var(--text-interactive-weak);
+  }
+
+  [data-slot="context-tool-group-summary"] {
     flex-shrink: 1;
     min-width: 0;
   }
@@ -719,17 +786,19 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding-top: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-  padding-left: 12px;
+  padding: 4px 0 0 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
-    padding: 0;
+    padding: 4px 0;
+    border-top: 1px solid
+      light-dark(
+        color-mix(in oklch, var(--border-weak-base) 30%, transparent),
+        color-mix(in oklch, var(--border-weak-base) 20%, transparent)
+      );
   }
 }
 

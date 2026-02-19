@@ -941,13 +941,7 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const summary = createMemo(() => contextToolSummary(props.parts))
 
   return (
-    <Collapsible
-      open={open()}
-      onOpenChange={setOpen}
-      variant="ghost"
-      class="tool-collapsible"
-      data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
-    >
+    <Collapsible open={open()} onOpenChange={setOpen} class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
           <span
@@ -1009,8 +1003,10 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                       <div data-slot="basic-tool-tool-info">
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
-                              <TextShimmer text={trigger().title} active={running()} />
+                            <span data-slot="basic-tool-tool-title" class="tool-read">
+                              <Show when={running} fallback={trigger.title}>
+                                <TextShimmer text={trigger.title} />
+                              </Show>
                             </span>
                             <Show when={!running() && trigger().subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
@@ -1591,6 +1587,7 @@ ToolRegistry.register({
           icon="glasses"
           trigger={{
             title: i18n.t("ui.tool.read"),
+            titleClass: "tool-read",
             subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
             args,
           }}
@@ -1618,7 +1615,11 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="bullet-list"
-        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+        trigger={{
+          title: i18n.t("ui.tool.list"),
+          titleClass: "tool-read",
+          subtitle: getDirectory(props.input.path || "/"),
+        }}
       >
         <Show when={props.output}>
           <div data-component="tool-output" data-scrollable>
@@ -1640,6 +1641,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.glob"),
+          titleClass: "tool-read",
           subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
@@ -1667,6 +1669,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.grep"),
+          titleClass: "tool-read",
           subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
@@ -1699,8 +1702,10 @@ ToolRegistry.register({
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
+              <span data-slot="basic-tool-tool-title" class="tool-read">
+                <Show when={pending()} fallback={i18n.t("ui.tool.webfetch")}>
+                  <TextShimmer text={i18n.t("ui.tool.webfetch")} />
+                </Show>
               </span>
               <Show when={!pending() && url()}>
                 <a
@@ -1864,18 +1869,11 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
-        trigger={
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
-              </span>
-              <Show when={!pending() && props.input.description}>
-                <ShellSubmessage text={props.input.description} animate={sawPending} />
-              </Show>
-            </div>
-          </div>
-        }
+        trigger={{
+          title: i18n.t("ui.tool.shell"),
+          titleClass: "tool-exec",
+          subtitle: props.input.description,
+        }}
       >
         <div data-component="bash-output">
           <div data-slot="bash-copy">
@@ -1940,20 +1938,17 @@ ToolRegistry.register({
     })
 
     return (
-      <div data-component="edit-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          defer={props.deferContent !== false}
-          trigger={
-            <div data-component="edit-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        defer
+        trigger={
+          <div data-component="edit-trigger">
+            <div data-slot="message-part-title-area">
+              <div data-slot="message-part-title">
+                <span data-slot="message-part-title-text" class="tool-edit">
+                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
                   </Show>
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
@@ -2001,20 +1996,17 @@ ToolRegistry.register({
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
-      <div data-component="write-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          defer={props.deferContent !== false}
-          trigger={
-            <div data-component="write-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        defer
+        trigger={
+          <div data-component="write-trigger">
+            <div data-slot="message-part-title-area">
+              <div data-slot="message-part-title">
+                <span data-slot="message-part-title-text" class="tool-edit">
+                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
                   </Show>
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
@@ -2080,17 +2072,93 @@ ToolRegistry.register({
     })
 
     return (
-      <Show
-        when={single()}
-        fallback={
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              icon="code-lines"
-              defer={props.deferContent !== false}
-              trigger={{
-                title: i18n.t("ui.tool.patch"),
-                subtitle: subtitle(),
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        defer
+        trigger={{
+          title: i18n.t("ui.tool.patch"),
+          titleClass: "tool-edit",
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={files().length > 0}>
+          <Accordion
+            multiple
+            data-scope="apply-patch"
+            value={expanded()}
+            onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+          >
+            <For each={files()}>
+              {(file) => {
+                const active = createMemo(() => expanded().includes(file.filePath))
+                const [visible, setVisible] = createSignal(false)
+
+                createEffect(() => {
+                  if (!active()) {
+                    setVisible(false)
+                    return
+                  }
+
+                  requestAnimationFrame(() => {
+                    if (!active()) return
+                    setVisible(true)
+                  })
+                })
+
+                return (
+                  <Accordion.Item value={file.filePath} data-type={file.type}>
+                    <Accordion.Header>
+                      <Accordion.Trigger>
+                        <div data-slot="apply-patch-trigger-content">
+                          <div data-slot="apply-patch-file-info">
+                            <FileIcon node={{ path: file.relativePath, type: "file" }} />
+                            <div data-slot="apply-patch-file-name-container">
+                              <Show when={file.relativePath.includes("/")}>
+                                <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
+                              </Show>
+                              <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
+                            </div>
+                          </div>
+                          <div data-slot="apply-patch-trigger-actions">
+                            <Switch>
+                              <Match when={file.type === "add"}>
+                                <span data-slot="apply-patch-change" data-type="added">
+                                  {i18n.t("ui.patch.action.created")}
+                                </span>
+                              </Match>
+                              <Match when={file.type === "delete"}>
+                                <span data-slot="apply-patch-change" data-type="removed">
+                                  {i18n.t("ui.patch.action.deleted")}
+                                </span>
+                              </Match>
+                              <Match when={file.type === "move"}>
+                                <span data-slot="apply-patch-change" data-type="modified">
+                                  {i18n.t("ui.patch.action.moved")}
+                                </span>
+                              </Match>
+                              <Match when={true}>
+                                <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                              </Match>
+                            </Switch>
+                            <Icon name="chevron-grabber-vertical" size="small" />
+                          </div>
+                        </div>
+                      </Accordion.Trigger>
+                    </Accordion.Header>
+                    <Accordion.Content>
+                      <Show when={visible()}>
+                        <div data-component="apply-patch-file-diff">
+                          <Dynamic
+                            component={diffComponent}
+                            before={{ name: file.filePath, contents: file.before }}
+                            after={{ name: file.movePath ?? file.filePath, contents: file.after }}
+                          />
+                        </div>
+                      </Show>
+                    </Accordion.Content>
+                  </Accordion.Item>
+                )
               }}
             >
               <Show when={files().length > 0}>
@@ -2273,6 +2341,7 @@ ToolRegistry.register({
         icon="checklist"
         trigger={{
           title: i18n.t("ui.tool.todos"),
+          titleClass: "tool-interact",
           subtitle: subtitle(),
         }}
       >
@@ -2319,6 +2388,7 @@ ToolRegistry.register({
         icon="bubble-5"
         trigger={{
           title: i18n.t("ui.tool.questions"),
+          titleClass: "tool-interact",
           subtitle: subtitle(),
         }}
       >
