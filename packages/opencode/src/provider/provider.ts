@@ -940,6 +940,46 @@ export namespace Provider {
           },
         },
       },
+      "claude-sonnet-4-6": {
+        id: "claude-sonnet-4-6",
+        providerID: "kiro",
+        name: "Claude Sonnet 4.6",
+        family: "claude-sonnet",
+        api: {
+          id: "claude-sonnet-4-6",
+          url: "https://codewhisperer.us-east-1.amazonaws.com",
+          npm: "@ai-sdk/kiro",
+        },
+        status: "active",
+        headers: {},
+        options: {},
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        limit: { context: 200000, output: 64000 },
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: true,
+        },
+        release_date: "2026-02-20",
+        variants: {
+          high: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 16000,
+            },
+          },
+          max: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 31999,
+            },
+          },
+        },
+      },
       "claude-haiku-4-5": {
         id: "claude-haiku-4-5",
         providerID: "kiro",
