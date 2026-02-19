@@ -333,11 +333,8 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      // Resolve the agent early so we can prefer its configured model over the
-      // model stored on the user message (which may be a flat-plan model when
-      // the message was injected by the compaction resume path).
       const agent = await Agent.get(lastUser.agent)
-      const resolvedModel = agent.model ?? lastUser.model
+      const resolvedModel = lastUser.model
       const model = await Provider.getModel(resolvedModel.providerID, resolvedModel.modelID).catch((e) => {
         if (Provider.ModelNotFoundError.isInstance(e)) {
           const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
