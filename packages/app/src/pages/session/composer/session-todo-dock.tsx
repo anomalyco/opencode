@@ -1,5 +1,6 @@
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
+import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -54,13 +55,14 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
   const preview = createMemo(() => active()?.content ?? "")
 
   return (
-    <div
+    <DockTray
+      data-component="session-todo-dock"
       classList={{
-        "bg-background-base border border-border-weak-base relative z-0 rounded-[12px] overflow-clip": true,
         "h-[78px]": store.collapsed,
       }}
     >
       <div
+        data-action="session-todo-toggle"
         class="pl-3 pr-2 py-2 flex items-center gap-2"
         role="button"
         tabIndex={0}
@@ -81,6 +83,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         </Show>
         <div classList={{ "ml-auto": !store.collapsed, "ml-1": store.collapsed }}>
           <IconButton
+            data-action="session-todo-toggle-button"
             icon="chevron-down"
             size="normal"
             variant="ghost"
@@ -98,10 +101,10 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
         </div>
       </div>
 
-      <div hidden={store.collapsed}>
+      <div data-slot="session-todo-list" hidden={store.collapsed}>
         <TodoList todos={props.todos} open={!store.collapsed} />
       </div>
-    </div>
+    </DockTray>
   )
 }
 
