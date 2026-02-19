@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import { Discovery } from "../../src/skill/discovery"
+import { Filesystem } from "../../src/util/filesystem"
 import path from "path"
 
 const CLOUDFLARE_SKILLS_URL = "https://developers.cloudflare.com/.well-known/skills/"
@@ -11,7 +12,7 @@ describe("Discovery.pull", () => {
     for (const dir of dirs) {
       expect(dir).toStartWith(Discovery.dir())
       const md = path.join(dir, "SKILL.md")
-      expect(await Bun.file(md).exists()).toBe(true)
+      expect(await Filesystem.exists(md)).toBe(true)
     }
   }, 30_000)
 
@@ -20,7 +21,7 @@ describe("Discovery.pull", () => {
     expect(dirs.length).toBeGreaterThan(0)
     for (const dir of dirs) {
       const md = path.join(dir, "SKILL.md")
-      expect(await Bun.file(md).exists()).toBe(true)
+      expect(await Filesystem.exists(md)).toBe(true)
     }
   }, 30_000)
 
@@ -40,7 +41,7 @@ describe("Discovery.pull", () => {
     const agentsSdk = dirs.find((d) => d.endsWith("/agents-sdk"))
     if (agentsSdk) {
       const refs = path.join(agentsSdk, "references")
-      expect(await Bun.file(path.join(agentsSdk, "SKILL.md")).exists()).toBe(true)
+      expect(await Filesystem.exists(path.join(agentsSdk, "SKILL.md"))).toBe(true)
       // agents-sdk has reference files per the index
       const refDir = await Array.fromAsync(new Bun.Glob("**/*.md").scan({ cwd: refs, onlyFiles: true }))
       expect(refDir.length).toBeGreaterThan(0)
