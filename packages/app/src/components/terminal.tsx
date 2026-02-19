@@ -320,8 +320,6 @@ export const Terminal = (props: TerminalProps) => {
       const mod = loaded.mod
       const g = loaded.ghostty
 
-      const once = { value: false }
-
       const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
       const restoreSize =
         restore &&
@@ -416,20 +414,28 @@ export const Terminal = (props: TerminalProps) => {
         cleanups.push(() => window.removeEventListener("resize", handleResize))
       }
 
-      if (restore && restoreSize) {
-        t.write(restore, () => {
-          fit.fit()
-          scheduleSize(t.cols, t.rows)
-          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
-          startResize()
+      const write = (data: string) =>
+        new Promise<void>((resolve) => {
+          if (!output) {
+            resolve()
+            return
+          }
+          output.push(data)
+          output.flush(resolve)
         })
+
+      if (restore && restoreSize) {
+        await write(restore)
+        fit.fit()
+        scheduleSize(t.cols, t.rows)
+        if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+        startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
-          t.write(restore, () => {
-            if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
-          })
+          await write(restore)
+          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
         }
         startResize()
       }
@@ -438,38 +444,32 @@ export const Terminal = (props: TerminalProps) => {
       // console.log("Scroll position:", ydisp)
       // })
 
+      const once = { value: false }
+      let closing = false
+
       const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
       url.searchParams.set("directory", sdk.directory)
       url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       url.username = server.current?.http.username ?? ""
       url.password = server.current?.http.password ?? ""
+
       const socket = new WebSocket(url)
       socket.binaryType = "arraybuffer"
       ws = socket
-      cleanups.push(() => {
-        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
-      })
-      if (disposed) {
-        cleanup()
-        return
-      }
 
       const handleOpen = () => {
         local.onConnect?.()
         scheduleSize(t.cols, t.rows)
       }
       socket.addEventListener("open", handleOpen)
-      cleanups.push(() => socket.removeEventListener("open", handleOpen))
-
       if (socket.readyState === WebSocket.OPEN) handleOpen()
 
       const decoder = new TextDecoder()
-
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
+        if (closing) return
         if (event.data instanceof ArrayBuffer) {
-          // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
           const bytes = new Uint8Array(event.data)
           if (bytes[0] !== 0) return
           const json = decoder.decode(bytes.subarray(1))
@@ -491,20 +491,20 @@ export const Terminal = (props: TerminalProps) => {
         cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
-      cleanups.push(() => socket.removeEventListener("message", handleMessage))
 
       const handleError = (error: Event) => {
         if (disposed) return
+        if (closing) return
         if (once.value) return
         once.value = true
         console.error("WebSocket error:", error)
         local.onConnectError?.(error)
       }
       socket.addEventListener("error", handleError)
-      cleanups.push(() => socket.removeEventListener("error", handleError))
 
       const handleClose = (event: CloseEvent) => {
         if (disposed) return
+        if (closing) return
         // Normal closure (code 1000) means PTY process exited - server event handles cleanup
         // For other codes (network issues, server restart), trigger error handler
         if (event.code !== 1000) {
@@ -514,7 +514,15 @@ export const Terminal = (props: TerminalProps) => {
         }
       }
       socket.addEventListener("close", handleClose)
-      cleanups.push(() => socket.removeEventListener("close", handleClose))
+
+      cleanups.push(() => {
+        closing = true
+        socket.removeEventListener("open", handleOpen)
+        socket.removeEventListener("message", handleMessage)
+        socket.removeEventListener("error", handleError)
+        socket.removeEventListener("close", handleClose)
+        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close(1000)
+      })
     }
 
     void run().catch((err) => {
