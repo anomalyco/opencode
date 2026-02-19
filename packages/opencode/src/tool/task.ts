@@ -108,6 +108,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         providerID: msg.info.providerID,
       }
 
+      // Inherit variant from parent user message when subagent has no explicit variant
+      const parentUser = await MessageV2.get({ sessionID: ctx.sessionID, messageID: msg.info.parentID })
+      const variant = !agent.variant && parentUser.info.role === "user" ? parentUser.info.variant : undefined
+
       ctx.metadata({
         title: params.description,
         metadata: {
@@ -133,6 +137,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
+        variant,
         tools: {
           todowrite: false,
           todoread: false,
