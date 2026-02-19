@@ -1288,7 +1288,6 @@
 }
 
 [data-component="apply-patch-file-diff"] {
-  border-top: 1px solid var(--border-weaker-base);
   max-height: 420px;
   overflow-y: auto;
   scrollbar-width: none;
