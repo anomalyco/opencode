@@ -370,7 +370,6 @@ describe("Project.fromDirectory with worktrees", () => {
   test("does not repair non-git duplicate projects", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
-
     const stamp = `${Date.now()}-${Math.random()}`
 
     Database.transaction((db) => {
@@ -395,7 +394,6 @@ describe("Project.fromDirectory with worktrees", () => {
         })
         .run()
     })
-
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
     await p.repairAll()
