@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
+import { Glob } from "./glob"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -77,13 +78,11 @@ export namespace Log {
   }
 
   async function cleanup(dir: string) {
-    const glob = new Bun.Glob("????-??-??T??????.log")
-    const files = await Array.fromAsync(
-      glob.scan({
-        cwd: dir,
-        absolute: true,
-      }),
-    )
+    const files = await Glob.scan("????-??-??T??????.log", {
+      cwd: dir,
+      absolute: true,
+      include: "file",
+    })
     if (files.length <= 5) return
 
     const filesToDelete = files.slice(0, -10)
