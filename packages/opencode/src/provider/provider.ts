@@ -505,7 +505,7 @@ export namespace Provider {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -646,13 +646,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -744,10 +744,12 @@ export namespace Provider {
     // Open WebUI: Auto-discover models from instance
     if (!database["openwebui"]) {
       const openwebuiConfig = config.provider?.["openwebui"]
+      log.info("Open WebUI config", { config: openwebuiConfig })
       const openwebuiBaseURL = (openwebuiConfig?.options?.baseURL ?? Env.get("OPEN_WEBUI_BASE_URL"))?.replace(
         /\/+$/,
         "",
       )
+      log.info("Open WebUI baseURL", { baseURL: openwebuiBaseURL })
       const openwebuiApiKey = await (async () => {
         if (openwebuiConfig?.options?.apiKey) return openwebuiConfig.options.apiKey
         const envKey = Env.get("OPEN_WEBUI_API_KEY")
@@ -756,74 +758,100 @@ export namespace Provider {
         if (auth?.type === "api") return auth.key
         return undefined
       })()
+      log.info("Open WebUI apiKey resolved", { hasKey: !!openwebuiApiKey })
 
       if (openwebuiBaseURL) {
         const apiBase = openwebuiBaseURL.endsWith("/api") ? openwebuiBaseURL : `${openwebuiBaseURL}/api`
         const models: Record<string, Model> = {}
 
         if (openwebuiApiKey) {
-          try {
-            const response = await fetch(`${apiBase}/models`, {
-              headers: {
-                Authorization: `Bearer ${openwebuiApiKey}`,
-              },
-              signal: AbortSignal.timeout(10_000),
-            })
+          const endpointsToTry = [
+            `${apiBase}/models`,
+            openwebuiBaseURL.endsWith('/api/v1') ? `${openwebuiBaseURL}/models` : `${openwebuiBaseURL}/api/v1/models`,
+            openwebuiBaseURL.endsWith('/v1') ? `${openwebuiBaseURL}/models` : `${openwebuiBaseURL}/v1/models`,
+            `${apiBase}/tags`
+          ]
 
-            if (response.ok) {
-              const data = (await response.json()) as {
-                data?: Array<{ id: string; name?: string }>
-              }
+          // De-duplicate endpoints
+          const uniqueEndpoints = [...new Set(endpointsToTry)]
 
-              for (const entry of data.data ?? []) {
-                const modelID = entry.id
-                models[modelID] = {
-                  id: modelID,
-                  providerID: "openwebui",
-                  name: entry.name ?? modelID,
-                  api: {
+          for (const endpoint of uniqueEndpoints) {
+            if (Object.keys(models).length > 0) break
+
+            try {
+              const response = await fetch(endpoint, {
+                headers: {
+                  Authorization: `Bearer ${openwebuiApiKey}`,
+                },
+                signal: AbortSignal.timeout(5_000),
+              })
+
+              log.info("Open WebUI fetch response", { endpoint, status: response.status, ok: response.ok })
+              if (response.ok) {
+                const data = await response.json() as any
+
+                let entries: Array<{ id?: string; name?: string }> = []
+                if (Array.isArray(data)) {
+                  entries = data
+                } else if (data && typeof data === 'object') {
+                  if (Array.isArray(data.data)) entries = data.data
+                  else if (Array.isArray(data.models)) entries = data.models
+                }
+
+                log.info("Open WebUI response data", { endpoint, hasData: entries.length > 0, count: entries.length })
+
+                const resolvedBaseURL = endpoint.endsWith('/models')
+                  ? endpoint.slice(0, -7)
+                  : endpoint.endsWith('/tags')
+                    ? endpoint.slice(0, -5)
+                    : apiBase
+
+                for (const entry of entries) {
+                  const modelID = entry.id || entry.name
+                  if (!modelID) continue
+                  models[modelID] = {
                     id: modelID,
-                    url: apiBase,
-                    npm: "@ai-sdk/openai-compatible",
-                  },
-                  status: "active",
-                  headers: {},
-                  options: {},
-                  cost: {
-                    input: 0,
-                    output: 0,
-                    cache: { read: 0, write: 0 },
-                  },
-                  limit: {
-                    context: 128_000,
-                    output: 4_096,
-                  },
-                  capabilities: {
-                    temperature: true,
-                    reasoning: false,
-                    attachment: false,
-                    toolcall: true,
-                    input: { text: true, audio: false, image: false, video: false, pdf: false },
-                    output: { text: true, audio: false, image: false, video: false, pdf: false },
-                    interleaved: false,
-                  },
-                  release_date: "",
-                  variants: {},
+                    providerID: "openwebui",
+                    name: entry.name ?? modelID,
+                    api: {
+                      id: modelID,
+
+                      url: resolvedBaseURL,
+                      npm: "@ai-sdk/openai-compatible",
+                    },
+                    status: "active",
+                    headers: {},
+                    options: {},
+                    cost: {
+                      input: 0,
+                      output: 0,
+                      cache: { read: 0, write: 0 },
+                    },
+                    limit: {
+                      context: 128_000,
+                      output: 4_096,
+                    },
+                    capabilities: {
+                      temperature: true,
+                      reasoning: false,
+                      attachment: false,
+                      toolcall: true,
+                      input: { text: true, audio: false, image: false, video: false, pdf: false },
+                      output: { text: true, audio: false, image: false, video: false, pdf: false },
+                      interleaved: false,
+                    },
+                    release_date: "",
+                    variants: {},
+                  }
                 }
               }
-              if (Object.keys(models).length === 0) {
-                log.error("Open WebUI instance returned no models", {
-                  url: `${apiBase}/models`,
-                })
-              }
-            } else {
-              log.error("Open WebUI models endpoint returned non-ok status", {
-                status: response.status,
-                url: `${apiBase}/models`,
-              })
+            } catch (e) {
+              log.error("Failed to fetch Open WebUI models", { endpoint, error: e })
             }
-          } catch (e) {
-            log.error("Failed to fetch Open WebUI models", { error: e })
+          }
+
+          if (Object.keys(models).length === 0) {
+            log.error("Open WebUI instance returned no models after trying all endpoints", { baseURL: openwebuiBaseURL })
           }
         }
 
@@ -1097,13 +1125,25 @@ export namespace Provider {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      if (model.providerID === "openwebui" && model.api.url) {
+        options["baseURL"] = model.api.url
+      } else if (!options["baseURL"]) {
+        options["baseURL"] = model.api.url
+      }
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
           ...options["headers"],
           ...model.headers,
         }
+
+      // Workaround for Bun ZlibError on some openwebui instances
+      if (model.providerID === "openwebui") {
+        options["headers"] = {
+          ...options["headers"],
+          "Accept-Encoding": "identity"
+        }
+      }
 
       const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
@@ -1126,6 +1166,48 @@ export namespace Provider {
           opts.signal = combined
         }
 
+        // Workaround for Bun ZlibError: some openwebui + reverse proxy instances 
+        // force chunked gzip despite headers, which crashes Bun's native fetch.
+        // We use node-fetch for openwebui exclusively to bypass this engine bug.
+        if (model.providerID === "openwebui") {
+          const nodeFetch = require("node-fetch").default;
+          // node-fetch has slightly different typings but handles the AI SDK requests perfectly
+          // and its zlib decompression is rock solid for chunked SSE streams.
+          const res = await nodeFetch(input, {
+            ...opts,
+            timeout: undefined // node-fetch uses different timeout mechanism, AI SDK AbortSignal handles it
+          } as any);
+
+          // We must wrap the node-fetch response in a native Response 
+          // to satisfy AI SDK's expectation of standard Web API Response streams
+          const bodyStream = new ReadableStream({
+            start(controller) {
+              res.body.on('data', (chunk: Buffer) => controller.enqueue(chunk));
+              res.body.on('end', () => controller.close());
+              res.body.on('error', (err: Error) => controller.error(err));
+            },
+            cancel() { res.body.destroy(); }
+          });
+
+          const webRes = new Response(bodyStream, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: new Headers(res.headers.raw() as any)
+          });
+
+          if (!webRes.ok) {
+            await webRes.clone()
+              .text()
+              .then((text) => {
+                const msg = `Open WebUI Error (${webRes.status} ${webRes.statusText}): ${text}`;
+                log.error(msg);
+                Object.defineProperty(webRes, 'statusText', { value: msg });
+              })
+              .catch(() => { })
+          }
+          return webRes;
+        }
+
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
@@ -1144,10 +1226,26 @@ export namespace Provider {
           }
         }
 
+        // Capture and expose raw Open WebUI API errors (e.g., 429 Rate Limit) 
+        // before AI SDK drops them and only shows "AI_RetryError"
         return fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
+        }).then(async (res: Response) => {
+          if (!res.ok && model.providerID === "openwebui") {
+            const clone = res.clone();
+            try {
+              const text = await clone.text();
+              const msg = `Open WebUI Error (${res.status} ${res.statusText}): ${text}`;
+              log.error(msg);
+              // AI SDK often swallows body text on 429. Injecting into statusText helps it surface.
+              Object.defineProperty(res, 'statusText', { value: msg });
+            } catch (e) {
+              // ignore
+            }
+          }
+          return res;
         })
       }
 

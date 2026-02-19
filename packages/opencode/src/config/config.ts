@@ -124,12 +124,12 @@ export namespace Config {
       // Only scan project .opencode/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
-            Filesystem.up({
-              targets: [".opencode"],
-              start: Instance.directory,
-              stop: Instance.worktree,
-            }),
-          )
+          Filesystem.up({
+            targets: [".opencode"],
+            start: Instance.directory,
+            stop: Instance.worktree,
+          }),
+        )
         : []),
       // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
@@ -276,7 +276,7 @@ export namespace Config {
         ...(proxied() ? ["--no-cache"] : []),
       ],
       { cwd: dir },
-    ).catch(() => {})
+    ).catch(() => { })
   }
 
   async function isWritable(dir: string) {
@@ -1221,7 +1221,7 @@ export namespace Config {
           await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
           await fs.unlink(legacy)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
     return result
@@ -1312,7 +1312,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(configFilepath, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1320,7 +1320,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data
@@ -1366,9 +1366,22 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    // Determine existing config file or use opencode.json as default
+    const candidates = ["opencode.jsonc", "opencode.json"].map(f => path.join(Instance.directory, f))
+    const filepath = candidates.find(existsSync) || candidates[1]
+
+    let existing;
+    if (filepath.endsWith(".jsonc")) {
+      const before = await Bun.file(filepath).text().catch((e) => {
+        if (e.code === "ENOENT") return "{}"
+        throw e
+      })
+      const updated = patchJsonc(before, config)
+      await Bun.write(filepath, updated)
+    } else {
+      existing = await loadFile(filepath)
+      await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    }
     await Instance.dispose()
   }
 
