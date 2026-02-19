@@ -2,6 +2,7 @@ import { Component } from "solid-js"
 import { useLanguage } from "@/context/language"
 
 export const SettingsCommands: Component = () => {
+  // TODO: Replace this placeholder with full commands settings controls.
   const language = useLanguage()
 
   return (

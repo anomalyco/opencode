@@ -1,0 +1,393 @@
+---
+title: TUI
+description: Korištenje korisničkog interfejsa OpenCode terminala.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
+
+Pokretanje OpenCode pokreće TUI za trenutni direktorij.
+
+```bash
+opencode
+```
+
+Ili ga možete pokrenuti za određeni radni direktorij.
+
+```bash
+opencode /path/to/project
+```
+
+Kada uđete u TUI, možete to zatražiti porukom.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## Reference datoteka
+
+Možete referencirati datoteke u svojim porukama koristeći `@`. Ovo vrši nejasnu pretragu datoteka u trenutnom radnom direktoriju.
+
+:::tip
+Također možete koristiti `@` da referencirate datoteke u svojim porukama.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+Sadržaj datoteke se automatski dodaje u razgovor.
+
+---
+
+## Bash naredbe
+
+Započnite poruku sa `!` da pokrenete komandu ljuske.
+
+```bash frame="none"
+!ls -la
+```
+
+Izlaz naredbe se dodaje u razgovor kao rezultat alata.
+
+---
+
+## Naredbe
+
+Kada koristite OpenCode TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
+
+```bash frame="none"
+/help
+```
+
+Većina naredbi također ima vezu pomoću `ctrl+x` kao vodeće tipke, gdje je `ctrl+x` zadani vodeći ključ. [Saznajte više](/docs/keybinds).
+
+Ovdje su sve dostupne komande kose crte:
+
+---
+
+### connect
+
+Dodajte provajdera u OpenCode. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Sažimanje trenutne sesije. _Alias_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Tastatura:** `ctrl+x c`
+
+---
+
+### details
+
+Prebacite detalje o izvršavanju alata.
+
+```bash frame="none"
+/details
+```
+
+**Tastatura:** `ctrl+x d`
+
+---
+
+### editor
+
+Otvorite vanjski uređivač za sastavljanje poruka. Koristi editor postavljen u vašoj varijabli okruženja `EDITOR`. [Saznajte više](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Tastatura:** `ctrl+x e`
+
+---
+
+### exit
+
+Izađite iz OpenCode. _Aliases_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Tastatura:** `ctrl+x q`
+
+---
+
+### export
+
+Izvezite trenutni razgovor u Markdown i otvorite ga u zadanom uređivaču. Koristi editor postavljen u vašoj varijabli okruženja `EDITOR`. [Saznajte više](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Tastatura:** `ctrl+x x`
+
+---
+
+### help
+
+Prikaži dijalog pomoći.
+
+```bash frame="none"
+/help
+```
+
+**Tastatura:** `ctrl+x h`
+
+---
+
+### init
+
+Kreirajte ili ažurirajte datoteku `AGENTS.md`. [Saznajte više](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Tastatura:** `ctrl+x i`
+
+---
+
+### models
+
+Navedite dostupne modele.
+
+```bash frame="none"
+/models
+```
+
+**Tastatura:** `ctrl+x m`
+
+---
+
+### new
+
+Započnite novu sesiju. _Alias_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Tastatura:** `ctrl+x n`
+
+---
+
+### redo
+
+Ponovite prethodno poništenu poruku. Dostupno samo nakon korištenja `/undo`.
+
+:::tip
+Sve promjene fajla će također biti vraćene.
+:::
+
+Interno, ovo koristi Git za upravljanje promjenama datoteke. Dakle, vaš projekat **treba
+biti Git spremište**.
+
+```bash frame="none"
+/redo
+```
+
+**Tastatura:** `ctrl+x r`
+
+---
+
+### sessions
+
+Listanje i prebacivanje između sesija. _Aliases_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Tastatura:** `ctrl+x l`
+
+---
+
+### share
+
+Podijelite trenutnu sesiju. [Saznajte više](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Tastatura:** `ctrl+x s`
+
+---
+
+### themes
+
+Navedite dostupne teme.
+
+```bash frame="none"
+/theme
+```
+
+**Tastatura:** `ctrl+x t`
+
+---
+
+### thinking
+
+Uključite/isključite vidljivost blokova razmišljanja/rezoniranja u razgovoru. Kada je omogućeno, možete vidjeti proces rezonovanja modela za modele koji podržavaju prošireno razmišljanje.
+
+:::note
+Ova naredba samo kontrolira da li se blokovi razmišljanja **prikažu** - ne omogućava niti onemogućuje mogućnosti razmišljanja modela. Da biste uključili stvarne mogućnosti zaključivanja, koristite `ctrl+t` za kretanje kroz varijante modela.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Poništi posljednju poruku u razgovoru. Uklanja najnoviju korisničku poruku, sve naknadne odgovore i sve promjene datoteke.
+
+:::tip
+Sve promjene u fajlu će također biti poništene.
+:::
+
+Interno, ovo koristi Git za upravljanje promjenama datoteke. Dakle, vaš projekat **treba
+biti Git spremište**.
+
+```bash frame="none"
+/undo
+```
+
+**Tastatura:** `ctrl+x u`
+
+---
+
+### unshare
+
+Poništi dijeljenje trenutne sesije. [Saznajte više](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Podešavanje uređivača
+
+Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabli okruženja `EDITOR`.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    Da biste ga učinili trajnim, dodajte ovo u svoj shell profil;
+    `~/.bashrc`, `~/.zshrc`, itd.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    Da biste ga učinili trajnim, koristite **Svojstva sistema** > **Okruženje
+    Varijable**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    Da biste ga učinili trajnim, dodajte ovo u svoj PowerShell profil.
+
+  </TabItem>
+</Tabs>
+
+Popularne opcije uređivača uključuju:
+
+- `code` - ​​Visual Studio Code
+- `cursor` - ​​Cursor
+- `windsurf` - ​​Windsurf
+- `nvim` - ​​Neovim editorom
+- `vim` - ​​Vim editor
+- `nano` - ​​Nano editor
+- `notepad` - ​​Windows Notepad
+- `subl` - ​​Sublime Text
+
+:::note
+Neki uređivači kao što je VS Code moraju biti pokrenuti sa `--wait` zastavicom.
+:::
+
+Nekim uređivačima su potrebni argumenti komandne linije da bi se pokrenuli u načinu blokiranja. Oznaka `--wait` blokira proces uređivača dok se ne zatvori.
+
+---
+
+## Konfiguracija
+
+Možete prilagoditi TUI ponašanje putem vašeg OpenCode konfiguracionog fajla.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Opcije
+
+- `scroll_acceleration` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
+- `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimalno: `1`). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
+
+---
+
+## Prilagođavanje
+
+Možete prilagoditi različite aspekte TUI prikaza koristeći paletu komandi (`ctrl+x h` ili `/help`). Ove postavke traju i nakon ponovnog pokretanja.
+
+---
+
+#### Prikaz korisničkog imena
+
+Uključite da li se vaše korisničko ime pojavljuje u porukama za ćaskanje. Pristupite ovome putem:
+
+- Paleta naredbi: Potražite "korisničko ime" ili "sakrij korisničko ime"
+- Postavka se automatski nastavlja i pamtit će se tijekom TUI sesija

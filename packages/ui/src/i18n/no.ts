@@ -3,19 +3,27 @@ type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
   "ui.sessionReview.title": "Sesjonsendringer",
+  "ui.sessionReview.title.lastTurn": "Endringer i siste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Delt",
   "ui.sessionReview.expandAll": "Utvid alle",
   "ui.sessionReview.collapseAll": "Fold sammen alle",
-
   "ui.sessionReview.change.added": "Lagt til",
   "ui.sessionReview.change.removed": "Fjernet",
+  "ui.sessionReview.change.modified": "Endret",
+  "ui.sessionReview.image.loading": "Laster...",
+  "ui.sessionReview.image.placeholder": "Bilde",
+  "ui.sessionReview.largeDiff.title": "Diff er for stor til å gjengi",
+  "ui.sessionReview.largeDiff.meta": "Grense: {{limit}} endrede linjer. Nåværende: {{current}} endrede linjer.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Gjengi likevel",
+
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.submit": "Kommenter",
+
   "ui.sessionTurn.steps.show": "Vis trinn",
   "ui.sessionTurn.steps.hide": "Skjul trinn",
   "ui.sessionTurn.summary.response": "Svar",
@@ -23,10 +31,13 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.retry.retrying": "Prøver igjen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
+  "ui.sessionTurn.error.addCredits": "Legg til kreditt",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",
-  "ui.sessionTurn.status.gatheringContext": "Samler inn kontekst",
+  "ui.sessionTurn.status.gatheringContext": "Utforsker",
+  "ui.sessionTurn.status.gatheredContext": "Utforsket",
   "ui.sessionTurn.status.searchingCodebase": "Søker i kodebasen",
   "ui.sessionTurn.status.searchingWeb": "Søker på nettet",
   "ui.sessionTurn.status.makingEdits": "Gjør endringer",
@@ -75,6 +86,7 @@ export const dict: Record<Keys, string> = {
   "ui.common.question.other": "spørsmål",
 
   "ui.common.add": "Legg til",
+  "ui.common.back": "Tilbake",
   "ui.common.cancel": "Avbryt",
   "ui.common.confirm": "Bekreft",
   "ui.common.dismiss": "Avvis",
@@ -89,7 +101,10 @@ export const dict: Record<Keys, string> = {
   "ui.message.expand": "Utvid melding",
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
+  "ui.message.copyMessage": "Kopier melding",
+  "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
+  "ui.message.interrupted": "Avbrutt",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",
@@ -100,6 +115,7 @@ export const dict: Record<Keys, string> = {
   "ui.question.subtitle.answered": "{{count}} besvart",
   "ui.question.answer.none": "(ingen svar)",
   "ui.question.review.notAnswered": "(ikke besvart)",
-  "ui.question.multiHint": "(velg alle som gjelder)",
+  "ui.question.multiHint": "Velg alle som gjelder",
+  "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
 }

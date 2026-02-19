@@ -1,11 +1,19 @@
 export const dict = {
   "ui.sessionReview.title": "การเปลี่ยนแปลงเซสชัน",
+  "ui.sessionReview.title.lastTurn": "การเปลี่ยนแปลงของเทิร์นล่าสุด",
   "ui.sessionReview.diffStyle.unified": "แบบรวม",
   "ui.sessionReview.diffStyle.split": "แบบแยก",
   "ui.sessionReview.expandAll": "ขยายทั้งหมด",
   "ui.sessionReview.collapseAll": "ย่อทั้งหมด",
   "ui.sessionReview.change.added": "เพิ่ม",
   "ui.sessionReview.change.removed": "ลบ",
+  "ui.sessionReview.change.modified": "แก้ไข",
+  "ui.sessionReview.image.loading": "กำลังโหลด...",
+  "ui.sessionReview.image.placeholder": "รูปภาพ",
+  "ui.sessionReview.largeDiff.title": "Diff มีขนาดใหญ่เกินไปจนไม่สามารถแสดงผลได้",
+  "ui.sessionReview.largeDiff.meta":
+    "ขีดจำกัด: {{limit}} บรรทัดที่เปลี่ยนแปลง. ปัจจุบัน: {{current}} บรรทัดที่เปลี่ยนแปลง.",
+  "ui.sessionReview.largeDiff.renderAnyway": "แสดงผลต่อไป",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",
@@ -21,10 +29,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "กำลังลองใหม่",
   "ui.sessionTurn.retry.inSeconds": "ใน {{seconds}}วิ",
+  "ui.sessionTurn.error.freeUsageExceeded": "เกินขีดจำกัดการใช้งานฟรี",
+  "ui.sessionTurn.error.addCredits": "เพิ่มเครดิต",
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",
-  "ui.sessionTurn.status.gatheringContext": "รวบรวมบริบท",
+  "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ",
+  "ui.sessionTurn.status.gatheredContext": "สำรวจแล้ว",
   "ui.sessionTurn.status.searchingCodebase": "กำลังค้นหาโค้ดเบส",
   "ui.sessionTurn.status.searchingWeb": "กำลังค้นหาบนเว็บ",
   "ui.sessionTurn.status.makingEdits": "กำลังแก้ไข",
@@ -55,6 +66,7 @@ export const dict = {
   "ui.imagePreview.alt": "ตัวอย่างรูปภาพ",
 
   "ui.tool.read": "อ่าน",
+  "ui.tool.loaded": "โหลดแล้ว",
   "ui.tool.list": "รายการ",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -72,6 +84,7 @@ export const dict = {
   "ui.common.question.other": "คำถาม",
 
   "ui.common.add": "เพิ่ม",
+  "ui.common.back": "ย้อนกลับ",
   "ui.common.cancel": "ยกเลิก",
   "ui.common.confirm": "ยืนยัน",
   "ui.common.dismiss": "ปิด",
@@ -86,7 +99,10 @@ export const dict = {
   "ui.message.expand": "ขยายข้อความ",
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
+  "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
+  "ui.message.interrupted": "ถูกขัดจังหวะ",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",
@@ -97,6 +113,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} ตอบแล้ว",
   "ui.question.answer.none": "(ไม่มีคำตอบ)",
   "ui.question.review.notAnswered": "(ไม่ได้ตอบ)",
-  "ui.question.multiHint": "(เลือกทั้งหมดที่ใช้)",
+  "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
+  "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
 }

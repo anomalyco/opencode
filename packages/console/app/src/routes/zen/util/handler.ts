@@ -18,10 +18,10 @@ import {
   AuthError,
   CreditsError,
   MonthlyLimitError,
-  SubscriptionError,
   UserLimitError,
   ModelError,
-  RateLimitError,
+  FreeUsageLimitError,
+  SubscriptionUsageLimitError,
 } from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
@@ -38,6 +38,7 @@ type RetryOptions = {
   excludeProviders: string[]
   retryCount: number
 }
+type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "balance"
 
 export async function handler(
   input: APIEvent,
@@ -51,8 +52,10 @@ export async function handler(
   type AuthInfo = Awaited<ReturnType<typeof authenticate>>
   type ModelInfo = Awaited<ReturnType<typeof validateModel>>
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
+  type CostInfo = ReturnType<typeof calculateCost>
 
-  const MAX_RETRIES = 3
+  const MAX_FAILOVER_RETRIES = 3
+  const MAX_429_RETRIES = 3
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
@@ -79,7 +82,7 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
-    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip)
+    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip, input.request.headers)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -107,17 +110,21 @@ export async function handler(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
           model: providerInfo.model,
+          ...(providerInfo.payloadModifier ?? {}),
         }),
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const res = await fetch(reqUrl, {
+      const res = await fetchWith429Retry(reqUrl, {
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
           providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
+          })
+          Object.entries(providerInfo.headers ?? {}).forEach(([k, v]) => {
+            headers.set(k, v)
           })
           headers.delete("host")
           headers.delete("content-length")
@@ -129,6 +136,13 @@ export async function handler(
         })(),
         body: reqBody,
       })
+
+      if (res.status !== 200) {
+        logger.metric({
+          "llm.error.code": res.status,
+          "llm.error.message": res.statusText,
+        })
+      }
 
       // Try another provider => stop retrying if using fallback provider
       if (
@@ -173,18 +187,25 @@ export async function handler(
 
     // Handle non-streaming response
     if (!isStream) {
-      const responseConverter = createResponseConverter(providerInfo.format, opts.format)
       const json = await res.json()
-      const body = JSON.stringify(responseConverter(json))
+      const usageInfo = providerInfo.normalizeUsage(json.usage)
+      const costInfo = calculateCost(modelInfo, usageInfo)
+      await trialLimiter?.track(usageInfo)
+      await rateLimiter?.track()
+      await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+      await reload(billingSource, authInfo, costInfo)
+
+      const responseConverter = createResponseConverter(providerInfo.format, opts.format)
+      const body = JSON.stringify(
+        responseConverter({
+          ...json,
+          cost: calculateOccuredCost(billingSource, costInfo),
+        }),
+      )
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
       dataDumper?.provideResponse(body)
       dataDumper?.flush()
-      const tokensInfo = providerInfo.normalizeUsage(json.usage)
-      await trialLimiter?.track(tokensInfo)
-      await rateLimiter?.track()
-      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
-      await reload(authInfo, costInfo)
       return new Response(body, {
         status: resStatus,
         statusText: res.statusText,
@@ -216,12 +237,16 @@ export async function handler(
                 dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
+                let cost = "0"
                 if (usage) {
-                  const tokensInfo = providerInfo.normalizeUsage(usage)
-                  await trialLimiter?.track(tokensInfo)
-                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
-                  await reload(authInfo, costInfo)
+                  const usageInfo = providerInfo.normalizeUsage(usage)
+                  const costInfo = calculateCost(modelInfo, usageInfo)
+                  await trialLimiter?.track(usageInfo)
+                  await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+                  await reload(billingSource, authInfo, costInfo)
+                  cost = calculateOccuredCost(billingSource, costInfo)
                 }
+                c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
                 c.close()
                 return
               }
@@ -250,13 +275,18 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.format !== opts.format) {
+                if (providerInfo.responseModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.responseModifier)) {
+                    part = part.replace(k, v)
+                  }
+                  c.enqueue(encoder.encode(part + "\n\n"))
+                } else if (providerInfo.format !== opts.format) {
                   part = streamConverter(part)
                   c.enqueue(encoder.encode(part + "\n\n"))
                 }
               }
 
-              if (providerInfo.format === opts.format) {
+              if (!providerInfo.responseModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
@@ -268,7 +298,6 @@ export async function handler(
         return pump()
       },
     })
-
     return new Response(stream, {
       status: resStatus,
       statusText: res.statusText,
@@ -296,9 +325,9 @@ export async function handler(
         { status: 401 },
       )
 
-    if (error instanceof RateLimitError || error instanceof SubscriptionError) {
+    if (error instanceof FreeUsageLimitError || error instanceof SubscriptionUsageLimitError) {
       const headers = new Headers()
-      if (error instanceof SubscriptionError && error.retryAfter) {
+      if (error.retryAfter) {
         headers.set("retry-after", String(error.retryAfter))
       }
       return new Response(
@@ -361,23 +390,25 @@ export async function handler(
         if (provider) return provider
       }
 
-      if (retry.retryCount === MAX_RETRIES) {
-        return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+      if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
+        const providers = modelInfo.providers
+          .filter((provider) => !provider.disabled)
+          .filter((provider) => !retry.excludeProviders.includes(provider.id))
+          .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
+
+        // Use the last 4 characters of session ID to select a provider
+        let h = 0
+        const l = sessionId.length
+        for (let i = l - 4; i < l; i++) {
+          h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
+        }
+        const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
+        const provider = providers[index || 0]
+        if (provider) return provider
       }
 
-      const providers = modelInfo.providers
-        .filter((provider) => !provider.disabled)
-        .filter((provider) => !retry.excludeProviders.includes(provider.id))
-        .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
-
-      // Use the last 4 characters of session ID to select a provider
-      let h = 0
-      const l = sessionId.length
-      for (let i = l - 4; i < l; i++) {
-        h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
-      }
-      const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
-      return providers[index || 0]
+      // fallback provider
+      return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
     })()
 
     if (!modelProvider) throw new ModelError("No provider available")
@@ -483,9 +514,9 @@ export async function handler(
     }
   }
 
-  function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo) {
+  function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo): BillingSource {
     if (!authInfo) return "anonymous"
-    if (authInfo.provider?.credentials) return "free"
+    if (authInfo.provider?.credentials) return "byok"
     if (authInfo.isFree) return "free"
     if (modelInfo.allowAnonymous) return "free"
 
@@ -512,7 +543,7 @@ export async function handler(
             timeUpdated: sub.timeFixedUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )
@@ -526,7 +557,7 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )
@@ -589,13 +620,16 @@ export async function handler(
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function trackUsage(
-    authInfo: AuthInfo,
-    modelInfo: ModelInfo,
-    providerInfo: ProviderInfo,
-    billingSource: ReturnType<typeof validateBilling>,
-    usageInfo: UsageInfo,
-  ) {
+  async function fetchWith429Retry(url: string, options: RequestInit, retry = { count: 0 }) {
+    const res = await fetch(url, options)
+    if (res.status === 429 && retry.count < MAX_429_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
+      return fetchWith429Retry(url, options, { count: retry.count + 1 })
+    }
+    return res
+  }
+
+  function calculateCost(modelInfo: ModelInfo, usageInfo: UsageInfo) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
 
@@ -633,6 +667,33 @@ export async function handler(
       (cacheReadCost ?? 0) +
       (cacheWrite5mCost ?? 0) +
       (cacheWrite1hCost ?? 0)
+    return {
+      totalCostInCent,
+      inputCost,
+      outputCost,
+      reasoningCost,
+      cacheReadCost,
+      cacheWrite5mCost,
+      cacheWrite1hCost,
+    }
+  }
+
+  function calculateOccuredCost(billingSource: BillingSource, costInfo: CostInfo) {
+    return billingSource === "balance" ? (costInfo.totalCostInCent / 100).toFixed(8) : "0"
+  }
+
+  async function trackUsage(
+    billingSource: BillingSource,
+    authInfo: AuthInfo,
+    modelInfo: ModelInfo,
+    providerInfo: ProviderInfo,
+    usageInfo: UsageInfo,
+    costInfo: CostInfo,
+  ) {
+    const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
+      usageInfo
+    const { totalCostInCent, inputCost, outputCost, reasoningCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } =
+      costInfo
 
     logger.metric({
       "tokens.input": inputTokens,
@@ -653,7 +714,7 @@ export async function handler(
     if (billingSource === "anonymous") return
     authInfo = authInfo!
 
-    const cost = authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    const cost = centsToMicroCents(totalCostInCent)
     await Database.use((db) =>
       Promise.all([
         db.insert(UsageTable).values({
@@ -748,16 +809,12 @@ export async function handler(
     return { costInMicroCents: cost }
   }
 
-  async function reload(authInfo: AuthInfo, costInfo: Awaited<ReturnType<typeof trackUsage>>) {
-    if (!authInfo) return
-    if (authInfo.isFree) return
-    if (authInfo.provider?.credentials) return
-    if (authInfo.subscription) return
-
-    if (!costInfo) return
+  async function reload(billingSource: BillingSource, authInfo: AuthInfo, costInfo: CostInfo) {
+    if (billingSource !== "balance") return
+    authInfo = authInfo!
 
     const reloadTrigger = centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100)
-    if (authInfo.billing.balance - costInfo.costInMicroCents >= reloadTrigger) return
+    if (authInfo.billing.balance - costInfo.totalCostInCent >= reloadTrigger) return
     if (authInfo.billing.timeReloadLockedTill && authInfo.billing.timeReloadLockedTill > new Date()) return
 
     const lock = await Database.use((tx) =>

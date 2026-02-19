@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openSidebar } from "../actions"
+import { openSidebar, withSession } from "../actions"
 import { promptSelector } from "../selectors"
 
 test("sidebar session links navigate to the selected session", async ({ page, slug, sdk, gotoSession }) => {

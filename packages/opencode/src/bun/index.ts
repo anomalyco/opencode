@@ -5,12 +5,12 @@ import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
-import { createRequire } from "module"
 import { Lock } from "../util/lock"
+import { PackageRegistry } from "./registry"
+import { proxied } from "@/util/proxied"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
-  const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
@@ -66,23 +66,26 @@ export namespace BunProc {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
+      const result = { dependencies: {} as Record<string, string> }
+      await Filesystem.writeJson(pkgjsonPath, result)
       return result
     })
-    const dependencies = parsed.dependencies ?? {}
-    if (!parsed.dependencies) parsed.dependencies = dependencies
+    if (!parsed.dependencies) parsed.dependencies = {} as Record<string, string>
+    const dependencies = parsed.dependencies
     const modExists = await Filesystem.exists(mod)
-    if (dependencies[pkg] === version && modExists) return mod
+    const cachedVersion = dependencies[pkg]
 
-    const proxied = !!(
-      process.env.HTTP_PROXY ||
-      process.env.HTTPS_PROXY ||
-      process.env.http_proxy ||
-      process.env.https_proxy
-    )
+    if (!modExists || !cachedVersion) {
+      // continue to install
+    } else if (version !== "latest" && cachedVersion === version) {
+      return mod
+    } else if (version === "latest") {
+      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+      if (!isOutdated) return mod
+      log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
+    }
 
     // Build command arguments
     const args = [
@@ -90,7 +93,7 @@ export namespace BunProc {
       "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied ? ["--no-cache"] : []),
+      ...(proxied() ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,
@@ -120,15 +123,16 @@ export namespace BunProc {
     // This ensures subsequent starts use the cached version until explicitly updated
     let resolvedVersion = version
     if (version === "latest") {
-      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
-      const installedPkg = await installedPkgJson.json().catch(() => null)
+      const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(
+        () => null,
+      )
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version
       }
     }
 
     parsed.dependencies[pkg] = resolvedVersion
-    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+    await Filesystem.writeJson(pkgjsonPath, parsed)
     return mod
   }
 }
