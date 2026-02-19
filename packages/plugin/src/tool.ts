@@ -1,5 +1,27 @@
 import { z } from "zod"
 
+export type LspDiagnostic = {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  message: string
+  severity?: number
+  code?: number | string
+  source?: string
+}
+
+export type LspContext = {
+  /** Notify the language server that a file has changed and optionally wait for diagnostics. */
+  touchFile(filePath: string, waitForDiagnostics?: boolean): Promise<void>
+  /** Retrieve all current diagnostics across all open files. */
+  diagnostics(): Promise<Record<string, LspDiagnostic[]>>
+  /** Format a diagnostic into a human-readable string (e.g. "ERROR [12:5] message"). */
+  diagnosticPretty(diagnostic: LspDiagnostic): string
+  /** Get hover information at a position. */
+  hover(input: { file: string; line: number; character: number }): Promise<any>
+}
+
 export type ToolContext = {
   sessionID: string
   messageID: string
@@ -17,6 +39,8 @@ export type ToolContext = {
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>
+  /** Access to LSP functionality (language server diagnostics, hover, etc.) */
+  lsp: LspContext
 }
 
 type AskInput = {
