@@ -128,6 +128,7 @@ export const SettingsGeneral: Component = () => {
     { value: "roboto-mono", label: "font.option.robotoMono" },
     { value: "source-code-pro", label: "font.option.sourceCodePro" },
     { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
+    { value: "geist-mono", label: "font.option.geistMono" },
   ] as const
   const fontOptionsList = [...fontOptions]
 
@@ -306,39 +307,66 @@ export const SettingsGeneral: Component = () => {
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <Select
-            data-action="settings-sounds-agent"
-            {...soundSelectProps(
-              () => settings.sounds.agent(),
-              (id) => settings.sounds.setAgent(id),
-            )}
-          />
+          <div class="flex items-center gap-2">
+            <div data-action="settings-sounds-agent-enabled">
+              <Switch
+                checked={settings.sounds.agentEnabled()}
+                onChange={(checked) => settings.sounds.setAgentEnabled(checked)}
+              />
+            </div>
+            <Select
+              disabled={!settings.sounds.agentEnabled()}
+              data-action="settings-sounds-agent"
+              {...soundSelectProps(
+                () => settings.sounds.agent(),
+                (id) => settings.sounds.setAgent(id),
+              )}
+            />
+          </div>
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <Select
-            data-action="settings-sounds-permissions"
-            {...soundSelectProps(
-              () => settings.sounds.permissions(),
-              (id) => settings.sounds.setPermissions(id),
-            )}
-          />
+          <div class="flex items-center gap-2">
+            <div data-action="settings-sounds-permissions-enabled">
+              <Switch
+                checked={settings.sounds.permissionsEnabled()}
+                onChange={(checked) => settings.sounds.setPermissionsEnabled(checked)}
+              />
+            </div>
+            <Select
+              disabled={!settings.sounds.permissionsEnabled()}
+              data-action="settings-sounds-permissions"
+              {...soundSelectProps(
+                () => settings.sounds.permissions(),
+                (id) => settings.sounds.setPermissions(id),
+              )}
+            />
+          </div>
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <Select
-            data-action="settings-sounds-errors"
-            {...soundSelectProps(
-              () => settings.sounds.errors(),
-              (id) => settings.sounds.setErrors(id),
-            )}
-          />
+          <div class="flex items-center gap-2">
+            <div data-action="settings-sounds-errors-enabled">
+              <Switch
+                checked={settings.sounds.errorsEnabled()}
+                onChange={(checked) => settings.sounds.setErrorsEnabled(checked)}
+              />
+            </div>
+            <Select
+              disabled={!settings.sounds.errorsEnabled()}
+              data-action="settings-sounds-errors"
+              {...soundSelectProps(
+                () => settings.sounds.errors(),
+                (id) => settings.sounds.setErrors(id),
+              )}
+            />
+          </div>
         </SettingsRow>
       </div>
     </div>
@@ -403,7 +431,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
             const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
             const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
@@ -429,7 +457,7 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
-        </Show>
+        </Show>*/}
 
         <UpdatesSection />
 
