@@ -43,7 +43,7 @@ export namespace SessionCompaction {
       config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
     const usable = input.model.limit.input
       ? input.model.limit.input - reserved
-      : context - ProviderTransform.maxOutputTokens(input.model)
+      : context - reserved // Fix #13980: apply reserved even when limit.input is not set
     return count >= usable
   }
 
@@ -199,7 +199,7 @@ When constructing the summary, try to stick to this template:
       model,
     })
 
-    if (result === "continue" && input.auto) {
+    if ((result === "continue" || result === "compact") && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
