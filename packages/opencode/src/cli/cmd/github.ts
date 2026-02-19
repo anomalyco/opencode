@@ -534,7 +534,7 @@ export const GithubRunCommand = cmd({
             },
           ],
         })
-        unsubscribeEvents = subscribeSessionEvents()
+        unsubscribeEvents = subscribeSessionEvents(session.id)
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
@@ -823,7 +823,7 @@ export const GithubRunCommand = cmd({
         return { userPrompt: prompt, promptFiles: imgData }
       }
 
-      function subscribeSessionEvents() {
+      function subscribeSessionEvents(sessionID: string) {
         const TOOL: Record<string, [string, string]> = {
           todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
           todoread: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -847,7 +847,7 @@ export const GithubRunCommand = cmd({
         }
 
         // Track sessions: main session + subagent sessions when OPENCODE_EMIT_SUBAGENT_EVENTS
-        const trackedSessions = new Set<string>([session.id])
+        const trackedSessions = new Set<string>([sessionID])
         const unsubscribes: Array<() => void> = []
 
         if (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS) {
@@ -867,7 +867,7 @@ export const GithubRunCommand = cmd({
         unsubscribes.push(
           Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
             const shouldTrack =
-              evt.properties.part.sessionID === session.id ||
+              evt.properties.part.sessionID === sessionID ||
               (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS && trackedSessions.has(evt.properties.part.sessionID))
             if (!shouldTrack) return
 
@@ -901,7 +901,7 @@ export const GithubRunCommand = cmd({
         unsubscribes.push(
           Bus.subscribe(PermissionNext.Event.Asked, async (evt) => {
             const shouldTrack =
-              evt.properties.sessionID === session.id ||
+              evt.properties.sessionID === sessionID ||
               (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS && trackedSessions.has(evt.properties.sessionID))
             if (!shouldTrack) return
 
