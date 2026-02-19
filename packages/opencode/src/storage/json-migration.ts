@@ -8,6 +8,7 @@ import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
 import { Filesystem } from "../util/filesystem"
+import { Glob } from "../util/glob"
 
 export namespace JsonMigration {
   const log = Log.create({ service: "json-migration" })
@@ -71,12 +72,7 @@ export namespace JsonMigration {
     const now = Date.now()
 
     async function list(pattern: string) {
-      const items: string[] = []
-      const scan = new Bun.Glob(pattern)
-      for await (const file of scan.scan({ cwd: storageDir, absolute: true })) {
-        items.push(file)
-      }
-      return items
+      return Glob.scan(pattern, { cwd: storageDir, absolute: true })
     }
 
     async function read(files: string[], start: number, end: number) {

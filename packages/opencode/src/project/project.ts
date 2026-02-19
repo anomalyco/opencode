@@ -13,6 +13,7 @@ import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
+import { Glob } from "../util/glob"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -262,16 +263,11 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
-    const matches = await Array.fromAsync(
-      glob.scan({
-        cwd: input.worktree,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: false,
-        dot: false,
-      }),
-    )
+    const matches = await Glob.scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+      cwd: input.worktree,
+      absolute: true,
+      include: "file",
+    })
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
     const buffer = await Filesystem.readBytes(shortest)

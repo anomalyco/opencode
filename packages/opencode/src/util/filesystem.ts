@@ -5,6 +5,7 @@ import { realpathSync } from "fs"
 import { dirname, join, relative } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
+import { Glob } from "./glob"
 
 export namespace Filesystem {
   // Fast sync version for metadata checks
@@ -156,16 +157,13 @@ export namespace Filesystem {
     const result = []
     while (true) {
       try {
-        const glob = new Bun.Glob(pattern)
-        for await (const match of glob.scan({
+        const matches = await Glob.scan(pattern, {
           cwd: current,
           absolute: true,
-          onlyFiles: true,
-          followSymlinks: true,
+          include: "file",
           dot: true,
-        })) {
-          result.push(match)
-        }
+        })
+        result.push(...matches)
       } catch {
         // Skip invalid glob patterns
       }
