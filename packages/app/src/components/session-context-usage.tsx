@@ -1,6 +1,6 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
-import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
+import { type ProgressCircleProps, ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 import { useParams } from "@solidjs/router"
 
@@ -65,9 +65,17 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     })
   }
 
+  const status = createMemo((): ProgressCircleProps["status"] => {
+    const usage = context()?.usage ?? 0
+    if (usage >= 80) return "critical"
+    if (usage >= 50) return "warning"
+    if (usage > 0) return "success"
+    return "default"
+  })
+
   const circle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} status={status()} />
     </div>
   )
 
