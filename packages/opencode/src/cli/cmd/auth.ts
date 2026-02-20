@@ -332,7 +332,6 @@ export const AuthLoginCommand = cmd({
                 value: x.id,
                 hint: {
                   opencode: "recommended",
-                  anthropic: "Claude Max or API key",
                   openai: "ChatGPT Plus/Pro or API key",
                 }[x.id],
               })),
