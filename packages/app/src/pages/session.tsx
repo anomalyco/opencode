@@ -834,6 +834,19 @@ export default function Page() {
   createEffect(
     on(
       sessionKey,
+      (_next, prev) => {
+        if (!prev) return
+        const id = store.messageId
+        if (!id) return
+        layout.pendingMessage.set(prev, id)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      sessionKey,
       () => {
         scrollSpy.clear()
       },
