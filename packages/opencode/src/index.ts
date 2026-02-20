@@ -45,6 +45,18 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+// Handle terminal death signals to prevent orphaned processes.
+// When a controlling terminal is destroyed (SSH disconnect, tmux pane close, etc.),
+// the kernel sends SIGHUP. Without this handler, the process continues running
+// indefinitely because the TUI event loop blocks on stdin that will never arrive,
+// preventing the `process.exit()` in the finally block from ever executing.
+// This was observed to leak ~4.7 GB per orphaned instance.
+for (const sig of ["SIGHUP", "SIGTERM", "SIGPIPE"] as const) {
+  process.on(sig, () => {
+    process.exit(1)
+  })
+}
+
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
