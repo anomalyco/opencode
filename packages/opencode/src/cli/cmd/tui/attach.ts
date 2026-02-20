@@ -48,7 +48,7 @@ export const AttachCommand = cmd({
       }
 
       const directory = (() => {
-        if (!args.dir) return undefined
+        if (!args.dir) return process.cwd()
         try {
           process.chdir(args.dir)
           return process.cwd()
