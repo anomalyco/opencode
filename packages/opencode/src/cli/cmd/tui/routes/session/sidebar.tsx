@@ -48,6 +48,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }).format(total)
   })
 
+  const totalDiff = createMemo(() => {
+    const items = diff()
+    return {
+      additions: items.reduce((sum, item) => sum + (item.additions ?? 0), 0),
+      deletions: items.reduce((sum, item) => sum + (item.deletions ?? 0), 0),
+    }
+  })
+
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
@@ -234,14 +242,25 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
+                  justifyContent="space-between"
                   onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
                 >
-                  <Show when={diff().length > 2}>
-                    <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>Modified Files</b>
-                  </text>
+                  <box flexDirection="row" gap={1}>
+                    <Show when={diff().length > 2}>
+                      <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
+                    </Show>
+                    <text fg={theme.text}>
+                      <b>Modified Files</b>
+                    </text>
+                  </box>
+                  <box flexDirection="row" gap={1} flexShrink={0}>
+                    <Show when={totalDiff().additions > 0}>
+                      <text fg={theme.diffAdded}>+{totalDiff().additions}</text>
+                    </Show>
+                    <Show when={totalDiff().deletions > 0}>
+                      <text fg={theme.diffRemoved}>-{totalDiff().deletions}</text>
+                    </Show>
+                  </box>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
