@@ -49,6 +49,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
+import { DialogLoginProvider } from "@/components/dialog-login-provider"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
@@ -914,6 +915,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => connectProvider(),
       },
       {
+        id: "provider.login",
+        title: language.t("command.provider.login"),
+        category: language.t("command.category.provider"),
+        slash: "login",
+        onSelect: () => loginProvider(),
+      },
+      {
         id: "server.switch",
         title: language.t("command.server.switch"),
         category: language.t("command.category.server"),
@@ -1064,6 +1072,10 @@ export default function Layout(props: ParentProps) {
 
   function connectProvider() {
     dialog.show(() => <DialogSelectProvider />)
+  }
+
+  function loginProvider() {
+    dialog.show(() => <DialogLoginProvider />)
   }
 
   function openServer() {

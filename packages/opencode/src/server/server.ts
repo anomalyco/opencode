@@ -192,6 +192,65 @@ export namespace Server {
             return c.json(true)
           },
         )
+        .post(
+          "/auth/wellknown",
+          describeRoute({
+            summary: "Login via wellknown URL",
+            description:
+              "Authenticate with an external provider using their .well-known/opencode endpoint. Fetches the wellknown config, runs the auth command, and stores the resulting token.",
+            operationId: "auth.wellknown",
+            responses: {
+              200: {
+                description: "Successfully authenticated",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        success: z.boolean(),
+                        message: z.string().optional(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              url: z.string().meta({ description: "The base URL of the provider (e.g. https://example.com)" }),
+            }),
+          ),
+          async (c) => {
+            const { url } = c.req.valid("json")
+            const wellknownUrl = `${url}/.well-known/opencode`
+            const wellknown = await fetch(wellknownUrl).then((x) => {
+              if (!x.ok) throw new NamedError.Unknown({ message: `Failed to fetch ${wellknownUrl}: ${x.status}` })
+              return x.json() as Promise<{ auth: { command: string[]; env: string } }>
+            })
+            if (!wellknown.auth?.command || !wellknown.auth?.env) {
+              throw new NamedError.Unknown({ message: "Invalid wellknown response: missing auth.command or auth.env" })
+            }
+            const proc = Bun.spawn({
+              cmd: wellknown.auth.command,
+              stdout: "pipe",
+              stderr: "pipe",
+            })
+            const exit = await proc.exited
+            if (exit !== 0) {
+              const stderr = await new Response(proc.stderr).text()
+              throw new NamedError.Unknown({ message: `Auth command failed: ${stderr || "exit code " + exit}` })
+            }
+            const token = await new Response(proc.stdout).text()
+            await Auth.set(url, {
+              type: "wellknown",
+              key: wellknown.auth.env,
+              token: token.trim(),
+            })
+            return c.json({ success: true, message: `Logged into ${url}` })
+          },
+        )
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()

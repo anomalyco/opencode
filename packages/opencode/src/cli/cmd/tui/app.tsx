@@ -9,6 +9,7 @@ import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { DialogLogin } from "@tui/component/dialog-login"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -504,6 +505,18 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Login to provider URL",
+      value: "provider.login",
+      slash: {
+        name: "login",
+        aliases: ["auth"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogLogin />)
       },
       category: "Provider",
     },

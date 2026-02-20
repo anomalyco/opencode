@@ -24,6 +24,7 @@ export const dict = {
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
   "command.provider.connect": "Connect provider",
+  "command.provider.login": "Login to provider URL",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
@@ -192,6 +193,12 @@ export const dict = {
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
+
+  "provider.login.title": "Login to Provider",
+  "provider.login.description": "Enter the base URL of your provider (e.g. https://gateway.example.com)",
+  "provider.login.submit": "Login",
+  "provider.login.success": "Login successful",
+  "provider.login.failed": "Login failed",
 
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
