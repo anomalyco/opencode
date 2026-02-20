@@ -74,6 +74,19 @@ export namespace LSP {
         delete servers["ty"]
       }
     }
+
+    if (Flag.OPENCODE_EXPERIMENTAL_LSP_ROSLYN) {
+      // roslyn-language-server is enabled; disable the default csharp-ls
+      if (servers["csharp"]) {
+        log.info("LSP server csharp-ls is disabled because OPENCODE_EXPERIMENTAL_LSP_ROSLYN is enabled")
+        delete servers["csharp"]
+      }
+    } else {
+      // roslyn-language-server is not enabled; disable it so it doesn't conflict with csharp-ls
+      if (servers["csharp-roslyn"]) {
+        delete servers["csharp-roslyn"]
+      }
+    }
   }
 
   const state = Instance.state(

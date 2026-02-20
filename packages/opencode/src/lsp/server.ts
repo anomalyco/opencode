@@ -770,6 +770,55 @@ export namespace LSPServer {
     },
   }
 
+  export const RoslynLS: Info = {
+    id: "csharp-roslyn",
+    root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
+    extensions: [".cs"],
+    async spawn(root) {
+      let bin = Bun.which("roslyn-language-server", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+      if (!bin) {
+        if (!Bun.which("dotnet")) {
+          log.error(".NET SDK is required to install roslyn-language-server")
+          return
+        }
+
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing roslyn-language-server via dotnet tool")
+        const proc = Bun.spawn({
+          cmd: [
+            "dotnet",
+            "tool",
+            "install",
+            "--global",
+            "roslyn-language-server",
+            "--prerelease",
+            "--tool-path",
+            Global.Path.bin,
+          ],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install roslyn-language-server")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "roslyn-language-server" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed roslyn-language-server`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["--stdio", "--autoLoadProjects"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const FSharp: Info = {
     id: "fsharp",
     root: NearestRoot([".slnx", ".sln", ".fsproj", "global.json"]),
