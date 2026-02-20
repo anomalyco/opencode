@@ -76,7 +76,7 @@ const AgentCreateCommand = cmd({
         // Determine scope/path
         let targetPath: string
         if (cliPath) {
-          targetPath = path.join(cliPath, "agent")
+          targetPath = path.join(cliPath, "agents")
         } else {
           let scope: "global" | "project" = "global"
           if (project.vcs === "git") {
@@ -100,7 +100,7 @@ const AgentCreateCommand = cmd({
           }
           targetPath = path.join(
             scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
-            "agent",
+            "agents",
           )
         }
 
