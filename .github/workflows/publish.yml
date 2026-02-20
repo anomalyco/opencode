@@ -202,8 +202,11 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+          owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
+          repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-betas') || '' }}
+          releaseCommitish: ${{ (github.ref_name == 'beta' && github.sha) || '' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
