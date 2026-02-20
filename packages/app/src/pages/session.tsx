@@ -199,11 +199,7 @@ export default function Page() {
     },
   })
 
-  const blocked = createMemo(() => {
-    const sessionID = params.id
-    if (!sessionID) return false
-    return !!sync.data.permission[sessionID]?.[0] || !!sync.data.question[sessionID]?.[0]
-  })
+  const composer = createSessionComposerState()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const workspaceKey = createMemo(() => params.dir ?? "")
@@ -546,7 +542,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      if (blocked()) return
+      if (composer.blocked()) return
       inputRef?.focus()
     }
   }
@@ -1235,7 +1231,8 @@ export default function Page() {
             </Switch>
           </div>
 
-          <SessionPromptDock
+          <SessionComposerRegion
+            state={composer}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el
@@ -1246,6 +1243,7 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
+            onResponseSubmit={resumeScroll}
             setPromptDockRef={(el) => {
               promptDock = el
             }}
