@@ -211,6 +211,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("session", result.index, reconcile(event.properties.info))
             break
           }
+          // Only insert new sessions if they belong to the current directory
+          if (sdk.directory && event.properties.info.directory !== sdk.directory) break
           setStore(
             "session",
             produce((draft) => {
@@ -350,7 +352,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       console.log("bootstrapping")
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list({ start: start })
+        .list({ start: start, directory: sdk.directory })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
