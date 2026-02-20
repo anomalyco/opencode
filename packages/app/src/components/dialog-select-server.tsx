@@ -427,6 +427,7 @@ export function DialogSelectServer() {
             }
           >
             {(i) => {
+              const key = ServerConnection.key(i)
               return (
                 <div class="flex items-center gap-3 min-w-0 flex-1 group/item">
                   <Show
@@ -446,8 +447,8 @@ export function DialogSelectServer() {
                   >
                     <ServerRow
                       conn={i}
-                      status={store.status[ServerConnection.key(i)]}
-                      dimmed={store.status[ServerConnection.key(i)]?.healthy === false}
+                      status={store.status[key]}
+                      dimmed={store.status[key]?.healthy === false}
                       class="flex items-center gap-3 px-4 min-w-0 flex-1"
                       badge={
                         <Show when={defaultUrl() === i.http.url}>
@@ -460,7 +461,7 @@ export function DialogSelectServer() {
                   </Show>
                   <Show when={store.editServer.id !== i.http.url}>
                     <div class="flex items-center justify-center gap-5 pl-4">
-                      <Show when={current() === i}>
+                      <Show when={ServerConnection.key(current()) === key}>
                         <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
                       </Show>
 

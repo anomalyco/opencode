@@ -104,7 +104,8 @@ const unsafeCSS = `
 }
 
 [data-diff-header],
-[data-diff] {
+[data-diff],
+[data-file] {
   [data-separator] {
     height: 24px;
   }
@@ -122,6 +123,7 @@ const unsafeCSS = `
   }
   [data-code] {
     overflow-x: auto !important;
+    overflow-y: hidden !important;
   }
 }`
 
