@@ -623,6 +623,72 @@ function ProviderConnection(props: {
     )
   }
 
+  function LiteLLMAuthView() {
+    const [formStore, setFormStore] = createStore({
+      baseURL: "",
+      apiKey: "",
+      error: undefined as string | undefined,
+    })
+
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+
+      const form = e.currentTarget as HTMLFormElement
+      const formData = new FormData(form)
+      const baseURL = (formData.get("baseURL") as string)?.trim() || "http://localhost:4000"
+      const apiKey = (formData.get("apiKey") as string)?.trim()
+
+      setFormStore("error", undefined)
+      await serverSync().updateConfig({
+        provider: {
+          litellm: {
+            options: { baseURL },
+          },
+        },
+      })
+      if (apiKey) {
+        await serverSDK().client.auth.set({
+          providerID: props.provider,
+          auth: { type: "api", key: apiKey },
+        })
+      }
+      await complete()
+    }
+
+    return (
+      <div class="flex flex-col gap-6">
+        <div class="text-14-regular text-text-base">
+          Connect to a LiteLLM proxy server. Models will be discovered automatically.
+        </div>
+        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+          <TextField
+            autofocus
+            type="text"
+            label="Base URL"
+            placeholder="http://localhost:4000"
+            name="baseURL"
+            value={formStore.baseURL}
+            onChange={(v) => setFormStore("baseURL", v)}
+          />
+          <TextField
+            type="text"
+            label="API Key (optional)"
+            placeholder="sk-..."
+            name="apiKey"
+            value={formStore.apiKey}
+            onChange={(v) => setFormStore("apiKey", v)}
+          />
+          <Show when={formStore.error}>
+            <div class="text-14-regular text-text-critical-base">{formStore.error}</div>
+          </Show>
+          <Button class="w-auto" type="submit" size="large" variant="primary">
+            {language.t("common.submit")}
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
   function OAuthCodeView() {
     const [formStore, setFormStore] = createStore({
       value: "",
@@ -782,6 +848,9 @@ function ProviderConnection(props: {
                   <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
                 </div>
               </div>
+            </Match>
+            <Match when={method()?.type === "api" && props.provider === "litellm"}>
+              <LiteLLMAuthView />
             </Match>
             <Match when={method()?.type === "api"}>
               <ApiAuthView />
