@@ -15,7 +15,7 @@ Du kan bytte mellom agenter under en økt eller påkalle dem med `@`-omtalen.
 
 ## Typer
 
-Det er to typer agenter i OpenCode; primære agenter og subagenter.
+Det er to typer agenter i OpenCode; primære agenter og underagenter.
 
 ---
 
@@ -31,21 +31,21 @@ OpenCode kommer med to innebygde primære agenter, **Build** og **Plan**. Vi ser
 
 ---
 
-### Subagenter
+### Underagenter
 
-Subagenter er spesialiserte assistenter som primære agenter kan påkalle for spesifikke oppgaver. Du kan også starte dem manuelt ved å **@ nevne** dem i meldingene dine.
+Underagenter er spesialiserte assistenter som primære agenter kan påkalle for spesifikke oppgaver. Du kan også starte dem manuelt ved å **@ nevne** dem i meldingene dine.
 
-OpenCode kommer med to innebygde subagenter, **General** og **Explore**. Vi skal se på dette nedenfor.
+OpenCode kommer med to innebygde underagenter, **General** og **Explore**. Vi skal se på dette nedenfor.
 
 ---
 
 ## Innebygd
 
-OpenCode kommer med to innebygde primære agenter og to innebygde subagenter.
+OpenCode kommer med to innebygde primære agenter og to innebygde underagenter.
 
 ---
 
-### Bruk Build
+### Bruk av Build
 
 _Modus_: `primary`
 
@@ -53,7 +53,7 @@ Build er **standard** primæragent med alle verktøy aktivert. Dette er standard
 
 ---
 
-### Bruk Plan
+### Bruk av Plan
 
 _Modus_: `primary`
 
@@ -67,7 +67,7 @@ Denne agenten er nyttig når du vil at LLM skal analysere kode, foreslå endring
 
 ---
 
-### Bruk General
+### Bruk av General
 
 _Modus_: `subagent`
 
@@ -75,7 +75,7 @@ En generell agent for å undersøke komplekse spørsmål og utføre flertrinnsop
 
 ---
 
-### Bruk Explore
+### Bruk av Explore
 
 _Modus_: `subagent`
 
@@ -83,7 +83,7 @@ En rask, skrivebeskyttet agent for å utforske kodebaser. Kan ikke endre filer. 
 
 ---
 
-### Bruk Compaction
+### Bruk av Compaction
 
 _Modus_: `primary`
 
@@ -91,7 +91,7 @@ Skjult systemagent som komprimerer lang kontekst til et mindre sammendrag. Den k
 
 ---
 
-### Bruk Title
+### Bruk av Title
 
 _Modus_: `primary`
 
@@ -99,7 +99,7 @@ Skjult systemagent som genererer korte økttitler. Den kjører automatisk og kan
 
 ---
 
-### Bruk Summary
+### Bruk av Summary
 
 _Modus_: `primary`
 
@@ -111,7 +111,7 @@ Skjult systemagent som lager øktsammendrag. Den kjører automatisk og kan ikke 
 
 1. For primære agenter, bruk **Tab**-tasten for å bla gjennom dem under en økt. Du kan også bruke din konfigurerte `switch_agent` nøkkelbinding.
 
-2. Subagenter kan påkalles:
+2. Underagenter kan påkalles:
    - **Automatisk** av primære agenter for spesialiserte oppgaver basert på deres beskrivelser.
    - Manuelt ved å **@ nevne** en underagent i meldingen. For eksempel.
 
@@ -127,7 +127,7 @@ Skjult systemagent som lager øktsammendrag. Den kjører automatisk og kan ikke 
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
 Du kan tilpasse de innebygde agentene eller lage dine egne gjennom konfigurasjon. Agenter kan konfigureres på to måter:
 
@@ -322,9 +322,9 @@ Sett til `true` for å deaktivere agenten.
 
 ---
 
-### Spør
+### Ledetekst
 
-Spesifiser en tilpasset systemmeldingsfil for denne agenten med `prompt`-konfigurasjonen. Spørrefilen skal inneholde instruksjoner som er spesifikke for agentens formål.
+Spesifiser en tilpasset systemmeldingsfil for denne agenten med `prompt`-konfigurasjonen. Ledetekstfilen skal inneholde instruksjoner som er spesifikke for agentens formål.
 
 ```json title="opencode.json"
 {
@@ -616,7 +616,7 @@ Bruk en gyldig sekskantfarge (f.eks. `#FF5733`) eller temafarge: `primary`, `sec
 
 ---
 
-### Topp P
+### Top P
 
 Kontroller responsmangfoldet med alternativet `top_p`. Alternativ til temperatur for å kontrollere tilfeldighet.
 
@@ -634,7 +634,7 @@ Verdiene varierer fra 0,0 til 1,0. Lavere verdier er mer fokuserte, høyere verd
 
 ---
 
-### Tillegg
+### Ekstra
 
 Eventuelle andre alternativer du spesifiserer i agentkonfigurasjonen vil bli **overført direkte** til leverandøren som modellalternativer. Dette lar deg bruke leverandørspesifikke funksjoner og parametere.
 
@@ -661,7 +661,7 @@ Kjør `opencode models` for å se en liste over tilgjengelige modeller.
 
 ---
 
-## Opprett agenter
+## Opprette agenter
 
 Du kan opprette nye agenter ved å bruke følgende kommando:
 
@@ -679,15 +679,15 @@ Denne interaktive kommandoen vil:
 
 ---
 
-## Brukstilfeller
+## Bruksområder
 
-Her er noen vanlige brukstilfeller for forskjellige agenter.
+Her er noen vanlige bruksområder for forskjellige agenter.
 
 - **Byggagent**: Fullstendig utviklingsarbeid med alle verktøy aktivert
 - **Planagent**: Analyse og planlegging uten å gjøre endringer
-- **Anmeldelsesagent**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
+- **Kodevurderingsagent**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
 - **Feilsøkingsagent**: Fokusert på etterforskning med bash og leseverktøy aktivert
-- **Docs-agent**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
+- **Dokumentasjonsagent**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
 
 ---
 

@@ -1,5 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
@@ -85,8 +86,7 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
+      const stats = Filesystem.stat(filePath)
       if (!stats) continue
 
       matches.push({
@@ -111,7 +111,8 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const totalMatches = matches.length
+    const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
     let currentFile = ""
     for (const match of finalMatches) {
@@ -129,7 +130,9 @@ export const GrepTool = Tool.define("grep", {
 
     if (truncated) {
       outputLines.push("")
-      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+      outputLines.push(
+        `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+      )
     }
 
     if (hasErrors) {
@@ -140,7 +143,7 @@ export const GrepTool = Tool.define("grep", {
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
+        matches: totalMatches,
         truncated,
       },
       output: outputLines.join("\n"),

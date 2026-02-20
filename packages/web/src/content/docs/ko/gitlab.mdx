@@ -1,6 +1,6 @@
 ---
 title: GitLab
-description: Use opencode in GitLab issues and merge requests.
+description: GitLab 이슈 및 머지 리퀘스트에서 opencode를 사용하세요.
 ---
 
 opencode는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워크플로우와 통합됩니다.
@@ -9,17 +9,17 @@ opencode는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워�
 
 ---
 
-#GitLab CI 소개
+# GitLab CI 소개
 
-opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 구성품](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 구축할 수 있습니다.
+opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 컴포넌트](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 구축할 수 있습니다.
 
 여기에서 우리는 opencode에 대한 커뮤니티 생성 CI / CD 구성품을 사용하고 있습니다. [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
-### 특징
+### 기능
 
-- **일당 사용자 지정 구성 사용**: 사용자 정의 구성 디렉토리와 opencode 구성, 예를 들어 `./config/#custom-directory`는 opencode invocation 당 활성화하거나 비활성화 할 수 있습니다.
+- **실행별 사용자 지정 구성 사용**: 사용자 정의 구성 디렉토리와 opencode 구성, 예를 들어 `./config/#custom-directory`는 opencode 실행마다 활성화하거나 비활성화 할 수 있습니다.
 - ** 최소 설정**: CI 구성 요소는 opencode를 배경으로 설정하면 opencode 구성과 초기 프롬프트를 만들 필요가 있습니다.
 - **Flexible**: CI 구성 요소는 여러 입력을 지원합니다.
 
@@ -44,19 +44,19 @@ opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 구성품](
 
 ---
 
-## GitLab 듀오
+## GitLab Duo
 
 opencode는 GitLab 워크플로우와 통합됩니다.
 코멘트에 Mention `@opencode`, opencode는 GitLab CI 파이프라인 내에서 작업을 실행합니다.
 
 ---
 
-### 특징
+### 기능
 
-- **문제**: opencode가 문제점을 보고 당신을 설명합니다.
-- **Fix 및 구현 **: 이슈를 수정하거나 기능을 구현하려면 opencode에 문의하십시오.
+- **이슈**: opencode가 문제점을 보고 당신을 설명합니다.
+- **수정 및 구현**: 이슈를 수정하거나 기능을 구현하려면 opencode에 문의하십시오.
   새로운 지점을 만들고 변화를 병합 요청을 제기합니다.
-- **Secure**: opencode는 GitLab runners에서 실행됩니다.
+- **보안**: opencode는 GitLab runners에서 실행됩니다.
 
 ---
 
@@ -164,7 +164,7 @@ opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해
 `@opencode`보다 다른 트리거 구문을 사용할 수 있습니다.
 :::
 
-- **문제 설명**
+- **이슈 설명**
 
 GitLab 문제에서이 코멘트를 추가하십시오.
 
@@ -174,7 +174,7 @@ GitLab 문제에서이 코멘트를 추가하십시오.
 
 opencode는 문제와 대답을 명확하게 설명합니다.
 
-- **문제**
+- **이슈 해결**
 
 GitLab 문제에서, 말한다:
 
@@ -184,7 +184,7 @@ GitLab 문제에서, 말한다:
 
 opencode는 새로운 지점을 만들 것이며 변경 사항을 구현하고 변경 사항을 병합 요청을 엽니다.
 
-- **Review 병합 요청**
+- **머지 리퀘스트 검토**
 
 GitLab 병합 요청에 대한 다음 의견을 남겨주세요.
 

@@ -1,5 +1,5 @@
 ---
-title: Enterprise
+title: Bedrift
 description: Sikker bruk av opencode i din organisasjon.
 ---
 
@@ -19,7 +19,7 @@ For å komme i gang med OpenCode Enterprise:
 
 ---
 
-## Prøve
+## Prøveversjon
 
 OpenCode er åpen kildekode og lagrer ingen av koden eller kontekstdataene dine, så utviklerne dine kan ganske enkelt [komme i gang](/docs/) og utføre en prøveversjon.
 
@@ -36,7 +36,7 @@ Det eneste forbeholdet her er den valgfrie `/share`-funksjonen.
 
 ---
 
-#### Deler samtaler
+#### Deling av samtaler
 
 Hvis en bruker aktiverer funksjonen `/share`, sendes samtalen og dataene knyttet til den til tjenesten vi bruker til å være vert for disse delesidene på opencode.ai.
 
@@ -75,7 +75,7 @@ prissetting og implementeringsalternativer.
 
 ---
 
-### Sentral konfig
+### Sentral konfigurasjon
 
 Vi kan sette opp OpenCode for å bruke en enkelt sentral konfigurasjon for hele organisasjonen din.
 
@@ -83,7 +83,7 @@ Denne sentraliserte konfigurasjonen kan integreres med SSO-leverandøren din og 
 
 ---
 
-### SSO integrasjon
+### SSO-integrasjon
 
 Gjennom den sentrale konfigurasjonen kan OpenCode integreres med organisasjonens SSO-leverandør for autentisering.
 
@@ -91,7 +91,7 @@ Dette lar OpenCode få legitimasjon for din interne AI-gateway gjennom ditt eksi
 
 ---
 
-### Intern AI gateway
+### Intern AI-gateway
 
 Med den sentrale konfigurasjonen kan OpenCode også konfigureres til kun å bruke din interne AI-gateway.
 
@@ -99,7 +99,7 @@ Du kan også deaktivere alle andre AI-leverandører, og sikre at alle forespørs
 
 ---
 
-### Selvhosting
+### Egen hosting
 
 Selv om vi anbefaler å deaktivere delingssidene for å sikre at dataene dine aldri forsvinner
 organisasjonen din, kan vi også hjelpe deg med å være vert for dem på din infrastruktur.
@@ -108,7 +108,7 @@ Dette er nå på veikartet vårt. Hvis du er interessert, **<a href={email}>gi o
 
 ---
 
-## FAQ
+## Ofte stilte spørsmål (FAQ)
 
 <details>
 <summary>Hva er OpenCode Enterprise?</summary>
@@ -120,7 +120,7 @@ OpenCode Enterprise er for organisasjoner som ønsker å sikre at deres kode og 
 <details>
 <summary>Hvordan kommer jeg i gang med OpenCode Enterprise?</summary>
 
-Bare start med en intern prøveversjon med teamet ditt. OpenCode lagrer som standard ikke koden eller kontekstdataene dine, noe som gjør det enkelt å komme i gang.
+Bare sett i gang en intern prøveversjon med teamet ditt. OpenCode lagrer som standard ikke koden eller kontekstdataene dine, noe som gjør det enkelt å komme i gang.
 
 Så **<a href={email}>kontakt oss</a>** for å diskutere priser og implementeringsalternativer.
 
@@ -129,7 +129,7 @@ Så **<a href={email}>kontakt oss</a>** for å diskutere priser og implementerin
 <details>
 <summary>Hvordan fungerer bedriftsprising?</summary>
 
-Vi tilbyr bedriftspriser per sete. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For ytterligere detaljer, **<a href={email}>kontakt oss</a>** for et tilpasset tilbud basert på organisasjonens behov.
+Vi tilbyr bedriftspriser per bruker. Hvis du har din egen LLM-gateway, tar vi ikke betalt for tokens som brukes. For ytterligere detaljer, **<a href={email}>kontakt oss</a>** for et tilpasset tilbud basert på organisasjonens behov.
 
 </details>
 
@@ -143,7 +143,7 @@ Ja. OpenCode lagrer ikke koden eller kontekstdataene dine. All behandling skjer 
 <details>
 <summary>Kan vi bruke vårt eget private NPM-register?</summary>
 
-OpenCode støtter private npm-registre gjennom Buns innebygde `.npmrc`-filstøtte. Hvis organisasjonen din bruker et privat register, som JFrog Artifactory, Nexus eller lignende, sørg for at utviklerne er autentisert før du kjører OpenCode.
+OpenCode støtter private npm-registre gjennom Bun sin innebygde støtte for .npmrc-filer. Hvis organisasjonen din bruker et privat register, som JFrog Artifactory, Nexus eller lignende, sørg for at utviklerne er autentisert før du kjører OpenCode.
 
 Slik setter du opp autentisering med ditt private register:
 
