@@ -10,6 +10,52 @@ import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
 
 export namespace SessionSummary {
+  const syncGit = new Set(["pull", "fetch", "switch", "checkout", "merge", "rebase", "reset", "restore"])
+  const readGit = new Set([
+    "status",
+    "branch",
+    "log",
+    "show",
+    "diff",
+    "rev-parse",
+    "remote",
+    "symbolic-ref",
+    "for-each-ref",
+    "ls-remote",
+  ])
+  const readTool = new Set([
+    "read",
+    "glob",
+    "grep",
+    "ls",
+    "question",
+    "webfetch",
+    "websearch",
+    "codesearch",
+    "skill",
+    "todowrite",
+    "todoread",
+    "plan_enter",
+    "plan_exit",
+    "lsp",
+  ])
+  const gitFlagsWithValue = new Set([
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--super-prefix",
+    "--config-env",
+    "--exec-path",
+  ])
+
+  type Step = {
+    from: string
+    to: string
+    sync: boolean
+  }
+
   function unquoteGitPath(input: string) {
     if (!input.startsWith('"')) return input
     if (!input.endsWith('"')) return input
@@ -64,6 +110,167 @@ export namespace SessionSummary {
     }
 
     return Buffer.from(bytes).toString()
+  }
+
+  function words(input: string) {
+    return input
+      .split(/\s+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+
+  function commandParts(input: string) {
+    return input
+      .split(/&&|\|\||;|\n/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+
+  function isGitBinary(input: string) {
+    return /(^|[\\/])git(\.exe)?$/i.test(input)
+  }
+
+  function gitSubcommand(input: string) {
+    const list = words(input.replace(/^[()]+|[()]+$/g, ""))
+    if (!list.length) return
+
+    let i = 0
+    while (i < list.length && /^[A-Za-z_][A-Za-z0-9_]*=.*/.test(list[i]!)) i++
+    while (i < list.length && (list[i] === "env" || list[i] === "command" || list[i] === "sudo")) i++
+    if (!list[i]) return
+    if (!isGitBinary(list[i]!)) return
+    i++
+
+    while (i < list.length) {
+      const token = list[i]!
+      if (token === "--") {
+        i++
+        break
+      }
+      if (!token.startsWith("-")) break
+      if (token.includes("=")) {
+        i++
+        continue
+      }
+      if (gitFlagsWithValue.has(token)) {
+        i += 2
+        continue
+      }
+      i++
+    }
+
+    const sub = list[i]
+    if (!sub) return
+    return sub.toLowerCase()
+  }
+
+  export function isGitSyncBashCommand(input: string) {
+    const list = commandParts(input)
+    if (!list.length) return false
+
+    let sync = false
+    for (const item of list) {
+      const sub = gitSubcommand(item)
+      if (!sub) return false
+      if (syncGit.has(sub)) {
+        sync = true
+        continue
+      }
+      if (readGit.has(sub)) continue
+      return false
+    }
+
+    return sync
+  }
+
+  function bashCommand(input: MessageV2.ToolPart) {
+    if (input.tool !== "bash") return
+    const command = input.state.input.command
+    if (typeof command !== "string") return
+    return command
+  }
+
+  function isSyncStep(input: MessageV2.ToolPart[]) {
+    if (!input.length) return false
+    let sync = false
+
+    for (const part of input) {
+      if (part.tool === "bash") {
+        const command = bashCommand(part)
+        if (!command) return false
+        if (!isGitSyncBashCommand(command)) return false
+        sync = true
+        continue
+      }
+      if (readTool.has(part.tool)) continue
+      return false
+    }
+
+    return sync
+  }
+
+  function steps(input: MessageV2.WithParts[]) {
+    const result: Step[] = []
+
+    for (const msg of input) {
+      if (msg.info.role !== "assistant") continue
+      let from: string | undefined
+      const tools: MessageV2.ToolPart[] = []
+
+      for (const part of msg.parts) {
+        if (part.type === "step-start") {
+          from = part.snapshot
+          tools.length = 0
+          continue
+        }
+        if (!from) continue
+        if (part.type === "tool") {
+          tools.push(part)
+          continue
+        }
+        if (part.type !== "step-finish") continue
+        if (part.snapshot) {
+          result.push({
+            from,
+            to: part.snapshot,
+            sync: isSyncStep(tools),
+          })
+        }
+        from = undefined
+        tools.length = 0
+      }
+    }
+
+    return result
+  }
+
+  export function diffWindow(input: { messages: MessageV2.WithParts[] }) {
+    const all = steps(input.messages)
+    if (!all.length) return
+
+    const local = all.map((step, index) => ({ step, index })).filter((item) => !item.step.sync)
+    if (!local.length) return
+
+    const end = local[local.length - 1]!.index
+    let boundary = -1
+    for (let i = end - 1; i >= 0; i--) {
+      if (!all[i]!.sync) continue
+      boundary = i
+      break
+    }
+
+    let start = -1
+    for (let i = boundary + 1; i <= end; i++) {
+      if (all[i]!.sync) continue
+      start = i
+      break
+    }
+    if (start < 0) return
+
+    return {
+      from: all[start]!.from,
+      to: all[end]!.to,
+    }
   }
 
   export const summarize = fn(
@@ -133,29 +340,8 @@ export namespace SessionSummary {
   )
 
   export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
-    let from: string | undefined
-    let to: string | undefined
-
-    // scan assistant messages to find earliest from and latest to
-    // snapshot
-    for (const item of input.messages) {
-      if (!from) {
-        for (const part of item.parts) {
-          if (part.type === "step-start" && part.snapshot) {
-            from = part.snapshot
-            break
-          }
-        }
-      }
-
-      for (const part of item.parts) {
-        if (part.type === "step-finish" && part.snapshot) {
-          to = part.snapshot
-        }
-      }
-    }
-
-    if (from && to) return Snapshot.diffFull(from, to)
+    const window = diffWindow(input)
+    if (window) return Snapshot.diffFull(window.from, window.to)
     return []
   }
 }
