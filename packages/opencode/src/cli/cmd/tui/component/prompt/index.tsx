@@ -150,6 +150,35 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const subagents = createMemo(() => {
+    if (!props.sessionID) return { total: 0, active: 0 }
+    const byParent = new Map<string, (typeof sync.data.session)[number][]>()
+    for (const s of sync.data.session) {
+      if (!s.parentID) continue
+      const list = byParent.get(s.parentID) ?? []
+      list.push(s)
+      byParent.set(s.parentID, list)
+    }
+    const descendants: (typeof sync.data.session)[number][] = []
+    const queue = [props.sessionID]
+    const visited = new Set<string>()
+    while (queue.length > 0) {
+      const pid = queue.pop()!
+      if (visited.has(pid)) continue
+      visited.add(pid)
+      const children = byParent.get(pid)
+      if (!children) continue
+      for (const c of children) {
+        descendants.push(c)
+        queue.push(c.id)
+      }
+    }
+    const active = descendants.filter((d) => {
+      const st = sync.data.session_status[d.id]?.type
+      return st === "busy" || st === "retry"
+    }).length
+    return { total: descendants.length, active }
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandPalette()
@@ -1761,6 +1790,12 @@ export function Prompt(props: PromptProps) {
                   </Switch>
                   <text fg={theme.text}>
                     {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
+                    <Show when={subagents().total > 0}>
+                      <span style={{ fg: subagents().active > 0 ? theme.warning : theme.textMuted }}>
+                        {subagents().active > 0 ? " ⚡" : " "}
+                        {subagents().active}/{subagents().total} sub agents
+                      </span>
+                    </Show>
                   </text>
                 </Match>
                 <Match when={store.mode === "shell"}>
