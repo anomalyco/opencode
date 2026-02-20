@@ -119,6 +119,10 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()

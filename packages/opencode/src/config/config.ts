@@ -1371,6 +1371,10 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function getGlobal() {
     return global()
   }

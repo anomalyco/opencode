@@ -63,7 +63,7 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
+  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): State.Accessor<S> {
     return State.create(() => Instance.directory, init, dispose)
   },
   async dispose() {

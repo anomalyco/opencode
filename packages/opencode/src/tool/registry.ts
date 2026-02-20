@@ -59,6 +59,10 @@ export namespace ToolRegistry {
     return { custom }
   })
 
+  export async function reset() {
+    await state.reset()
+  }
+
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,

@@ -1,6 +1,10 @@
 import { Log } from "@/util/log"
 
 export namespace State {
+  export type Accessor<S> = (() => S) & {
+    reset: () => Promise<void>
+  }
+
   interface Entry {
     state: any
     dispose?: (state: any) => Promise<void>
@@ -9,8 +13,8 @@ export namespace State {
   const log = Log.create({ service: "state" })
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
-  export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
-    return () => {
+  export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): Accessor<S> {
+    const fn = (() => {
       const key = root()
       let entries = recordsByKey.get(key)
       if (!entries) {
@@ -25,7 +29,32 @@ export namespace State {
         dispose,
       })
       return state
+    }) as Accessor<S>
+
+    fn.reset = async () => {
+      await disposeInit(root(), init)
     }
+
+    return fn
+  }
+
+  async function disposeInit(key: string, init: any) {
+    const entries = recordsByKey.get(key)
+    if (!entries) return
+    const entry = entries.get(init)
+    if (!entry) return
+
+    if (entry.dispose) {
+      await Promise.resolve(entry.state)
+        .then((state) => entry.dispose!(state))
+        .catch((error) => {
+          const label = typeof init === "function" ? init.name : String(init)
+          log.error("Error while disposing state:", { error, key, init: label })
+        })
+    }
+
+    entries.delete(init)
+    if (!entries.size) recordsByKey.delete(key)
   }
 
   export async function dispose(key: string) {

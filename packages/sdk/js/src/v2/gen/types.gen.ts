@@ -941,6 +941,22 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventOpencodeHotreloadChanged = {
+  type: "opencode.hotreload.changed"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventOpencodeHotreloadApplied = {
+  type: "opencode.hotreload.applied"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -985,6 +1001,8 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventOpencodeHotreloadChanged
+  | EventOpencodeHotreloadApplied
 
 export type GlobalEvent = {
   directory: string
@@ -2012,6 +2030,14 @@ export type Provider = {
   }
 }
 
+export type ExperimentalHotReloadResult = {
+  ok: boolean
+  enabled: boolean
+  queued?: boolean
+  sessions?: number
+  wait?: number
+}
+
 export type ToolIds = Array<string>
 
 export type ToolListItem = {
@@ -2714,6 +2740,37 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ExperimentalHotreloadApplyData = {
+  body?: {
+    file?: string
+    event?: "add" | "change" | "unlink"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/hotreload"
+}
+
+export type ExperimentalHotreloadApplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalHotreloadApplyError = ExperimentalHotreloadApplyErrors[keyof ExperimentalHotreloadApplyErrors]
+
+export type ExperimentalHotreloadApplyResponses = {
+  /**
+   * Hot reload scheduled
+   */
+  200: ExperimentalHotReloadResult
+}
+
+export type ExperimentalHotreloadApplyResponse =
+  ExperimentalHotreloadApplyResponses[keyof ExperimentalHotreloadApplyResponses]
 
 export type ToolIdsData = {
   body?: never
