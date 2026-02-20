@@ -179,7 +179,7 @@
 
 [data-component="text-part"] {
   width: 100%;
-  margin-top: 40px;
+  margin-top: 24px;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
