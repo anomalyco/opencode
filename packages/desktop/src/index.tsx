@@ -426,6 +426,12 @@ void listenForDeepLinks()
 render(() => {
   const platform = createPlatform()
 
+  const [defaultServer] = createResource(() =>
+    platform.getDefaultServerUrl?.().then((url) => {
+      if (url) return ServerConnection.key({ type: "http", http: { url } })
+    }),
+  )
+
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
     if (link?.href) {
@@ -466,9 +472,13 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]}>
-                <Inner />
-              </AppInterface>
+              <Show when={defaultServer.loading ? false : defaultServer.latest}>
+                {(defaultServer) => (
+                  <AppInterface defaultServer={defaultServer() ?? ServerConnection.key(server)} servers={[server]}>
+                    <Inner />
+                  </AppInterface>
+                )}
+              </Show>
             )
           }}
         </ServerGate>
