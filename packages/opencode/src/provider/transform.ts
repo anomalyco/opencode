@@ -434,6 +434,9 @@ function mapProviderOptions(
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  const underlying = ((model.options?.underlyingModel as string) ?? "").toLowerCase()
+  const isLiteLLMClaude =
+    model.providerID === "litellm" && (underlying.includes("claude") || underlying.includes("anthropic"))
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
@@ -442,7 +445,8 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.id.includes("anthropic") ||
       model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic" ||
-      model.api.npm === "@ai-sdk/alibaba") &&
+      model.api.npm === "@ai-sdk/alibaba" ||
+      isLiteLLMClaude) &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
     msgs = applyCaching(msgs, model)
