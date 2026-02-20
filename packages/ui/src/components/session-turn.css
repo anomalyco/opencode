@@ -129,6 +129,11 @@
     gap: 8px;
     flex-shrink: 0;
 
+    [data-slot="collapsible-arrow"] {
+      margin-left: -6px;
+      transform: translateY(2px);
+    }
+
     [data-component="diff-changes"][data-variant="bars"] {
       transform: translateY(1px);
     }
