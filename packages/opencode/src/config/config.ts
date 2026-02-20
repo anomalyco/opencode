@@ -546,6 +546,10 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+      subscriptions: z
+        .array(z.string())
+        .optional()
+        .describe("Resource URIs to automatically subscribe to for update notifications"),
     })
     .strict()
     .meta({
@@ -585,6 +589,10 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+      subscriptions: z
+        .array(z.string())
+        .optional()
+        .describe("Resource URIs to automatically subscribe to for update notifications"),
     })
     .strict()
     .meta({
