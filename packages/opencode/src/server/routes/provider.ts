@@ -39,7 +39,39 @@ export const ProviderRoutes = lazy(() =>
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
 
-        const allProviders = await ModelsDev.get()
+        const allProviders: Record<string, ModelsDev.Provider> = {
+          ...(await ModelsDev.get()),
+          modal: {
+            id: "modal",
+            name: "Modal",
+            env: ["MODAL_API_KEY"],
+            models: {
+              "zai-org/GLM-5-FP8": {
+                id: "zai-org/GLM-5-FP8",
+                name: "GLM-5",
+                family: "",
+                release_date: "",
+                attachment: false,
+                reasoning: false,
+                temperature: true,
+                tool_call: true,
+                options: {},
+                limit: {
+                  context: 8192,
+                  output: 4096,
+                },
+                modalities: {
+                  input: ["text"],
+                  output: ["text"],
+                },
+                provider: {
+                  npm: "@ai-sdk/openai-compatible",
+                  api: "https://api.us-west-2.modal.direct/v1",
+                },
+              },
+            },
+          },
+        }
         const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
         for (const [key, value] of Object.entries(allProviders)) {
           if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {

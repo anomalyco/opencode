@@ -223,6 +223,11 @@ function ApiMethod(props: ApiMethodProps) {
               Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
             </text>
           </box>
+        ) : props.providerID === "modal" ? (
+          <box gap={1}>
+            <text fg={theme.text}>Get your free API key at</text>
+            <text fg={theme.primary}>https://modal.com/glm-5-endpoint</text>
+          </box>
         ) : undefined
       }
       onConfirm={async (value) => {
