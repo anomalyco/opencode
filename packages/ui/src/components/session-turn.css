@@ -129,6 +129,11 @@
     gap: 8px;
     flex-shrink: 0;
 
+    [data-slot="collapsible-arrow"] {
+      margin-left: -6px;
+      transform: translateY(2px);
+    }
+
     [data-component="diff-changes"][data-variant="bars"] {
       transform: translateY(1px);
     }
@@ -154,6 +159,7 @@
     min-width: 0;
     align-items: baseline;
     overflow: hidden;
+    white-space: nowrap;
 
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -161,6 +167,7 @@
   }
 
   [data-slot="session-turn-diff-directory"] {
+    flex: 1 1 auto;
     color: var(--text-weak);
     min-width: 0;
     overflow: hidden;
@@ -172,6 +179,12 @@
   }
 
   [data-slot="session-turn-diff-filename"] {
+    flex-shrink: 0;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
   }
