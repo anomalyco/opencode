@@ -1,9 +1,22 @@
+const meta: Record<string, "boolean" | "number"> = {}
+
 function truthy(key: string) {
+  meta[key] = "boolean"
   const value = process.env[key]?.toLowerCase()
   return value === "true" || value === "1"
 }
 
+function number(key: string) {
+  meta[key] = "number"
+  const value = process.env[key]
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
 export namespace Flag {
+  export const types = meta as Readonly<Record<string, "boolean" | "number">>
+
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
@@ -54,13 +67,6 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("OPENCODE_EXPERIMENTAL_MARKDOWN")
   export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
-
-  function number(key: string) {
-    const value = process.env[key]
-    if (!value) return undefined
-    const parsed = Number(value)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-  }
 }
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
