@@ -160,6 +160,18 @@ describe("convertToKiroPayload", () => {
   })
 
   test("handles tool calls in assistant messages", () => {
+    const tools = [
+      {
+        type: "function" as const,
+        name: "bash",
+        description: "Run bash",
+        inputSchema: {
+          type: "object" as const,
+          properties: { command: { type: "string" as const } },
+          required: ["command"],
+        },
+      },
+    ]
     const prompt = [
       { role: "user" as const, content: [{ type: "text" as const, text: "Run ls" }] },
       {
@@ -180,13 +192,13 @@ describe("convertToKiroPayload", () => {
             type: "tool-result" as const,
             toolCallId: "call_123",
             toolName: "bash",
-            output: { type: "text" as const, value: "file1.txt\nfile2.txt" },
+            output: { type: "text" as const, value: "file1.txt file2.txt" },
           },
         ],
       },
     ]
 
-    const result = convertToKiroPayload(prompt as any, modelId)
+    const result = convertToKiroPayload(prompt as any, modelId, tools as any)
 
     // Check that tool calls are in history
     const assistantMsg = result.conversationState.history.find((h) => h.assistantResponseMessage?.toolUses)
@@ -196,6 +208,18 @@ describe("convertToKiroPayload", () => {
   })
 
   test("handles tool results in current message", () => {
+    const tools = [
+      {
+        type: "function" as const,
+        name: "bash",
+        description: "Run bash",
+        inputSchema: {
+          type: "object" as const,
+          properties: { command: { type: "string" as const } },
+          required: ["command"],
+        },
+      },
+    ]
     const prompt = [
       { role: "user" as const, content: [{ type: "text" as const, text: "Run ls" }] },
       {
@@ -222,7 +246,7 @@ describe("convertToKiroPayload", () => {
       },
     ]
 
-    const result = convertToKiroPayload(prompt as any, modelId)
+    const result = convertToKiroPayload(prompt as any, modelId, tools as any)
 
     const toolResults = result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults
     expect(toolResults).toBeDefined()
@@ -233,7 +257,31 @@ describe("convertToKiroPayload", () => {
   })
 
   test("handles error tool results", () => {
+    const tools = [
+      {
+        type: "function" as const,
+        name: "bash",
+        description: "Run bash",
+        inputSchema: {
+          type: "object" as const,
+          properties: { command: { type: "string" as const } },
+          required: ["command"],
+        },
+      },
+    ]
     const prompt = [
+      { role: "user" as const, content: [{ type: "text" as const, text: "Run bad command" }] },
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool-call" as const,
+            toolCallId: "call_123",
+            toolName: "bash",
+            input: { command: "bad-command" },
+          },
+        ],
+      },
       {
         role: "tool" as const,
         content: [
@@ -247,7 +295,7 @@ describe("convertToKiroPayload", () => {
       },
     ]
 
-    const result = convertToKiroPayload(prompt as any, modelId)
+    const result = convertToKiroPayload(prompt as any, modelId, tools as any)
 
     const toolResults = result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults
     expect(toolResults![0].status).toBe("error")
@@ -347,6 +395,117 @@ describe("convertToKiroPayload", () => {
     expect(assistantMsgs).toHaveLength(1)
     expect(assistantMsgs[0].assistantResponseMessage?.content).toContain("Part 1")
     expect(assistantMsgs[0].assistantResponseMessage?.content).toContain("Part 2")
+  })
+
+  test("strips toolUses/toolResults from history when no tools defined (compaction)", () => {
+    const prompt = [
+      { role: "system" as const, content: "You are helpful" },
+      { role: "user" as const, content: [{ type: "text" as const, text: "Run ls" }] },
+      {
+        role: "assistant" as const,
+        content: [
+          { type: "text" as const, text: "I'll run ls" },
+          { type: "tool-call" as const, toolCallId: "call_1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "call_1",
+            toolName: "bash",
+            output: { type: "text" as const, value: "file1.txt" },
+          },
+        ],
+      },
+      {
+        role: "assistant" as const,
+        content: [{ type: "text" as const, text: "Found file1.txt" }],
+      },
+      { role: "user" as const, content: [{ type: "text" as const, text: "Summarize the conversation" }] },
+    ]
+
+    // No tools passed — simulates compaction
+    const result = convertToKiroPayload(prompt as any, modelId)
+
+    for (const item of result.conversationState.history) {
+      expect(item.assistantResponseMessage?.toolUses).toBeUndefined()
+      expect(item.userInputMessage?.userInputMessageContext?.toolResults).toBeUndefined()
+    }
+    expect(
+      result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults,
+    ).toBeUndefined()
+  })
+
+  test("removes synthetic empty assistant items after stripping tools", () => {
+    const prompt = [
+      { role: "user" as const, content: [{ type: "text" as const, text: "Run ls" }] },
+      {
+        role: "assistant" as const,
+        content: [{ type: "tool-call" as const, toolCallId: "call_1", toolName: "bash", input: { command: "ls" } }],
+      },
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "call_1",
+            toolName: "bash",
+            output: { type: "text" as const, value: "ok" },
+          },
+        ],
+      },
+      { role: "user" as const, content: [{ type: "text" as const, text: "Summarize" }] },
+    ]
+
+    const result = convertToKiroPayload(prompt as any, modelId)
+    const hasEmptyAssistant = result.conversationState.history.some(
+      (x) => x.assistantResponseMessage?.content === "(empty)",
+    )
+
+    expect(hasEmptyAssistant).toBe(false)
+  })
+
+  test("preserves toolUses/toolResults when tools are defined", () => {
+    const tools = [
+      {
+        type: "function" as const,
+        name: "bash",
+        description: "Run bash",
+        inputSchema: {
+          type: "object" as const,
+          properties: { command: { type: "string" as const } },
+          required: ["command"],
+        },
+      },
+    ]
+    const prompt = [
+      { role: "user" as const, content: [{ type: "text" as const, text: "Run ls" }] },
+      {
+        role: "assistant" as const,
+        content: [{ type: "tool-call" as const, toolCallId: "call_1", toolName: "bash", input: { command: "ls" } }],
+      },
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "call_1",
+            toolName: "bash",
+            output: { type: "text" as const, value: "file1.txt" },
+          },
+        ],
+      },
+    ]
+
+    const result = convertToKiroPayload(prompt as any, modelId, tools as any)
+
+    const assistant = result.conversationState.history.find((h) => h.assistantResponseMessage?.toolUses)
+    expect(assistant).toBeDefined()
+    expect(assistant!.assistantResponseMessage!.toolUses).toHaveLength(1)
+    const toolResults = result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults
+    expect(toolResults).toHaveLength(1)
   })
 })
 

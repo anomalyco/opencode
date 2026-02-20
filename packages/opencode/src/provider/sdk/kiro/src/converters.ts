@@ -552,6 +552,65 @@ export function convertToKiroPayload(
     userInputMessage.userInputMessageContext = userInputMessageContext
   }
 
+  // If no tools are defined in this request, strip all toolUses/toolResults from history.
+  // Kiro API rejects requests with toolUses in history but no tools definition (e.g. compaction).
+  if (!kiroTools) {
+    for (const item of history) {
+      if (item.assistantResponseMessage?.toolUses) delete item.assistantResponseMessage.toolUses
+      if (item.userInputMessage?.userInputMessageContext?.toolResults)
+        delete item.userInputMessage.userInputMessageContext.toolResults
+    }
+    const filtered = history.filter((item) => {
+      if (
+        item.assistantResponseMessage &&
+        item.assistantResponseMessage.content === "(empty)" &&
+        !item.assistantResponseMessage.reasoning?.thinking?.trim()
+      ) {
+        delete item.assistantResponseMessage
+      }
+      if (
+        item.userInputMessage &&
+        (!item.userInputMessage.content || item.userInputMessage.content === ".") &&
+        !item.userInputMessage.userInputMessageContext?.toolResults?.length
+      ) {
+        delete item.userInputMessage
+      }
+      return Boolean(item.assistantResponseMessage || item.userInputMessage)
+    })
+    history.length = 0
+    history.push(...filtered)
+
+    // After filtering, consecutive same-role messages can appear (e.g. two assistants
+    // when a "." user between them was removed). Kiro API requires alternating roles,
+    // so merge consecutive items of the same role.
+    for (let i = history.length - 1; i > 0; i--) {
+      const prev = history[i - 1]
+      const curr = history[i]
+      const prevIsUser = !!prev.userInputMessage && !prev.assistantResponseMessage
+      const currIsUser = !!curr.userInputMessage && !curr.assistantResponseMessage
+      const prevIsAssistant = !!prev.assistantResponseMessage && !prev.userInputMessage
+      const currIsAssistant = !!curr.assistantResponseMessage && !curr.userInputMessage
+
+      if (prevIsUser && currIsUser) {
+        const p = prev.userInputMessage!
+        const c = curr.userInputMessage!
+        p.content = [p.content, c.content].filter((t) => t && t !== ".").join("\n\n") || "."
+        history.splice(i, 1)
+      } else if (prevIsAssistant && currIsAssistant) {
+        const p = prev.assistantResponseMessage!
+        const c = curr.assistantResponseMessage!
+        p.content = [p.content, c.content].filter((t) => t && t !== "(empty)").join("\n\n") || "(empty)"
+        if (c.reasoning?.thinking) {
+          p.reasoning = p.reasoning ?? { thinking: "" }
+          p.reasoning.thinking = [p.reasoning.thinking, c.reasoning.thinking].filter(Boolean).join("\n")
+        }
+        history.splice(i, 1)
+      }
+    }
+    lastToolResults = []
+    delete userInputMessageContext.toolResults
+  }
+
   // Validate entire history: toolUses/toolResults must be paired.
   // After compaction/pruning, these pairs can become mismatched
   // causing "Improperly formed request" error from Kiro API.
