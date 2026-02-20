@@ -27,6 +27,7 @@ import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
   "vscode",
+  "vscode-insiders",
   "cursor",
   "zed",
   "textmate",
@@ -46,6 +47,12 @@ type OS = "macos" | "windows" | "linux" | "unknown"
 
 const MAC_APPS = [
   { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
+  {
+    id: "vscode-insiders",
+    label: "VS Code Insiders",
+    icon: "vscode-insiders",
+    openWith: "Visual Studio Code - Insiders",
+  },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
   { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
@@ -60,6 +67,7 @@ const MAC_APPS = [
 
 const WINDOWS_APPS = [
   { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+  { id: "vscode-insiders", label: "VS Code Insiders", icon: "vscode-insiders", openWith: "code-insiders" },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
   { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
@@ -68,6 +76,7 @@ const WINDOWS_APPS = [
 
 const LINUX_APPS = [
   { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+  { id: "vscode-insiders", label: "VS Code Insiders", icon: "vscode-insiders", openWith: "code-insiders" },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
   { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
@@ -75,7 +84,7 @@ const LINUX_APPS = [
 
 type OpenOption = (typeof MAC_APPS)[number] | (typeof WINDOWS_APPS)[number] | (typeof LINUX_APPS)[number]
 type OpenIcon = OpenApp | "file-explorer"
-const OPEN_ICON_BASE = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
+const OPEN_ICON_BASE = new Set<OpenIcon>(["finder", "vscode", "vscode-insiders", "cursor", "zed"])
 
 const openIconSize = (id: OpenIcon) => (OPEN_ICON_BASE.has(id) ? "size-4" : "size-[19px]")
 

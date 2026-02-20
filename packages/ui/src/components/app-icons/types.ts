@@ -2,6 +2,7 @@
 
 export const iconNames = [
   "vscode",
+  "vscode-insiders",
   "cursor",
   "zed",
   "file-explorer",

@@ -13,6 +13,7 @@ import powershell from "../assets/icons/app/powershell.svg"
 import terminal from "../assets/icons/app/terminal.png"
 import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
+import vscodeInsiders from "../assets/icons/app/vscode-insiders.svg"
 import xcode from "../assets/icons/app/xcode.png"
 import zed from "../assets/icons/app/zed.svg"
 import zedDark from "../assets/icons/app/zed-dark.svg"
@@ -20,6 +21,7 @@ import sublimetext from "../assets/icons/app/sublimetext.svg"
 
 const icons = {
   vscode,
+  "vscode-insiders": vscodeInsiders,
   cursor,
   zed,
   "file-explorer": fileExplorer,
