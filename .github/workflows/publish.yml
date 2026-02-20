@@ -205,6 +205,7 @@ jobs:
           owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
           repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-betas') || '' }}
           releaseCommitish: ${{ (github.ref_name == 'beta' && github.sha) || '' }}
+          releaseName: ${{ (github.ref_name == 'beta' && needs.version.outputs.version) || '' }}
         env:
           GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
