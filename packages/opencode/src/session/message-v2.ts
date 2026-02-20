@@ -814,7 +814,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     }
 
     if (msg.info.role === "assistant") {
-      const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+      // Only strip provider metadata when crossing provider boundaries (e.g. Anthropic → OpenAI).
+      // Metadata is provider-namespaced so a different provider ignores unknown keys, but
+      // passing it is still unnecessary. Within the same provider (e.g. compaction using a
+      // different model variant), metadata MUST be preserved — Anthropic requires thinking
+      // block signatures to be byte-identical on replay.
+      const differentProvider = model.providerID !== msg.info.providerID
       const media: Array<{ mime: string; url: string }> = []
 
       if (
@@ -836,7 +841,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "text",
             text: part.text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            ...(differentProvider ? {} : { providerMetadata: part.metadata }),
           })
         if (part.type === "step-start")
           assistantMessage.parts.push({
@@ -874,7 +879,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentProvider ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
           }
           if (part.state.status === "error") {
@@ -887,7 +892,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentProvider ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             } else {
               assistantMessage.parts.push({
@@ -897,7 +902,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 errorText: part.state.error,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentProvider ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
           }
@@ -911,14 +916,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               errorText: "[Tool execution was interrupted]",
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentProvider ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
         }
         if (part.type === "reasoning") {
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            ...(differentProvider ? {} : { providerMetadata: part.metadata }),
           })
         }
       }

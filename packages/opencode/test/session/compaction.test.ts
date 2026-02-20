@@ -457,20 +457,20 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
-  // ─── Bug reproduction tests ───────────────────────────────────────────
-  // These tests demonstrate that when limit.input is set, isOverflow()
-  // does not subtract any headroom for the next model response. This means
-  // compaction only triggers AFTER we've already consumed the full input
-  // budget, leaving zero room for the next API call's output tokens.
+  // ─── Headroom reservation tests ──────────────────────────────────────
+  // These tests verify that when limit.input is set, isOverflow()
+  // correctly reserves headroom (maxOutputTokens, capped at 32K) so
+  // compaction triggers before the next API call overflows.
   //
-  // Compare: without limit.input, usable = context - output (reserves space).
-  // With limit.input, usable = limit.input (reserves nothing).
+  // Previously (bug), the limit.input path only subtracted a 20K buffer
+  // while the non-input path subtracted the full maxOutputTokens — an
+  // asymmetry that let sessions grow ~12K tokens too large before compacting.
   //
   // Related issues: #10634, #8089, #11086, #12621
   // Open PRs: #6875, #12924
 
   it.live(
-    "BUG: no headroom when limit.input is set — compaction should trigger near boundary but does not",
+    "no headroom when limit.input is set — compaction should trigger near boundary",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -496,7 +496,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: without limit.input, same token count correctly triggers compaction",
+    "without limit.input, same token count correctly triggers compaction",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -516,7 +516,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it",
+    "asymmetry — limit.input model does not allow more usage than equivalent model without it",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -524,7 +524,7 @@ describe("session.compaction.isOverflow", () => {
         const withInputLimit = createModel({ context: 200_000, input: 200_000, output: 32_000 })
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
 
-        // 170K total tokens — well above context-output (168K) but below input limit (200K)
+        // 181K total tokens — above usable (context - maxOutput = 168K)
         const tokens = { input: 166_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
         const withLimit = yield* compact.isOverflow({ tokens, model: withInputLimit })
