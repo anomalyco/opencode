@@ -8,6 +8,8 @@ import {
   CallToolResultSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
+  ResourceListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
@@ -51,6 +53,21 @@ export namespace MCP {
     z.object({
       mcpName: z.string(),
       url: z.string(),
+    }),
+  )
+
+  export const ResourceUpdated = BusEvent.define(
+    "mcp.resource.updated",
+    z.object({
+      server: z.string(),
+      uri: z.string(),
+    }),
+  )
+
+  export const ResourceListChanged = BusEvent.define(
+    "mcp.resource.list.changed",
+    z.object({
+      server: z.string(),
     }),
   )
 
