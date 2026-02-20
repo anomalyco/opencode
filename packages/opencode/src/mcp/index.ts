@@ -225,30 +225,32 @@ export namespace MCP {
       const subscriptionMap = new Map<string, Set<string>>()
 
       // Set up config-based subscriptions for connected clients
-      for (const [key, client] of Object.entries(clients)) {
-        if (status[key]?.status !== "connected") continue
-        const mcp = config[key]
-        if (!isMcpConfigured(mcp) || !mcp.subscriptions?.length) continue
-        if (!supportsSubscriptions(client)) continue
-
-        const uris = new Set<string>(mcp.subscriptions)
-        for (const uri of mcp.subscriptions) {
-          client
-            .subscribeResource({ uri })
-            .then(() => {
-              log.info("subscribed to config resource", { key, uri })
-            })
-            .catch((e) => {
-              uris.delete(uri)
-              log.error("failed to subscribe to config resource", {
-                key,
-                uri,
-                error: e instanceof Error ? e.message : String(e),
+      Object.entries(clients)
+        .filter(([key]) => status[key]?.status === "connected")
+        .filter(([key]) => {
+          const mcp = config[key]
+          return isMcpConfigured(mcp) && mcp.subscriptions?.length && supportsSubscriptions(clients[key])
+        })
+        .forEach(([key]) => {
+          const mcp = config[key] as Config.Mcp
+          const uris = new Set<string>(mcp.subscriptions!)
+          mcp.subscriptions!.forEach((uri) => {
+            clients[key]
+              .subscribeResource({ uri })
+              .then(() => {
+                log.info("subscribed to config resource", { key, uri })
               })
-            })
-        }
-        subscriptionMap.set(key, uris)
-      }
+              .catch((e) => {
+                uris.delete(uri)
+                log.error("failed to subscribe to config resource", {
+                  key,
+                  uri,
+                  error: e instanceof Error ? e.message : String(e),
+                })
+              })
+          })
+          subscriptionMap.set(key, uris)
+        })
 
       return {
         status,
@@ -611,28 +613,28 @@ export namespace MCP {
       s.clients[name] = result.mcpClient
 
       // Re-subscribe to previously tracked resources and config-based subscriptions
-      const previousSubs = s.subscriptions.get(name) ?? new Set<string>()
-      const configSubs = new Set(isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : [])
-      const allSubs = new Set([...previousSubs, ...configSubs])
+      const tracked = new Set([
+        ...(s.subscriptions.get(name) ?? []),
+        ...(isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : []),
+      ])
 
-      if (allSubs.size > 0 && supportsSubscriptions(result.mcpClient)) {
-        const activeSubs = new Set<string>(allSubs)
-        for (const uri of allSubs) {
-          result.mcpClient
+      if (tracked.size > 0 && supportsSubscriptions(result.mcpClient)) {
+        ;[...tracked].forEach((uri) => {
+          result.mcpClient!
             .subscribeResource({ uri })
             .then(() => {
               log.info("re-subscribed to resource", { name, uri })
             })
             .catch((e) => {
-              activeSubs.delete(uri)
+              tracked.delete(uri)
               log.error("failed to re-subscribe to resource", {
                 name,
                 uri,
                 error: e instanceof Error ? e.message : String(e),
               })
             })
-        }
-        s.subscriptions.set(name, activeSubs)
+        })
+        s.subscriptions.set(name, tracked)
       }
     }
   }
@@ -795,8 +797,7 @@ export namespace MCP {
   }
 
   export async function subscribe(clientName: string, uri: string): Promise<boolean> {
-    const clientsSnapshot = await clients()
-    const client = clientsSnapshot[clientName]
+    const client = (await clients())[clientName]
 
     if (!client) {
       log.warn("client not found for subscription", { clientName })
@@ -809,32 +810,32 @@ export namespace MCP {
     }
 
     const s = await state()
-    const serverSubs = s.subscriptions.get(clientName)
-    if (serverSubs?.has(uri)) {
+    if (s.subscriptions.get(clientName)?.has(uri)) {
       return true // already subscribed
     }
 
-    try {
-      await client.subscribeResource({ uri })
-      if (!s.subscriptions.has(clientName)) {
-        s.subscriptions.set(clientName, new Set())
-      }
-      s.subscriptions.get(clientName)!.add(uri)
-      log.info("subscribed to resource", { clientName, uri })
-      return true
-    } catch (e) {
-      log.error("failed to subscribe to resource", {
-        clientName,
-        uri,
-        error: e instanceof Error ? e.message : String(e),
+    return client
+      .subscribeResource({ uri })
+      .then(() => {
+        if (!s.subscriptions.has(clientName)) {
+          s.subscriptions.set(clientName, new Set())
+        }
+        s.subscriptions.get(clientName)!.add(uri)
+        log.info("subscribed to resource", { clientName, uri })
+        return true
       })
-      return false
-    }
+      .catch((e) => {
+        log.error("failed to subscribe to resource", {
+          clientName,
+          uri,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        return false
+      })
   }
 
   export async function unsubscribe(clientName: string, uri: string): Promise<boolean> {
-    const clientsSnapshot = await clients()
-    const client = clientsSnapshot[clientName]
+    const client = (await clients())[clientName]
     const s = await state()
 
     // Remove from tracking regardless of whether the server call succeeds
@@ -849,29 +850,29 @@ export namespace MCP {
       return true // already removed from tracking above
     }
 
-    try {
-      await client.unsubscribeResource({ uri })
-      log.info("unsubscribed from resource", { clientName, uri })
-      return true
-    } catch (e) {
-      log.error("failed to unsubscribe from resource", {
-        clientName,
-        uri,
-        error: e instanceof Error ? e.message : String(e),
+    return client
+      .unsubscribeResource({ uri })
+      .then(() => {
+        log.info("unsubscribed from resource", { clientName, uri })
+        return true
       })
-      return false
-    }
+      .catch((e) => {
+        log.error("failed to unsubscribe from resource", {
+          clientName,
+          uri,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        return false
+      })
   }
 
   export async function subscriptions(): Promise<Record<string, string[]>> {
     const s = await state()
-    const result: Record<string, string[]> = {}
-    for (const [server, uris] of s.subscriptions) {
-      if (uris.size > 0) {
-        result[server] = [...uris]
-      }
-    }
-    return result
+    return Object.fromEntries(
+      [...s.subscriptions]
+        .filter(([, uris]) => uris.size > 0)
+        .map(([server, uris]) => [server, [...uris]]),
+    )
   }
 
   /**

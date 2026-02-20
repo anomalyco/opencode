@@ -731,26 +731,24 @@ function App() {
   })
 
   sdk.event.on(MCP.ResourceUpdated.type, (evt) => {
-    const { server, uri } = evt.properties
     toast.show({
       title: "Resource Updated",
-      message: `${uri} (${server})`,
+      message: `${evt.properties.uri} (${evt.properties.server})`,
       variant: "info",
       duration: 5000,
     })
 
     // If current session is idle, trigger AI with updated resource info
     if (route.data.type === "session") {
-      const sessionID = route.data.sessionID
-      const status = sync.data.session_status?.[sessionID]
+      const status = sync.data.session_status?.[route.data.sessionID]
       if (!status || status.type === "idle") {
         sdk.client.session
           .prompt({
-            sessionID,
+            sessionID: route.data.sessionID,
             parts: [
               {
                 type: "text",
-                text: `[System: MCP resource updated]\nResource "${uri}" from server "${server}" has been updated. Please review the changes.`,
+                text: `[System: MCP resource updated]\nResource "${evt.properties.uri}" from server "${evt.properties.server}" has been updated. Please review the changes.`,
               },
             ],
           })
