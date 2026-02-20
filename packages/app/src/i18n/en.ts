@@ -610,6 +610,8 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
+  "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",

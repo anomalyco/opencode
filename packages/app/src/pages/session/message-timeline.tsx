@@ -14,6 +14,7 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 
@@ -80,6 +81,7 @@ export function MessageTimeline(props: {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -535,6 +537,7 @@ export function MessageTimeline(props: {
                     sessionID={sessionID() ?? ""}
                     messageID={message.id}
                     lastUserMessageID={props.lastUserMessageID}
+                    showReasoningSummaries={settings.general.showReasoningSummaries()}
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",
