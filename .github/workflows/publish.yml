@@ -49,7 +49,7 @@ jobs:
         run: |
           ./script/version.ts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -199,13 +199,12 @@ jobs:
           args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.version.outputs.release }}
-          tagName: ${{ (github.ref_name == 'beta' && needs.version.outputs.version) || needs.version.outputs.tag }}
+          tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
           owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
           repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-betas') || '' }}
           releaseCommitish: ${{ (github.ref_name == 'beta' && github.sha) || '' }}
-          releaseName: ${{ (github.ref_name == 'beta' && needs.version.outputs.version) || '' }}
         env:
           GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
