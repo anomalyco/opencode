@@ -735,6 +735,82 @@ export namespace MCP {
     return result
   }
 
+  export async function subscribe(clientName: string, uri: string): Promise<boolean> {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    if (!client) {
+      log.warn("client not found for subscription", { clientName })
+      return false
+    }
+
+    if (!supportsSubscriptions(client)) {
+      log.debug("server does not support resource subscriptions", { clientName })
+      return false
+    }
+
+    const s = await state()
+    const serverSubs = s.subscriptions.get(clientName)
+    if (serverSubs?.has(uri)) {
+      return true // already subscribed
+    }
+
+    try {
+      await client.subscribeResource({ uri })
+      if (!s.subscriptions.has(clientName)) {
+        s.subscriptions.set(clientName, new Set())
+      }
+      s.subscriptions.get(clientName)!.add(uri)
+      log.info("subscribed to resource", { clientName, uri })
+      return true
+    } catch (e) {
+      log.error("failed to subscribe to resource", {
+        clientName,
+        uri,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return false
+    }
+  }
+
+  export async function unsubscribe(clientName: string, uri: string): Promise<boolean> {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+    const s = await state()
+
+    // Remove from tracking regardless of whether the server call succeeds
+    s.subscriptions.get(clientName)?.delete(uri)
+
+    if (!client) {
+      log.warn("client not found for unsubscription", { clientName })
+      return false
+    }
+
+    try {
+      await client.unsubscribeResource({ uri })
+      log.info("unsubscribed from resource", { clientName, uri })
+      return true
+    } catch (e) {
+      log.error("failed to unsubscribe from resource", {
+        clientName,
+        uri,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return false
+    }
+  }
+
+  export async function subscriptions(): Promise<Record<string, string[]>> {
+    const s = await state()
+    const result: Record<string, string[]> = {}
+    for (const [server, uris] of s.subscriptions) {
+      if (uris.size > 0) {
+        result[server] = [...uris]
+      }
+    }
+    return result
+  }
+
   /**
    * Start OAuth authentication flow for an MCP server.
    * Returns the authorization URL that should be opened in a browser.
