@@ -250,6 +250,18 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )
@@ -418,7 +430,7 @@ export const SettingsGeneral: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>
@@ -431,7 +443,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
             const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
             const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
@@ -457,7 +469,7 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
-        </Show>
+        </Show>*/}
 
         <UpdatesSection />
 

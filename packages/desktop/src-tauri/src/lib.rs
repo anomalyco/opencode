@@ -1,21 +1,20 @@
 mod cli;
 mod constants;
-#[cfg(windows)]
-mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+#[cfg(target_os = "linux")]
+pub mod linux_windowing;
 mod logging;
 mod markdown;
 mod server;
 mod window_customizer;
 mod windows;
 
+use crate::cli::CommandChild;
 use futures::{
     FutureExt, TryFutureExt,
     future::{self, Shared},
 };
-#[cfg(windows)]
-use job_object::*;
 use std::{
     env,
     net::TcpListener,
@@ -27,7 +26,6 @@ use std::{
 use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_shell::process::CommandChild;
 use tauri_specta::Event;
 use tokio::{
     sync::{oneshot, watch},
@@ -42,7 +40,9 @@ use crate::windows::{LoadingWindow, MainWindow};
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
+    username: Option<String>,
     password: Option<String>,
+    is_sidecar: bool
 }
 
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
@@ -607,6 +607,7 @@ async fn initialize(app: AppHandle) {
                     child,
                     health_check,
                     url,
+                    username,
                     password,
                 } => {
                     let app = app.clone();
@@ -631,15 +632,9 @@ async fn initialize(app: AppHandle) {
 
                             tracing::info!("CLI health check OK");
 
-                            #[cfg(windows)]
-                            {
-                                let job_state = app.state::<JobObjectState>();
-                                job_state.assign_pid(child.pid());
-                            }
-
                             app.state::<ServerState>().set_child(Some(child));
 
-                            Ok(ServerReadyData { url, password })
+                            Ok(ServerReadyData { url, username,password, is_sidecar: true })
                         }
                         .map(move |res| {
                             let _ = server_ready_tx.send(res);
@@ -649,7 +644,9 @@ async fn initialize(app: AppHandle) {
                 ServerConnection::Existing { url } => {
                     let _ = server_ready_tx.send(Ok(ServerReadyData {
                         url: url.to_string(),
+                        username: None,
                         password: None,
+                        is_sidecar: false,
                     }));
                     None
                 }
@@ -710,9 +707,6 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
     app.deep_link().register_all().ok();
 
-    #[cfg(windows)]
-    app.manage(JobObjectState::new());
-
     app.manage(InitState { current: init_rx });
 }
 
@@ -730,6 +724,7 @@ enum ServerConnection {
     },
     CLI {
         url: String,
+        username: Option<String>,
         password: Option<String>,
         child: CommandChild,
         health_check: server::HealthCheck,
@@ -741,11 +736,15 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 
     tracing::info!(?custom_url, "Attempting server connection");
 
-    if let Some(url) = custom_url
-        && server::check_health_or_ask_retry(&app, &url).await
+    if let Some(url) = &custom_url
+        && server::check_health_or_ask_retry(&app, url).await
     {
         tracing::info!(%url, "Connected to custom server");
-        return ServerConnection::Existing { url: url.clone() };
+        // If the default server is already local, no need to also spawn a sidecar
+        if server::is_localhost_url(url) {
+            return ServerConnection::Existing { url: url.clone() };
+        }
+        // Remote default server: fall through and also spawn a local sidecar
     }
 
     let local_port = get_sidecar_port();
@@ -766,6 +765,7 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 
     ServerConnection::CLI {
         url: local_url,
+        username: Some("opencode".to_string()),
         password: Some(password),
         child,
         health_check,
