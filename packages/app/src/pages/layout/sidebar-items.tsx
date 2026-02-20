@@ -166,7 +166,7 @@ const SessionHoverPreview = (props: {
       when={props.hoverReady()}
       fallback={<div class="text-12-regular text-text-weak">{props.language.t("session.messages.loading")}</div>}
     >
-      <div class="overflow-y-auto max-h-72 h-full">
+      <div class="overflow-y-auto overflow-x-hidden max-h-72 h-full">
         <MessageNav
           messages={props.hoverMessages() ?? []}
           current={undefined}

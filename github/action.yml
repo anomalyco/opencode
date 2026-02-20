@@ -35,6 +35,10 @@ inputs:
     required: false
     default: "false"
 
+  variant:
+    description: "Model variant for provider-specific reasoning effort (e.g., high, max, minimal)"
+    required: false
+
   oidc_base_url:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
@@ -76,5 +80,6 @@ runs:
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
+        VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
         OPENCODE_EMIT_SUBAGENT_EVENTS: ${{ inputs.emit_subagent_events }}
