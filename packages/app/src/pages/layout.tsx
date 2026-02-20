@@ -30,7 +30,6 @@ import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
@@ -50,7 +49,6 @@ import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
-import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
@@ -67,12 +65,7 @@ import {
 } from "./layout/helpers"
 import { collectOpenProjectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
-import {
-  LocalWorkspace,
-  SortableWorkspace,
-  WorkspaceDragOverlay,
-  type WorkspaceSidebarContext,
-} from "./layout/sidebar-workspace"
+import { LocalWorkspace, type WorkspaceSidebarContext } from "./layout/sidebar-workspace"
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
@@ -82,8 +75,8 @@ export default function Layout(props: ParentProps) {
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
       lastProjectSession: {} as { [directory: string]: { directory: string; id: string; at: number } },
+      activeWorkspaceByProject: {} as Record<string, string>,
       activeProject: undefined as string | undefined,
-      activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
       workspaceName: {} as Record<string, string>,
       workspaceBranchName: {} as Record<string, Record<string, string>>,
@@ -549,8 +542,7 @@ export default function Layout(props: ParentProps) {
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
     if (!project) return false
-    if (project.vcs !== "git") return false
-    return layout.sidebar.workspaces(project.worktree)()
+    return project.vcs === "git"
   })
 
   createEffect(() => {
@@ -586,7 +578,7 @@ export default function Layout(props: ParentProps) {
       if (!expanded) continue
       const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
       if (!project) continue
-      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
+      if (project.vcs === "git") continue
       setStore("workspaceExpanded", directory, false)
     }
   })
@@ -596,22 +588,49 @@ export default function Layout(props: ParentProps) {
     if (!project) return [] as Session[]
     const now = Date.now()
     if (workspaceSetting()) {
-      const dirs = workspaceIds(project)
-      const activeDir = currentDir()
-      const result: Session[] = []
-      for (const dir of dirs) {
-        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
-        const active = dir === activeDir
-        if (!expanded && !active) continue
-        const [dirStore] = globalSync.child(dir, { bootstrap: true })
-        const dirSessions = sortedRootSessions(dirStore, now)
-        result.push(...dirSessions)
-      }
-      return result
+      const active = activeWorkspace(project)
+      if (!active) return []
+      const [workspace] = globalSync.child(active, { bootstrap: true })
+      return sortedRootSessions(workspace, now)
     }
     const [projectStore] = globalSync.child(project.worktree)
     return sortedRootSessions(projectStore, now)
   })
+
+  function activeWorkspace(project: LocalProject | undefined) {
+    if (!project) return
+    if (project.vcs !== "git") return project.worktree
+    const dirs = workspaceIds(project)
+    const saved = store.activeWorkspaceByProject[project.worktree]
+    if (saved && dirs.includes(saved)) return saved
+    const current = currentDir()
+    if (dirs.includes(current)) return current
+    return project.worktree
+  }
+
+  function navigateToWorkspace(project: LocalProject, directory: string) {
+    setStore("activeWorkspaceByProject", project.worktree, directory)
+    const recent = store.lastProjectSession[project.worktree]
+    if (recent?.directory === directory && recent.id) {
+      navigateWithSidebarReset(`/${base64Encode(recent.directory)}/session/${recent.id}`)
+      return
+    }
+    navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
+  }
+
+  function cycleWorkspace(offset: number, project?: LocalProject) {
+    const current = project ?? currentProject()
+    if (!current) return
+    if (current.vcs !== "git") return
+    const dirs = workspaceIds(current)
+    if (dirs.length < 2) return
+    const selected = activeWorkspace(current) ?? current.worktree
+    const index = dirs.indexOf(selected)
+    const start = index === -1 ? 0 : index
+    const next = dirs[(start + offset + dirs.length) % dirs.length]
+    if (!next) return
+    navigateToWorkspace(current, next)
+  }
 
   type PrefetchQueue = {
     inflight: Set<string>
@@ -978,27 +997,27 @@ export default function Layout(props: ParentProps) {
         },
       },
       {
-        id: "workspace.toggle",
-        title: language.t("command.workspace.toggle"),
-        description: language.t("command.workspace.toggle.description"),
+        id: "workspace.switch",
+        title: language.t("command.workspace.switch"),
         category: language.t("command.category.workspace"),
-        slash: "workspace",
-        disabled: !currentProject() || currentProject()?.vcs !== "git",
-        onSelect: () => {
-          const project = currentProject()
-          if (!project) return
-          if (project.vcs !== "git") return
-          const wasEnabled = layout.sidebar.workspaces(project.worktree)()
-          layout.sidebar.toggleWorkspaces(project.worktree)
-          showToast({
-            title: wasEnabled
-              ? language.t("toast.workspace.disabled.title")
-              : language.t("toast.workspace.enabled.title"),
-            description: wasEnabled
-              ? language.t("toast.workspace.disabled.description")
-              : language.t("toast.workspace.enabled.description"),
-          })
-        },
+        disabled: !workspaceSetting(),
+        onSelect: () => cycleWorkspace(1),
+      },
+      {
+        id: "workspace.previous",
+        title: language.t("command.workspace.previous"),
+        category: language.t("command.category.workspace"),
+        keybind: "alt+shift+arrowleft",
+        disabled: !workspaceSetting(),
+        onSelect: () => cycleWorkspace(-1),
+      },
+      {
+        id: "workspace.next",
+        title: language.t("command.workspace.next"),
+        category: language.t("command.category.workspace"),
+        keybind: "alt+shift+arrowright",
+        disabled: !workspaceSetting(),
+        onSelect: () => cycleWorkspace(1),
       },
       {
         id: "theme.cycle",
@@ -1098,13 +1117,16 @@ export default function Layout(props: ParentProps) {
     const root = projectRoot(directory)
     server.projects.touch(root)
 
+    const project = layout.projects.list().find((item) => item.worktree === root)
+    const target = activeWorkspace(project) ?? root
+
     const projectSession = store.lastProjectSession[root]
-    if (projectSession?.id) {
+    if (projectSession?.id && projectSession.directory === target) {
       navigateWithSidebarReset(`/${base64Encode(projectSession.directory)}/session/${projectSession.id}`)
       return
     }
 
-    navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    navigateWithSidebarReset(`/${base64Encode(target)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -1162,16 +1184,6 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     if (next) navigateToProject(next.worktree)
     else navigate("/")
-  }
-
-  function toggleProjectWorkspaces(project: LocalProject) {
-    const enabled = layout.sidebar.workspaces(project.worktree)()
-    if (enabled) {
-      layout.sidebar.toggleWorkspaces(project.worktree)
-      return
-    }
-    if (project.vcs !== "git") return
-    layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
@@ -1459,7 +1471,9 @@ export default function Layout(props: ParentProps) {
         const directory = decode64(dir)
         if (!directory) return
         const at = Date.now()
-        setStore("lastProjectSession", projectRoot(directory), { directory, id, at })
+        const root = projectRoot(directory)
+        setStore("lastProjectSession", root, { directory, id, at })
+        setStore("activeWorkspaceByProject", root, directory)
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
         if (expanded === false) {
@@ -1488,14 +1502,8 @@ export default function Layout(props: ParentProps) {
     }
 
     if (workspaces) {
-      const activeDir = currentDir()
-      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-      for (const directory of dirs) {
-        const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-        const active = directory === activeDir
-        if (!expanded && !active) continue
-        next.add(directory)
-      }
+      const active = activeWorkspace(project)
+      if (active) next.add(active)
     }
 
     if (!workspaces) {
@@ -1553,43 +1561,6 @@ export default function Layout(props: ParentProps) {
     if (!extra) return merged
     if (pending) return merged
     return [...merged, extra]
-  }
-
-  const sidebarProject = createMemo(() => {
-    if (layout.sidebar.opened()) return currentProject()
-    const hovered = hoverProjectData()
-    if (hovered) return hovered
-    return currentProject()
-  })
-
-  function handleWorkspaceDragStart(event: unknown) {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeWorkspace", id)
-  }
-
-  function handleWorkspaceDragOver(event: DragEvent) {
-    const { draggable, droppable } = event
-    if (!draggable || !droppable) return
-
-    const project = sidebarProject()
-    if (!project) return
-
-    const ids = workspaceIds(project)
-    const fromIndex = ids.findIndex((dir) => dir === draggable.id.toString())
-    const toIndex = ids.findIndex((dir) => dir === droppable.id.toString())
-    if (fromIndex === -1 || toIndex === -1) return
-    if (fromIndex === toIndex) return
-
-    const result = ids.slice()
-    const [item] = result.splice(fromIndex, 1)
-    if (!item) return
-    result.splice(toIndex, 0, item)
-    setStore("workspaceOrder", project.worktree, result)
-  }
-
-  function handleWorkspaceDragEnd() {
-    setStore("activeWorkspace", undefined)
   }
 
   const createWorkspace = async (project: LocalProject) => {
@@ -1675,8 +1646,7 @@ export default function Layout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog,
-    toggleProjectWorkspaces,
-    workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
+    workspacesEnabled: (project) => project.vcs === "git",
     workspaceIds,
     workspaceLabel,
     sessionProps: {
@@ -1693,6 +1663,9 @@ export default function Layout(props: ParentProps) {
   }
 
   const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean }) => {
+    const [menu, setMenu] = createStore({
+      workspace: false,
+    })
     const projectName = createMemo(() => {
       const project = panelProps.project
       if (!project) return ""
@@ -1710,8 +1683,19 @@ export default function Layout(props: ParentProps) {
     const workspacesEnabled = createMemo(() => {
       const project = panelProps.project
       if (!project) return false
-      if (project.vcs !== "git") return false
-      return layout.sidebar.workspaces(project.worktree)()
+      return project.vcs === "git"
+    })
+    const activeDir = createMemo(() => activeWorkspace(panelProps.project) ?? panelProps.project?.worktree ?? "")
+    const activeStore = createMemo(() => {
+      const directory = activeDir()
+      if (!directory) return
+      return globalSync.child(directory, { bootstrap: false })[0]
+    })
+    const activeLabel = createMemo(() => {
+      const project = panelProps.project
+      const directory = activeDir()
+      if (!project || !directory) return ""
+      return workspaceLabel(directory, activeStore()?.vcs?.branch, project.id)
     })
     const homedir = createMemo(() => globalSync.data.path.home)
 
@@ -1741,7 +1725,7 @@ export default function Layout(props: ParentProps) {
                     <Tooltip
                       placement="bottom"
                       gutter={2}
-                      value={p().worktree}
+                      value={activeDir() || p().worktree}
                       class="shrink-0"
                       contentStyle={{
                         "max-width": "640px",
@@ -1749,9 +1733,64 @@ export default function Layout(props: ParentProps) {
                       }}
                     >
                       <span class="text-12-regular text-text-base truncate select-text">
-                        {p().worktree.replace(homedir(), "~")}
+                        {(activeDir() || p().worktree).replace(homedir(), "~")}
                       </span>
                     </Tooltip>
+                    <Show when={workspacesEnabled()}>
+                      <DropdownMenu
+                        modal={!sidebarHovering()}
+                        open={menu.workspace}
+                        onOpenChange={(open) => setMenu("workspace", open)}
+                      >
+                        <DropdownMenu.Trigger
+                          as={Button}
+                          variant="ghost"
+                          size="small"
+                          class="mt-1 h-7 px-2 justify-start text-12-medium text-text-base"
+                        >
+                          <div class="flex items-center gap-1.5 min-w-0">
+                            <Icon name="branch" size="small" class="text-icon-base shrink-0" />
+                            <span class="truncate">{activeLabel()}</span>
+                            <Icon name="chevron-down" size="small" class="text-icon-weak shrink-0" />
+                          </div>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
+                          <DropdownMenu.Content class="mt-1 min-w-64">
+                            <DropdownMenu.RadioGroup
+                              value={activeDir()}
+                              onChange={(value) => {
+                                if (typeof value !== "string") return
+                                navigateToWorkspace(p(), value)
+                                setMenu("workspace", false)
+                              }}
+                            >
+                              <For each={workspaces()}>
+                                {(directory) => {
+                                  const workspace = globalSync.child(directory, { bootstrap: false })[0]
+                                  return (
+                                    <DropdownMenu.RadioItem value={directory}>
+                                      <div class="flex items-center gap-2 min-w-0">
+                                        <Icon
+                                          name={directory === p().worktree ? "folder" : "branch"}
+                                          size="small"
+                                          class="text-icon-weak shrink-0"
+                                        />
+                                        <DropdownMenu.ItemLabel class="truncate">
+                                          {workspaceLabel(directory, workspace.vcs?.branch, p().id)}
+                                        </DropdownMenu.ItemLabel>
+                                      </div>
+                                      <DropdownMenu.ItemIndicator>
+                                        <Icon name="check-small" size="small" class="text-icon-weak" />
+                                      </DropdownMenu.ItemIndicator>
+                                    </DropdownMenu.RadioItem>
+                                  )
+                                }}
+                              </For>
+                            </DropdownMenu.RadioGroup>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu>
+                    </Show>
                   </div>
 
                   <DropdownMenu modal={!sidebarHovering()}>
@@ -1773,16 +1812,12 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          data-action="project-workspaces-toggle"
+                          data-action="project-switch-workspace"
                           data-project={base64Encode(p().worktree)}
-                          disabled={p().vcs !== "git" && !layout.sidebar.workspaces(p().worktree)()}
-                          onSelect={() => toggleProjectWorkspaces(p())}
+                          disabled={workspaceIds(p()).length < 2}
+                          onSelect={() => cycleWorkspace(1, p())}
                         >
-                          <DropdownMenu.ItemLabel>
-                            {layout.sidebar.workspaces(p().worktree)()
-                              ? language.t("sidebar.workspaces.disable")
-                              : language.t("sidebar.workspaces.enable")}
-                          </DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{language.t("command.workspace.switch")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-clear-notifications"
@@ -1852,43 +1887,14 @@ export default function Layout(props: ParentProps) {
                         </Button>
                       </TooltipKeybind>
                     </div>
-                    <div class="relative flex-1 min-h-0">
-                      <DragDropProvider
-                        onDragStart={handleWorkspaceDragStart}
-                        onDragEnd={handleWorkspaceDragEnd}
-                        onDragOver={handleWorkspaceDragOver}
-                        collisionDetector={closestCenter}
-                      >
-                        <DragDropSensors />
-                        <ConstrainDragXAxis />
-                        <div
-                          ref={(el) => {
-                            if (!panelProps.mobile) scrollContainerRef = el
-                          }}
-                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-                        >
-                          <SortableProvider ids={workspaces()}>
-                            <For each={workspaces()}>
-                              {(directory) => (
-                                <SortableWorkspace
-                                  ctx={workspaceSidebarCtx}
-                                  directory={directory}
-                                  project={p()}
-                                  sortNow={sortNow}
-                                  mobile={panelProps.mobile}
-                                />
-                              )}
-                            </For>
-                          </SortableProvider>
-                        </div>
-                        <DragOverlay>
-                          <WorkspaceDragOverlay
-                            sidebarProject={sidebarProject}
-                            activeWorkspace={() => store.activeWorkspace}
-                            workspaceLabel={workspaceLabel}
-                          />
-                        </DragOverlay>
-                      </DragDropProvider>
+                    <div class="flex-1 min-h-0">
+                      <LocalWorkspace
+                        ctx={workspaceSidebarCtx}
+                        project={p()}
+                        directory={activeDir()}
+                        sortNow={sortNow}
+                        mobile={panelProps.mobile}
+                      />
                     </div>
                   </>
                 </Show>

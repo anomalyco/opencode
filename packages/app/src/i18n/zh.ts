@@ -99,8 +99,9 @@ export const dict = {
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
 
-  "command.workspace.toggle": "切换工作区",
-  "command.workspace.toggle.description": "在侧边栏启用或禁用多个工作区",
+  "command.workspace.switch": "切换工作区",
+  "command.workspace.previous": "上一个工作区",
+  "command.workspace.next": "下一个工作区",
 
   "command.session.undo": "撤销",
   "command.session.undo.description": "撤销上一条消息",

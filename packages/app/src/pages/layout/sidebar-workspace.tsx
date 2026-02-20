@@ -465,16 +465,18 @@ export const SortableWorkspace = (props: {
 export const LocalWorkspace = (props: {
   ctx: WorkspaceSidebarContext
   project: LocalProject
+  directory?: string
   sortNow: Accessor<number>
   mobile?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const directory = createMemo(() => props.directory ?? props.project.worktree)
   const workspace = createMemo(() => {
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store, setStore] = globalSync.child(directory())
     return { store, setStore }
   })
-  const slug = createMemo(() => base64Encode(props.project.worktree))
+  const slug = createMemo(() => base64Encode(directory()))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
@@ -482,7 +484,7 @@ export const LocalWorkspace = (props: {
   const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
-    await globalSync.project.loadSessions(props.project.worktree)
+    await globalSync.project.loadSessions(directory())
   }
 
   return (
