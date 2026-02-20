@@ -40,13 +40,11 @@ export namespace Plugin {
     }
 
     for (const plugin of INTERNAL_PLUGINS) {
-      try {
-        log.info("loading internal plugin", { name: plugin.name })
-        const init = await plugin(input)
-        hooks.push(init)
-      } catch (err) {
+      log.info("loading internal plugin", { name: plugin.name })
+      const init = await plugin(input).catch((err) => {
         log.error("failed to load internal plugin", { name: plugin.name, error: err })
-      }
+      })
+      if (init) hooks.push(init)
     }
 
     let plugins = config.plugin ?? []
@@ -76,27 +74,27 @@ export namespace Plugin {
         })
         if (!plugin) continue
       }
-      try {
-        const mod = await import(plugin)
-        // Prevent duplicate initialization when plugins export the same function
-        // as both a named export and default export (e.g., `export const X` and `export default X`).
-        // Object.entries(mod) would return both entries pointing to the same function reference.
-        const seen = new Set<PluginInstance>()
-        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-          if (seen.has(fn)) continue
-          seen.add(fn)
-          const init = await fn(input)
-          hooks.push(init)
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        log.error("failed to load plugin", { path: plugin, error: message })
-        Bus.publish(Session.Event.Error, {
-          error: new NamedError.Unknown({
-            message: `Failed to load plugin ${plugin}: ${message}`,
-          }).toObject(),
+      // Prevent duplicate initialization when plugins export the same function
+      // as both a named export and default export (e.g., `export const X` and `export default X`).
+      // Object.entries(mod) would return both entries pointing to the same function reference.
+      await import(plugin)
+        .then(async (mod) => {
+          const seen = new Set<PluginInstance>()
+          for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+            if (seen.has(fn)) continue
+            seen.add(fn)
+            hooks.push(await fn(input))
+          }
         })
-      }
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to load plugin", { path: plugin, error: message })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to load plugin ${plugin}: ${message}`,
+            }).toObject(),
+          })
+        })
     }
 
     return {
