@@ -1086,7 +1086,7 @@ ToolRegistry.register({
         icon="console"
         trigger={{
           title: i18n.t("ui.tool.shell"),
-          subtitle: props.input.description,
+          subtitle: props.input.command ?? props.metadata.command ?? props.input.description,
         }}
       >
         <div data-component="tool-output" data-scrollable>
