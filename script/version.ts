@@ -18,11 +18,12 @@ if (!Script.preview) {
   output.push(`release=${release.databaseId}`)
   output.push(`tag=${release.tagName}`)
 } else if (Script.channel === "beta") {
-  await $`gh release create ${Script.version} -d --title "${Script.version}" --repo brendonovich/opencode-desktop-beta`
+  await $`gh release create ${Script.version} -d --title "${Script.version}" --repo ${process.env.GH_REPO}`
   const release =
-    await $`gh release view ${Script.version} --json tagName,databaseId --repo brendonovich/opencode-desktop-beta`.json()
+    await $`gh release view ${Script.version} --json tagName,databaseId --repo ${process.env.GH_REPO}`.json()
   output.push(`release=${release.databaseId}`)
   output.push(`tag=${release.tagName}`)
+  output.push(`repo=${process.env.GH_REPO}`)
 }
 
 if (process.env.GITHUB_OUTPUT) {

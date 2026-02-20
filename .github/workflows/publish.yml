@@ -53,10 +53,12 @@ jobs:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_REPO: ${{ (github.ref_name == 'beta' && 'brendonovich/opencode-desktop-beta') || github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
+      repo: ${{ steps.version.outputs.repo }}
 
   build-cli:
     needs: version
@@ -202,8 +204,7 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-          owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
-          repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-beta') || '' }}
+          repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-betas') || '' }}
           releaseCommitish: ${{ (github.ref_name == 'beta' && github.sha) || '' }}
         env:
           GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || secrets.GITHUB_TOKEN }}
@@ -283,4 +284,5 @@ jobs:
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
