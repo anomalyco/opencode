@@ -7,6 +7,7 @@ import { Icon } from "./icon"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
+import { ScrollView } from "./scroll-view"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -274,13 +275,13 @@ export const SessionReview = (props: SessionReviewProps) => {
   })
 
   return (
-    <div
+    <ScrollView
       data-component="session-review"
-      ref={(el) => {
+      viewportRef={(el) => {
         scroll = el
         props.scrollRef?.(el)
       }}
-      onScroll={props.onScroll}
+      onScroll={props.onScroll as any}
       classList={{
         ...(props.classList ?? {}),
         [props.classes?.root ?? ""]: !!props.classes?.root,
@@ -709,6 +710,6 @@ export const SessionReview = (props: SessionReviewProps) => {
           </Accordion>
         </Show>
       </div>
-    </div>
+    </ScrollView>
   )
 }

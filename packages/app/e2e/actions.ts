@@ -225,7 +225,7 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
   await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const scroller = page.locator(".session-scroller").first()
+  const scroller = page.locator(".scroll-view__viewport").first()
   await expect(scroller).toBeVisible()
   await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
 
