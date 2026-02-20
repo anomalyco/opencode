@@ -23,7 +23,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
-import { type Accessor, createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
+import { createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -31,7 +31,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { commands, type InitStep } from "./bindings"
+import { commands, ServerReadyData, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -452,16 +452,19 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            const server: ServerConnection.Sidecar = {
-              displayName: "Local Server",
-              type: "sidecar",
-              variant: "base",
-              http: {
-                url: data().url,
-                username: "opencode",
-                password: data().password ?? undefined,
-              },
+            const http = {
+              url: data.url,
+              username: data.username ?? undefined,
+              password: data.password ?? undefined,
             }
+            const server: ServerConnection.Any = data.is_sidecar
+              ? {
+                  displayName: "Local Server",
+                  type: "sidecar",
+                  variant: "base",
+                  http,
+                }
+              : { type: "http", http }
 
             function Inner() {
               const cmd = useCommand()
@@ -485,10 +488,8 @@ render(() => {
   )
 }, root!)
 
-type ServerReadyData = { url: string; password: string | null }
-
 // Gate component that waits for the server to be ready
-function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
+function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
 
   return (
@@ -516,7 +517,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
           </div>
         }
       >
-        {(data) => props.children(data)}
+        {(data) => props.children(data())}
       </Show>
     </Show>
   )
