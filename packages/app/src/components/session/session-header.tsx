@@ -452,7 +452,10 @@ export function SessionHeader() {
                       variant: "ghost",
                       class:
                         "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
-                      classList: { "rounded-r-none": share.shareUrl() !== undefined },
+                      classList: {
+                        "rounded-r-none": share.shareUrl() !== undefined,
+                        "border-r-0": share.shareUrl() !== undefined,
+                      },
                       style: { scale: 1 },
                     }}
                     trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
