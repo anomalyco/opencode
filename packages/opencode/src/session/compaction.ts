@@ -27,8 +27,6 @@ export namespace SessionCompaction {
     ),
   }
 
-  const COMPACTION_BUFFER = 20_000
-
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
@@ -39,11 +37,12 @@ export namespace SessionCompaction {
       input.tokens.total ||
       input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
 
-    const reserved =
-      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-    const usable = input.model.limit.input
-      ? input.model.limit.input - reserved
-      : context - ProviderTransform.maxOutputTokens(input.model)
+    // Reserve headroom so compaction triggers before the next turn overflows.
+    // maxOutputTokens() is capped at 32K (OUTPUT_TOKEN_MAX) regardless of the
+    // model's raw output limit, so this is never excessively aggressive.
+    // Users can override via config.compaction.reserved if needed (#12924).
+    const reserved = config.compaction?.reserved ?? ProviderTransform.maxOutputTokens(input.model)
+    const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
     return count >= usable
   }
 
