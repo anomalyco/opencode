@@ -58,6 +58,21 @@ describe("prompt-input editor dom", () => {
     container.remove()
   })
 
+  test("getTextLength counts implicit newlines from block elements", () => {
+    const container = document.createElement("div")
+    const div1 = document.createElement("div")
+    div1.appendChild(document.createTextNode("line1"))  // +4
+    const div2 = document.createElement("div")          // +1 (newline)
+    div2.appendChild(document.createTextNode("line2"))  // +4
+    const div3 = document.createElement("div")          // +1 (newline)
+    div3.appendChild(document.createTextNode("line3"))  // +4
+    container.appendChild(div1)
+    container.appendChild(div2)
+    container.appendChild(div3)
+
+    expect(getTextLength(container)).toBe(17)
+  })
+
   test("setCursorPosition and getCursorPosition round-trip across blank lines", () => {
     const container = document.createElement("div")
     container.appendChild(document.createTextNode("a"))

@@ -1,3 +1,9 @@
+function isBlock(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false
+  const tag = (node as HTMLElement).tagName
+  return tag === "DIV" || tag === "P"
+}
+
 export function createTextFragment(content: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
   const segments = content.split("\n")
@@ -21,8 +27,13 @@ export function getTextLength(node: Node): number {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
   let length = 0
-  for (const child of Array.from(node.childNodes)) {
+  const childNodes = node.childNodes
+  for (let i = 0; i < childNodes.length; i++) {
+    const child = childNodes[i]
     length += getTextLength(child)
+    if (isBlock(child) && i < childNodes.length - 1) {
+      length += 1
+    }
   }
   return length
 }
