@@ -6,6 +6,7 @@ import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
+import { MCP } from "@/mcp"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -726,6 +727,44 @@ function App() {
       title: "Update Available",
       message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
       duration: 10000,
+    })
+  })
+
+  sdk.event.on(MCP.ResourceUpdated.type, (evt) => {
+    const { server, uri } = evt.properties
+    toast.show({
+      title: "Resource Updated",
+      message: `${uri} (${server})`,
+      variant: "info",
+      duration: 5000,
+    })
+
+    // If current session is idle, trigger AI with updated resource info
+    if (route.data.type === "session") {
+      const sessionID = route.data.sessionID
+      const status = sync.data.session_status?.[sessionID]
+      if (!status || status.type === "idle") {
+        sdk.client.session
+          .prompt({
+            sessionID,
+            parts: [
+              {
+                type: "text" as const,
+                text: `[System: MCP resource updated]\nResource "${uri}" from server "${server}" has been updated. Please review the changes.`,
+              },
+            ],
+          })
+          .catch(() => {})
+      }
+    }
+  })
+
+  sdk.event.on(MCP.ResourceListChanged.type, (evt) => {
+    toast.show({
+      title: "MCP Resources Changed",
+      message: `Server "${evt.properties.server}" resource list updated`,
+      variant: "info",
+      duration: 3000,
     })
   })
 
