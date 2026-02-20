@@ -415,16 +415,11 @@ async function getCustomThemes() {
       dot: true,
       symlink: true,
     })) {
-<<<<<<< HEAD
       const ext = path.extname(item)
       const name = path.basename(item, ext)
 
       // Use JSONC parser for all theme files regardless of extension
       result[name] = await Config.loadThemeFile(item)
-=======
-      const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
->>>>>>> dev
     }
   }
   return result
