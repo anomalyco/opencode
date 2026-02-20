@@ -215,6 +215,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        slug: z.string().optional(),
       })
       .optional(),
     async (input) => {
@@ -223,6 +224,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        slug: input?.slug,
       })
     },
   )
@@ -290,10 +292,11 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    slug?: string
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
-      slug: Slug.create(),
+      slug: input.slug ?? Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
