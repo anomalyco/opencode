@@ -414,6 +414,15 @@ const createPlatform = (): Platform => {
         }, "image/png")
       })
     },
+
+    getConfigPaths: () => commands.getConfigPaths(),
+
+    readConfigFile: (path: string) => commands.readConfigFile(path),
+
+    writeConfigFile: async (path: string, content: string) => {
+      await commands.writeConfigFile(path, content)
+      return undefined
+    },
   }
 }
 

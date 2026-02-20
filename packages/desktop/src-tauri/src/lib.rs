@@ -428,6 +428,63 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[derive(serde::Serialize, specta::Type)]
+pub struct ConfigPaths {
+    pub global: String,
+    pub project: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_config_paths(app: AppHandle) -> Result<ConfigPaths, String> {
+    let global = dirs::config_dir()
+        .ok_or("Failed to get config directory")?
+        .join("opencode")
+        .to_string_lossy()
+        .to_string();
+
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let project = find_config_file(&cwd, &["opencode.jsonc", "opencode.json"]);
+
+    Ok(ConfigPaths { global, project })
+}
+
+fn find_config_file(start_dir: &str, filenames: &[&str]) -> Option<String> {
+    let mut current = std::path::PathBuf::from(start_dir);
+    
+    for _ in 0..20 {
+        for filename in filenames {
+            let path = current.join(filename);
+            if path.exists() {
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+        
+        if !current.pop() {
+            break;
+        }
+    }
+    
+    None
+}
+
+#[tauri::command]
+#[specta::specta]
+fn read_config_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read config: {}", e))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn write_config_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content)
+        .map_err(|e| format!("Failed to write config: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = make_specta_builder();
@@ -516,7 +573,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path,
-            resolve_app_path
+            resolve_app_path,
+            get_config_paths,
+            read_config_file,
+            write_config_file
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

@@ -86,6 +86,15 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Get config file paths (desktop only) */
+  getConfigPaths?(): Promise<{ global: string; project: string | null }>
+
+  /** Read config file (desktop only) */
+  readConfigFile?(path: string): Promise<string>
+
+  /** Write config file (desktop only) */
+  writeConfigFile?(path: string, content: string): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"
