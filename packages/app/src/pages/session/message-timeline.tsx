@@ -371,9 +371,9 @@ export function MessageTimeline(props: {
           <Show when={showHeader()}>
             <div
               classList={{
-                "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                "sticky top-0 z-30 bg-background-stronger border-b border-border-weak-base": true,
                 "w-full": true,
-                "px-4 md:px-6": true,
+                "px-4 md:px-5": true,
                 "md:mx-auto": props.centered,
               }}
               style={{
@@ -396,7 +396,7 @@ export function MessageTimeline(props: {
                       when={title.editing}
                       fallback={
                         <h1
-                          class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
+                          class="text-14-medium text-text-strong truncate grow-1 min-w-0"
                           onDblClick={openTitleEditor}
                         >
                           {titleValue()}
@@ -409,7 +409,7 @@ export function MessageTimeline(props: {
                         }}
                         value={title.draft}
                         disabled={title.saving}
-                        class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                        class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
                         style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
