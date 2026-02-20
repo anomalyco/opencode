@@ -154,7 +154,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const fallbackModel = createMemo(() => {
         if (args.model) {
           const { providerID, modelID } = Provider.parseModel(args.model)
-          if (isModelValid({ providerID, modelID })) {
+          // FIX: Trust CLI-provided model even if not in synced provider list
+          // This allows using models like openrouter/* that may not be cached yet
+          if (providerID && modelID) {
             return {
               providerID,
               modelID,
@@ -192,6 +194,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
+        const args = useArgs()
+        
+        // FIX: Check CLI -m flag first without validation to allow custom providers like openrouter
+        if (args.model) {
+          const { providerID, modelID } = Provider.parseModel(args.model)
+          if (providerID && modelID) {
+            return { providerID, modelID }
+          }
+        }
+        
         return (
           getFirstValidModel(
             () => modelStore.model[a.name],
