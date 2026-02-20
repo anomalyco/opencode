@@ -9,6 +9,7 @@ import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
@@ -317,6 +318,7 @@ export function SessionTurn(
                           <div data-component="session-turn-diffs-content">
                             <Accordion
                               multiple
+                              style={{ "--sticky-accordion-offset": "40px" }}
                               value={expanded()}
                               onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
                             >
@@ -345,13 +347,13 @@ export function SessionTurn(
 
                                   return (
                                     <Accordion.Item value={diff.file}>
-                                      <Accordion.Header>
+                                      <StickyAccordionHeader>
                                         <Accordion.Trigger>
                                           <div data-slot="session-turn-diff-trigger">
                                             <span data-slot="session-turn-diff-path">
                                               <Show when={diff.file.includes("/")}>
                                                 <span data-slot="session-turn-diff-directory">
-                                                  {getDirectory(diff.file)}
+                                                  {`\u202A${getDirectory(diff.file)}\u202C`}
                                                 </span>
                                               </Show>
                                               <span data-slot="session-turn-diff-filename">
@@ -368,7 +370,7 @@ export function SessionTurn(
                                             </div>
                                           </div>
                                         </Accordion.Trigger>
-                                      </Accordion.Header>
+                                      </StickyAccordionHeader>
                                       <Accordion.Content>
                                         <Show when={visible()}>
                                           <div data-slot="session-turn-diff-view" data-scrollable>
