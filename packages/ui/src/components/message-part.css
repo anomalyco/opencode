@@ -179,6 +179,7 @@
 
 [data-component="text-part"] {
   width: 100%;
+  margin-top: 24px;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -227,12 +228,18 @@
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
-  opacity: 0.8;
-  line-height: var(--line-height-large);
+  line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: normal;
+    font-size: inherit;
+    color: var(--text-weak);
+
+    strong,
+    b {
+      color: var(--text-weak);
+    }
 
     p:has(strong) {
       margin-top: 24px;
@@ -767,12 +774,6 @@
     flex: 1;
     min-height: 0;
     padding: 12px 12px 0;
-    background-color: var(--surface-raised-stronger-non-alpha);
-    border-radius: 12px;
-    box-shadow: var(--shadow-xs-border);
-    overflow: clip;
-    position: relative;
-    z-index: 10;
   }
 
   [data-slot="permission-header"] {
@@ -855,13 +856,7 @@
     justify-content: space-between;
     flex-shrink: 0;
     padding: 32px 8px 8px;
-    background-color: var(--background-base);
-    border: 1px solid var(--border-weak-base);
-    border-radius: 12px;
-    overflow: clip;
     margin-top: -24px;
-    position: relative;
-    z-index: 0;
   }
 
   [data-slot="permission-footer-actions"] {
@@ -891,12 +886,6 @@
     flex: 1;
     min-height: 0;
     padding: 8px 8px 0;
-    background-color: var(--surface-raised-stronger-non-alpha);
-    border-radius: 12px;
-    box-shadow: var(--shadow-xs-border);
-    overflow: clip;
-    position: relative;
-    z-index: 10;
   }
 
   [data-slot="question-header"] {
@@ -1180,13 +1169,7 @@
     justify-content: space-between;
     flex-shrink: 0;
     padding: 32px 8px 8px;
-    background-color: var(--background-base);
-    border: 1px solid var(--border-weak-base);
-    border-radius: 12px;
-    overflow: clip;
     margin-top: -24px;
-    position: relative;
-    z-index: 0;
   }
 
   [data-slot="question-footer-actions"] {
@@ -1215,6 +1198,21 @@
     [data-slot="answer-text"] {
       color: var(--text-strong);
     }
+  }
+}
+
+[data-component="apply-patch-tool"] {
+  > [data-component="collapsible"].tool-collapsible {
+    gap: 0px;
+  }
+
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    height: 40px;
+    padding-bottom: 8px;
+    background-color: var(--background-stronger);
   }
 }
 
@@ -1287,8 +1285,6 @@
 }
 
 [data-component="apply-patch-file-diff"] {
-  border-top: 1px solid var(--border-weaker-base);
-  max-height: 420px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
