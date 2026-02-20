@@ -204,7 +204,8 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-          repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-betas') || '' }}
+          owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
+          repo: ${{ (github.ref_name == 'beta' && 'opencode-desktop-beta') || '' }}
           releaseCommitish: ${{ (github.ref_name == 'beta' && github.sha) || '' }}
         env:
           GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || secrets.GITHUB_TOKEN }}
