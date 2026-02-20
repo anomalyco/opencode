@@ -13,11 +13,14 @@ import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
 import { Config } from "@/config"
+import { Yolo } from "../yolo"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   // everything depends on config so eager load it for nice traces
   yield* Config.Service.use((svc) => svc.get())
+  // Yolo depends on config so init it right after config is ready.
+  yield* Effect.promise(() => Yolo.init())
   // Plugin can mutate config so it has to be initialized before anything else.
   yield* Plugin.Service.use((svc) => svc.init())
   yield* Effect.all(

@@ -1472,6 +1472,29 @@ const layer: Layer.Layer<
             }
           }
 
+          // Kimi's coding API requires a thinking block on every assistant message
+          // that contains tool_use when thinking is enabled. The @ai-sdk/anthropic SDK
+          // drops thinking blocks from multi-turn messages because Kimi doesn't return
+          // Anthropic-style signatures. We inject an empty thinking block here so Kimi
+          // doesn't reject the request with 'reasoning_content is missing'.
+          if (model.providerID === "kimi-for-coding" && opts.body && opts.method === "POST") {
+            const body = JSON.parse(opts.body as string)
+            if (Array.isArray(body.messages)) {
+              for (const msg of body.messages) {
+                if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+                const hasToolUse = msg.content.some((b: any) => b.type === "tool_use")
+                const hasThinking = msg.content.some(
+                  (b: any) => b.type === "thinking" || b.type === "redacted_thinking",
+                )
+                if (hasToolUse && !hasThinking) {
+                  msg.content.unshift({ type: "thinking", thinking: ".", signature: "placeholder" })
+                  msg.reasoning_content = "."
+                }
+              }
+              opts.body = JSON.stringify(body)
+            }
+          }
+
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

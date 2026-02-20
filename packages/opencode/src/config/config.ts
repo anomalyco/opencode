@@ -196,6 +196,9 @@ const InfoSchema = Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
     }),
   ),
+  yolo: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable YOLO mode - auto-approve all permission prompts (except explicit deny rules)",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({
