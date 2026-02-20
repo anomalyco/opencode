@@ -3,6 +3,7 @@ import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -407,11 +408,11 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
+    for (const item of await Glob.scan("themes/*.{json,jsonc}", {
       cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
     })) {
       const ext = path.extname(item)
       const name = path.basename(item, ext)

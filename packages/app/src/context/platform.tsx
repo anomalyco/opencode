@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
+import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 
 type PickerPaths = string | string[] | null
@@ -58,7 +58,7 @@ export type Platform = {
   fetch?: typeof fetch
 
   /** Get the configured default server URL (platform-specific) */
-  getDefaultServerUrl?(): Promise<string | null> | string | null
+  getDefaultServerUrl?(): Promise<string | null>
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
