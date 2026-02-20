@@ -177,7 +177,7 @@ export const SettingsPermissions: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.permissions.title")}</h2>
           <p class="text-14-regular text-text-weak">{language.t("settings.permissions.description")}</p>
