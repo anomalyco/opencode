@@ -207,6 +207,9 @@ export function createDialogProviderOptions() {
               }
             }
             if (method.type === "api") {
+              if (provider.id === "litellm") {
+                return dialog.replace(() => <LiteLLMMethod />)
+              }
               let metadata: Record<string, string> | undefined
               if (method.prompts?.length) {
                 const value = await PromptsMethod({ dialog, prompts: method.prompts })
@@ -466,4 +469,51 @@ async function PromptsMethod(props: PromptsMethodProps) {
     inputs[prompt.key] = value
   }
   return inputs
+}
+
+function LiteLLMMethod() {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  return (
+    <DialogPrompt
+      title="LiteLLM Base URL"
+      placeholder="http://localhost:4000"
+      description={() => (
+        <text fg={theme.textMuted}>Enter the base URL of your LiteLLM proxy server.</text>
+      )}
+      onConfirm={async (baseURL) => {
+        const url = baseURL?.trim() || "http://localhost:4000"
+        dialog.replace(() => (
+          <DialogPrompt
+            title="LiteLLM API Key"
+            placeholder="API key (optional)"
+            description={() => (
+              <text fg={theme.textMuted}>Enter the API key for your LiteLLM proxy, or leave empty if not required.</text>
+            )}
+            onConfirm={async (apiKey) => {
+              await sdk.client.config.update({
+                provider: {
+                  litellm: {
+                    options: { baseURL: url },
+                  },
+                },
+              })
+              if (apiKey?.trim()) {
+                await sdk.client.auth.set({
+                  providerID: "litellm",
+                  auth: { type: "api", key: apiKey.trim() },
+                })
+              }
+              await sdk.client.instance.dispose()
+              await sync.bootstrap()
+              dialog.replace(() => <DialogModel providerID="litellm" />)
+            }}
+          />
+        ))
+      }}
+    />
+  )
 }
