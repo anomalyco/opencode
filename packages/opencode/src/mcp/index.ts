@@ -222,10 +222,38 @@ export namespace MCP {
           }
         }),
       )
+      const subscriptionMap = new Map<string, Set<string>>()
+
+      // Set up config-based subscriptions for connected clients
+      for (const [key, client] of Object.entries(clients)) {
+        if (status[key]?.status !== "connected") continue
+        const mcp = config[key]
+        if (!isMcpConfigured(mcp) || !mcp.subscriptions?.length) continue
+        if (!supportsSubscriptions(client)) continue
+
+        const uris = new Set<string>()
+        for (const uri of mcp.subscriptions) {
+          client
+            .subscribeResource({ uri })
+            .then(() => {
+              uris.add(uri)
+              log.info("subscribed to config resource", { key, uri })
+            })
+            .catch((e) => {
+              log.error("failed to subscribe to config resource", {
+                key,
+                uri,
+                error: e instanceof Error ? e.message : String(e),
+              })
+            })
+        }
+        subscriptionMap.set(key, uris)
+      }
+
       return {
         status,
         clients,
-        subscriptions: new Map<string, Set<string>>(),
+        subscriptions: subscriptionMap,
       }
     },
     async (state) => {
