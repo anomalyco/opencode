@@ -1654,22 +1654,17 @@ export namespace LSPServer {
 
       if (!bin) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        log.info("downloading terraform-ls from GitHub releases")
+        log.info("downloading terraform-ls from HashiCorp releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/hashicorp/terraform-ls/releases/latest")
+        const releaseResponse = await fetch("https://api.releases.hashicorp.com/v1/releases/terraform-ls/latest")
         if (!releaseResponse.ok) {
           log.error("Failed to fetch terraform-ls release info")
           return
         }
 
         const release = (await releaseResponse.json()) as {
-          tag_name?: string
-          assets?: { name?: string; browser_download_url?: string }[]
-        }
-        const version = release.tag_name?.replace("v", "")
-        if (!version) {
-          log.error("terraform-ls release did not include a version tag")
-          return
+          version?: string
+          builds?: { arch?: string; os?: string; url?: string }[]
         }
 
         const platform = process.platform
@@ -1678,22 +1673,20 @@ export namespace LSPServer {
         const tfArch = arch === "arm64" ? "arm64" : "amd64"
         const tfPlatform = platform === "win32" ? "windows" : platform
 
-        const assetName = `terraform-ls_${version}_${tfPlatform}_${tfArch}.zip`
-
-        const assets = release.assets ?? []
-        const asset = assets.find((a) => a.name === assetName)
-        if (!asset?.browser_download_url) {
-          log.error(`Could not find asset ${assetName} in terraform-ls release`)
+        const builds = release.builds ?? []
+        const build = builds.find((b) => b.arch === tfArch && b.os === tfPlatform)
+        if (!build?.url) {
+          log.error(`Could not find build for ${tfPlatform}/${tfArch} terraform-ls release version ${release.version}`)
           return
         }
 
-        const downloadResponse = await fetch(asset.browser_download_url)
+        const downloadResponse = await fetch(build.url)
         if (!downloadResponse.ok) {
           log.error("Failed to download terraform-ls")
           return
         }
 
-        const tempPath = path.join(Global.Path.bin, assetName)
+        const tempPath = path.join(Global.Path.bin, "terraform-ls.zip")
         if (downloadResponse.body) await Filesystem.writeStream(tempPath, downloadResponse.body)
 
         const ok = await Archive.extractZip(tempPath, Global.Path.bin)
