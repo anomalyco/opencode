@@ -21883,6 +21883,28 @@
         "cost": { "input": 0.1, "output": 0.4, "cache_read": 0.025 },
         "limit": { "context": 1048576, "output": 65536 }
       },
+      "gemini-3.1-pro": {
+        "id": "gemini-3.1-pro",
+        "name": "Gemini 3.1 Pro",
+        "family": "gemini-pro",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "knowledge": "2026-01",
+        "release_date": "2026-02-19",
+        "last_updated": "2026-02-19",
+        "modalities": { "input": ["text", "image", "video", "audio", "pdf"], "output": ["text"] },
+        "open_weights": false,
+        "cost": {
+          "input": 2,
+          "output": 12,
+          "cache_read": 0.2,
+          "context_over_200k": { "input": 4, "output": 18, "cache_read": 0.4 }
+        },
+        "limit": { "context": 1048576, "output": 65536 }
+      },
       "gemini-3-pro-preview": {
         "id": "gemini-3-pro-preview",
         "name": "Gemini 3 Pro Preview",
@@ -22312,6 +22334,28 @@
         "modalities": { "input": ["text", "image", "audio", "video", "pdf"], "output": ["text"] },
         "open_weights": false,
         "cost": { "input": 0.1, "output": 0.4, "cache_read": 0.025 },
+        "limit": { "context": 1048576, "output": 65536 }
+      },
+      "gemini-3.1-pro": {
+        "id": "gemini-3.1-pro",
+        "name": "Gemini 3.1 Pro",
+        "family": "gemini-pro",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "knowledge": "2026-01",
+        "release_date": "2026-02-19",
+        "last_updated": "2026-02-19",
+        "modalities": { "input": ["text", "image", "video", "audio", "pdf"], "output": ["text"] },
+        "open_weights": false,
+        "cost": {
+          "input": 2,
+          "output": 12,
+          "cache_read": 0.2,
+          "context_over_200k": { "input": 4, "output": 18, "cache_read": 0.4 }
+        },
         "limit": { "context": 1048576, "output": 65536 }
       },
       "gemini-3-pro-preview": {
