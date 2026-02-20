@@ -732,6 +732,11 @@ export namespace MCP {
         return undefined
       })
 
+    // Auto-subscribe to the resource for update notifications (fire-and-forget)
+    if (result) {
+      subscribe(clientName, resourceUri).catch(() => {})
+    }
+
     return result
   }
 
