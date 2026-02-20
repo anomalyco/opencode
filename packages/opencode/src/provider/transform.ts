@@ -744,6 +744,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   // Model aliases (e.g., "sonnet-4.5") may not contain "claude" or "anthropic",
   // so we also check the underlying model stored in options.underlyingModel
   // (e.g., "azure_ai/claude-sonnet-4-5").
+  // NOTE: @ai-sdk/openai-compatible passes provider options as raw request body
+  // fields, so we must use snake_case (budget_tokens) not camelCase (budgetTokens)
+  // since LiteLLM forwards them directly to the upstream API.
   if (model.providerID === "litellm" && model.capabilities.reasoning) {
     const apiId = model.api.id.toLowerCase()
     const underlying = ((model.options?.underlyingModel as string) ?? "").toLowerCase()
@@ -754,20 +757,23 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       )
       if (isAdaptive) {
         return Object.fromEntries(
-          ["low", "medium", "high", "max"].map((effort) => [effort, { thinking: { type: "adaptive" }, effort }]),
+          ["low", "medium", "high", "max"].map((effort) => [
+            effort,
+            { thinking: { type: "enabled", budget_tokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)) } },
+          ]),
         )
       }
       return {
         high: {
           thinking: {
             type: "enabled",
-            budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
+            budget_tokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
           },
         },
         max: {
           thinking: {
             type: "enabled",
-            budgetTokens: Math.min(31_999, model.limit.output - 1),
+            budget_tokens: Math.min(31_999, model.limit.output - 1),
           },
         },
       }
