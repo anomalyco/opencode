@@ -784,6 +784,21 @@ export type EventMcpBrowserOpenFailed = {
   }
 }
 
+export type EventMcpResourceUpdated = {
+  type: "mcp.resource.updated"
+  properties: {
+    server: string
+    uri: string
+  }
+}
+
+export type EventMcpResourceListChanged = {
+  type: "mcp.resource.list.changed"
+  properties: {
+    server: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -972,6 +987,8 @@ export type Event =
   | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMcpResourceUpdated
+  | EventMcpResourceListChanged
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -1616,6 +1633,14 @@ export type McpLocalConfig = {
    * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
+  /**
+   * Resource URIs to automatically subscribe to for update notifications
+   */
+  subscriptions?: Array<string>
+  /**
+   * Automatically prompt the AI when a subscribed resource is updated. Defaults to false.
+   */
+  autoprompt?: boolean
 }
 
 export type McpOAuthConfig = {
@@ -1660,6 +1685,14 @@ export type McpRemoteConfig = {
    * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
+  /**
+   * Resource URIs to automatically subscribe to for update notifications
+   */
+  subscriptions?: Array<string>
+  /**
+   * Automatically prompt the AI when a subscribed resource is updated. Defaults to false.
+   */
+  autoprompt?: boolean
 }
 
 /**
