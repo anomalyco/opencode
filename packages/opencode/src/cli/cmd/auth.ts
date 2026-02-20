@@ -26,7 +26,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       prompts.log.error(
         `Unknown method "${methodName}" for ${provider}. Available: ${plugin.auth.methods.map((x) => x.label).join(", ")}`,
       )
-      return false
+      process.exit(1)
     }
     index = match
   } else if (plugin.auth.methods.length > 1) {
@@ -366,8 +366,7 @@ export const AuthLoginCommand = cmd({
           const match = options.find((x) => x.label.toLowerCase() === args.provider!.toLowerCase())
           if (!match) {
             prompts.log.error(`Unknown provider "${args.provider}"`)
-            prompts.outro("Done")
-            return
+            process.exit(1)
           }
           provider = match.value
         } else {
