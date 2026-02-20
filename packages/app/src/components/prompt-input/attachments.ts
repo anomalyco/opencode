@@ -7,6 +7,19 @@ import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+const LARGE_PASTE_CHARS = 8000
+const LARGE_PASTE_BREAKS = 120
+
+function largePaste(text: string) {
+  if (text.length >= LARGE_PASTE_CHARS) return true
+  let breaks = 0
+  for (const char of text) {
+    if (char !== "\n") continue
+    breaks += 1
+    if (breaks >= LARGE_PASTE_BREAKS) return true
+  }
+  return false
+}
 
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
@@ -14,7 +27,7 @@ type PromptAttachmentsInput = {
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
-  addPart: (part: ContentPart) => void
+  addPart: (part: ContentPart) => boolean
   readClipboardImage?: () => Promise<File | null>
 }
 
@@ -89,6 +102,13 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     if (!plainText) return
+
+    if (largePaste(plainText)) {
+      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+      input.focusEditor()
+      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+    }
+
     const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
     if (inserted) return
 
