@@ -199,7 +199,7 @@ jobs:
           args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.version.outputs.release }}
-          tagName: ${{ needs.version.outputs.tag }}
+          tagName: ${{ (github.ref_name == 'beta' && needs.version.outputs.version) || needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
           owner: ${{ (github.ref_name == 'beta' && 'brendonovich') || '' }}
