@@ -18,12 +18,14 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
+    data?: unknown
     send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
   }
 
   type Subscriber = {
     id: number
+    token: unknown
   }
 
   const sockets = new WeakMap<object, number>()
@@ -35,6 +37,19 @@ export namespace Pty {
     const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
     sockets.set(ws, next)
     return next
+  }
+
+  const token = (ws: Socket) => {
+    const data = ws.data
+    if (!data || typeof data !== "object") return
+
+    const events = (data as { events?: unknown }).events
+    if (events && typeof events === "object") return events
+
+    const url = (data as { url?: unknown }).url
+    if (url && typeof url === "object") return url
+
+    return data
   }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON.
@@ -194,6 +209,12 @@ export namespace Pty {
           session.subscribers.delete(ws)
           continue
         }
+
+        if (sub.token !== undefined && token(ws) !== sub.token) {
+          session.subscribers.delete(ws)
+          continue
+        }
+
         try {
           ws.send(chunk)
         } catch {
@@ -291,7 +312,7 @@ export namespace Pty {
     }
 
     owners.set(ws, id)
-    session.subscribers.set(ws, { id: socketId })
+    session.subscribers.set(ws, { id: socketId, token: token(ws) })
 
     const cleanup = () => {
       session.subscribers.delete(ws)
