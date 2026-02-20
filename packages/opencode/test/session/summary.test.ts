@@ -153,6 +153,20 @@ describe("SessionSummary.diffWindow", () => {
     expect(SessionSummary.diffWindow({ messages: [sync] })).toBeUndefined()
   })
 
+  test("treats git status followed by git pull as sync-only", () => {
+    const sync = step({
+      id: "sync",
+      from: "a",
+      to: "b",
+      tools: (messageID) => [
+        tool({ id: "status", messageID, name: "bash", args: { command: "git status" } }),
+        tool({ id: "pull", messageID, name: "bash", args: { command: "git pull --ff-only" } }),
+      ],
+    })
+
+    expect(SessionSummary.diffWindow({ messages: [sync] })).toBeUndefined()
+  })
+
   test("resets baseline to the first local step after a sync step", () => {
     const sync = step({
       id: "1",

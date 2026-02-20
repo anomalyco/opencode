@@ -164,23 +164,27 @@ export namespace SessionSummary {
     return sub.toLowerCase()
   }
 
-  export function isGitSyncBashCommand(input: string) {
+  function gitCommand(input: string) {
     const list = commandParts(input)
-    if (!list.length) return false
+    if (!list.length) return
 
     let sync = false
     for (const item of list) {
       const sub = gitSubcommand(item)
-      if (!sub) return false
+      if (!sub) return
       if (syncGit.has(sub)) {
         sync = true
         continue
       }
       if (readGit.has(sub)) continue
-      return false
+      return
     }
 
-    return sync
+    return sync ? "sync" : "read"
+  }
+
+  export function isGitSyncBashCommand(input: string) {
+    return gitCommand(input) === "sync"
   }
 
   function bashCommand(input: MessageV2.ToolPart) {
@@ -198,8 +202,9 @@ export namespace SessionSummary {
       if (part.tool === "bash") {
         const command = bashCommand(part)
         if (!command) return false
-        if (!isGitSyncBashCommand(command)) return false
-        sync = true
+        const git = gitCommand(command)
+        if (!git) return false
+        if (git === "sync") sync = true
         continue
       }
       if (readTool.has(part.tool)) continue
