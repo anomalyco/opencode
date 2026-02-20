@@ -573,13 +573,16 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: {
-    port: number
-    hostname: string
-    mdns?: boolean
-    mdnsDomain?: string
-    cors?: string[]
-  }) {
+  export function listen(
+    opts: {
+      port: number
+      hostname: string
+      mdns?: boolean
+      mdnsDomain?: string
+      cors?: string[]
+    },
+    prefer_default_port = true,
+  ) {
     _corsWhitelist = opts.cors ?? []
 
     const args = {
@@ -595,7 +598,8 @@ export namespace Server {
         return undefined
       }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    const preferred = opts.port !== 0 ? opts.port : prefer_default_port ? 4096 : 0
+    const server = tryServe(preferred) ?? (preferred === 0 ? undefined : tryServe(0))
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
