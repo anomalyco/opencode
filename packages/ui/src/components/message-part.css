@@ -238,7 +238,7 @@
 
     strong,
     b {
-      color: var(--text-base);
+      color: var(--text-weak);
     }
 
     p:has(strong) {
