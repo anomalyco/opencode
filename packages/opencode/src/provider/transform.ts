@@ -308,13 +308,13 @@ export namespace ProviderTransform {
               }
             })
 
-            if (next?.role === "tool" && Array.isArray(next.content)) {
-              next.content = [...next.content, ...patches]
-            } else {
+            if (!next || next.role !== "tool" || !Array.isArray(next.content)) {
               result.push(msg)
               result.push({ role: "tool", content: patches })
               continue
             }
+
+            next.content = [...next.content, ...patches]
           }
         }
       }
