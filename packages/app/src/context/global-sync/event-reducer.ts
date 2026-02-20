@@ -20,7 +20,7 @@ export function applyGlobalEvent(input: {
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
   refresh: () => void
 }) {
-  if (input.event.type === "global.disposed") {
+  if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
     input.refresh()
     return
   }
@@ -39,7 +39,12 @@ export function applyGlobalEvent(input: {
   })
 }
 
-function cleanupSessionCaches(store: Store<State>, setStore: SetStoreFunction<State>, sessionID: string) {
+function cleanupSessionCaches(
+  store: Store<State>,
+  setStore: SetStoreFunction<State>,
+  sessionID: string,
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
+) {
   if (!sessionID) return
   const hasAny =
     store.message[sessionID] !== undefined ||
@@ -48,6 +53,7 @@ function cleanupSessionCaches(store: Store<State>, setStore: SetStoreFunction<St
     store.permission[sessionID] !== undefined ||
     store.question[sessionID] !== undefined ||
     store.session_status[sessionID] !== undefined
+  setSessionTodo?.(sessionID, undefined)
   if (!hasAny) return
   setStore(
     produce((draft) => {
@@ -77,6 +83,7 @@ export function applyDirectoryEvent(input: {
   directory: string
   loadLsp: () => void
   vcsCache?: VcsCache
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -110,7 +117,7 @@ export function applyDirectoryEvent(input: {
             }),
           )
         }
-        cleanupSessionCaches(input.store, input.setStore, info.id)
+        cleanupSessionCaches(input.store, input.setStore, info.id, input.setSessionTodo)
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -136,7 +143,7 @@ export function applyDirectoryEvent(input: {
           }),
         )
       }
-      cleanupSessionCaches(input.store, input.setStore, info.id)
+      cleanupSessionCaches(input.store, input.setStore, info.id, input.setSessionTodo)
       if (info.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
@@ -149,6 +156,7 @@ export function applyDirectoryEvent(input: {
     case "todo.updated": {
       const props = event.properties as { sessionID: string; todos: Todo[] }
       input.setStore("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
+      input.setSessionTodo?.(props.sessionID, props.todos)
       break
     }
     case "session.status": {

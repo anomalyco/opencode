@@ -1,16 +1,20 @@
 import type { Component, JSX } from "solid-js"
-import { createMemo, splitProps } from "solid-js"
+import { createMemo, splitProps, Show } from "solid-js"
 import sprite from "./file-icons/sprite.svg"
 import type { IconName } from "./file-icons/types"
+
+let filter = 0
 
 export type FileIconProps = JSX.GSVGAttributes<SVGSVGElement> & {
   node: { path: string; type: "file" | "directory" }
   expanded?: boolean
+  mono?: boolean
 }
 
 export const FileIcon: Component<FileIconProps> = (props) => {
-  const [local, rest] = splitProps(props, ["node", "class", "classList", "expanded"])
+  const [local, rest] = splitProps(props, ["node", "class", "classList", "expanded", "mono"])
   const name = createMemo(() => chooseIconName(local.node.path, local.node.type, local.expanded || false))
+  const id = `file-icon-mono-${filter++}`
   return (
     <svg
       data-component="file-icon"
@@ -20,7 +24,15 @@ export const FileIcon: Component<FileIconProps> = (props) => {
         [local.class ?? ""]: !!local.class,
       }}
     >
-      <use href={`${sprite}#${name()}`} />
+      <Show when={local.mono}>
+        <defs>
+          <filter id={id} color-interpolation-filters="sRGB">
+            <feFlood flood-color="currentColor" result="flood" />
+            <feComposite in="flood" in2="SourceAlpha" operator="in" />
+          </filter>
+        </defs>
+      </Show>
+      <use href={`${sprite}#${name()}`} filter={local.mono ? `url(#${id})` : undefined} />
     </svg>
   )
 }
