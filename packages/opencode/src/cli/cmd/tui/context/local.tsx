@@ -21,16 +21,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const toast = useToast()
 
-    function isModelValid(model: { providerID: string; modelID: string }) {
+    function isModelValid(model: { providerID: string; modelID: string }, allowUncached = false) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
-      return !!provider?.models[model.modelID]
+      if (!provider) return false
+      // If model exists in cache, it's valid
+      if (provider.models[model.modelID]) return true
+      // If allowUncached is true (for CLI-provided models), accept it even if not in cache
+      return allowUncached
     }
 
-    function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
+    function getFirstValidModel(
+      ...modelFns: (() => { providerID: string; modelID: string; allowUncached?: boolean } | undefined)[]
+    ) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
-        if (isModelValid(model)) return model
+        if (isModelValid(model, model.allowUncached ?? false)) return model
       }
     }
 
@@ -154,9 +160,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const fallbackModel = createMemo(() => {
         if (args.model) {
           const { providerID, modelID } = Provider.parseModel(args.model)
-          // FIX: Trust CLI-provided model even if not in synced provider list
-          // This allows using models like openrouter/* that may not be cached yet
-          if (providerID && modelID) {
+          if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
               modelID,
@@ -196,16 +200,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         const args = useArgs()
         
-        // FIX: Check CLI -m flag first without validation to allow custom providers like openrouter
-        if (args.model) {
-          const { providerID, modelID } = Provider.parseModel(args.model)
-          if (providerID && modelID) {
-            return { providerID, modelID }
-          }
-        }
+        // FIX: Include CLI -m flag in model resolution chain
+        // This allows custom providers like openrouter/* to work even if not in cache
+        const cliModel = args.model
+          ? (() => {
+              const { providerID, modelID } = Provider.parseModel(args.model)
+              if (providerID && modelID) {
+                // Mark CLI-provided models to skip strict cache validation
+                return { providerID, modelID, allowUncached: true }
+              }
+              return undefined
+            })()
+          : undefined
         
         return (
           getFirstValidModel(
+            () => cliModel,  // CLI -m flag takes precedence
             () => modelStore.model[a.name],
             () => a.model,
             fallbackModel,
