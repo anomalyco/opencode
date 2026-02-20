@@ -287,15 +287,20 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </text>
                 </box>
                 <Show when={readFiles().length <= 2 || expanded.files}>
-                  <box paddingLeft={1}>
-                    <For each={readFiles()}>
-                      {(file) => (
+                  <For each={readFiles()}>
+                    {(file) => (
+                      <box flexDirection="row" gap={1}>
+                        <text
+                          flexShrink={0}
+                        >
+                          •
+                        </text>
                         <text fg={theme.textMuted} wrapMode="none">
                           {formatReadFile(file)}
                         </text>
-                      )}
-                    </For>
-                  </box>
+                      </box>
+                    )}
+                  </For>
                 </Show>
               </box>
             </Show>
