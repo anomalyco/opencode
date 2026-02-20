@@ -18,8 +18,7 @@ export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
   // Built-in plugins that are directly imported (not installed from npm)
-import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
-import { KiroAuthPlugin } from "./kiro"
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, KiroAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
