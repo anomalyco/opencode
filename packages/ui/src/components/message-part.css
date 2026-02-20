@@ -676,8 +676,19 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0px;
+  gap: 8px;
   cursor: pointer;
+
+  [data-slot="context-tool-group-indicator"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-weak);
+    opacity: 0.7;
+  }
 
   [data-slot="context-tool-group-title"] {
     min-width: 0;

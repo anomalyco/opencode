@@ -582,6 +582,11 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     <Collapsible open={open()} onOpenChange={setOpen} class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
+          <Show when={!pending()}>
+            <div data-slot="context-tool-group-indicator">
+              <Icon name="eye" size="small" />
+            </div>
+          </Show>
           <Show
             when={pending()}
             fallback={
