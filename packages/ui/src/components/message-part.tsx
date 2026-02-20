@@ -922,9 +922,21 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     <Collapsible open={open()} onOpenChange={setOpen} class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
-          <span
-            data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+          <Show when={!pending()}>
+            <div data-slot="context-tool-group-indicator">
+              <Icon name="eye" size="small" />
+            </div>
+          </Show>
+          <Show
+            when={pending()}
+            fallback={
+              <span data-slot="context-tool-group-title">
+                <span data-slot="context-tool-group-label">{i18n.t("ui.sessionTurn.status.gatheredContext")}</span>
+                <Show when={details().length}>
+                  <span data-slot="context-tool-group-summary">{details()}</span>
+                </Show>
+              </span>
+            }
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
