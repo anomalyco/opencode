@@ -9,9 +9,10 @@ import {
 } from "@thisbeyond/solid-dnd"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
-import { sidebarExpanded } from "./sidebar-shell-helpers"
+import { sidebarExpanded } from "@/pages/layout/sidebar-shell-helpers"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -54,25 +55,6 @@ export const SidebarContent = (props: {
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
-              <Tooltip
-                placement={props.mobile ? "bottom" : "right"}
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>{props.openProjectLabel}</span>
-                    <Show when={!props.mobile && !!props.openProjectKeybind()}>
-                      <span class="text-icon-base text-12-medium">{props.openProjectKeybind()}</span>
-                    </Show>
-                  </div>
-                }
-              >
-                <IconButton
-                  icon="plus"
-                  variant="ghost"
-                  size="large"
-                  onClick={props.onOpenProject}
-                  aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
-                />
-              </Tooltip>
             </div>
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>

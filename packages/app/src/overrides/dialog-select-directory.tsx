@@ -62,7 +62,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
     try {
       if (params.dir) {
-        layout.view(sessionKey)().terminal.open()
+        layout.view(sessionKey).terminal.open()
       }
     } catch {}
 
@@ -117,7 +117,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               autofocus
               value={newName()}
               onInput={(e) => setNewName(e.currentTarget.value)}
-              onKeyDown={(e) => {
+              onKeyDown={(e: KeyboardEvent) => {
                 if (e.key === "Enter") runCreate()
                 if (e.key === "Escape") {
                   e.stopPropagation()
