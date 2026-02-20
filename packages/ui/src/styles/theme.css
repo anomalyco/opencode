@@ -117,6 +117,7 @@
   --surface-weak: var(--smoke-light-alpha-3);
   --surface-weaker: var(--smoke-light-alpha-4);
   --surface-strong: #ffffff;
+  --surface-stronger-non-alpha: var(--surface-raised-stronger-non-alpha);
   --surface-raised-stronger-non-alpha: var(--white);
   --surface-brand-base: var(--yuzu-light-9);
   --surface-brand-hover: var(--yuzu-light-10);
@@ -375,6 +376,7 @@
     --surface-weak: var(--smoke-dark-alpha-4);
     --surface-weaker: var(--smoke-dark-alpha-5);
     --surface-strong: var(--smoke-dark-alpha-7);
+    --surface-stronger-non-alpha: var(--surface-raised-stronger-non-alpha);
     --surface-raised-stronger-non-alpha: var(--smoke-dark-3);
     --surface-brand-base: var(--yuzu-light-9);
     --surface-brand-hover: var(--yuzu-light-10);
