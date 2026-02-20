@@ -77,6 +77,7 @@ export interface IconButtonProps { ... }
 ### Props Extension Patterns
 
 #### Extend Kobalte Component
+
 ```typescript
 export interface ButtonProps
   extends ComponentProps<typeof Kobalte>,
@@ -86,6 +87,7 @@ export interface ButtonProps
 ```
 
 #### Extend HTML Element
+
 ```typescript
 export interface CardProps extends ComponentProps<"div"> {
   variant?: "normal" | "error" | "warning" | "success" | "info"
@@ -93,6 +95,7 @@ export interface CardProps extends ComponentProps<"div"> {
 ```
 
 #### Extend with ParentProps
+
 ```typescript
 export interface CheckboxProps extends ParentProps<ComponentProps<typeof Kobalte>> {
   // Custom props
@@ -102,6 +105,7 @@ export interface CheckboxProps extends ParentProps<ComponentProps<typeof Kobalte
 ### Common Props
 
 All components should support:
+
 - `class?: string` - Single class name
 - `classList?: Record<string, boolean>` - Conditional classes
 - `children?: JSX.Element` - Child content (via ParentProps)
@@ -109,12 +113,14 @@ All components should support:
 ### Variant Props
 
 Use string unions for variants:
+
 ```typescript
 size?: "small" | "normal" | "large"
 variant?: "primary" | "secondary" | "ghost"
 ```
 
 **Default values**: Always provide defaults in the component
+
 ```typescript
 data-size={split.size || "normal"}
 data-variant={split.variant || "secondary"}
@@ -164,6 +170,7 @@ Components use `data-*` attributes for CSS hooks:
 ### classList Pattern
 
 For dynamic classes:
+
 ```typescript
 classList={{
   ...(split.classList ?? {}),
@@ -172,6 +179,7 @@ classList={{
 ```
 
 This allows both patterns:
+
 ```tsx
 <Button class="my-class" />
 <Button classList={{ "my-class": condition }} />
@@ -200,6 +208,7 @@ export const Collapsible = Object.assign(CollapsibleRoot, {
 ```
 
 **Usage**:
+
 ```tsx
 <Collapsible open={open()} onOpenChange={setOpen}>
   <Collapsible.Trigger>
@@ -217,6 +226,7 @@ export const Collapsible = Object.assign(CollapsibleRoot, {
 ### Subcomponent Naming
 
 Subcomponents use `data-slot` attribute:
+
 ```typescript
 <Kobalte.Trigger data-slot="collapsible-trigger" {...props} />
 <Kobalte.Content data-slot="collapsible-content" {...props} />
@@ -229,6 +239,7 @@ Subcomponents use `data-slot` attribute:
 ### Kobalte Integration
 
 This project uses **Kobalte** for accessible components:
+
 - Built-in ARIA attributes
 - Keyboard navigation
 - Focus management
@@ -370,12 +381,14 @@ export function MyComponent() {
 ### ❌ Don't
 
 1. **Don't use default exports**
+
    ```typescript
    // Bad
    export default function Button() { ... }
    ```
 
 2. **Don't hardcode variant values**
+
    ```typescript
    // Bad
    <div data-variant="primary">
@@ -385,6 +398,7 @@ export function MyComponent() {
    ```
 
 3. **Don't forget splitProps**
+
    ```typescript
    // Bad - passes all props including custom ones
    <Kobalte {...props} />
@@ -395,6 +409,7 @@ export function MyComponent() {
    ```
 
 4. **Don't override Kobalte accessibility**
+
    ```typescript
    // Bad
    <Kobalte role="button" aria-label="custom">
@@ -404,6 +419,7 @@ export function MyComponent() {
    ```
 
 5. **Don't use inline styles**
+
    ```typescript
    // Bad
    <div style={{ color: "red" }}>
@@ -415,48 +431,77 @@ export function MyComponent() {
 ### ✅ Do
 
 1. **Use named exports**
+
    ```typescript
    export function Button() { ... }
    export interface ButtonProps { ... }
    ```
 
 2. **Use splitProps for prop separation**
+
    ```typescript
    const [split, rest] = splitProps(props, ["variant", "size"])
    ```
 
 3. **Provide default values**
+
    ```typescript
    data-size={split.size || "normal"}
    ```
 
 4. **Use data attributes for styling**
+
    ```typescript
    data-component="button"
    data-variant={variant}
    ```
 
 5. **Export Props interfaces**
+
    ```typescript
    export interface ButtonProps { ... }
    ```
+
+6. **Normalize external data before comparing**
+   Some providers return tool/field names with different casing (e.g. `"Task"` vs `"task"`).
+   Always normalize to lowercase before matching against internal registries or hardcoded strings.
+
+   ```typescript
+   // Good - normalize once, use everywhere
+   function toolName(part: { tool: string }) {
+     return part.tool.toLowerCase()
+   }
+   const tool = toolName(part)
+   if (tool === "bash") { ... }
+
+   // Bad - comparing raw external data against hardcoded lowercase
+   if (part.tool === "bash") { ... }  // fails when part.tool is "Bash"
+   ```
+
+   **Lesson**: The ToolRegistry registers tools with lowercase names, but model providers
+   may return uppercase tool names (e.g. `"Task"`, `"Bash"`, `"Question"`). This caused
+   all tool renderers to silently fall back to `GenericTool`.
 
 ---
 
 ## Examples from Codebase
 
 ### Simple Component
+
 - `packages/ui/src/components/card.tsx`
 - `packages/ui/src/components/button.tsx`
 
 ### Icon Component
+
 - `packages/ui/src/components/icon-button.tsx`
 
 ### Compound Component
+
 - `packages/ui/src/components/collapsible.tsx`
 - `packages/ui/src/components/accordion.tsx`
 
 ### Complex Component
+
 - `packages/ui/src/components/message-part.tsx`
 
 ---

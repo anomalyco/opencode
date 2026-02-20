@@ -255,6 +255,10 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
+function toolName(part: { tool: string }) {
+  return part.tool.toLowerCase()
+}
+
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
   return fallback
@@ -262,8 +266,8 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 function renderable(part: PartType) {
   if (part.type === "tool") {
-    if (HIDDEN_TOOLS.has(part.tool)) return false
-    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    if (HIDDEN_TOOLS.has(toolName(part))) return false
+    if (toolName(part) === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
@@ -375,11 +379,11 @@ export function AssistantParts(props: {
 }
 
 function isContextGroupTool(part: PartType): part is ToolPart {
-  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(toolName(part))
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(part.tool, part.state.input ?? {})
+  const info = getToolInfo(toolName(part), part.state.input ?? {})
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -398,7 +402,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const offset = typeof input.offset === "number" ? input.offset : undefined
   const limit = typeof input.limit === "number" ? input.limit : undefined
 
-  switch (part.tool) {
+  switch (toolName(part)) {
     case "read": {
       const args: string[] = []
       if (offset !== undefined) args.push("offset=" + offset)
@@ -431,7 +435,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     default: {
-      const info = getToolInfo(part.tool, input)
+      const info = getToolInfo(toolName(part), input)
       return {
         title: info.title,
         subtitle: info.subtitle || contextToolDetail(part),
@@ -442,9 +446,9 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 }
 
 function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
+  const read = parts.filter((part) => toolName(part) === "read").length
+  const search = parts.filter((part) => toolName(part) === "glob" || toolName(part) === "grep").length
+  const list = parts.filter((part) => toolName(part) === "list").length
   return [
     read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
     search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
@@ -895,10 +899,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = props.part as ToolPart
-  if (part.tool === "todowrite" || part.tool === "todoread") return null
+  const tool = toolName(part)
+  if (tool === "todowrite" || tool === "todoread") return null
 
   const hideQuestion = createMemo(
-    () => part.tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
+    () => tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
   )
 
   const permission = createMemo(() => {
@@ -965,7 +970,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return partMetadata()
   }
 
-  const render = ToolRegistry.render(part.tool) ?? GenericTool
+  const render = ToolRegistry.render(tool) ?? GenericTool
 
   return (
     <Show when={!hideQuestion()}>
@@ -974,7 +979,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           <Match when={part.state.status === "error" && part.state.error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
-              if (part.tool === "question" && cleaned.includes("dismissed this question")) {
+              if (tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
@@ -1008,7 +1013,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             <Dynamic
               component={render}
               input={input()}
-              tool={part.tool}
+              tool={tool}
               metadata={metadata()}
               // @ts-expect-error
               output={part.state.output}
@@ -1333,13 +1338,16 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
-    const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const type = createMemo(() => props.input.subagent_type || props.metadata.subagent_type || props.tool)
+    const title = createMemo(() => i18n.t("ui.tool.agent", { type: type() }))
     const description = createMemo(() => {
       const value = props.input.description
       if (typeof value === "string") return value
+      const meta = props.metadata.title
+      if (typeof meta === "string") return meta
       return undefined
     })
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
 
     const href = createMemo(() => {
       const sessionId = childSessionId()
@@ -1376,38 +1384,48 @@ ToolRegistry.register({
       }, 50)
     }
 
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
-
-    const trigger = () => (
-      <div data-slot="basic-tool-tool-info-structured">
-        <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {titleContent()}
-          </span>
-          <Show when={description()}>
-            <Switch>
-              <Match when={href()}>
-                {(url) => (
-                  <a
-                    data-slot="basic-tool-tool-subtitle"
-                    class="clickable subagent-link"
-                    href={url()}
-                    onClick={handleLinkClick}
-                  >
-                    {description()}
-                  </a>
-                )}
-              </Match>
-              <Match when={true}>
-                <span data-slot="basic-tool-tool-subtitle">{description()}</span>
-              </Match>
-            </Switch>
-          </Show>
-        </div>
-      </div>
+    return (
+      <BasicTool
+        {...props}
+        hideDetails
+        icon="task"
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
+                <Show when={pending()} fallback={title()}>
+                  <TextShimmer text={title()} />
+                </Show>
+              </span>
+              <Show when={description()}>
+                <Switch>
+                  <Match when={href()}>
+                    {(url) => (
+                      <a
+                        data-slot="basic-tool-tool-subtitle"
+                        class="clickable subagent-link"
+                        href={url()}
+                        onClick={handleLinkClick}
+                      >
+                        {description()}
+                      </a>
+                    )}
+                  </Match>
+                  <Match when={true}>
+                    <span data-slot="basic-tool-tool-subtitle">{description()}</span>
+                  </Match>
+                </Switch>
+              </Show>
+            </div>
+            <Show when={!pending() && href()}>
+              <div data-component="tool-action">
+                <Icon name="align-right" size="small" />
+              </div>
+            </Show>
+          </div>
+        }
+      />
     )
-
-    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails />
   },
 })
 
