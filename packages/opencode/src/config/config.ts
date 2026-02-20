@@ -550,6 +550,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Resource URIs to automatically subscribe to for update notifications"),
+      autoprompt: z
+        .boolean()
+        .optional()
+        .describe("Automatically prompt the AI when a subscribed resource is updated. Defaults to false."),
     })
     .strict()
     .meta({
@@ -593,6 +597,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Resource URIs to automatically subscribe to for update notifications"),
+      autoprompt: z
+        .boolean()
+        .optional()
+        .describe("Automatically prompt the AI when a subscribed resource is updated. Defaults to false."),
     })
     .strict()
     .meta({

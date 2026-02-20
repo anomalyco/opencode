@@ -141,6 +141,30 @@ export namespace MCP {
     client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
       log.info("resource list changed notification received", { server: serverName })
       Bus.publish(ResourceListChanged, { server: serverName })
+      // Subscribe to any newly listed resources
+      if (supportsSubscriptions(client)) {
+        const s = await state()
+        const existing = s.subscriptions.get(serverName) ?? new Set()
+        const listed = await client.listResources().catch((e) => {
+          log.warn("failed to list resources after list changed", { server: serverName, error: e instanceof Error ? e.message : String(e) })
+          return undefined
+        })
+        listed?.resources
+          .filter((r) => !existing.has(r.uri))
+          .forEach((r) => {
+            existing.add(r.uri)
+            client
+              .subscribeResource({ uri: r.uri })
+              .then(() => {
+                log.info("subscribed to new resource", { server: serverName, uri: r.uri })
+              })
+              .catch((e) => {
+                existing.delete(r.uri)
+                log.error("failed to subscribe to new resource", { server: serverName, uri: r.uri, error: e instanceof Error ? e.message : String(e) })
+              })
+          })
+        if (existing.size > 0) s.subscriptions.set(serverName, existing)
+      }
     })
   }
 
@@ -224,33 +248,37 @@ export namespace MCP {
       )
       const subscriptionMap = new Map<string, Set<string>>()
 
-      // Set up config-based subscriptions for connected clients
-      Object.entries(clients)
-        .filter(([key]) => status[key]?.status === "connected")
-        .filter(([key]) => {
-          const mcp = config[key]
-          return isMcpConfigured(mcp) && mcp.subscriptions?.length && supportsSubscriptions(clients[key])
-        })
-        .forEach(([key]) => {
-          const mcp = config[key] as Config.Mcp
-          const uris = new Set<string>(mcp.subscriptions!)
-          mcp.subscriptions!.forEach((uri) => {
-            clients[key]
-              .subscribeResource({ uri })
-              .then(() => {
-                log.info("subscribed to config resource", { key, uri })
-              })
-              .catch((e) => {
-                uris.delete(uri)
-                log.error("failed to subscribe to config resource", {
-                  key,
-                  uri,
-                  error: e instanceof Error ? e.message : String(e),
+      // Auto-subscribe to all resources for servers that support subscriptions
+      await Promise.all(
+        Object.entries(clients)
+          .filter(([key]) => status[key]?.status === "connected" && supportsSubscriptions(clients[key]))
+          .map(async ([key, client]) => {
+            const mcp = config[key]
+            const cfg = isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : []
+            const listed = await client.listResources().catch((e) => {
+              log.warn("failed to list resources for auto-subscribe", { key, error: e instanceof Error ? e.message : String(e) })
+              return undefined
+            })
+            const uris = new Set([...cfg, ...(listed?.resources.map((r) => r.uri) ?? [])])
+            if (uris.size === 0) return
+            uris.forEach((uri) => {
+              client
+                .subscribeResource({ uri })
+                .then(() => {
+                  log.info("auto-subscribed to resource", { key, uri })
                 })
-              })
-          })
-          subscriptionMap.set(key, uris)
-        })
+                .catch((e) => {
+                  uris.delete(uri)
+                  log.error("failed to auto-subscribe to resource", {
+                    key,
+                    uri,
+                    error: e instanceof Error ? e.message : String(e),
+                  })
+                })
+            })
+            subscriptionMap.set(key, uris)
+          }),
+      )
 
       return {
         status,
@@ -612,29 +640,36 @@ export namespace MCP {
       }
       s.clients[name] = result.mcpClient
 
-      // Re-subscribe to previously tracked resources and config-based subscriptions
-      const tracked = new Set([
-        ...(s.subscriptions.get(name) ?? []),
-        ...(isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : []),
-      ])
-
-      if (tracked.size > 0 && supportsSubscriptions(result.mcpClient)) {
-        ;[...tracked].forEach((uri) => {
-          result.mcpClient!
-            .subscribeResource({ uri })
-            .then(() => {
-              log.info("re-subscribed to resource", { name, uri })
-            })
-            .catch((e) => {
-              tracked.delete(uri)
-              log.error("failed to re-subscribe to resource", {
-                name,
-                uri,
-                error: e instanceof Error ? e.message : String(e),
-              })
-            })
+      // Re-subscribe: merge previous subscriptions, config URIs, and freshly listed resources
+      if (supportsSubscriptions(result.mcpClient)) {
+        const cfg = isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : []
+        const listed = await result.mcpClient.listResources().catch((e) => {
+          log.warn("failed to list resources on reconnect", { name, error: e instanceof Error ? e.message : String(e) })
+          return undefined
         })
-        s.subscriptions.set(name, tracked)
+        const tracked = new Set([
+          ...(s.subscriptions.get(name) ?? []),
+          ...cfg,
+          ...(listed?.resources.map((r) => r.uri) ?? []),
+        ])
+        if (tracked.size > 0) {
+          tracked.forEach((uri) => {
+            result.mcpClient!
+              .subscribeResource({ uri })
+              .then(() => {
+                log.info("re-subscribed to resource", { name, uri })
+              })
+              .catch((e) => {
+                tracked.delete(uri)
+                log.error("failed to re-subscribe to resource", {
+                  name,
+                  uri,
+                  error: e instanceof Error ? e.message : String(e),
+                })
+              })
+          })
+          s.subscriptions.set(name, tracked)
+        }
       }
     }
   }
