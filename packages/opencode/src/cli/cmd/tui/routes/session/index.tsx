@@ -154,6 +154,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [showFilesInContext, setShowFilesInContext] = kv.signal("sidebar_files_in_context", false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -608,6 +609,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowGenericToolOutput((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: showFilesInContext() ? "Hide files in context" : "Show files in context",
+      value: "session.toggle.files_in_context",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowFilesInContext((prev) => !prev)
         dialog.clear()
       },
     },

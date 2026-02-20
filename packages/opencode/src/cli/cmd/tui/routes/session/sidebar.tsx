@@ -3,6 +3,7 @@ import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import { extractReadFiles, formatReadFile } from "@/session/file-context"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
@@ -19,12 +20,16 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const readFiles = createMemo(() =>
+    extractReadFiles(messages().map((msg) => ({ parts: sync.data.part[msg.id] ?? [] }))),
+  )
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
     todo: true,
     lsp: true,
+    files: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -62,6 +67,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const directory = useDirectory()
   const kv = useKV()
+  const [showFilesInContext] = kv.signal("sidebar_files_in_context", false)
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -263,6 +269,33 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       )
                     }}
                   </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={showFilesInContext() && readFiles().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => readFiles().length > 2 && setExpanded("files", !expanded.files)}
+                >
+                  <Show when={readFiles().length > 2}>
+                    <text fg={theme.text}>{expanded.files ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Files in Context</b>
+                  </text>
+                </box>
+                <Show when={readFiles().length <= 2 || expanded.files}>
+                  <box paddingLeft={1}>
+                    <For each={readFiles()}>
+                      {(file) => (
+                        <text fg={theme.textMuted} wrapMode="none">
+                          {formatReadFile(file)}
+                        </text>
+                      )}
+                    </For>
+                  </box>
                 </Show>
               </box>
             </Show>
