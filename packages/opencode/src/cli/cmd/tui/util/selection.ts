@@ -19,7 +19,13 @@ export namespace Selection {
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
 
-    renderer.clearSelection()
+    // Defer clearing the selection so that @opentui's finishSelection() can
+    // complete its lifecycle first (set isDragging=false, emit "selection"
+    // event, etc.). Clearing synchronously inside the onMouseUp handler
+    // nullifies currentSelection before finishSelection() runs, which can
+    // leave internal renderer state (e.g. capturedRenderable) stale and
+    // prevent subsequent text selections from starting.
+    queueMicrotask(() => renderer.clearSelection())
     return true
   }
 }
