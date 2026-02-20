@@ -104,6 +104,7 @@ export interface MessagePartProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -149,6 +150,8 @@ function createThrottledValue(getValue: () => string) {
 function relativizeProjectPaths(text: string, directory?: string) {
   if (!text) return ""
   if (!directory) return text
+  if (directory === "/") return text
+  if (directory === "\\") return text
   return text.split(directory).join("")
 }
 
@@ -275,6 +278,7 @@ function renderable(part: PartType) {
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
   working?: boolean
 }) {
   const data = useData()
@@ -365,6 +369,7 @@ export function AssistantParts(props: {
                   part={entry().part}
                   message={entry().message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  turnDurationMs={props.turnDurationMs}
                 />
               )}
             </Show>
@@ -849,6 +854,7 @@ export function Part(props: MessagePartProps) {
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
+        turnDurationMs={props.turnDurationMs}
       />
     </Show>
   )
@@ -1060,8 +1066,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
     const completed = message.time.completed
-    if (typeof completed !== "number") return ""
-    const ms = completed - message.time.created
+    const ms =
+      typeof props.turnDurationMs === "number"
+        ? props.turnDurationMs
+        : typeof completed === "number"
+          ? completed - message.time.created
+          : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
     if (total < 60) return `${total}s`
