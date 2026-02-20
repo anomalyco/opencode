@@ -284,6 +284,6 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          GITHUB_TOKEN: ${{ (github.ref_name == 'beta' && secrets.BRENDAN_GITHUB_TOKEN) || steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
