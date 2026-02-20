@@ -65,7 +65,15 @@ function EditBody(props: { request: PermissionRequest }) {
   return (
     <box flexDirection="column" gap={1}>
       <Show when={diff()}>
-        <scrollbox height="100%">
+        <scrollbox
+          height="100%"
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.background,
+              foregroundColor: theme.borderActive,
+            },
+          }}
+        >
           <diff
             diff={diff()}
             view={view()}

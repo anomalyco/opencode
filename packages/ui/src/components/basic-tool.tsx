@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -27,17 +27,51 @@ export interface BasicToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  defer?: boolean
   locked?: boolean
   onSubtitleClick?: () => void
 }
 
 export function BasicTool(props: BasicToolProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
+  const [ready, setReady] = createSignal(open())
   const pending = () => props.status === "pending" || props.status === "running"
+
+  let frame: number | undefined
+
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  onCleanup(cancel)
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
   })
+
+  createEffect(
+    on(
+      open,
+      (value) => {
+        if (!props.defer) return
+        if (!value) {
+          cancel()
+          setReady(false)
+          return
+        }
+
+        cancel()
+        frame = requestAnimationFrame(() => {
+          frame = undefined
+          if (!open()) return
+          setReady(true)
+        })
+      },
+      { defer: true },
+    ),
+  )
 
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
@@ -114,7 +148,9 @@ export function BasicTool(props: BasicToolProps) {
         </div>
       </Collapsible.Trigger>
       <Show when={props.children && !props.hideDetails}>
-        <Collapsible.Content>{props.children}</Collapsible.Content>
+        <Collapsible.Content>
+          <Show when={!props.defer || ready()}>{props.children}</Show>
+        </Collapsible.Content>
       </Show>
     </Collapsible>
   )

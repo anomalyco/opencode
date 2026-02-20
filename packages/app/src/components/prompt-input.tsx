@@ -1,5 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -20,12 +20,14 @@ import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
+import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { RadioGroup } from "@opencode-ai/ui/radio-group"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -249,7 +251,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return messages.some((m) => m.role === "user")
   })
 
-  const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
     Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
@@ -319,6 +320,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
+  const shellModeKey = "mod+shift+x"
+  const normalModeKey = "mod+shift+e"
+
   command.register("prompt-input", () => [
     {
       id: "file.attach",
@@ -327,6 +331,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: "mod+u",
       disabled: store.mode !== "normal",
       onSelect: pick,
+    },
+    {
+      id: "prompt.mode.shell",
+      title: language.t("command.prompt.mode.shell"),
+      category: language.t("command.category.session"),
+      keybind: shellModeKey,
+      disabled: store.mode === "shell",
+      onSelect: () => setMode("shell"),
+    },
+    {
+      id: "prompt.mode.normal",
+      title: language.t("command.prompt.mode.normal"),
+      category: language.t("command.category.session"),
+      keybind: normalModeKey,
+      disabled: store.mode === "normal",
+      onSelect: () => setMode("normal"),
     },
   ])
 
@@ -384,15 +404,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
-  createEffect(() => {
-    if (!isFocused()) closePopover()
-  })
-
-  // Safety: reset composing state on focus change to prevent stuck state
-  // This handles edge cases where compositionend event may not fire
-  createEffect(() => {
-    if (!isFocused()) setComposing(false)
-  })
+  const handleBlur = () => {
+    closePopover()
+    setComposing(false)
+  }
 
   const agentList = createMemo(() =>
     sync.data.agent
@@ -1031,12 +1046,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <form
+      <DockShellForm
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          "bg-surface-raised-stronger-non-alpha shadow-xs-border relative z-10": true,
-          "rounded-[12px] overflow-clip focus-within:shadow-xs-border": true,
+          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1099,6 +1113,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onPaste={handlePaste}
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
+              onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
@@ -1228,10 +1243,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-      </form>
+      </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
-        <div class="-mt-3.5 bg-background-base border border-border-weak-base relative z-0 rounded-[12px] rounded-tl-0 rounded-tr-0 overflow-clip">
-          <div class="px-2 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
+        <DockTray attach="top">
+          <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <Show when={store.mode === "shell"}>
                 <div class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0" style={{ padding: "0 4px 0 8px" }}>
@@ -1239,7 +1254,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <div class="size-4 shrink-0" />
                 </div>
               </Show>
-
               <Show when={store.mode === "normal"}>
                 <TooltipKeybind
                   placement="top"
@@ -1339,62 +1353,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </TooltipKeybind>
               </Show>
             </div>
-
             <div class="shrink-0">
-              <div
-                data-component="prompt-mode-toggle"
-                class="relative h-7 w-[68px] rounded-[4px] bg-surface-inset-base border border-[0.5px] border-border-weak-base p-0 flex items-center gap-1 overflow-visible"
-              >
-                <div
-                  class="absolute inset-y-0 left-0 w-[calc((100%-4px)/2)] rounded-[4px] bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-xs-border)] transition-transform duration-200 ease-out will-change-transform"
-                  style={{
-                    transform: store.mode === "shell" ? "translateX(0px)" : "translateX(calc(100% + 4px))",
-                  }}
-                />
-                <button
-                  type="button"
-                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
-                  aria-pressed={store.mode === "shell"}
-                  onClick={() => setMode("shell")}
-                >
-                  <div
-                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
-                    classList={{ "hover:bg-transparent": store.mode === "shell" }}
+              <RadioGroup
+                options={["shell", "normal"] as const}
+                current={store.mode}
+                value={(mode) => mode}
+                label={(mode) => (
+                  <TooltipKeybind
+                    placement="top"
+                    gutter={4}
+                    openDelay={2000}
+                    title={language.t(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
+                    keybind={command.keybind(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
+                    class="size-full flex items-center justify-center"
                   >
                     <Icon
-                      name="console"
+                      name={mode === "shell" ? "console" : "prompt"}
                       class="size-[18px]"
                       classList={{
-                        "text-icon-strong-base": store.mode === "shell",
-                        "text-icon-weak": store.mode !== "shell",
+                        "text-icon-strong-base": store.mode === mode,
+                        "text-icon-weak": store.mode !== mode,
                       }}
                     />
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  class="relative z-10 flex-1 h-full p-0.5 flex items-center justify-center"
-                  aria-pressed={store.mode === "normal"}
-                  onClick={() => setMode("normal")}
-                >
-                  <div
-                    class="w-full h-full flex items-center justify-center rounded-[2px] transition-colors hover:bg-surface-inset-base"
-                    classList={{ "hover:bg-transparent": store.mode === "normal" }}
-                  >
-                    <Icon
-                      name="prompt"
-                      class="size-[18px]"
-                      classList={{
-                        "text-icon-interactive-base": store.mode === "normal",
-                        "text-icon-weak": store.mode !== "normal",
-                      }}
-                    />
-                  </div>
-                </button>
-              </div>
+                  </TooltipKeybind>
+                )}
+                onSelect={(mode) => mode && setMode(mode)}
+                fill
+                pad="none"
+                class="w-[68px]"
+              />
             </div>
           </div>
-        </div>
+        </DockTray>
       </Show>
     </div>
   )
