@@ -1,0 +1,9 @@
+Fetch context from another session in this project. Use this when the user references a previous session (via @session mentions) and you need to understand what was done, what files were changed, or what decisions were made in that session.
+
+Available modes:
+- "summary": Get a high-level summary of what happened in the session
+- "messages": Get the conversation history (post-compaction if available)
+- "diffs": Get the file changes (additions, deletions, diffs)
+- "todo": Get the task list from the session
+
+Start with "summary" mode to get an overview, then use other modes if you need specific details.

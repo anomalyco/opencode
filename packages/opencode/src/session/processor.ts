@@ -47,9 +47,9 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
+          let currentText: MessageV2.TextPart | undefined
+          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
           try {
-            let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -364,6 +364,18 @@ export namespace SessionProcessor {
               error: input.assistantMessage.error,
             })
             SessionStatus.set(input.sessionID, { type: "idle" })
+          }
+          // Flush any in-progress text part so partial content is preserved
+          // after abort.  During streaming, each text-delta writes the
+          // accumulated text, but the abort may have interrupted before
+          // the most recent delta was flushed.
+          if (currentText && currentText.text) {
+            currentText.time = {
+              start: currentText.time?.start ?? Date.now(),
+              end: Date.now(),
+            }
+            await Session.updatePart(currentText)
+            currentText = undefined
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

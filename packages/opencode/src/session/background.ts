@@ -90,11 +90,13 @@ export namespace BackgroundTask {
     try {
       // Dynamically import to avoid circular dependency
       const { SessionPrompt } = await import("./prompt")
-      // Fire a notification into the parent session (no await on the loop)
+      // Fire a notification into the parent session (no await on the loop).
+      // Mark the text part as synthetic so the frontend hides the user bubble
+      // (prevents a duplicate user turn from appearing in the chat UI).
       SessionPrompt.prompt({
         sessionID: info.parentSessionID,
         agent: info.parentAgent,
-        parts: [{ type: "text", text: message }],
+        parts: [{ type: "text", text: message, synthetic: true }],
       })
       log.info("notified parent", {
         id: info.id,
