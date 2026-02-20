@@ -131,6 +131,21 @@ export namespace MCP {
       log.info("tools list changed notification received", { server: serverName })
       Bus.publish(ToolsChanged, { server: serverName })
     })
+
+    client.setNotificationHandler(ResourceUpdatedNotificationSchema, async (notification) => {
+      const uri = notification.params.uri
+      log.info("resource updated notification received", { server: serverName, uri })
+      Bus.publish(ResourceUpdated, { server: serverName, uri })
+    })
+
+    client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
+      log.info("resource list changed notification received", { server: serverName })
+      Bus.publish(ResourceListChanged, { server: serverName })
+    })
+  }
+
+  function supportsSubscriptions(client: MCPClient): boolean {
+    return client.getServerCapabilities()?.resources?.subscribe === true
   }
 
   // Convert MCP tool definition to AI SDK Tool type
@@ -210,6 +225,7 @@ export namespace MCP {
       return {
         status,
         clients,
+        subscriptions: new Map<string, Set<string>>(),
       }
     },
     async (state) => {
