@@ -231,15 +231,15 @@ export namespace MCP {
         if (!isMcpConfigured(mcp) || !mcp.subscriptions?.length) continue
         if (!supportsSubscriptions(client)) continue
 
-        const uris = new Set<string>()
+        const uris = new Set<string>(mcp.subscriptions)
         for (const uri of mcp.subscriptions) {
           client
             .subscribeResource({ uri })
             .then(() => {
-              uris.add(uri)
               log.info("subscribed to config resource", { key, uri })
             })
             .catch((e) => {
+              uris.delete(uri)
               log.error("failed to subscribe to config resource", {
                 key,
                 uri,
@@ -616,15 +616,15 @@ export namespace MCP {
       const allSubs = new Set([...previousSubs, ...configSubs])
 
       if (allSubs.size > 0 && supportsSubscriptions(result.mcpClient)) {
-        const activeSubs = new Set<string>()
+        const activeSubs = new Set<string>(allSubs)
         for (const uri of allSubs) {
           result.mcpClient
             .subscribeResource({ uri })
             .then(() => {
-              activeSubs.add(uri)
               log.info("re-subscribed to resource", { name, uri })
             })
             .catch((e) => {
+              activeSubs.delete(uri)
               log.error("failed to re-subscribe to resource", {
                 name,
                 uri,
@@ -767,7 +767,7 @@ export namespace MCP {
     const client = clientsSnapshot[clientName]
 
     if (!client) {
-      log.warn("client not found for prompt", {
+      log.warn("client not found for resource", {
         clientName: clientName,
       })
       return undefined
@@ -778,7 +778,7 @@ export namespace MCP {
         uri: resourceUri,
       })
       .catch((e) => {
-        log.error("failed to get prompt from MCP server", {
+        log.error("failed to read resource from MCP server", {
           clientName: clientName,
           resourceUri: resourceUri,
           error: e.message,
@@ -843,6 +843,10 @@ export namespace MCP {
     if (!client) {
       log.warn("client not found for unsubscription", { clientName })
       return false
+    }
+
+    if (!supportsSubscriptions(client)) {
+      return true // already removed from tracking above
     }
 
     try {

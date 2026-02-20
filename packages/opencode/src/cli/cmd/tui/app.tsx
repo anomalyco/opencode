@@ -749,7 +749,7 @@ function App() {
             sessionID,
             parts: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `[System: MCP resource updated]\nResource "${uri}" from server "${server}" has been updated. Please review the changes.`,
               },
             ],
