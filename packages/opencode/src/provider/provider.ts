@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { LiteLLM } from "./litellm"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -857,6 +858,64 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    litellm: Effect.fnUntraced(function* (provider: Info) {
+      const cfg = yield* dep.config()
+      const providerConfig = cfg.provider?.["litellm"]
+
+      const baseURL =
+        providerConfig?.options?.baseURL ??
+        Env.get("LITELLM_HOST") ??
+        Env.get("LITELLM_BASE_URL") ??
+        "http://localhost:4000"
+
+      const apiKey = yield* Effect.gen(function* () {
+        if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
+        const envKey = Env.get("LITELLM_API_KEY")
+        if (envKey) return envKey
+        const auth = yield* dep.auth("litellm")
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })
+
+      const customHeaders = iife(() => {
+        const raw = Env.get("LITELLM_CUSTOM_HEADERS")
+        if (!raw) return {}
+        try {
+          return JSON.parse(raw) as Record<string, string>
+        } catch {
+          return {}
+        }
+      })
+
+      const timeout = Number(Env.get("LITELLM_TIMEOUT") ?? "5000")
+      const discovered = yield* Effect.promise(() =>
+        LiteLLM.discover(baseURL, {
+          apiKey,
+          headers: customHeaders,
+          timeout,
+        }),
+      )
+
+      if (discovered) {
+        for (const [modelID, model] of Object.entries(discovered)) {
+          if (!provider.models[modelID]) {
+            provider.models[modelID] = model
+          }
+        }
+      }
+
+      if (Object.keys(provider.models).length === 0) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL,
+          apiKey,
+          litellmProxy: true,
+          ...(Object.keys(customHeaders).length > 0 ? { headers: customHeaders } : {}),
+        },
+      }
+    }),
     "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const auth = yield* dep.auth(input.id)
