@@ -906,7 +906,12 @@ export namespace SessionPrompt {
           title: "",
           metadata,
           output: truncated.content,
-          attachments,
+          attachments: attachments.map((attachment) => ({
+            ...attachment,
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+          })),
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
