@@ -1662,7 +1662,30 @@ export default function Page() {
     ),
   )
 
-  let fill = () => {}
+  createEffect(
+    on(
+      sessionKey,
+      (_next, prev) => {
+        if (!prev) return
+        const id = store.messageId
+        if (!id) return
+        layout.pendingMessage.set(prev, id)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        scrollSpy.clear()
+      },
+      { defer: true },
+    ),
+  )
+
+  const anchor = (id: string) => `message-${id}`
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
