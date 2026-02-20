@@ -40,7 +40,9 @@ use crate::windows::{LoadingWindow, MainWindow};
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
+    username: Option<String>,
     password: Option<String>,
+    is_sidecar: bool
 }
 
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
@@ -605,6 +607,7 @@ async fn initialize(app: AppHandle) {
                     child,
                     health_check,
                     url,
+                    username,
                     password,
                 } => {
                     let app = app.clone();
@@ -631,7 +634,7 @@ async fn initialize(app: AppHandle) {
 
                             app.state::<ServerState>().set_child(Some(child));
 
-                            Ok(ServerReadyData { url, password })
+                            Ok(ServerReadyData { url, username,password, is_sidecar: true })
                         }
                         .map(move |res| {
                             let _ = server_ready_tx.send(res);
@@ -641,7 +644,9 @@ async fn initialize(app: AppHandle) {
                 ServerConnection::Existing { url } => {
                     let _ = server_ready_tx.send(Ok(ServerReadyData {
                         url: url.to_string(),
+                        username: None,
                         password: None,
+                        is_sidecar: false,
                     }));
                     None
                 }
@@ -719,6 +724,7 @@ enum ServerConnection {
     },
     CLI {
         url: String,
+        username: Option<String>,
         password: Option<String>,
         child: CommandChild,
         health_check: server::HealthCheck,
@@ -730,11 +736,15 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 
     tracing::info!(?custom_url, "Attempting server connection");
 
-    if let Some(url) = custom_url
-        && server::check_health_or_ask_retry(&app, &url).await
+    if let Some(url) = &custom_url
+        && server::check_health_or_ask_retry(&app, url).await
     {
         tracing::info!(%url, "Connected to custom server");
-        return ServerConnection::Existing { url: url.clone() };
+        // If the default server is already local, no need to also spawn a sidecar
+        if server::is_localhost_url(url) {
+            return ServerConnection::Existing { url: url.clone() };
+        }
+        // Remote default server: fall through and also spawn a local sidecar
     }
 
     let local_port = get_sidecar_port();
@@ -755,6 +765,7 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 
     ServerConnection::CLI {
         url: local_url,
+        username: Some("opencode".to_string()),
         password: Some(password),
         child,
         health_check,

@@ -41,6 +41,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
+    min-width: 0;
     color: var(--text-weak);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
@@ -51,6 +53,16 @@
     [data-component="spinner"] {
       width: 16px;
       height: 16px;
+    }
+
+    [data-slot="session-turn-thinking-heading"] {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-weaker);
+      font-weight: var(--font-weight-regular);
     }
   }
 

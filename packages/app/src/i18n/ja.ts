@@ -569,6 +569,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "なし",
   "sound.option.alert01": "アラート 01",
   "sound.option.alert02": "アラート 02",
   "sound.option.alert03": "アラート 03",

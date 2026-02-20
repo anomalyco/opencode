@@ -37,10 +37,11 @@ function target(container: HTMLElement): Target | undefined {
 
   const review = container.closest("[data-component='session-review']")
   if (review instanceof HTMLElement) {
+    const root = scrollRoot(container) ?? review
     const content = review.querySelector("[data-slot='session-review-container']")
     return {
       key: review,
-      root: review,
+      root,
       content: content instanceof HTMLElement ? content : undefined,
     }
   }

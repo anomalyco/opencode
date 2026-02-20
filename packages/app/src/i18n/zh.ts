@@ -633,6 +633,7 @@ export const dict = {
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
 
+  "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",
   "sound.option.alert03": "警报 03",
