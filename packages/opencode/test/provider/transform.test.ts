@@ -620,6 +620,134 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.message - repair interleaved assistant messages", () => {
+  const model = {
+    id: "anthropic/claude-sonnet-4",
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4-20250514",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Sonnet 4",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("reorders interleaved text and tool-call parts in assistant message", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "First text" },
+          { type: "tool-call", toolCallId: "call_1", toolName: "task", input: {} },
+          { type: "tool-call", toolCallId: "call_2", toolName: "task", input: {} },
+          { type: "text", text: "Second text" },
+          { type: "tool-call", toolCallId: "call_3", toolName: "bash", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call_1", toolName: "task", output: { type: "text", value: "ok" } },
+          { type: "tool-result", toolCallId: "call_2", toolName: "task", output: { type: "text", value: "ok" } },
+          { type: "tool-result", toolCallId: "call_3", toolName: "bash", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    const types = result[0].content.map((p: any) => p.type)
+    expect(types).toEqual(["text", "text", "tool-call", "tool-call", "tool-call"])
+  })
+
+  test("injects tool-result when assistant has tool-call but next message is not tool", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "call_1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+      {
+        role: "user",
+        content: "hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[1].role).toBe("tool")
+    expect(result[1].content[0].type).toBe("tool-result")
+    expect(result[1].content[0].toolCallId).toBe("call_1")
+    expect(result[1].content[0].output.value).toBe("[Tool execution was interrupted]")
+  })
+
+  test("patches existing tool message when some tool-results are missing", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "call_1", toolName: "bash", input: {} },
+          { type: "tool-call", toolCallId: "call_2", toolName: "read", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call_1", toolName: "bash", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[1].role).toBe("tool")
+    expect(result[1].content).toHaveLength(2)
+    expect(result[1].content[1].toolCallId).toBe("call_2")
+    expect(result[1].content[1].output.value).toBe("[Tool execution was interrupted]")
+  })
+
+  test("does not modify messages when all tool-calls have matching tool-results", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "call_1", toolName: "bash", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call_1", toolName: "bash", output: { type: "text", value: "done" } },
+        ],
+      },
+      { role: "user", content: "thanks" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result).toHaveLength(3)
+    expect(result[1].content).toHaveLength(1)
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
@@ -674,9 +802,9 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
         release_date: "2023-04-01",
       },
       {},
-    )
+    ) as any[]
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toEqual([
       {
         type: "tool-call",
@@ -686,6 +814,9 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+    // repairAssistantMessages injects a tool-result for the orphaned tool-call
+    expect(result[1].role).toBe("tool")
+    expect(result[1].content[0].toolCallId).toBe("test")
   })
 
   test("Non-DeepSeek providers leave reasoning content unchanged", () => {
@@ -963,9 +1094,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
 
-    expect(result).toHaveLength(1)
+    // repairAssistantMessages adds a tool message for the orphaned tool-call
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
@@ -973,6 +1105,8 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       toolName: "bash",
       input: { command: "ls" },
     })
+    expect(result[1].role).toBe("tool")
+    expect(result[1].content[0].toolCallId).toBe("123")
   })
 
   test("keeps messages with valid text alongside empty parts", () => {

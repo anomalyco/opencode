@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -249,9 +250,84 @@ export namespace ProviderTransform {
     })
   }
 
+  // Fix assistant messages where text/reasoning and tool-call parts are interleaved.
+  // Anthropic requires all text/reasoning parts to come before tool-call parts.
+  // The AI SDK's convertToModelMessages can produce interleaved content when
+  // multi-step conversations have text in between tool calls across steps.
+  // Also ensures every tool-call has a matching tool-result in the next message.
+  function repairAssistantMessages(msgs: ModelMessage[]): ModelMessage[] {
+    const log = Log.create({ service: "transform" })
+    const result: ModelMessage[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const parts = msg.content as any[]
+        const hasToolCalls = parts.some((p) => p.type === "tool-call")
+        if (hasToolCalls) {
+          const nonToolParts = parts.filter((p) => p.type !== "tool-call")
+          const toolParts = parts.filter((p) => p.type === "tool-call")
+
+          const wasInterleaved = parts.some((p, idx) => {
+            if (p.type === "tool-call") return false
+            return parts.slice(0, idx).some((prev) => prev.type === "tool-call")
+          })
+
+          if (wasInterleaved) {
+            log.warn("repairAssistantMessages: reordering interleaved text/tool-call parts", {
+              messageIndex: i,
+              originalOrder: parts.map((p) => p.type),
+            })
+          }
+
+          msg.content = [...nonToolParts, ...toolParts]
+
+          const callIds = toolParts.map((p) => p.toolCallId as string)
+          const next = msgs[i + 1]
+          const existingResults = new Set<string>()
+          if (next?.role === "tool" && Array.isArray(next.content)) {
+            for (const p of next.content as any[]) {
+              if (p.type === "tool-result" && p.toolCallId) existingResults.add(p.toolCallId)
+            }
+          }
+
+          const missing = callIds.filter((id) => !existingResults.has(id))
+          if (missing.length > 0) {
+            log.warn("repairAssistantMessages: patching orphaned tool-calls", {
+              missing,
+              messageIndex: i,
+            })
+
+            const patches = missing.map((id) => {
+              const call = toolParts.find((p) => p.toolCallId === id)
+              return {
+                type: "tool-result" as const,
+                toolCallId: id,
+                toolName: (call?.toolName as string) ?? "unknown",
+                output: { type: "text" as const, value: "[Tool execution was interrupted]" },
+              }
+            })
+
+            if (next?.role === "tool" && Array.isArray(next.content)) {
+              next.content = [...next.content, ...patches]
+            } else {
+              result.push(msg)
+              result.push({ role: "tool", content: patches })
+              continue
+            }
+          }
+        }
+      }
+
+      result.push(msg)
+    }
+    return result
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    msgs = repairAssistantMessages(msgs)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||
