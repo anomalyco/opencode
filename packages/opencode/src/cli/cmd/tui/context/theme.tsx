@@ -409,7 +409,7 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for (const item of await Glob.scan("themes/*.json", {
+    for (const item of await Glob.scan("themes/*.{json,jsonc}", {
       cwd: dir,
       absolute: true,
       dot: true,
