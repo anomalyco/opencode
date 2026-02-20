@@ -31,7 +31,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { Storage } from "../storage/storage"
+import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
@@ -65,7 +65,7 @@ export namespace Server {
           })
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
-            if (err instanceof Storage.NotFoundError) status = 404
+            if (err instanceof NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name.startsWith("Worktree")) status = 400
             else status = 500
@@ -501,6 +501,8 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
+            c.header("X-Accel-Buffering", "no")
+            c.header("X-Content-Type-Options", "nosniff")
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({
@@ -517,7 +519,7 @@ export namespace Server {
                 }
               })
 
-              // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+              // Send heartbeat every 10s to prevent stalled proxy streams.
               const heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
@@ -525,7 +527,7 @@ export namespace Server {
                     properties: {},
                   }),
                 })
-              }, 30000)
+              }, 10_000)
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {

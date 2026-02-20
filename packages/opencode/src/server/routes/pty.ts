@@ -3,7 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
-import { Storage } from "../../storage/storage"
+import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -76,7 +76,7 @@ export const PtyRoutes = lazy(() =>
       async (c) => {
         const info = Pty.get(c.req.valid("param").ptyID)
         if (!info) {
-          throw new Storage.NotFoundError({ message: "Session not found" })
+          throw new NotFoundError({ message: "Session not found" })
         }
         return c.json(info)
       },
@@ -163,7 +163,7 @@ export const PtyRoutes = lazy(() =>
 
         type Socket = {
           readyState: number
-          send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+          send: (data: string | Uint8Array | ArrayBuffer) => void
           close: (code?: number, reason?: string) => void
         }
 
@@ -177,11 +177,16 @@ export const PtyRoutes = lazy(() =>
 
         return {
           onOpen(_event, ws) {
-            const socket = isSocket(ws.raw) ? ws.raw : ws
+            const socket = ws.raw
+            if (!isSocket(socket)) {
+              ws.close()
+              return
+            }
             handler = Pty.connect(id, socket, cursor)
           },
           onMessage(event) {
-            handler?.onMessage(String(event.data))
+            if (typeof event.data !== "string") return
+            handler?.onMessage(event.data)
           },
           onClose() {
             handler?.onClose()

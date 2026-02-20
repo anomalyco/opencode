@@ -1,5 +1,15 @@
 export const promptSelector = '[data-component="prompt-input"]'
 export const terminalSelector = '[data-component="terminal"]'
+export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
+export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
+export const permissionDockSelector = '[data-component="dock-prompt"][data-kind="permission"]'
+export const permissionRejectSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(1)`
+export const permissionAllowAlwaysSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(2)`
+export const permissionAllowOnceSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(3)`
+export const sessionTodoDockSelector = '[data-component="session-todo-dock"]'
+export const sessionTodoToggleSelector = '[data-action="session-todo-toggle"]'
+export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggle-button"]'
+export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
 export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
@@ -29,6 +39,9 @@ export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`
 
 export const projectCloseMenuSelector = (slug: string) => `[data-action="project-close-menu"][data-project="${slug}"]`
+
+export const projectClearNotificationsSelector = (slug: string) =>
+  `[data-action="project-clear-notifications"][data-project="${slug}"]`
 
 export const projectWorkspacesToggleSelector = (slug: string) =>
   `[data-action="project-workspaces-toggle"][data-project="${slug}"]`
