@@ -81,7 +81,7 @@ This creates two tools: `math_add` and `math_multiply`.
 
 #### Name collisions with built-in tools
 
-Custom tools are keyed by tool name. If a custom tool uses the same name as a built-in tool, the custom tool takes precedence for that session.
+Custom tools are keyed by tool name. If a custom tool uses the same name as a built-in tool, the custom tool takes precedence.
 
 For example, this file replaces the built-in `bash` tool:
 
@@ -100,7 +100,7 @@ export default tool({
 ```
 
 :::note
-Prefer unique names unless you intentionally want to replace a built-in tool. A common pattern is to create `safe_bash` and disable `bash` using [permissions](/docs/permissions).
+Prefer unique names unless you intentionally want to replace a built-in tool. If you want a safer wrapper, create `safe_bash` and deny `bash` using [permissions](/docs/permissions).
 :::
 
 ---
