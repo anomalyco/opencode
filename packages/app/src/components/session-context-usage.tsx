@@ -1,5 +1,5 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 import { useParams } from "@solidjs/router"
@@ -11,6 +11,18 @@ import { getSessionContextMetrics } from "@/components/session/session-context-m
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
+  placement?: TooltipProps["placement"]
+}
+
+function openSessionContext(args: {
+  view: ReturnType<ReturnType<typeof useLayout>["view"]>
+  layout: ReturnType<typeof useLayout>
+  tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
+}) {
+  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+  args.tabs.open("context")
+  args.tabs.setActive("context")
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
@@ -41,11 +53,16 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.open()
-    layout.fileTree.setTab("all")
-    tabs().open("context")
-    tabs().setActive("context")
+
+    if (tabs().active() === "context") {
+      tabs().close("context")
+      return
+    }
+    openSessionContext({
+      view: view(),
+      layout,
+      tabs: tabs(),
+    })
   }
 
   const circle = () => (
@@ -79,7 +96,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement="top">
+      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>

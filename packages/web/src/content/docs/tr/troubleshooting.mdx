@@ -37,11 +37,11 @@ Bu dizin sunlari icerir:
 
 ---
 
-## Masaustu uygulamasi
+## Masaüstü uygulaması
 
 opencode Desktop arka planda yerel bir opencode sunucusu (`opencode-cli` sidecar) calistirir. Sorunlarin cogu bozuk bir plugin, hasarli cache veya hatali sunucu ayarindan kaynaklanir.
 
-### Hizli kontroller
+### Hızlı kontroller
 
 - Uygulamayi tamamen kapatip yeniden acin
 - Uygulama hata ekrani gosteriyorsa **Restart**'a tiklayip hata detaylarini kopyalayin
@@ -49,7 +49,7 @@ opencode Desktop arka planda yerel bir opencode sunucusu (`opencode-cli` sidecar
 
 ---
 
-### Pluginleri devre disi birakin
+### Eklentileri devre dışı bırakın
 
 Desktop uygulamasi acilista cokuyorsa, takiliyorsa veya garip davranislar gosteriyorsa once pluginleri devre disi birakin.
 
@@ -70,7 +70,7 @@ Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak 
 }
 ```
 
-#### Plugin dizinlerini kontrol edin
+#### Eklenti dizinlerini kontrol edin
 
 opencode diskten yerel plugin de yukleyebilir. Bu dizinleri gecici olarak tasiyin (veya klasoru yeniden adlandirin) ve uygulamayi yeniden baslatin:
 
@@ -99,7 +99,7 @@ Pluginleri kapatmak ise yaramazsa (veya plugin kurulumu takili kaldiysa), openco
 
 ---
 
-### Sunucu baglanti sorunlarini duzeltin
+### Sunucu bağlantı sorunlarını düzeltin
 
 opencode Desktop ya kendi yerel sunucusunu baslatir (varsayilan) ya da sizin tanimladiginiz bir sunucu URL'sine baglanir.
 
@@ -121,7 +121,7 @@ Ortamda `OPENCODE_PORT` ayarliysa desktop uygulamasi yerel sunucu icin o portu k
 
 ---
 
-### Linux: Wayland / X11 sorunlari
+### Linux: Wayland / X11 sorunları
 
 Linux'ta bazi Wayland kurulumlari bos pencere veya compositor hatalarina yol acabilir.
 
@@ -130,19 +130,19 @@ Linux'ta bazi Wayland kurulumlari bos pencere veya compositor hatalarina yol aca
 
 ---
 
-### Windows: WebView2 runtime
+### Windows: WebView2 Çalışma Zamanı
 
 Windows'ta opencode Desktop, Microsoft Edge **WebView2 Runtime** gerektirir. Uygulama bos pencereyle aciliyorsa veya hic baslamiyorsa WebView2'yi kurup/guncelleyip tekrar deneyin.
 
 ---
 
-### Windows: Genel performans sorunlari
+### Windows: Genel performans sorunları
 
 Windows'ta yavaslik, dosya erisim sorunlari veya terminal problemleri yasiyorsaniz [WSL (Windows Subsystem for Linux)](/docs/windows-wsl) kullanmayi deneyin. WSL, opencode ozellikleriyle daha sorunsuz calisan bir Linux ortami saglar.
 
 ---
 
-### Bildirimler gorunmuyor
+### Bildirimler görünmüyor
 
 opencode Desktop sistem bildirimlerini yalnizca su durumlarda gosterir:
 
@@ -151,7 +151,7 @@ opencode Desktop sistem bildirimlerini yalnizca su durumlarda gosterir:
 
 ---
 
-### Desktop depolamasini sifirlayin (son care)
+### Desktop depolamasını sıfırlayın (son çare)
 
 Uygulama acilmiyorsa ve ayarlari arayuz icinden temizleyemiyorsaniz, desktop uygulamasinin kayitli durumunu sifirlayin.
 
@@ -169,7 +169,7 @@ Dizini hizlica bulmak icin:
 
 ---
 
-## Yardim alin
+## Yardım alın
 
 opencode ile ilgili bir sorun yasiyorsaniz:
 
@@ -189,13 +189,13 @@ opencode ile ilgili bir sorun yasiyorsaniz:
 
 ---
 
-## Yaygin sorunlar
+## Yaygın sorunlar
 
 Asagida yaygin sorunlar ve cozumleri yer aliyor.
 
 ---
 
-### opencode baslamiyor
+### opencode başlamıyor
 
 1. Hata mesaji icin loglari kontrol edin
 2. Terminalde cikti gormek icin `--print-logs` ile calistirin
@@ -203,7 +203,7 @@ Asagida yaygin sorunlar ve cozumleri yer aliyor.
 
 ---
 
-### Kimlik dogrulama sorunlari
+### Kimlik doğrulama sorunları
 
 1. TUI'da `/connect` komutuyla yeniden kimlik dogrulamasi yapin
 2. API anahtarlarinizin gecerli oldugunu kontrol edin
@@ -211,7 +211,7 @@ Asagida yaygin sorunlar ve cozumleri yer aliyor.
 
 ---
 
-### Model kullanilamiyor
+### Model kullanılamıyor
 
 1. Provider ile kimlik dogrulamasi yaptiginizi kontrol edin
 2. Config'teki model adinin dogru oldugunu dogrulayin
@@ -269,7 +269,7 @@ Bu, opencode'un en yeni provider paket surumlerini indirmesini zorlar ve model p
 
 ---
 
-### Linux'ta kopyala/yapistir calismiyor
+### Linux'ta kopyala/yapıştır çalışmıyor
 
 Linux kullanicilarinin kopyala/yapistir ozelliginin calismasi icin asagidaki pano araclarindan en az birini kurmasi gerekir:
 
@@ -277,7 +277,7 @@ Linux kullanicilarinin kopyala/yapistir ozelliginin calismasi icin asagidaki pan
 
 ```bash
 apt install -y xclip
-# veya
+# or
 apt install -y xsel
 ```
 
@@ -291,7 +291,7 @@ apt install -y wl-clipboard
 
 ```bash
 apt install -y xvfb
-# ve su komutlari calistirin:
+# and run:
 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```

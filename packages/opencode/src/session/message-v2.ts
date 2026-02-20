@@ -6,6 +6,10 @@ import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
+import { Database, eq, desc, inArray } from "@/storage/db"
+import { MessageTable, PartTable } from "./session.sql"
+import { ProviderTransform } from "@/provider/transform"
+import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
@@ -15,6 +19,13 @@ import type { Provider } from "@/provider/provider"
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
+  export const StructuredOutputError = NamedError.create(
+    "StructuredOutputError",
+    z.object({
+      message: z.string(),
+      retries: z.number(),
+    }),
+  )
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -38,6 +49,29 @@ export namespace MessageV2 {
     "ContextOverflowError",
     z.object({ message: z.string(), responseBody: z.string().optional() }),
   )
+
+  export const OutputFormatText = z
+    .object({
+      type: z.literal("text"),
+    })
+    .meta({
+      ref: "OutputFormatText",
+    })
+
+  export const OutputFormatJsonSchema = z
+    .object({
+      type: z.literal("json_schema"),
+      schema: z.record(z.string(), z.any()).meta({ ref: "JSONSchema" }),
+      retryCount: z.number().int().min(0).default(2),
+    })
+    .meta({
+      ref: "OutputFormatJsonSchema",
+    })
+
+  export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
+    ref: "OutputFormat",
+  })
+  export type OutputFormat = z.infer<typeof Format>
 
   const PartBase = z.object({
     id: z.string(),
@@ -210,6 +244,7 @@ export namespace MessageV2 {
     snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
+      total: z.number().optional(),
       input: z.number(),
       output: z.number(),
       reasoning: z.number(),
@@ -312,6 +347,7 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
     }),
+    format: Format.optional(),
     summary: z
       .object({
         title: z.string().optional(),
@@ -364,6 +400,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        StructuredOutputError.Schema,
         ContextOverflowError.Schema,
         APIError.Schema,
       ])
@@ -383,6 +420,7 @@ export namespace MessageV2 {
     summary: z.boolean().optional(),
     cost: z.number(),
     tokens: z.object({
+      total: z.number().optional(),
       input: z.number(),
       output: z.number(),
       reasoning: z.number(),
@@ -391,6 +429,7 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
+    structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
   }).meta({
@@ -421,7 +460,16 @@ export namespace MessageV2 {
       "message.part.updated",
       z.object({
         part: Part,
-        delta: z.string().optional(),
+      }),
+    ),
+    PartDelta: BusEvent.define(
+      "message.part.delta",
+      z.object({
+        sessionID: z.string(),
+        messageID: z.string(),
+        partID: z.string(),
+        field: z.string(),
+        delta: z.string(),
       }),
     ),
     PartRemoved: BusEvent.define(
@@ -666,23 +714,65 @@ export namespace MessageV2 {
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
-    for (let i = list.length - 1; i >= 0; i--) {
-      yield await get({
-        sessionID,
-        messageID: list[i][2],
-      })
+    const size = 50
+    let offset = 0
+    while (true) {
+      const rows = Database.use((db) =>
+        db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, sessionID))
+          .orderBy(desc(MessageTable.time_created))
+          .limit(size)
+          .offset(offset)
+          .all(),
+      )
+      if (rows.length === 0) break
+
+      const ids = rows.map((row) => row.id)
+      const partsByMessage = new Map<string, MessageV2.Part[]>()
+      if (ids.length > 0) {
+        const partRows = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(inArray(PartTable.message_id, ids))
+            .orderBy(PartTable.message_id, PartTable.id)
+            .all(),
+        )
+        for (const row of partRows) {
+          const part = {
+            ...row.data,
+            id: row.id,
+            sessionID: row.session_id,
+            messageID: row.message_id,
+          } as MessageV2.Part
+          const list = partsByMessage.get(row.message_id)
+          if (list) list.push(part)
+          else partsByMessage.set(row.message_id, [part])
+        }
+      }
+
+      for (const row of rows) {
+        const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+        yield {
+          info,
+          parts: partsByMessage.get(row.id) ?? [],
+        }
+      }
+
+      offset += rows.length
+      if (rows.length < size) break
     }
   })
 
-  export const parts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
-    return result
+  export const parts = fn(Identifier.schema("message"), async (message_id) => {
+    const rows = Database.use((db) =>
+      db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
+    )
+    return rows.map(
+      (row) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
+    )
   })
 
   export const get = fn(
@@ -691,8 +781,11 @@ export namespace MessageV2 {
       messageID: Identifier.schema("message"),
     }),
     async (input): Promise<WithParts> => {
+      const row = Database.use((db) => db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID)).get())
+      if (!row) throw new Error(`Message not found: ${input.messageID}`)
+      const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
       return {
-        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
+        info,
         parts: await parts(input.messageID),
       }
     },

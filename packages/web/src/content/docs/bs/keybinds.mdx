@@ -1,9 +1,9 @@
 ---
-title: Keybinds
-description: Prilagodite svoje veze dugmadi.
+title: Prečice tipki
+description: Prilagodite svoje veze tipki.
 ---
 
-OpenCode ima listu veza ključeva koje možete prilagoditi preko OpenCode konfiguracije.
+OpenCode ima listu veza tipki koje možete prilagoditi preko OpenCode konfiguracije.
 
 ```json title="opencode.json"
 {
@@ -105,15 +105,15 @@ OpenCode ima listu veza ključeva koje možete prilagoditi preko OpenCode konfig
 
 ---
 
-## Leader key
+## Leader tipka
 
-OpenCode koristi `leader` ključ za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
-Prema zadanim postavkama, `ctrl+x` je vodeći taster i većina radnji zahtijeva da prvo pritisnete vodeći taster, a zatim i prečicu. Na primjer, da biste započeli novu sesiju, prvo pritisnite `ctrl+x`, a zatim pritisnite `n`.
-Ne morate koristiti vodeći ključ za svoje veze tipki, ali preporučujemo da to učinite.
+OpenCode koristi `leader` (vodeću) tipku za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
+Prema zadanim postavkama, `ctrl+x` je vodeća tipka i većina radnji zahtijeva da prvo pritisnete vodeću tipku, a zatim i prečicu. Na primjer, da biste započeli novu sesiju, prvo pritisnite `ctrl+x`, a zatim pritisnite `n`.
+Ne morate koristiti vodeću tipku za svoje veze tipki, ali preporučujemo da to učinite.
 
 ---
 
-## Onemogući povezivanje tastera
+## Onemogućavanje prečica tipki
 
 Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s vrijednošću "none".
 
@@ -130,21 +130,22 @@ Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s v
 
 ## Prečice za radnu površinu
 
-Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. Oni su ugrađeni i trenutno se ne mogu konfigurirati putem `opencode.json`.
-| Prečica | Akcija
-|-------- | ---------------------------------------- |
-| `ctrl+a` | Prelazak na početak tekućeg reda |
-| `ctrl+e` | Prelazak na kraj trenutnog reda |
-| `ctrl+b` | Pomeri kursor za jedan znak unazad |
-| `ctrl+f` | Pomicanje kursora naprijed za jedan znak |
-| `alt+b` | Pomeri kursor za jednu reč unazad |
-| `alt+f` | Pomeri kursor za jednu reč unapred |
-| `ctrl+d` | Izbriši znak ispod kursora |
-| `ctrl+k` | Ubiti do kraja reda |
-| `ctrl+u` | Kill do početka reda |
-| `ctrl+w` | Ubiti prethodnu riječ |
-| `alt+d` | Ubiti sljedeću riječ |
-| `ctrl+t` | Transponirajte znakove |
+Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. One su ugrađene i trenutno se ne mogu konfigurirati putem `opencode.json`.
+
+| Prečica  | Akcija                                           |
+| -------- | ------------------------------------------------ |
+| `ctrl+a` | Prelazak na početak trenutnog reda               |
+| `ctrl+e` | Prelazak na kraj trenutnog reda                  |
+| `ctrl+b` | Pomjeri kursor za jedan znak unazad              |
+| `ctrl+f` | Pomicanje kursora naprijed za jedan znak         |
+| `alt+b`  | Pomjeri kursor za jednu riječ unazad             |
+| `alt+f`  | Pomjeri kursor za jednu riječ unaprijed          |
+| `ctrl+d` | Izbriši znak ispod kursora                       |
+| `ctrl+k` | Kill do kraja reda                               |
+| `ctrl+u` | Kill do početka reda                             |
+| `ctrl+w` | Kill prethodnu riječ                             |
+| `alt+d`  | Kill sljedeću riječ                              |
+| `ctrl+t` | Transponirajte znakove                           |
 | `ctrl+g` | Otkaži iskakanje / poništi odgovor na pokretanje |
 
 ---
@@ -153,7 +154,7 @@ Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u sti
 
 Neki terminali ne šalju modifikatorske tipke sa Enter prema zadanim postavkama. Možda ćete trebati konfigurirati svoj terminal da pošalje `Shift+Enter` kao escape sekvencu.
 
-### Windows terminal
+### Windows Terminal
 
 Otvorite svoj `settings.json` na:
 

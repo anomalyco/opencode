@@ -175,96 +175,200 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
-describe("ProviderTransform.maxOutputTokens", () => {
-  test("returns 32k when modelLimit > 32k", () => {
-    const modelLimit = 100000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(OUTPUT_TOKEN_MAX)
-  })
+describe("ProviderTransform.options - gateway", () => {
+  const sessionID = "test-session-123"
 
-  test("returns modelLimit when modelLimit < 32k", () => {
-    const modelLimit = 16000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(16000)
-  })
+  const createModel = (id: string) =>
+    ({
+      id,
+      providerID: "vercel",
+      api: {
+        id,
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+      name: id,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2024-01-01",
+    }) as any
 
-  describe("azure", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("bedrock", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("anthropic without thinking options", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
+  test("puts gateway defaults under gateway key", () => {
+    const model = createModel("anthropic/claude-sonnet-4")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result).toEqual({
+      gateway: {
+        caching: "auto",
+      },
     })
   })
+})
 
-  describe("anthropic with thinking options", () => {
-    test("returns 32k when budgetTokens + 32k <= modelLimit", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+describe("ProviderTransform.providerOptions", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "test/test-model",
+      providerID: "test",
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 64_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2024-01-01",
+      ...overrides,
+    }) as any
+
+  test("uses sdk key for non-gateway models", () => {
+    const model = createModel({
+      providerID: "my-bedrock",
+      api: {
+        id: "anthropic.claude-sonnet-4",
+        url: "https://bedrock.aws",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
     })
 
-    test("returns modelLimit - budgetTokens when budgetTokens + 32k > modelLimit", () => {
-      const modelLimit = 50000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 30000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(20000)
+    expect(ProviderTransform.providerOptions(model, { cachePoint: { type: "default" } })).toEqual({
+      bedrock: { cachePoint: { type: "default" } },
+    })
+  })
+
+  test("uses gateway model provider slug for gateway models", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
     })
 
-    test("returns 32k when thinking type is not enabled", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "disabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
+      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+  })
+
+  test("falls back to gateway key when gateway api id is unscoped", () => {
+    const model = createModel({
+      id: "anthropic/claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
+      gateway: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+  })
+
+  test("splits gateway routing options from provider-specific options", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(
+      ProviderTransform.providerOptions(model, {
+        gateway: { order: ["vertex", "anthropic"] },
+        thinking: { type: "enabled", budgetTokens: 12_000 },
+      }),
+    ).toEqual({
+      gateway: { order: ["vertex", "anthropic"] },
+      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    } as any)
+  })
+
+  test("falls back to gateway key when model id has no provider slug", () => {
+    const model = createModel({
+      id: "claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      gateway: { reasoningEffort: "high" },
+    })
+  })
+
+  test("maps amazon slug to bedrock for provider options", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "amazon/nova-2-lite",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningConfig: { type: "enabled" } })).toEqual({
+      bedrock: { reasoningConfig: { type: "enabled" } },
+    })
+  })
+
+  test("uses groq slug for groq models", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "groq/llama-3.3-70b-versatile",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningFormat: "parsed" })).toEqual({
+      groq: { reasoningFormat: "parsed" },
     })
   })
 })
@@ -1326,6 +1430,105 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
   })
 })
 
+describe("ProviderTransform.message - cache control on gateway", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "anthropic/claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+      name: "Claude Sonnet 4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 200_000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("gateway does not set cache control for anthropic models", () => {
+    const model = createModel()
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant" }],
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].content[0].providerOptions).toBeUndefined()
+    expect(result[0].providerOptions).toBeUndefined()
+  })
+
+  test("non-gateway anthropic keeps existing cache control behavior", () => {
+    const model = createModel({
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions).toEqual({
+      anthropic: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      bedrock: {
+        cachePoint: {
+          type: "default",
+        },
+      },
+      openaiCompatible: {
+        cache_control: {
+          type: "ephemeral",
+        },
+      },
+      copilot: {
+        copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+    })
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -1502,6 +1705,92 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
+    test("anthropic sonnet 4.6 models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4-6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic sonnet 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic opus 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
+    test("anthropic models return anthropic thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 31999,
+        },
+      })
+    })
+
     test("returns OPENAI_EFFORTS with reasoningEffort", () => {
       const model = createMockModel({
         id: "gateway/gateway-model",
@@ -1835,6 +2124,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/anthropic", () => {
+    test("sonnet 4.6 returns adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-6",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",
@@ -1863,6 +2172,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
+    test("anthropic sonnet 4.6 returns adaptive reasoning options", () => {
+      const model = createMockModel({
+        id: "bedrock/anthropic-claude-sonnet-4-6",
+        providerID: "bedrock",
+        api: {
+          id: "anthropic.claude-sonnet-4-6",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.max).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "max",
+        },
+      })
+    })
+
     test("returns WIDELY_SUPPORTED_EFFORTS with reasoningConfig", () => {
       const model = createMockModel({
         id: "bedrock/llama-4",
@@ -1924,12 +2253,16 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "low",
+        },
       })
       expect(result.high).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "high",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "high",
+        },
       })
     })
   })
@@ -1994,12 +2327,10 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
       expect(result.none).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "none",
+        reasoningEffort: "none",
       })
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        reasoningEffort: "low",
       })
     })
   })

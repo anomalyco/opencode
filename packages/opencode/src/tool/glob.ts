@@ -1,6 +1,7 @@
 import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
@@ -45,10 +46,7 @@ export const GlobTool = Tool.define("glob", {
         break
       }
       const full = path.resolve(search, file)
-      const stats = await Bun.file(full)
-        .stat()
-        .then((x) => x.mtime.getTime())
-        .catch(() => 0)
+      const stats = Filesystem.stat(full)?.mtime.getTime() ?? 0
       files.push({
         path: full,
         mtime: stats,
@@ -62,7 +60,9 @@ export const GlobTool = Tool.define("glob", {
       output.push(...files.map((f) => f.path))
       if (truncated) {
         output.push("")
-        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
+        output.push(
+          `(Results are truncated: showing first ${limit} results. Consider using a more specific path or pattern.)`,
+        )
       }
     }
 

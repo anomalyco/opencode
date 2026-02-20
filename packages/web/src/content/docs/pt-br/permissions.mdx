@@ -3,7 +3,7 @@ title: Permissões
 description: Controle quais ações requerem aprovação para serem executadas.
 ---
 
-opencode usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
+O opencode usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
 
 A partir da versão `v1.1.1`, a configuração booleana legada `tools` foi descontinuada e mesclada na `permission`. A antiga configuração `tools` ainda é suportada para compatibilidade retroativa.
 
@@ -221,7 +221,7 @@ Você também pode configurar permissões de agentes em Markdown:
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
-description: Revisão de código sem edições
+description: Code review without edits
 mode: subagent
 permission:
   edit: deny
@@ -229,7 +229,7 @@ permission:
   webfetch: deny
 ---
 
-Apenas analise o código e sugira alterações.
+Only analyze code and suggest changes.
 ```
 
 :::tip

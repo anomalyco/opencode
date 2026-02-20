@@ -66,14 +66,14 @@ export namespace BunProc {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
+      const result = { dependencies: {} as Record<string, string> }
+      await Filesystem.writeJson(pkgjsonPath, result)
       return result
     })
-    const dependencies = parsed.dependencies ?? {}
-    if (!parsed.dependencies) parsed.dependencies = dependencies
+    if (!parsed.dependencies) parsed.dependencies = {} as Record<string, string>
+    const dependencies = parsed.dependencies
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
 
@@ -131,8 +131,9 @@ export namespace BunProc {
     // This ensures subsequent starts use the cached version instead of querying npm each time
     let resolvedVersion = version
     if (version === "latest") {
-      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
-      const installedPkg = await installedPkgJson.json().catch(() => null)
+      const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(
+        () => null,
+      )
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version
         log.info("Resolved 'latest' to actual version", { pkg, resolvedVersion })
@@ -140,7 +141,7 @@ export namespace BunProc {
         log.error("Failed to read version from installed package, cannot cache", { pkg, modPath: mod })
       }
     }
-
+    
     // Only cache valid SemVer versions
     // Never cache "latest" or any non-SemVer strings as they cause semver parsing errors
     if (resolvedVersion !== "latest" && /^\d+\.\d+\.\d+/.test(resolvedVersion)) {

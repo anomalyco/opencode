@@ -1,4 +1,4 @@
-import type { CommandOption } from "@/context/command"
+import { batch } from "solid-js"
 
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
@@ -27,14 +27,33 @@ export const createOpenReviewFile = (input: {
   loadFile: (path: string) => void
 }) => {
   return (path: string) => {
-    input.showAllFiles()
-    input.openTab(input.tabForPath(path))
-    input.loadFile(path)
+    batch(() => {
+      input.showAllFiles()
+      input.openTab(input.tabForPath(path))
+      input.loadFile(path)
+    })
   }
 }
 
-export const combineCommandSections = (sections: readonly (readonly CommandOption[])[]) => {
-  return sections.flatMap((section) => section)
+export const createOpenSessionFileTab = (input: {
+  normalizeTab: (tab: string) => string
+  openTab: (tab: string) => void
+  pathFromTab: (tab: string) => string | undefined
+  loadFile: (path: string) => void
+  openReviewPanel: () => void
+  setActive: (tab: string) => void
+}) => {
+  return (value: string) => {
+    const next = input.normalizeTab(value)
+    input.openTab(next)
+
+    const path = input.pathFromTab(next)
+    if (!path) return
+
+    input.loadFile(path)
+    input.openReviewPanel()
+    input.setActive(next)
+  }
 }
 
 export const getTabReorderIndex = (tabs: readonly string[], from: string, to: string) => {

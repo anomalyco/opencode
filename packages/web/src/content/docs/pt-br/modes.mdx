@@ -15,19 +15,19 @@ Você pode alternar entre os modos durante uma sessão ou configurá-los no seu 
 
 ---
 
-## Integrado
+## Integrados
 
 O opencode vem com dois modos integrados.
 
 ---
 
-### Build
+### build
 
 Build é o modo **padrão** com todas as ferramentas habilitadas. Este é o modo padrão para trabalho de desenvolvimento onde você precisa de acesso total a operações de arquivos e comandos do sistema.
 
 ---
 
-### Plan
+### plan
 
 Um modo restrito projetado para planejamento e análise. No modo plan, as seguintes ferramentas estão desativadas por padrão:
 
@@ -48,7 +48,7 @@ Veja também: [Formatadores](/docs/formatters) para informações sobre configur
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode personalizar os modos integrados ou criar os seus próprios através da configuração. Os modos podem ser configurados de duas maneiras:
 
@@ -98,14 +98,14 @@ tools:
   bash: false
 ---
 
-Você está no modo de revisão de código. Foque em:
+You are in code review mode. Focus on:
 
-- Qualidade do código e melhores práticas
-- Bugs potenciais e casos extremos
-- Implicações de desempenho
-- Considerações de segurança
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
 
-Forneça feedback construtivo sem fazer alterações diretas.
+Provide constructive feedback without making direct changes.
 ```
 
 O nome do arquivo markdown se torna o nome do modo (por exemplo, `review.md` cria um modo `review`).
@@ -278,17 +278,17 @@ tools:
   edit: false
 ---
 
-Você está no modo de depuração. Seu objetivo principal é ajudar a investigar e diagnosticar problemas.
+You are in debug mode. Your primary goal is to help investigate and diagnose issues.
 
-Foque em:
+Focus on:
 
-- Compreender o problema através de uma análise cuidadosa
-- Usar comandos bash para inspecionar o estado do sistema
-- Ler arquivos e logs relevantes
-- Pesquisar padrões e anomalias
-- Fornecer explicações claras das descobertas
+- Understanding the problem through careful analysis
+- Using bash commands to inspect system state
+- Reading relevant files and logs
+- Searching for patterns and anomalies
+- Providing clear explanations of findings
 
-Não faça alterações em arquivos. Apenas investigue e relate.
+Do not make any changes to files. Only investigate and report.
 ```
 
 ```markdown title="~/.config/opencode/modes/refactor.md"
@@ -302,15 +302,15 @@ tools:
   glob: true
 ---
 
-Você está no modo de refatoração. Foque em melhorar a qualidade do código sem alterar a funcionalidade.
+You are in refactoring mode. Focus on improving code quality without changing functionality.
 
-Prioridades:
+Priorities:
 
-- Melhorar a legibilidade e a manutenibilidade do código
-- Aplicar convenções de nomenclatura consistentes
-- Reduzir a duplicação de código
-- Otimizar o desempenho onde apropriado
-- Garantir que todos os testes continuem passando
+- Improve code readability and maintainability
+- Apply consistent naming conventions
+- Reduce code duplication
+- Optimize performance where appropriate
+- Ensure all tests continue to pass
 ```
 
 ---
