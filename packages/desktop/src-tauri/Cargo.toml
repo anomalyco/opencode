@@ -37,6 +37,7 @@ serde_json = "1"
 tokio = { version = "1.48.0", features = ["process"] }
 listeners = "0.3"
 tauri-plugin-os = "2"
+tauri-plugin-fs = "2"
 futures = "0.3.31"
 semver = "1.0.27"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

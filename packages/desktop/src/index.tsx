@@ -33,6 +33,8 @@ import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, ServerReadyData, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
+import { readTextFile, writeTextFile, exists } from "@tauri-apps/plugin-fs"
+import { configDir } from "@tauri-apps/api/path"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -415,12 +417,17 @@ const createPlatform = (): Platform => {
       })
     },
 
-    getConfigPaths: () => commands.getConfigPaths(),
+    getConfigPaths: async () => {
+      const globalPath = (await configDir()).replace(/\\/g, "/") + "/opencode/opencode.json"
+      return { global: globalPath, project: null }
+    },
 
-    readConfigFile: (path: string) => commands.readConfigFile(path),
+    readConfigFile: async (path: string) => {
+      return readTextFile(path)
+    },
 
     writeConfigFile: async (path: string, content: string) => {
-      await commands.writeConfigFile(path, content)
+      await writeTextFile(path, content)
       return undefined
     },
   }
