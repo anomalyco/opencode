@@ -390,7 +390,7 @@
       "border-selected": "var(--cobalt-dark-alpha-11)",
       "border-disabled": "var(--gray-dark-alpha-8)",
       "border-focus": "var(--gray-dark-alpha-9)",
-      "border-weak-base": "var(--gray-dark-alpha-4)",
+      "border-weak-base": "var(--gray-dark-alpha-5)",
       "border-weak-hover": "var(--gray-dark-alpha-7)",
       "border-weak-active": "var(--gray-dark-alpha-8)",
       "border-weak-selected": "var(--cobalt-dark-alpha-6)",

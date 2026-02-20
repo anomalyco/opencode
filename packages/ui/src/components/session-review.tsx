@@ -6,6 +6,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { Tooltip } from "./tooltip"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -532,25 +533,31 @@ export const SessionReview = (props: SessionReviewProps) => {
                               </Show>
                               <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
                               <Show when={props.onViewFile}>
-                                <button
-                                  data-slot="session-review-view-button"
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    props.onViewFile?.(diff.file)
-                                  }}
-                                >
-                                  <Icon name="eye" size="small" />
-                                </button>
+                                <Tooltip value="Open file" placement="top" gutter={4}>
+                                  <button
+                                    data-slot="session-review-view-button"
+                                    type="button"
+                                    aria-label="Open file"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      props.onViewFile?.(diff.file)
+                                    }}
+                                  >
+                                    <Icon name="open-file" size="small" />
+                                  </button>
+                                </Tooltip>
                               </Show>
                             </div>
                           </div>
                           <div data-slot="session-review-trigger-actions">
                             <Switch>
                               <Match when={isAdded()}>
-                                <span data-slot="session-review-change" data-type="added">
-                                  {i18n.t("ui.sessionReview.change.added")}
-                                </span>
+                                <div data-slot="session-review-change-group" data-type="added">
+                                  <span data-slot="session-review-change" data-type="added">
+                                    {i18n.t("ui.sessionReview.change.added")}
+                                  </span>
+                                  <DiffChanges changes={diff} />
+                                </div>
                               </Match>
                               <Match when={isDeleted()}>
                                 <span data-slot="session-review-change" data-type="removed">
@@ -566,7 +573,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <DiffChanges changes={diff} />
                               </Match>
                             </Switch>
-                            <Icon name="chevron-grabber-vertical" size="small" />
+                            <span data-slot="session-review-diff-chevron">
+                              <Icon name="chevron-down" size="small" />
+                            </span>
                           </div>
                         </div>
                       </Accordion.Trigger>
