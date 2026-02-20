@@ -43,6 +43,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         const text = store.get()
         if (text) process.stdout.write(text + "\n")
         await input.onExit?.()
+        setTimeout(() => process.exit(0), 100)
       },
       {
         message: store,

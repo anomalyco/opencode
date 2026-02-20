@@ -967,7 +967,9 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  // Temporarily insert text directly without extmark to avoid the "can not paste certain string" bug
+                  // which causes UI corruption and data loss on multi-line text
+                  input.insertText(pastedContent)
                   return
                 }
 

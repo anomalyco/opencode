@@ -770,6 +770,7 @@ function ErrorComponent(props: {
     renderer.destroy()
     win32FlushInputBuffer()
     await props.onExit()
+    setTimeout(() => process.exit(0), 100)
   }
 
   useKeyboard((evt) => {
