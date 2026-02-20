@@ -540,7 +540,7 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+          const sessionID = await sdk.client.session.create({}).then((x: any) => x.data!.id)
           return sessionID
         })()
     const messageID = Identifier.ascending("message")

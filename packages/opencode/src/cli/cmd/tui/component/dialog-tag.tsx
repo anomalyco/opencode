@@ -25,7 +25,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
   )
 
   const options = createMemo(() =>
-    (files() ?? []).map((file) => ({
+    (files() ?? []).map((file: any) => ({
       value: file,
       title: file,
     })),
@@ -35,7 +35,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
     <DialogSelect
       title="Autocomplete"
       options={options()}
-      onSelect={(option) => {
+      onSelect={(option: any) => {
         props.onSelect?.(option.value)
         dialog.clear()
       }}

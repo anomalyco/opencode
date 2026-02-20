@@ -234,7 +234,7 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
-        const sortedFiles = result.data.sort((a, b) => {
+        const sortedFiles = result.data.sort((a: any, b: any) => {
           const aScore = frecency.getFrecency(a)
           const bScore = frecency.getFrecency(b)
           if (aScore !== bScore) return bScore - aScore
@@ -246,7 +246,7 @@ export function Autocomplete(props: {
 
         const width = props.anchor().width - 4
         options.push(
-          ...sortedFiles.map((item): AutocompleteOption => {
+          ...sortedFiles.map((item: any): AutocompleteOption => {
             const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
             const fullPath = `${baseDir}/${item}`
             const urlObj = pathToFileURL(fullPath)

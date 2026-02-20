@@ -25,7 +25,7 @@ export class ACPSessionManager {
         },
         { throwOnError: true },
       )
-      .then((x) => x.data!)
+      .then((x: any) => x.data!)
 
     const sessionId = session.id
     const resolvedModel = model
@@ -57,7 +57,7 @@ export class ACPSessionManager {
         },
         { throwOnError: true },
       )
-      .then((x) => x.data!)
+      .then((x: any) => x.data!)
 
     const resolvedModel = model
 

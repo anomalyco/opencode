@@ -312,7 +312,7 @@ function App() {
     if (match) {
       continued = true
       if (args.fork) {
-        sdk.client.session.fork({ sessionID: match }).then((result) => {
+        sdk.client.session.fork({ sessionID: match }).then((result: any) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
@@ -332,7 +332,7 @@ function App() {
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+    sdk.client.session.fork({ sessionID: args.sessionID }).then((result: any) => {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id })
       } else {

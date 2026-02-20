@@ -332,7 +332,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "lsp.updated": {
-          sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
+          sdk.client.lsp.status().then((x: any) => setStore("lsp", x.data!))
           break
         }
 
@@ -351,7 +351,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x: any) => (x.data ?? []).toSorted((a: any, b: any) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
       const providersPromise = sdk.client.config.providers({}, { throwOnError: true })
@@ -368,10 +368,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
       await Promise.all(blockingRequests)
         .then(() => {
-          const providersResponse = providersPromise.then((x) => x.data!)
-          const providerListResponse = providerListPromise.then((x) => x.data!)
-          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
-          const configResponse = configPromise.then((x) => x.data!)
+          const providersResponse = providersPromise.then((x: any) => x.data!)
+          const providerListResponse = providerListPromise.then((x: any) => x.data!)
+          const agentsResponse = agentsPromise.then((x: any) => x.data ?? [])
+          const configResponse = configPromise.then((x: any) => x.data!)
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
           return Promise.all([
@@ -401,18 +401,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
-            sdk.client.session.status().then((x) => {
+            ...(args.continue ? [] : [sessionListPromise.then((sessions: any) => setStore("session", reconcile(sessions)))]),
+            sdk.client.command.list().then((x: any) => setStore("command", reconcile(x.data ?? []))),
+            sdk.client.lsp.status().then((x: any) => setStore("lsp", reconcile(x.data!))),
+            sdk.client.mcp.status().then((x: any) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.experimental.resource.list().then((x: any) => setStore("mcp_resource", reconcile(x.data ?? {}))),
+            sdk.client.formatter.status().then((x: any) => setStore("formatter", reconcile(x.data!))),
+            sdk.client.session.status().then((x: any) => {
               setStore("session_status", reconcile(x.data!))
             }),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
-            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.provider.auth().then((x: any) => setStore("provider_auth", reconcile(x.data ?? {}))),
+            sdk.client.vcs.get().then((x: any) => setStore("vcs", reconcile(x.data))),
+            sdk.client.path.get().then((x: any) => setStore("path", reconcile(x.data!))),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -471,7 +471,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
+              draft.message[sessionID] = messages.data!.map((x: any) => x.info)
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }

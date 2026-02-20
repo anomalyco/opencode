@@ -59,13 +59,13 @@ export namespace ACP {
   ): Promise<number | null> {
     const providers = await sdk.config
       .providers({ directory })
-      .then((x) => x.data?.providers ?? [])
-      .catch((error) => {
+      .then((x: any) => x.data?.providers ?? [])
+      .catch((error: unknown) => {
         log.error("failed to get providers for context limit", { error })
         return []
       })
 
-    const provider = providers.find((p) => p.id === providerID)
+    const provider = providers.find((p: any) => p.id === providerID)
     const model = provider?.models[modelID]
     return model?.limit.context ?? null
   }
@@ -1379,7 +1379,7 @@ export namespace ACP {
 
       const command = await this.config.sdk.command
         .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
+        .then((x: any) => x.data!.find((c: any) => c.name === cmd.name))
       if (command) {
         const response = await this.sdk.session.command({
           sessionID,
@@ -1490,7 +1490,7 @@ export namespace ACP {
 
     const specified = await sdk.config
       .get({ directory }, { throwOnError: true })
-      .then((resp) => {
+      .then((resp: any) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
         const parsed = Provider.parseModel(cfg.model)
@@ -1499,27 +1499,27 @@ export namespace ACP {
           modelID: parsed.modelID,
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         log.error("failed to load user config for default model", { error })
         return undefined
       })
 
     const providers = await sdk.config
       .providers({ directory }, { throwOnError: true })
-      .then((x) => x.data?.providers ?? [])
-      .catch((error) => {
+      .then((x: any) => x.data?.providers ?? [])
+      .catch((error: unknown) => {
         log.error("failed to list providers for default model", { error })
         return []
       })
 
     if (specified && providers.length) {
-      const provider = providers.find((p) => p.id === specified.providerID)
+      const provider = providers.find((p: any) => p.id === specified.providerID)
       if (provider && provider.models[specified.modelID]) return specified
     }
 
     if (specified && !providers.length) return specified
 
-    const opencodeProvider = providers.find((p) => p.id === "opencode")
+    const opencodeProvider = providers.find((p: any) => p.id === "opencode")
     if (opencodeProvider) {
       if (opencodeProvider.models["big-pickle"]) {
         return { providerID: "opencode", modelID: "big-pickle" }
@@ -1533,7 +1533,7 @@ export namespace ACP {
       }
     }
 
-    const models = providers.flatMap((p) => Object.values(p.models))
+    const models = providers.flatMap((p: any) => Object.values(p.models))
     const [best] = Provider.sort(models)
     if (best) {
       return {
