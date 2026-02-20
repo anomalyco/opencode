@@ -1213,61 +1213,20 @@ export function MessageTimeline(props: {
           class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
           onClick={props.onResumeScroll}
         >
-          <div
-            class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
-            style={{
-              "box-shadow":
-                "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
-            }}
-          >
-            <Icon name="arrow-down-to-line" size="small" />
-          </div>
-        </button>
-      </div>
-      <ScrollView
-        viewportRef={bindListRoot}
-        onWheel={handleListWheel}
-        onTouchStart={handleListTouchStart}
-        onTouchMove={handleListTouchMove}
-        onTouchEnd={handleListTouchEnd}
-        onTouchCancel={handleListTouchEnd}
-        onPointerDown={handleListPointerDown}
-        onScroll={handleListScroll}
-        onClick={props.onAutoScrollInteraction}
-        class="relative min-w-0 w-full h-full"
-        style={{
-          "--sticky-accordion-top": showHeader() ? "48px" : "0px",
-        }}
-      >
-        <Show when={showHeader()}>
-          <div
-            ref={(el) => {
-              head = el
-              updateTitleMetrics()
-            }}
-            data-session-title
-            classList={{
-              "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-              "w-full": true,
-              "pb-4": true,
-              "pl-2 pr-3 md:pl-4 md:pr-3": true,
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-            }}
-          >
-            <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
-              <div data-component="session-progress" data-state={workingStatus()} aria-hidden="true">
-                <div
-                  data-component="session-progress-bar"
-                  style={{
-                    background: tint() ?? "var(--icon-interactive-base)",
-                    animation: `session-progress-whip ${bar.ms}ms infinite`,
-                  }}
-                />
-              </div>
-            </Show>
-            <div class="h-12 w-full flex items-center justify-between gap-2">
-              <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                <div class="flex items-center min-w-0 grow-1">
+          <Show when={showHeader()}>
+            <div
+              classList={{
+                "sticky top-0 z-30 bg-background-stronger border-b border-border-weak-base": true,
+                "w-full": true,
+                "px-4 md:px-5": true,
+                "md:mx-auto": props.centered,
+              }}
+              style={{
+                "max-width": props.centered ? "var(--session-content-width)" : undefined,
+              }}
+            >
+              <div class="h-12 w-full flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                   <Show when={parentID()}>
                     <button
                       type="button"
@@ -1307,7 +1266,6 @@ export function MessageTimeline(props: {
                       when={title.editing}
                       fallback={
                         <h1
-                          data-slot="session-title-child"
                           class="text-14-medium text-text-strong truncate grow-1 min-w-0"
                           onDblClick={openTitleEditor}
                         >
@@ -1321,8 +1279,8 @@ export function MessageTimeline(props: {
                         }}
                         data-slot="session-title-child"
                         value={title.draft}
-                        disabled={titleMutation.isPending}
-                        class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px] pl-1 -ml-1"
+                        disabled={title.saving}
+                        class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
                         style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
