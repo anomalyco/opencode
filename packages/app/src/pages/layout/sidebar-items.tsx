@@ -21,12 +21,25 @@ const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
+  const globalSync = useGlobalSync()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const unseenCount = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
+
+  const hasActiveSessions = createMemo(() => {
+    for (const dir of dirs()) {
+      const [store] = globalSync.child(dir)
+      for (const session of store.session) {
+        const status = store.session_status[session.id]
+        if (status?.type === "busy" || status?.type === "retry") return true
+      }
+    }
+    return false
+  })
+
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
       <div class="size-full rounded overflow-clip">
@@ -40,6 +53,23 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           classList={{ "badge-mask": unseenCount() > 0 && props.notify }}
         />
       </div>
+      <Show when={hasActiveSessions()}>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "10px",
+            height: "10px",
+            "z-index": 100,
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "center",
+          }}
+        >
+          <Spinner class="size-2.5 text-text-interactive-base" />
+        </div>
+      </Show>
       <Show when={unseenCount() > 0 && props.notify}>
         <div
           classList={{
