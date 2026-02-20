@@ -2,7 +2,7 @@ import path from "path"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
@@ -82,7 +82,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         return store.history.at(store.index)
       },
       append(item: PromptInfo) {
-        const entry = structuredClone(item)
+        const entry = structuredClone(unwrap(item))
         let trimmed = false
         setStore(
           produce((draft) => {
