@@ -5,12 +5,14 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useNavigate } from "@solidjs/router"
 
 export const SettingsConfig: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
+  const navigate = useNavigate()
 
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null)
   const [configContent, setConfigContent] = createSignal("")
@@ -39,7 +41,7 @@ export const SettingsConfig: Component = () => {
     return null
   }
 
-  const openGlobalEditor = () => {
+  const openGlobalEditor = async () => {
     const config = globalSync.data.config
     const json = JSON.stringify(config, null, 2)
     setConfigContent(json)
@@ -82,16 +84,14 @@ export const SettingsConfig: Component = () => {
     if (isGlobal) {
       try {
         const config = JSON.parse(configContent())
-        await globalSDK.client.global.config.update({ config })
+        const result = await globalSDK.client.global.config.update({ config })
+        globalSync.set("config", result.data!)
         showToast({
           variant: "success",
           title: language.t("common.success"),
-          description: "Global config saved. Restarting...",
+          description: "Global config saved.",
         })
         setEditorOpen(false)
-        if (platform.restart) {
-          setTimeout(() => platform.restart(), 500)
-        }
       } catch (e) {
         showToast({
           variant: "error",
@@ -102,17 +102,20 @@ export const SettingsConfig: Component = () => {
     } else {
       if (platform.platform !== "desktop" || !platform.writeConfigFile) return
 
+      const worktree = globalSync.data.path.worktree
+      const directory = globalSync.data.path.directory
       setLoading(true)
       try {
         await platform.writeConfigFile(path, configContent())
-        showToast({
-          variant: "success",
-          title: language.t("common.success"),
-          description: "Project config saved. Restarting...",
-        })
         setEditorOpen(false)
-        if (platform.restart) {
-          setTimeout(() => platform.restart(), 500)
+        if (worktree && directory) {
+          showToast({
+            variant: "success",
+            title: language.t("common.success"),
+            description: "Refreshing to apply changes...",
+          })
+          await globalSDK.client.instance.dispose({ directory: worktree })
+          globalSync.child(worktree, { bootstrap: true })
         }
       } catch (e) {
         const errMsg = String(e)

@@ -373,6 +373,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       get directory() {
         return current()[0].path.directory
       },
+      refreshAgents: async () => {
+        const directory = sdk.directory
+        const [, setStore] = globalSync.child(directory)
+        const agents = await sdk.client.app.agents()
+        setStore("agent", agents.data ?? [])
+      },
     }
   },
 })

@@ -18,6 +18,9 @@ export const commands = {
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
+	getConfigPaths: () => __TAURI_INVOKE<ConfigPaths>("get_config_paths"),
+	readConfigFile: (path: string) => __TAURI_INVOKE<string>("read_config_file", { path }),
+	writeConfigFile: (path: string, content: string) => __TAURI_INVOKE<null>("write_config_file", { path, content }),
 };
 
 /** Events */
@@ -27,6 +30,11 @@ export const events = {
 };
 
 /* Types */
+export type ConfigPaths = {
+		global: string,
+		project: string | null,
+	};
+
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
 
 export type LinuxDisplayBackend = "wayland" | "auto";

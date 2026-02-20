@@ -1458,10 +1458,8 @@ export namespace Config {
 
     const next = await (async () => {
       if (!filepath.endsWith(".jsonc")) {
-        const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
-        await Filesystem.writeJson(filepath, merged)
-        return merged
+        await Filesystem.writeJson(filepath, config)
+        return config
       }
 
       const updated = patchJsonc(before, config)
