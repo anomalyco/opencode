@@ -1,5 +1,4 @@
 import { Global } from "../global"
-import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
 import { Installation } from "../installation"
@@ -12,7 +11,6 @@ import { Filesystem } from "../util/filesystem"
 /* @ts-ignore */
 
 export namespace ModelsDev {
-  const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
 
   export const Model = z.object({
@@ -94,7 +92,10 @@ export namespace ModelsDev {
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
+    const json = await fetch(`${url()}/api.json`)
+      .then((x) => x.text())
+      .catch(() => undefined)
+    if (!json) return {}
     return JSON.parse(json)
   })
 
@@ -109,11 +110,7 @@ export namespace ModelsDev {
         "User-Agent": Installation.USER_AGENT,
       },
       signal: AbortSignal.timeout(10 * 1000),
-    }).catch((e) => {
-      log.error("Failed to fetch models.dev", {
-        error: e,
-      })
-    })
+    }).catch(() => undefined)
     if (result && result.ok) {
       await Filesystem.write(filepath, await result.text())
       ModelsDev.Data.reset()
