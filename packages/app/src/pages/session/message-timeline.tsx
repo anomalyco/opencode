@@ -366,7 +366,10 @@ export function MessageTimeline(props: {
           }}
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-          style={{ "--session-title-height": showHeader() ? "40px" : "0px" }}
+          style={{
+            "--session-title-height": showHeader() ? "40px" : "0px",
+            "--sticky-accordion-top": showHeader() ? "48px" : "0px",
+          }}
         >
           <Show when={showHeader()}>
             <div
@@ -535,7 +538,7 @@ export function MessageTimeline(props: {
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",
-                      container: "w-full px-4 md:px-6",
+                      container: "w-full px-4 md:px-5",
                     }}
                   />
                 </div>
