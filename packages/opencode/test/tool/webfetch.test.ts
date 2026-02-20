@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { Installation } from "../../src/installation"
 import { WebFetchTool } from "../../src/tool/webfetch"
 
 const projectRoot = path.join(import.meta.dir, "../..")
@@ -71,6 +72,66 @@ describe("tool.webfetch", () => {
             const result = await webfetch.execute({ url: "https://example.com/image.svg", format: "html" }, ctx)
             expect(result.output).toContain("<svg")
             expect(result.attachments).toBeUndefined()
+          },
+        })
+      },
+    )
+  })
+
+  test("sends opencode user-agent by default instead of browser UA", async () => {
+    let capturedUA = ""
+    await withFetch(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        capturedUA = (init?.headers as Record<string, string>)?.["User-Agent"] ?? ""
+        return new Response("ok", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com", format: "text" }, ctx)
+            expect(capturedUA).toBe(Installation.USER_AGENT)
+            expect(capturedUA).not.toContain("Mozilla")
+            expect(capturedUA).toStartWith("opencode/")
+          },
+        })
+      },
+    )
+  })
+
+  test("retries with browser UA when Cloudflare blocks the request", async () => {
+    let callCount = 0
+    let retryUA = ""
+    await withFetch(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        callCount++
+        const ua = (init?.headers as Record<string, string>)?.["User-Agent"] ?? ""
+        if (callCount === 1) {
+          // First call: simulate Cloudflare bot detection block
+          return new Response("Blocked", {
+            status: 403,
+            headers: { "cf-mitigated": "challenge" },
+          })
+        }
+        // Second call: capture the retry UA and return success
+        retryUA = ua
+        return new Response("ok", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com", format: "text" }, ctx)
+            expect(callCount).toBe(2)
+            expect(retryUA).toContain("Mozilla")
           },
         })
       },
