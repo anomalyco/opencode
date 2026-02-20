@@ -609,6 +609,31 @@ export namespace MCP {
         })
       }
       s.clients[name] = result.mcpClient
+
+      // Re-subscribe to previously tracked resources and config-based subscriptions
+      const previousSubs = s.subscriptions.get(name) ?? new Set<string>()
+      const configSubs = new Set(isMcpConfigured(mcp) && mcp.subscriptions ? mcp.subscriptions : [])
+      const allSubs = new Set([...previousSubs, ...configSubs])
+
+      if (allSubs.size > 0 && supportsSubscriptions(result.mcpClient)) {
+        const activeSubs = new Set<string>()
+        for (const uri of allSubs) {
+          result.mcpClient
+            .subscribeResource({ uri })
+            .then(() => {
+              activeSubs.add(uri)
+              log.info("re-subscribed to resource", { name, uri })
+            })
+            .catch((e) => {
+              log.error("failed to re-subscribe to resource", {
+                name,
+                uri,
+                error: e instanceof Error ? e.message : String(e),
+              })
+            })
+        }
+        s.subscriptions.set(name, activeSubs)
+      }
     }
   }
 
@@ -621,6 +646,7 @@ export namespace MCP {
       })
       delete s.clients[name]
     }
+    s.subscriptions.delete(name)
     s.status[name] = { status: "disabled" }
   }
 
