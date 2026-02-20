@@ -74,8 +74,8 @@ jobs:
         run: |
           ./packages/opencode/script/build.ts
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENCODE_VERSION: ${{ (github.ref_name != 'beta' && needs.version.outputs.version) || '' }}
+          OPENCODE_RELEASE: ${{ (github.ref_name != 'beta' && needs.version.outputs.release) || '' }}
           GH_TOKEN: ${{ github.token }}
 
       - uses: actions/upload-artifact@v4
