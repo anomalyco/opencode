@@ -494,10 +494,12 @@ function LiteLLMMethod() {
               <text fg={theme.textMuted}>Enter the API key for your LiteLLM proxy, or leave empty if not required.</text>
             )}
             onConfirm={async (apiKey) => {
-              await sdk.client.config.update({
-                provider: {
-                  litellm: {
-                    options: { baseURL: url },
+              await sdk.client.global.config.update({
+                config: {
+                  provider: {
+                    litellm: {
+                      options: { baseURL: url },
+                    },
                   },
                 },
               })
