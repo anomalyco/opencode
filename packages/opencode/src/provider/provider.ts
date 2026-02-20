@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { MODAL_PROVIDER } from "./modal"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -219,9 +220,10 @@ export namespace Provider {
       }
 
       return {
-        autoload: false,
+        autoload: !!apiKey,
         options: {
           baseURL,
+          ...(apiKey ? { apiKey } : {}),
         },
       }
     },
@@ -869,43 +871,7 @@ export namespace Provider {
       }
     }
 
-    // Add Modal provider
-    database["modal"] = {
-      id: "modal",
-      name: "Modal",
-      source: "custom",
-      env: ["MODAL_API_KEY"],
-      options: {},
-      models: {
-        "zai-org/GLM-5-FP8": {
-          id: "zai-org/GLM-5-FP8",
-          name: "GLM-5",
-          providerID: "modal",
-          api: {
-            id: "zai-org/GLM-5-FP8",
-            npm: "@ai-sdk/openai-compatible",
-            url: "https://api.us-west-2.modal.direct/v1",
-          },
-          status: "active",
-          capabilities: {
-            temperature: true,
-            reasoning: false,
-            attachment: false,
-            toolcall: true,
-            input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false, video: false, pdf: false },
-            interleaved: false,
-          },
-          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-          options: {},
-          limit: { context: 8192, output: 4096 },
-          headers: {},
-          family: "",
-          release_date: "",
-          variants: {},
-        },
-      },
-    }
+    database["modal"] = fromModelsDevProvider(MODAL_PROVIDER)
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]

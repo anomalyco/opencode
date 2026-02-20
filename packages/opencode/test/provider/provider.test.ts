@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
@@ -2217,4 +2217,130 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
     },
   })
+})
+
+test("Modal: discovers models when API key is available", async () => {
+  const originalFetch = globalThis.fetch
+  const mockFetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).endsWith("/models")) {
+      const headers = new Headers(init?.headers)
+      expect(headers.get("Authorization")).toBe("Bearer test-modal-key")
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "modal/custom-a" }, { id: "modal/custom-b" }],
+        }),
+        { status: 200 },
+      )
+    }
+    return new Response("not found", { status: 404 })
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            modal: {
+              options: {
+                apiKey: "test-modal-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["modal"]).toBeDefined()
+        expect(Object.keys(providers["modal"].models)).toEqual(["modal/custom-a", "modal/custom-b"])
+        expect(providers["modal"].options.baseURL).toBe("https://api.us-west-2.modal.direct/v1")
+        expect(providers["modal"].options.apiKey).toBe("test-modal-key")
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Modal: does not load when API key is missing", async () => {
+  const originalFetch = globalThis.fetch
+  const mockFetch = mock(async (_url: string | URL | Request, _init?: RequestInit) => {
+    throw new Error("fetch should not be called without key")
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["modal"]).toBeUndefined()
+      },
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Modal: uses fallback model when discovery API fails", async () => {
+  const originalFetch = globalThis.fetch
+  const mockFetch = mock(async (url: string | URL | Request, _init?: RequestInit) => {
+    if (String(url).endsWith("/models")) {
+      return new Response("error", { status: 500 })
+    }
+    return new Response("not found", { status: 404 })
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            modal: {
+              options: {
+                apiKey: "test-modal-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["modal"]).toBeDefined()
+        expect(Object.keys(providers["modal"].models)).toEqual(["zai-org/GLM-5-FP8"])
+      },
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

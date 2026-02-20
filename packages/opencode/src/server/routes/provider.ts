@@ -8,6 +8,7 @@ import { ProviderAuth } from "../../provider/auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { MODAL_PROVIDER } from "../../provider/modal"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -41,36 +42,7 @@ export const ProviderRoutes = lazy(() =>
 
         const allProviders: Record<string, ModelsDev.Provider> = {
           ...(await ModelsDev.get()),
-          modal: {
-            id: "modal",
-            name: "Modal",
-            env: ["MODAL_API_KEY"],
-            models: {
-              "zai-org/GLM-5-FP8": {
-                id: "zai-org/GLM-5-FP8",
-                name: "GLM-5",
-                family: "",
-                release_date: "",
-                attachment: false,
-                reasoning: false,
-                temperature: true,
-                tool_call: true,
-                options: {},
-                limit: {
-                  context: 8192,
-                  output: 4096,
-                },
-                modalities: {
-                  input: ["text"],
-                  output: ["text"],
-                },
-                provider: {
-                  npm: "@ai-sdk/openai-compatible",
-                  api: "https://api.us-west-2.modal.direct/v1",
-                },
-              },
-            },
-          },
+          modal: MODAL_PROVIDER,
         }
         const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
         for (const [key, value] of Object.entries(allProviders)) {
