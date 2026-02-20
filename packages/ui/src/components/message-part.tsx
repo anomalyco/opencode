@@ -501,6 +501,10 @@ function taskSession(
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
 
+function toolName(part: { tool: string }) {
+  return part.tool.toLowerCase()
+}
+
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
   return fallback
@@ -604,8 +608,8 @@ function index<T extends { id: string }>(items: readonly T[]) {
 
 export function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
-    if (HIDDEN_TOOLS.has(part.tool)) return false
-    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    if (HIDDEN_TOOLS.has(toolName(part))) return false
+    if (toolName(part) === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
@@ -726,15 +730,11 @@ export function AssistantParts(props: {
 }
 
 function isContextGroupTool(part: PartType): part is ToolPart {
-  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(toolName(part))
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(
-    part.tool,
-    part.state.input ?? {},
-    "metadata" in part.state ? part.state.metadata : undefined,
-  )
+  const info = getToolInfo(toolName(part), part.state.input ?? {})
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -753,7 +753,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const offset = typeof input.offset === "number" ? input.offset : undefined
   const limit = typeof input.limit === "number" ? input.limit : undefined
 
-  switch (part.tool) {
+  switch (toolName(part)) {
     case "read": {
       const args: string[] = []
       if (offset !== undefined) args.push("offset=" + offset)
@@ -786,7 +786,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     default: {
-      const info = getToolInfo(part.tool, input, "metadata" in part.state ? part.state.metadata : undefined)
+      const info = getToolInfo(toolName(part), input)
       return {
         title: info.title,
         subtitle: info.subtitle || contextToolDetail(part),
@@ -797,36 +797,14 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 }
 
 function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
-  return { read, search, list }
-}
-
-function ExaOutput(props: { output?: string }) {
-  const links = createMemo(() => urls(props.output))
-
-  return (
-    <Show when={links().length > 0}>
-      <div data-component="exa-tool-output">
-        <div data-slot="exa-tool-links">
-          <For each={links()}>
-            {(url) => (
-              <a
-                data-slot="exa-tool-link"
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {url}
-              </a>
-            )}
-          </For>
-        </div>
-      </div>
-    </Show>
-  )
+  const read = parts.filter((part) => toolName(part) === "read").length
+  const search = parts.filter((part) => toolName(part) === "glob" || toolName(part) === "grep").length
+  const list = parts.filter((part) => toolName(part) === "list").length
+  return [
+    read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
+    search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
+    list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+  ].filter((value): value is string => !!value)
 }
 
 export function registerPartComponent(type: string, component: PartComponent) {
@@ -1335,11 +1313,12 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
-  const part = () => props.part as ToolPart
-  if (part().tool === "todowrite") return null
+  const part = props.part as ToolPart
+  const tool = toolName(part)
+  if (tool === "todowrite" || tool === "todoread") return null
 
   const hideQuestion = createMemo(
-    () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
+    () => tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
   )
 
   const emptyInput: Record<string, any> = {}
@@ -1364,7 +1343,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return taskId()
   })
 
-  const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  const render = ToolRegistry.render(tool) ?? GenericTool
 
   return (
     <Show when={!hideQuestion()}>
@@ -1373,7 +1352,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           <Match when={part().state.status === "error" && (part().state as any).error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
-              if (part().tool === "question" && cleaned.includes("dismissed this question")) {
+              if (tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
@@ -1398,9 +1377,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             <Dynamic
               component={render()}
               input={input()}
-              tool={part().tool}
-              sessionID={part().sessionID}
-              metadata={partMetadata()}
+              tool={tool}
+              metadata={metadata()}
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
@@ -1763,25 +1741,17 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const location = useLocation()
-    const childSessionId = createMemo(() => {
-      const value = props.metadata.sessionId
-      if (typeof value === "string" && value) return value
-      return taskSession(props.input, location.pathname, data.store.session, data.store.agent)
+    const childSessionId = () => props.metadata.sessionId as string | undefined
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const type = createMemo(() => props.input.subagent_type || props.metadata.subagent_type || props.tool)
+    const title = createMemo(() => i18n.t("ui.tool.agent", { type: type() }))
+    const description = createMemo(() => {
+      const value = props.input.description
+      if (typeof value === "string") return value
+      const meta = props.metadata.title
+      if (typeof meta === "string") return meta
+      return undefined
     })
-    const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
-    const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
-    const tone = createMemo(() => agent().color)
-    const subtitle = createMemo(() => {
-      const value =
-        typeof props.input.description === "string" && props.input.description
-          ? props.input.description
-          : childSessionId()
-      if (!value) return value
-      if (props.metadata.background === true) return `${value} (background)`
-      return value
-    })
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
 
     const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
@@ -1797,47 +1767,46 @@ ToolRegistry.register({
       if (value) window.location.assign(value)
     }
 
-    const navigate = (event: MouseEvent) => {
-      if (!data.navigateToSession) return
-      if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-      event.preventDefault()
-      open()
-    }
-
-    const trigger = () => (
-      <div data-component="task-tool-card">
-        <div data-slot="basic-tool-tool-info-structured">
-          <div data-slot="basic-tool-tool-info-main">
-            <Show when={running()}>
-              <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                <Spinner />
-              </span>
-            </Show>
-            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
-              {title()}
-            </span>
-            <Show when={subtitle()}>
-              <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
-            </Show>
-          </div>
-        </div>
-        <Show when={clickable()}>
-          <div data-component="task-tool-action">
-            <Icon name="square-arrow-top-right" size="small" />
-          </div>
-        </Show>
-      </div>
-    )
-
     return (
       <BasicTool
-        icon="task"
-        status={props.status}
-        trigger={trigger()}
+        {...props}
         hideDetails
-        triggerHref={href()}
-        clickable={clickable()}
-        onTriggerClick={navigate}
+        icon="task"
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
+                <Show when={pending()} fallback={title()}>
+                  <TextShimmer text={title()} />
+                </Show>
+              </span>
+              <Show when={description()}>
+                <Switch>
+                  <Match when={href()}>
+                    {(url) => (
+                      <a
+                        data-slot="basic-tool-tool-subtitle"
+                        class="clickable subagent-link"
+                        href={url()}
+                        onClick={handleLinkClick}
+                      >
+                        {description()}
+                      </a>
+                    )}
+                  </Match>
+                  <Match when={true}>
+                    <span data-slot="basic-tool-tool-subtitle">{description()}</span>
+                  </Match>
+                </Switch>
+              </Show>
+            </div>
+            <Show when={!pending() && href()}>
+              <div data-component="tool-action">
+                <Icon name="align-right" size="small" />
+              </div>
+            </Show>
+          </div>
+        }
       />
     )
   },
