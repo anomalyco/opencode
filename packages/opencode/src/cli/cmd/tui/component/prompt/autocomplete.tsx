@@ -1,4 +1,5 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
+import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
@@ -132,6 +133,16 @@ export function Autocomplete(props: {
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
+  // filter() reads reactive props.value plus non-reactive cursor/text state.
+  // On keypress those can be briefly out of sync, so filter() may return an empty/partial string.
+  // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
+  // so the input has settled and all consumers read the same stable value.
+  const [search, setSearch] = createSignal("")
+  createEffect(() => {
+    const next = filter()
+    setSearch(next ? next : "")
+  })
+
   // When the filter changes due to how TUI works, the mousemove might still be triggered
   // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
   // that the mouseover event doesn't trigger when filtering.
@@ -211,7 +222,7 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => filter(),
+    () => search(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
@@ -240,18 +251,17 @@ export function Autocomplete(props: {
         const root = sync.data.path.directory || projectState.current || process.cwd()
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            const urlPath = path.join(root, item)
-            let url = `file://${urlPath}`
+            const fullPath = path.join(root, item)
+            const urlObj = pathToFileURL(fullPath)
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-              const urlObj = new URL(url)
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
               }
-              url = urlObj.toString()
             }
+            const url = urlObj.href
 
             const isDir = item.endsWith("/")
             return {
@@ -350,8 +360,10 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
+      if (serverCommand.source === "skill") continue
+      const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
-        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
+        display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
@@ -381,9 +393,9 @@ export function Autocomplete(props: {
     const mixed: AutocompleteOption[] =
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
 
-    const currentFilter = filter()
+    const searchValue = search()
 
-    if (!currentFilter) {
+    if (!searchValue) {
       return mixed
     }
 
@@ -391,7 +403,7 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
       keys: [
         (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
         "description",
@@ -401,7 +413,7 @@ export function Autocomplete(props: {
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
           score *= 2
         }
         const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0

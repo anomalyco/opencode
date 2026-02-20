@@ -175,166 +175,200 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
-describe("ProviderTransform.maxOutputTokens", () => {
-  test("returns 32k when modelLimit > 32k", () => {
-    const modelLimit = 100000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(OUTPUT_TOKEN_MAX)
-  })
+describe("ProviderTransform.options - gateway", () => {
+  const sessionID = "test-session-123"
 
-  test("returns modelLimit when modelLimit < 32k", () => {
-    const modelLimit = 16000
-    const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai", {}, modelLimit, OUTPUT_TOKEN_MAX)
-    expect(result).toBe(16000)
-  })
+  const createModel = (id: string) =>
+    ({
+      id,
+      providerID: "vercel",
+      api: {
+        id,
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+      name: id,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2024-01-01",
+    }) as any
 
-  describe("azure", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/azure", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("bedrock", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/amazon-bedrock", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
-    })
-  })
-
-  describe("anthropic without thinking options", () => {
-    test("returns 32k when modelLimit > 32k", () => {
-      const modelLimit = 100000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit when modelLimit < 32k", () => {
-      const modelLimit = 16000
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", {}, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(16000)
+  test("puts gateway defaults under gateway key", () => {
+    const model = createModel("anthropic/claude-sonnet-4")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result).toEqual({
+      gateway: {
+        caching: "auto",
+      },
     })
   })
+})
 
-  describe("anthropic with thinking options", () => {
-    test("returns 32k when budgetTokens + 32k <= modelLimit", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+describe("ProviderTransform.providerOptions", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "test/test-model",
+      providerID: "test",
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 64_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2024-01-01",
+      ...overrides,
+    }) as any
+
+  test("uses sdk key for non-gateway models", () => {
+    const model = createModel({
+      providerID: "my-bedrock",
+      api: {
+        id: "anthropic.claude-sonnet-4",
+        url: "https://bedrock.aws",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
     })
 
-    test("returns modelLimit - budgetTokens when budgetTokens + 32k > modelLimit", () => {
-      const modelLimit = 50000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 30000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(20000)
-    })
-
-    test("returns 32k when thinking type is not enabled", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "disabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    expect(ProviderTransform.providerOptions(model, { cachePoint: { type: "default" } })).toEqual({
+      bedrock: { cachePoint: { type: "default" } },
     })
   })
 
-  describe("openai-compatible with thinking options (snake_case)", () => {
-    test("returns 32k when budget_tokens + 32k <= modelLimit", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens(
-        "@ai-sdk/openai-compatible",
-        options,
-        modelLimit,
-        OUTPUT_TOKEN_MAX,
-      )
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+  test("uses gateway model provider slug for gateway models", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
     })
 
-    test("returns modelLimit - budget_tokens when budget_tokens + 32k > modelLimit", () => {
-      const modelLimit = 50000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 30000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens(
-        "@ai-sdk/openai-compatible",
-        options,
-        modelLimit,
-        OUTPUT_TOKEN_MAX,
-      )
-      expect(result).toBe(20000)
+    expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
+      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+  })
+
+  test("falls back to gateway key when gateway api id is unscoped", () => {
+    const model = createModel({
+      id: "anthropic/claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
     })
 
-    test("returns 32k when thinking type is not enabled", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "disabled",
-          budget_tokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens(
-        "@ai-sdk/openai-compatible",
-        options,
-        modelLimit,
-        OUTPUT_TOKEN_MAX,
-      )
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
+      gateway: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+  })
+
+  test("splits gateway routing options from provider-specific options", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
     })
 
-    test("returns 32k when budget_tokens is 0", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 0,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens(
-        "@ai-sdk/openai-compatible",
-        options,
-        modelLimit,
-        OUTPUT_TOKEN_MAX,
-      )
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    expect(
+      ProviderTransform.providerOptions(model, {
+        gateway: { order: ["vertex", "anthropic"] },
+        thinking: { type: "enabled", budgetTokens: 12_000 },
+      }),
+    ).toEqual({
+      gateway: { order: ["vertex", "anthropic"] },
+      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    } as any)
+  })
+
+  test("falls back to gateway key when model id has no provider slug", () => {
+    const model = createModel({
+      id: "claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      gateway: { reasoningEffort: "high" },
+    })
+  })
+
+  test("maps amazon slug to bedrock for provider options", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "amazon/nova-2-lite",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningConfig: { type: "enabled" } })).toEqual({
+      bedrock: { reasoningConfig: { type: "enabled" } },
+    })
+  })
+
+  test("uses groq slug for groq models", () => {
+    const model = createModel({
+      providerID: "vercel",
+      api: {
+        id: "groq/llama-3.3-70b-versatile",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningFormat: "parsed" })).toEqual({
+      groq: { reasoningFormat: "parsed" },
     })
   })
 })
@@ -360,6 +394,229 @@ describe("ProviderTransform.schema - gemini array items", () => {
 
     expect(result.properties.nodes.items).toBeDefined()
     expect(result.properties.edges.items.type).toBe("string")
+  })
+})
+
+describe("ProviderTransform.schema - gemini nested array items", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("adds type to 2D array with empty inner items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        values: {
+          type: "array",
+          items: {
+            type: "array",
+            items: {}, // Empty items object
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // Inner items should have a default type
+    expect(result.properties.values.items.items.type).toBe("string")
+  })
+
+  test("adds items and type to 2D array with missing inner items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "array",
+          items: { type: "array" }, // No items at all
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.items.items).toBeDefined()
+    expect(result.properties.data.items.items.type).toBe("string")
+  })
+
+  test("handles deeply nested arrays (3D)", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        matrix: {
+          type: "array",
+          items: {
+            type: "array",
+            items: {
+              type: "array",
+              // No items
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.matrix.items.items.items).toBeDefined()
+    expect(result.properties.matrix.items.items.items.type).toBe("string")
+  })
+
+  test("preserves existing item types in nested arrays", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        numbers: {
+          type: "array",
+          items: {
+            type: "array",
+            items: { type: "number" }, // Has explicit type
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // Should preserve the explicit type
+    expect(result.properties.numbers.items.items.type).toBe("number")
+  })
+
+  test("handles mixed nested structures with objects and arrays", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        spreadsheetData: {
+          type: "object",
+          properties: {
+            rows: {
+              type: "array",
+              items: {
+                type: "array",
+                items: {}, // Empty items
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.spreadsheetData.properties.rows.items.items.type).toBe("string")
+  })
+})
+
+describe("ProviderTransform.schema - gemini non-object properties removal", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("removes properties from non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "string",
+          properties: { invalid: { type: "string" } },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("string")
+    expect(result.properties.data.properties).toBeUndefined()
+  })
+
+  test("removes required from non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "array",
+          items: { type: "string" },
+          required: ["invalid"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("array")
+    expect(result.properties.data.required).toBeUndefined()
+  })
+
+  test("removes properties and required from nested non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        outer: {
+          type: "object",
+          properties: {
+            inner: {
+              type: "number",
+              properties: { bad: { type: "string" } },
+              required: ["bad"],
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.outer.properties.inner.type).toBe("number")
+    expect(result.properties.outer.properties.inner.properties).toBeUndefined()
+    expect(result.properties.outer.properties.inner.required).toBeUndefined()
+  })
+
+  test("keeps properties and required on object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("object")
+    expect(result.properties.data.properties).toBeDefined()
+    expect(result.properties.data.required).toEqual(["name"])
+  })
+
+  test("does not affect non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "string",
+          properties: { invalid: { type: "string" } },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.data.properties).toBeDefined()
   })
 })
 
@@ -1166,10 +1423,109 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
     expect(result[0].providerOptions?.bedrock).toEqual(
       expect.objectContaining({
         cachePoint: {
-          type: "ephemeral",
+          type: "default",
         },
       }),
     )
+  })
+})
+
+describe("ProviderTransform.message - cache control on gateway", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "anthropic/claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+      name: "Claude Sonnet 4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 200_000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("gateway does not set cache control for anthropic models", () => {
+    const model = createModel()
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant" }],
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].content[0].providerOptions).toBeUndefined()
+    expect(result[0].providerOptions).toBeUndefined()
+  })
+
+  test("non-gateway anthropic keeps existing cache control behavior", () => {
+    const model = createModel({
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions).toEqual({
+      anthropic: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      bedrock: {
+        cachePoint: {
+          type: "default",
+        },
+      },
+      openaiCompatible: {
+        cache_control: {
+          type: "ephemeral",
+        },
+      },
+      copilot: {
+        copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+    })
   })
 })
 
@@ -1349,6 +1705,92 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
+    test("anthropic sonnet 4.6 models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4-6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic sonnet 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic opus 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
+    test("anthropic models return anthropic thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 31999,
+        },
+      })
+    })
+
     test("returns OPENAI_EFFORTS with reasoningEffort", () => {
       const model = createMockModel({
         id: "gateway/gateway-model",
@@ -1564,67 +2006,6 @@ describe("ProviderTransform.variants", () => {
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
-
-    test("Claude via LiteLLM returns thinking with snake_case budget_tokens", () => {
-      const model = createMockModel({
-        id: "anthropic/claude-sonnet-4-5",
-        providerID: "anthropic",
-        api: {
-          id: "claude-sonnet-4-5-20250929",
-          url: "http://localhost:4000",
-          npm: "@ai-sdk/openai-compatible",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        thinking: {
-          type: "enabled",
-          budget_tokens: 16000,
-        },
-      })
-      expect(result.max).toEqual({
-        thinking: {
-          type: "enabled",
-          budget_tokens: 31999,
-        },
-      })
-    })
-
-    test("Claude model (by model.id) via openai-compatible uses snake_case", () => {
-      const model = createMockModel({
-        id: "litellm/claude-3-opus",
-        providerID: "litellm",
-        api: {
-          id: "claude-3-opus-20240229",
-          url: "http://localhost:4000",
-          npm: "@ai-sdk/openai-compatible",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        thinking: {
-          type: "enabled",
-          budget_tokens: 16000,
-        },
-      })
-    })
-
-    test("Anthropic model (by model.api.id) via openai-compatible uses snake_case", () => {
-      const model = createMockModel({
-        id: "custom/my-model",
-        providerID: "custom",
-        api: {
-          id: "anthropic.claude-sonnet",
-          url: "http://localhost:4000",
-          npm: "@ai-sdk/openai-compatible",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high.thinking.budget_tokens).toBe(16000)
-    })
   })
 
   describe("@ai-sdk/azure", () => {
@@ -1743,6 +2124,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/anthropic", () => {
+    test("sonnet 4.6 returns adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-6",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",
@@ -1771,6 +2172,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
+    test("anthropic sonnet 4.6 returns adaptive reasoning options", () => {
+      const model = createMockModel({
+        id: "bedrock/anthropic-claude-sonnet-4-6",
+        providerID: "bedrock",
+        api: {
+          id: "anthropic.claude-sonnet-4-6",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.max).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "max",
+        },
+      })
+    })
+
     test("returns WIDELY_SUPPORTED_EFFORTS with reasoningConfig", () => {
       const model = createMockModel({
         id: "bedrock/llama-4",
@@ -1832,12 +2253,16 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "low",
+        },
       })
       expect(result.high).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "high",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "high",
+        },
       })
     })
   })
@@ -1902,12 +2327,10 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
       expect(result.none).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "none",
+        reasoningEffort: "none",
       })
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        reasoningEffort: "low",
       })
     })
   })

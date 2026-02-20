@@ -31,6 +31,8 @@ export const dict = {
   "command.settings.open": "Åpne innstillinger",
   "command.session.previous": "Forrige sesjon",
   "command.session.next": "Neste sesjon",
+  "command.session.previous.unseen": "Forrige uleste økt",
+  "command.session.next.unseen": "Neste uleste økt",
   "command.session.archive": "Arkiver sesjon",
 
   "command.palette": "Kommandopalett",
@@ -45,9 +47,10 @@ export const dict = {
 
   "command.session.new": "Ny sesjon",
   "command.file.open": "Åpne fil",
-  "command.file.open.description": "Søk i filer og kommandoer",
+  "command.tab.close": "Lukk fane",
   "command.context.addSelection": "Legg til markering i kontekst",
   "command.context.addSelection.description": "Legg til valgte linjer fra gjeldende fil",
+  "command.input.focus": "Fokuser inndata",
   "command.terminal.toggle": "Veksle terminal",
   "command.fileTree.toggle": "Veksle filtre",
   "command.review.toggle": "Veksle gjennomgang",
@@ -69,8 +72,12 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Bytt til forrige agent",
   "command.model.variant.cycle": "Bytt tenkeinnsats",
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
+  "command.workspace.toggle": "Veksle arbeidsområder",
+  "command.workspace.toggle.description": "Enable or disable multiple workspaces in the sidebar",
   "command.session.undo": "Angre",
   "command.session.undo.description": "Angre siste melding",
   "command.session.redo": "Gjør om",
@@ -84,7 +91,7 @@ export const dict = {
   "command.session.unshare": "Slutt å dele sesjon",
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
-  "palette.search.placeholder": "Søk i filer og kommandoer",
+  "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -94,9 +101,13 @@ export const dict = {
   "dialog.provider.group.popular": "Populære",
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalt",
-  "dialog.provider.anthropic.note": "Koble til med Claude Pro/Max eller API-nøkkel",
-  "dialog.provider.openai.note": "Koble til med ChatGPT Pro/Plus eller API-nøkkel",
-  "dialog.provider.copilot.note": "Koble til med Copilot eller API-nøkkel",
+  "dialog.provider.opencode.note": "Utvalgte modeller inkludert Claude, GPT, Gemini og mer",
+  "dialog.provider.anthropic.note": "Direkte tilgang til Claude-modeller, inkludert Pro og Max",
+  "dialog.provider.copilot.note": "Claude-modeller for kodeassistanse",
+  "dialog.provider.openai.note": "GPT-modeller for raske, dyktige generelle AI-oppgaver",
+  "dialog.provider.google.note": "Gemini-modeller for raske, strukturerte svar",
+  "dialog.provider.openrouter.note": "Tilgang til alle støttede modeller fra én leverandør",
+  "dialog.provider.vercel.note": "Enhetlig tilgang til AI-modeller med smart ruting",
 
   "dialog.model.select.title": "Velg modell",
   "dialog.model.search.placeholder": "Søk etter modeller",
@@ -144,8 +155,46 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} tilkoblet",
   "provider.connect.toast.connected.description": "{{provider}}-modeller er nå tilgjengelige.",
 
+  "provider.custom.title": "Egendefinert leverandør",
+  "provider.custom.description.prefix": "Konfigurer en OpenAI-kompatibel leverandør. Se ",
+  "provider.custom.description.link": "dokumentasjon for leverandørkonfigurasjon",
+  "provider.custom.description.suffix": ".",
+  "provider.custom.field.providerID.label": "Leverandør-ID",
+  "provider.custom.field.providerID.placeholder": "minleverandør",
+  "provider.custom.field.providerID.description": "Små bokstaver, tall, bindestreker eller understreker",
+  "provider.custom.field.name.label": "Visningsnavn",
+  "provider.custom.field.name.placeholder": "Min AI-leverandør",
+  "provider.custom.field.baseURL.label": "Base-URL",
+  "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
+  "provider.custom.field.apiKey.label": "API-nøkkel",
+  "provider.custom.field.apiKey.placeholder": "API-nøkkel",
+  "provider.custom.field.apiKey.description": "Valgfritt. La stå tomt hvis du administrerer autentisering via headers.",
+  "provider.custom.models.label": "Modeller",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "modell-id",
+  "provider.custom.models.name.label": "Navn",
+  "provider.custom.models.name.placeholder": "Visningsnavn",
+  "provider.custom.models.remove": "Fjern modell",
+  "provider.custom.models.add": "Legg til modell",
+  "provider.custom.headers.label": "Headers (valgfritt)",
+  "provider.custom.headers.key.label": "Header",
+  "provider.custom.headers.key.placeholder": "Header-Navn",
+  "provider.custom.headers.value.label": "Verdi",
+  "provider.custom.headers.value.placeholder": "verdi",
+  "provider.custom.headers.remove": "Fjern header",
+  "provider.custom.headers.add": "Legg til header",
+  "provider.custom.error.providerID.required": "Leverandør-ID er påkrevd",
+  "provider.custom.error.providerID.format": "Bruk små bokstaver, tall, bindestreker eller understreker",
+  "provider.custom.error.providerID.exists": "Den leverandør-IDen finnes allerede",
+  "provider.custom.error.name.required": "Visningsnavn er påkrevd",
+  "provider.custom.error.baseURL.required": "Base-URL er påkrevd",
+  "provider.custom.error.baseURL.format": "Må starte med http:// eller https://",
+  "provider.custom.error.required": "Påkrevd",
+  "provider.custom.error.duplicate": "Duplikat",
+
   "provider.disconnect.toast.disconnected.title": "{{provider}} frakoblet",
   "provider.disconnect.toast.disconnected.description": "Modeller fra {{provider}} er ikke lenger tilgjengelige.",
+
   "model.tag.free": "Gratis",
   "model.tag.latest": "Nyeste",
   "model.provider.anthropic": "Anthropic",
@@ -165,6 +214,7 @@ export const dict = {
 
   "common.search.placeholder": "Søk",
   "common.goBack": "Gå tilbake",
+  "common.goForward": "Navigate forward",
   "common.loading": "Laster",
   "common.loading.ellipsis": "...",
   "common.cancel": "Avbryt",
@@ -178,9 +228,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Skriv inn shell-kommando...",
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
+  "prompt.placeholder.simple": "Spør om hva som helst...",
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
   "prompt.placeholder.summarizeComment": "Oppsummer kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "ESC for å avslutte",
 
   "prompt.example.1": "Fiks en TODO i kodebasen",
@@ -212,7 +264,10 @@ export const dict = {
   "prompt.popover.emptyResults": "Ingen matchende resultater",
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
   "prompt.dropzone.label": "Slipp bilder eller PDF-er her",
+  "prompt.dropzone.file.label": "Slipp for å @nevne fil",
   "prompt.slash.badge.custom": "egendefinert",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -231,6 +286,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Kunne ikke sende shell-kommando",
   "prompt.toast.commandSendFailed.title": "Kunne ikke sende kommando",
   "prompt.toast.promptSendFailed.title": "Kunne ikke sende forespørsel",
+  "prompt.toast.promptSendFailed.description": "Kunne ikke hente økt",
 
   "dialog.mcp.title": "MCP-er",
   "dialog.mcp.description": "{{enabled}} av {{total}} aktivert",
@@ -282,10 +338,10 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "Anbefalt: 128x128px",
   "dialog.project.edit.color": "Farge",
   "dialog.project.edit.color.select": "Velg fargen {{color}}",
-
   "dialog.project.edit.worktree.startup": "Oppstartsskript for arbeidsområde",
   "dialog.project.edit.worktree.startup.description": "Kjører etter at et nytt arbeidsområde (worktree) er opprettet.",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
+
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note": 'Omtrentlig fordeling av input-tokens. "Annet" inkluderer verktøydefinisjoner og overhead.',
   "context.breakdown.system": "System",
@@ -334,6 +390,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
   "language.th": "ไทย",
 
   "toast.language.title": "Språk",
@@ -341,6 +398,11 @@ export const dict = {
 
   "toast.theme.title": "Tema byttet",
   "toast.scheme.title": "Fargevalg",
+
+  "toast.workspace.enabled.title": "Arbeidsområder aktivert",
+  "toast.workspace.enabled.description": "Flere worktrees vises nå i sidefeltet",
+  "toast.workspace.disabled.title": "Arbeidsområder deaktivert",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidefeltet",
 
   "toast.permissions.autoaccept.on.title": "Godtar endringer automatisk",
   "toast.permissions.autoaccept.on.description": "Redigerings- og skrivetillatelser vil bli godkjent automatisk",
@@ -351,10 +413,11 @@ export const dict = {
   "toast.model.none.description": "Koble til en leverandør for å oppsummere denne sesjonen",
 
   "toast.file.loadFailed.title": "Kunne ikke laste fil",
-
   "toast.file.listFailed.title": "Kunne ikke liste filer",
+
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Velg først et linjeområde i en filfane.",
+
   "toast.session.share.copyFailed.title": "Kunne ikke kopiere URL til utklippstavlen",
   "toast.session.share.success.title": "Sesjon delt",
   "toast.session.share.success.description": "Delings-URL kopiert til utklippstavlen!",
@@ -388,6 +451,7 @@ export const dict = {
     "Rotelement ikke funnet. Glemte du å legge det til i index.html? Eller kanskje id-attributten er feilstavet?",
 
   "error.globalSync.connectFailed": "Kunne ikke koble til server. Kjører det en server på `{{url}}`?",
+  "directory.error.invalidUrl": "Invalid directory in URL.",
 
   "error.chain.unknown": "Ukjent feil",
   "error.chain.causedBy": "Forårsaket av:",
@@ -434,8 +498,11 @@ export const dict = {
   "session.review.loadingChanges": "Laster endringer...",
   "session.review.empty": "Ingen endringer i denne sesjonen ennå",
   "session.review.noChanges": "Ingen endringer",
+
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
+  "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
+
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",
   "session.messages.loadEarlier": "Last inn tidligere meldinger",
@@ -443,6 +510,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Hopp til nyeste",
 
   "session.context.addToContext": "Legg til {{selection}} i kontekst",
+  "session.todo.title": "Oppgaver",
+  "session.todo.collapse": "Skjul",
+  "session.todo.expand": "Utvid",
 
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
@@ -451,6 +521,11 @@ export const dict = {
 
   "session.header.search.placeholder": "Søk i {{project}}",
   "session.header.searchFiles": "Søk etter filer",
+  "session.header.openIn": "Åpne i",
+  "session.header.open.action": "Åpne {{app}}",
+  "session.header.open.ariaLabel": "Åpne i {{app}}",
+  "session.header.open.menu": "Åpne alternativer",
+  "session.header.open.copyPath": "Kopier bane",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Serverkonfigurasjoner",
@@ -511,17 +586,23 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Koble til en leverandør for å bruke modeller, inkl. Claude, GPT, Gemini osv.",
   "sidebar.project.recentSessions": "Nylige sesjoner",
   "sidebar.project.viewAllSessions": "Vis alle sesjoner",
+  "sidebar.project.clearNotifications": "Fjern varsler",
 
   "app.name.desktop": "OpenCode Desktop",
+
   "settings.section.desktop": "Skrivebord",
   "settings.section.server": "Server",
   "settings.tab.general": "Generelt",
   "settings.tab.shortcuts": "Snarveier",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL-integrasjon",
+  "settings.desktop.wsl.description": "Kjør OpenCode-serveren i WSL på Windows.",
 
   "settings.general.section.appearance": "Utseende",
   "settings.general.section.notifications": "Systemvarsler",
   "settings.general.section.updates": "Oppdateringer",
   "settings.general.section.sounds": "Lydeffekter",
+  "settings.general.section.display": "Skjerm",
 
   "settings.general.row.language.title": "Språk",
   "settings.general.row.language.description": "Endre visningsspråket for OpenCode",
@@ -531,6 +612,11 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpass hvordan OpenCode er tematisert.",
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
+
+  "settings.general.row.wayland.title": "Bruk innebygd Wayland",
+  "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
+  "settings.general.row.wayland.tooltip":
+    "På Linux med skjermer med blandet oppdateringsfrekvens kan innebygd Wayland være mer stabilt.",
 
   "settings.general.row.releaseNotes.title": "Utgivelsesnotater",
   "settings.general.row.releaseNotes.description": 'Vis "Hva er nytt"-vinduer etter oppdateringer',
@@ -543,7 +629,6 @@ export const dict = {
   "settings.updates.action.checking": "Sjekker...",
   "settings.updates.toast.latest.title": "Du er oppdatert",
   "settings.updates.toast.latest.description": "Du bruker den nyeste versjonen av OpenCode.",
-
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -556,6 +641,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "Varsel 01",
   "sound.option.alert02": "Varsel 02",
   "sound.option.alert03": "Varsel 03",
@@ -601,6 +687,7 @@ export const dict = {
   "sound.option.yup04": "Ja 04",
   "sound.option.yup05": "Ja 05",
   "sound.option.yup06": "Ja 06",
+
   "settings.general.notifications.agent.title": "Agent",
   "settings.general.notifications.agent.description":
     "Vis systemvarsel når agenten er ferdig eller trenger oppmerksomhet",
@@ -699,6 +786,7 @@ export const dict = {
   "session.delete.title": "Slett sesjon",
   "session.delete.confirm": 'Slette sesjonen "{{name}}"?',
   "session.delete.button": "Slett sesjon",
+
   "workspace.new": "Nytt arbeidsområde",
   "workspace.type.local": "lokal",
   "workspace.type.sandbox": "sandkasse",

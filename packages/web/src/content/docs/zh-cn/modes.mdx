@@ -1,0 +1,328 @@
+---
+title: 模式
+description: 不同模式适用于不同的使用场景。
+---
+
+:::caution
+模式现在通过 opencode 配置中的 `agent` 选项进行配置。`mode` 选项已废弃。[了解更多](/docs/agents)。
+:::
+
+opencode 中的模式允许你为不同的使用场景自定义行为、工具和提示词。
+
+opencode 自带两种内置模式：**build** 和 **plan**。你可以自定义这些模式，也可以通过 opencode 配置创建自己的模式。
+
+你可以在会话中切换模式，也可以在配置文件中进行配置。
+
+---
+
+## 内置模式
+
+opencode 自带两种内置模式。
+
+---
+
+### Build
+
+Build 是启用了所有工具的**默认**模式。这是进行开发工作的标准模式，你可以完全访问文件操作和系统命令。
+
+---
+
+### Plan
+
+Plan 是一种为规划和分析设计的受限模式。在 plan 模式下，以下工具默认被禁用：
+
+- `write` - 无法创建新文件
+- `edit` - 无法修改现有文件，但位于 `.opencode/plans/*.md` 的文件除外，用于详细说明计划本身
+- `patch` - 无法应用补丁
+- `bash` - 无法执行 shell 命令
+
+当你希望 AI 分析代码、提出修改建议或制定计划，而不对代码库进行任何实际更改时，此模式非常有用。
+
+---
+
+## 切换
+
+你可以在会话中使用 _Tab_ 键切换模式，或者使用你配置的 `switch_mode` 快捷键。
+
+另请参阅：[格式化工具](/docs/formatters)了解代码格式化配置的相关信息。
+
+---
+
+## 配置
+
+你可以自定义内置模式或通过配置创建自己的模式。模式可以通过两种方式进行配置：
+
+### JSON 配置
+
+在 `opencode.json` 配置文件中配置模式：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+### Markdown 配置
+
+你还可以使用 Markdown 文件定义模式。将文件放置在以下位置：
+
+- 全局：`~/.config/opencode/modes/`
+- 项目：`.opencode/modes/`
+
+```markdown title="~/.config/opencode/modes/review.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `review` 的模式）。
+
+下面让我们详细了解这些配置选项。
+
+---
+
+### 模型
+
+使用 `model` 配置可以覆盖该模式的默认模型。这对于针对不同任务使用不同模型非常有用。例如，规划时使用更快的模型，实现时使用更强大的模型。
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+---
+
+### 温度
+
+使用 `temperature` 配置控制 AI 响应的随机性和创造性。较低的值使响应更加集中和确定性，较高的值则增加创造性和多样性。
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+温度值的范围通常为 0.0 到 1.0：
+
+- **0.0-0.2**：非常集中且确定性高的响应，适合代码分析和规划
+- **0.3-0.5**：兼顾稳定性与创造力的平衡型响应，适合一般开发任务
+- **0.6-1.0**：更具创造性和多样性的响应，适合头脑风暴和探索性工作
+
+```json title="opencode.json"
+{
+  "mode": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+如果未指定温度，opencode 将使用模型特定的默认值（大多数模型通常为 0，Qwen 模型为 0.55）。
+
+---
+
+### 提示词
+
+使用 `prompt` 配置为模式指定自定义系统提示词文件。提示词文件应包含针对该模式用途的具体指令。
+
+```json title="opencode.json"
+{
+  "mode": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+此路径相对于配置文件所在位置。因此，全局 opencode 配置和项目特定配置均可使用。
+
+---
+
+### 工具
+
+使用 `tools` 配置控制该模式下可用的工具。你可以将特定工具设置为 `true` 或 `false` 来启用或禁用它们。
+
+```json
+{
+  "mode": {
+    "readonly": {
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+如果未指定任何工具，则默认启用所有工具。
+
+---
+
+#### 可用工具
+
+以下是所有可通过模式配置控制的工具。
+
+| 工具        | 描述             |
+| ----------- | ---------------- |
+| `bash`      | 执行 shell 命令  |
+| `edit`      | 修改现有文件     |
+| `write`     | 创建新文件       |
+| `read`      | 读取文件内容     |
+| `grep`      | 搜索文件内容     |
+| `glob`      | 按模式查找文件   |
+| `list`      | 列出目录内容     |
+| `patch`     | 对文件应用补丁   |
+| `todowrite` | 管理待办事项列表 |
+| `todoread`  | 读取待办事项列表 |
+| `webfetch`  | 获取网页内容     |
+
+---
+
+## 自定义模式
+
+你可以通过在配置中添加自定义模式来创建自己的模式。以下是两种方式的示例：
+
+### 使用 JSON 配置
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "docs": {
+      "prompt": "{file:./prompts/documentation.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+### 使用 Markdown 文件
+
+在 `.opencode/modes/` 中创建项目特定的模式文件，或在 `~/.config/opencode/modes/` 中创建全局模式文件：
+
+```markdown title=".opencode/modes/debug.md"
+---
+temperature: 0.1
+tools:
+  bash: true
+  read: true
+  grep: true
+  write: false
+  edit: false
+---
+
+You are in debug mode. Your primary goal is to help investigate and diagnose issues.
+
+Focus on:
+
+- Understanding the problem through careful analysis
+- Using bash commands to inspect system state
+- Reading relevant files and logs
+- Searching for patterns and anomalies
+- Providing clear explanations of findings
+
+Do not make any changes to files. Only investigate and report.
+```
+
+```markdown title="~/.config/opencode/modes/refactor.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.2
+tools:
+  edit: true
+  read: true
+  grep: true
+  glob: true
+---
+
+You are in refactoring mode. Focus on improving code quality without changing functionality.
+
+Priorities:
+
+- Improve code readability and maintainability
+- Apply consistent naming conventions
+- Reduce code duplication
+- Optimize performance where appropriate
+- Ensure all tests continue to pass
+```
+
+---
+
+### 使用场景
+
+以下是不同模式的一些常见使用场景。
+
+- **Build 模式**：启用所有工具的完整开发工作
+- **Plan 模式**：分析和规划，不做任何更改
+- **Review 模式**：使用只读访问权限加文档工具进行代码审查
+- **Debug 模式**：启用 bash 和读取工具，专注于问题排查
+- **Docs 模式**：支持文件操作但不支持系统命令的文档编写
+
+你可能还会发现不同的模型适用于不同的使用场景。

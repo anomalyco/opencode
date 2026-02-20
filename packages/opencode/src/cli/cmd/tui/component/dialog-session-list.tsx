@@ -15,7 +15,7 @@ import { createDebouncedSignal } from "../util/signal"
 import { useProjectState } from "../context/directory"
 import { Global } from "@/global"
 import path from "path"
-import "opentui-spinner/solid"
+import { Spinner } from "./spinner"
 
 type SessionOptionValue = {
   id: string
@@ -112,8 +112,6 @@ export function DialogSessionList(
     return { id: session.id, directory: session.directory }
   })
 
-  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
@@ -135,11 +133,7 @@ export function DialogSessionList(
           value,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? (
-            <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-              <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
-            </Show>
-          ) : undefined,
+          gutter: isWorking ? <Spinner /> : undefined,
         }
       })
   })
