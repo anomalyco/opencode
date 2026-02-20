@@ -1,6 +1,7 @@
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Identifier } from "@/id/id"
+import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "terminal-control" })
@@ -23,7 +24,15 @@ export namespace TerminalControl {
     readonly timer: NodeJS.Timeout
   }
 
-  const pendingAcks = new Map<string, AckHandler>()
+  interface State {
+    pendingAcks: Map<string, AckHandler>
+    subscriptionsInitialized: boolean
+  }
+
+  const state = Instance.state(() => ({
+    pendingAcks: new Map<string, AckHandler>(),
+    subscriptionsInitialized: false,
+  }))
 
   function isTuiMode(): boolean {
     return process.env.OPENCODE_TUI === "1"
@@ -36,17 +45,17 @@ export namespace TerminalControl {
   function waitForAck(token: string, timeoutMs: number, operation: "suspend" | "resume"): Promise<void> {
     return new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
-        pendingAcks.delete(token)
+        state().pendingAcks.delete(token)
         log.warn(`${operation}: timeout waiting for TUI ack`, { token, timeoutMs })
         resolve()
       }, timeoutMs)
 
-      pendingAcks.set(token, {
+      state().pendingAcks.set(token, {
         token,
         timer,
         resolve: () => {
           clearTimeout(timer)
-          pendingAcks.delete(token)
+          state().pendingAcks.delete(token)
           log.debug(`${operation}: received ack`, { token })
           resolve()
         },
@@ -55,10 +64,10 @@ export namespace TerminalControl {
   }
 
   function cleanupPendingAck(token: string): void {
-    const handler = pendingAcks.get(token)
+    const handler = state().pendingAcks.get(token)
     if (handler) {
       clearTimeout(handler.timer)
-      pendingAcks.delete(token)
+      state().pendingAcks.delete(token)
     }
   }
 
@@ -101,14 +110,14 @@ export namespace TerminalControl {
   }
 
   function handleAck(token: string): void {
-    const handler = pendingAcks.get(token)
+    const handler = state().pendingAcks.get(token)
     handler?.resolve()
   }
 
-  let subscriptionsInitialized = false
   function ensureSubscriptions(): void {
-    if (subscriptionsInitialized) return
-    subscriptionsInitialized = true
+    const s = state()
+    if (s.subscriptionsInitialized) return
+    s.subscriptionsInitialized = true
 
     Bus.subscribe(TuiEvent.RendererSuspendAck, (event) => {
       handleAck(event.properties.token)
@@ -118,6 +127,6 @@ export namespace TerminalControl {
       handleAck(event.properties.token)
     })
 
-    log.debug("Bus subscriptions initialized")
+    log.debug("Bus subscriptions initialized", { directory: Instance.directory })
   }
 }

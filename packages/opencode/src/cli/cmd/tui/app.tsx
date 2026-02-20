@@ -49,7 +49,6 @@ import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
-import { Bus } from "@/bus"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -881,14 +880,24 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   sdk.event.on(TuiEvent.RendererSuspendRequest.type, async (evt) => {
     renderer.suspend()
     renderer.currentRenderBuffer.clear()
-    await Bus.publish(TuiEvent.RendererSuspendAck, { token: evt.properties.token })
+    await sdk.client.tui.publish({
+      body: {
+        type: TuiEvent.RendererSuspendAck.type,
+        properties: { token: evt.properties.token },
+      },
+    })
   })
 
   sdk.event.on(TuiEvent.RendererResumeRequest.type, async (evt) => {
     renderer.currentRenderBuffer.clear()
     renderer.resume()
     renderer.requestRender()
-    await Bus.publish(TuiEvent.RendererResumeAck, { token: evt.properties.token })
+    await sdk.client.tui.publish({
+      body: {
+        type: TuiEvent.RendererResumeAck.type,
+        properties: { token: evt.properties.token },
+      },
+    })
   })
 
   return (
