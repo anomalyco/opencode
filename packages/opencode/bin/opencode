@@ -25,6 +25,7 @@ if (envPath) {
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
+//
 const cached = path.join(scriptDir, ".opencode")
 if (fs.existsSync(cached)) {
   run(cached)

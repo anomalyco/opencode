@@ -6,7 +6,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message } from "./message-part"
+import { AssistantParts, Message, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -83,15 +83,55 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 const hidden = new Set(["todowrite", "todoread"])
 
-function visible(part: PartType) {
+function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
-    if (hidden.has(part.tool)) return false
-    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
-    return true
+    if (hidden.has(part.tool)) return
+    if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
+    return "visible" as const
   }
-  if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return !!part.text?.trim()
-  return false
+  if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
+  if (part.type === "reasoning") {
+    if (showReasoningSummaries) return "visible" as const
+    return
+  }
+  if (PART_MAPPING[part.type]) return "visible" as const
+  return
+}
+
+function clean(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+    .replace(/[*_~]+/g, "")
+    .trim()
+}
+
+function heading(text: string) {
+  const markdown = text.replace(/\r\n?/g, "\n")
+
+  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
+  if (html?.[1]) {
+    const value = clean(html[1].replace(/<[^>]+>/g, " "))
+    if (value) return value
+  }
+
+  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
+  if (atx?.[1]) {
+    const value = clean(atx[1])
+    if (value) return value
+  }
+
+  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
+  if (setext?.[1]) {
+    const value = clean(setext[1])
+    if (value) return value
+  }
+
+  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
+  if (strong?.[1]) {
+    const value = clean(strong[1])
+    if (value) return value
+  }
 }
 
 export function SessionTurn(
@@ -99,6 +139,7 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     lastUserMessageID?: string
+    showReasoningSummaries?: boolean
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -242,6 +283,7 @@ export function SessionTurn(
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
@@ -265,9 +307,33 @@ export function SessionTurn(
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter(visible).length
+      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
     }, 0),
   )
+  const assistantTailVisible = createMemo(() =>
+    assistantMessages()
+      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
+      .flatMap((part) => {
+        if (partState(part, showReasoningSummaries()) !== "visible") return []
+        if (part.type === "text") return ["text" as const]
+        return ["other" as const]
+      })
+      .at(-1),
+  )
+  const reasoningHeading = createMemo(() =>
+    assistantMessages()
+      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
+      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
+      .map((part) => heading(part.text))
+      .filter((text): text is string => !!text)
+      .at(-1),
+  )
+  const showThinking = createMemo(() => {
+    if (!working() || !!error()) return false
+    if (showReasoningSummaries()) return assistantVisible() === 0
+    if (assistantTailVisible() === "text") return false
+    return true
+  })
 
   const autoScroll = createAutoScroll({
     working,
@@ -295,11 +361,6 @@ export function SessionTurn(
                 <div data-slot="session-turn-message-content" aria-live="off">
                   <Message message={msg()} parts={parts()} interrupted={interrupted()} />
                 </div>
-                <Show when={working() && assistantVisible() === 0 && !error()}>
-                  <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                  </div>
-                </Show>
                 <Show when={assistantMessages().length > 0}>
                   <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
                     <AssistantParts
@@ -307,7 +368,16 @@ export function SessionTurn(
                       showAssistantCopyPartID={assistantCopyPartID()}
                       turnDurationMs={turnDurationMs()}
                       working={working()}
+                      showReasoningSummaries={showReasoningSummaries()}
                     />
+                  </div>
+                </Show>
+                <Show when={showThinking()}>
+                  <div data-slot="session-turn-thinking">
+                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                    <Show when={!showReasoningSummaries() && reasoningHeading()}>
+                      {(text) => <span data-slot="session-turn-thinking-heading">{text()}</span>}
+                    </Show>
                   </div>
                 </Show>
                 <Show when={edited() > 0 && !working()}>

@@ -250,6 +250,18 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )

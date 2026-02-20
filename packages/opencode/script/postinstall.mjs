@@ -106,8 +106,10 @@ async function main() {
       return
     }
 
+    // On non-Windows platforms, just verify the binary package exists
+    // Don't replace the wrapper script - it handles binary execution
     const { binaryPath } = findBinary()
-    const target = path.join(__dirname, "..", "bin", ".opencode")
+    const target = path.join(__dirname, "bin", ".opencode")
     if (fs.existsSync(target)) fs.unlinkSync(target)
     try {
       fs.linkSync(binaryPath, target)

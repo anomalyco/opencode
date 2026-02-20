@@ -44,7 +44,7 @@ test("session can be renamed via header menu", async ({ page, sdk, gotoSession }
     const menu = await openSessionMoreMenu(page, session.id)
     await clickMenuItem(menu, /rename/i)
 
-    const input = page.locator(".session-scroller").locator(inlineInputSelector).first()
+    const input = page.locator(".scroll-view__viewport").locator(inlineInputSelector).first()
     await expect(input).toBeVisible()
     await expect(input).toBeFocused()
     await input.fill(renamedTitle)
