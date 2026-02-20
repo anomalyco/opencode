@@ -48,14 +48,23 @@ function mapTextareaKeybindings(
   const configKey = `input_${action.replace(/-/g, "_")}`
   const bindings = keybinds[configKey]
   if (!bindings) return []
-  return bindings.map((binding) => ({
-    name: binding.name,
-    ctrl: binding.ctrl || undefined,
-    meta: binding.meta || undefined,
-    shift: binding.shift || undefined,
-    super: binding.super || undefined,
-    action,
-  }))
+  const result: KeyBinding[] = []
+  for (const binding of bindings) {
+    result.push({
+      name: binding.name,
+      ctrl: binding.ctrl || undefined,
+      meta: binding.meta || undefined,
+      shift: binding.shift || undefined,
+      super: binding.super || undefined,
+      action,
+    })
+    // Terminals encode ctrl+_ as \x1F without modifier flags, so add a
+    // raw binding so opentui's key matcher can recognise the sequence.
+    if (binding.name === "_" && binding.ctrl) {
+      result.push({ name: "\x1F", action })
+    }
+  }
+  return result
 }
 
 export function useTextareaKeybindings() {
