@@ -28,7 +28,6 @@ test("smoke model selection updates prompt footer", async ({ page, gotoSession }
   const key = await target.getAttribute("data-key")
   if (!key) throw new Error("Failed to resolve model key from list item")
 
-  const name = (await target.locator("span").first().innerText()).trim()
   const model = key.split(":").slice(1).join(":")
 
   await input.fill(model)
@@ -37,6 +36,13 @@ test("smoke model selection updates prompt footer", async ({ page, gotoSession }
 
   await expect(dialog).toHaveCount(0)
 
-  const form = page.locator(promptSelector).locator("xpath=ancestor::form[1]")
-  await expect(form.locator('[data-component="button"]').filter({ hasText: name }).first()).toBeVisible()
+  await page.locator(promptSelector).click()
+  await page.keyboard.type("/model")
+  await expect(command).toBeVisible()
+  await command.hover()
+  await page.keyboard.press("Enter")
+
+  const dialogAgain = page.getByRole("dialog")
+  await expect(dialogAgain).toBeVisible()
+  await expect(dialogAgain.locator(`[data-slot="list-item"][data-key="${key}"][data-selected="true"]`)).toBeVisible()
 })
