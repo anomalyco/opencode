@@ -862,20 +862,27 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const cfg = yield* dep.config()
       const providerConfig = cfg.provider?.["litellm"]
 
+      const hasEnv = !!(Env.get("LITELLM_API_KEY") || Env.get("LITELLM_HOST") || Env.get("LITELLM_BASE_URL"))
+      const hasConfig = !!providerConfig
+      const litellmAuth = yield* dep.auth("litellm")
+      const hasAuth = litellmAuth?.type === "api"
+
+      // Skip discovery when there is no configuration at all
+      if (!hasEnv && !hasConfig && !hasAuth) return { autoload: false }
+
       const baseURL =
         providerConfig?.options?.baseURL ??
         Env.get("LITELLM_HOST") ??
         Env.get("LITELLM_BASE_URL") ??
         "http://localhost:4000"
 
-      const apiKey = yield* Effect.gen(function* () {
+      const apiKey = (() => {
         if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
         const envKey = Env.get("LITELLM_API_KEY")
         if (envKey) return envKey
-        const auth = yield* dep.auth("litellm")
-        if (auth?.type === "api") return auth.key
+        if (hasAuth) return litellmAuth.key
         return undefined
-      })
+      })()
 
       const customHeaders = iife(() => {
         const raw = Env.get("LITELLM_CUSTOM_HEADERS")
@@ -1446,6 +1453,17 @@ const layer = Layer.effect(
           return true
         }
 
+        // Seed LiteLLM provider so it is always available for interactive configuration
+        if (!database["litellm"]) {
+          database["litellm"] = {
+            id: ProviderV2.ID.make("litellm"),
+            name: "LiteLLM",
+            env: ["LITELLM_API_KEY"],
+            options: {},
+            source: "custom",
+            models: {},
+          }
+        }
         for (const hook of plugins) {
           const p = hook.provider
           const models = p?.models
