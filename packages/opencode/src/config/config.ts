@@ -1043,6 +1043,10 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      yolo: z
+        .boolean()
+        .optional()
+        .describe("Enable YOLO mode - auto-approve all permission prompts (except explicit deny rules)"),
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
