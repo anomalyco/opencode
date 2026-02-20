@@ -862,13 +862,17 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const cfg = yield* dep.config()
       const providerConfig = cfg.provider?.["litellm"]
 
-      const hasEnv = !!(Env.get("LITELLM_API_KEY") || Env.get("LITELLM_HOST") || Env.get("LITELLM_BASE_URL"))
-      const hasConfig = !!providerConfig
       const litellmAuth = yield* dep.auth("litellm")
-      const hasAuth = litellmAuth?.type === "api"
 
       // Skip discovery when there is no configuration at all
-      if (!hasEnv && !hasConfig && !hasAuth) return { autoload: false }
+      if (
+        !providerConfig &&
+        !Env.get("LITELLM_API_KEY") &&
+        !Env.get("LITELLM_HOST") &&
+        !Env.get("LITELLM_BASE_URL") &&
+        litellmAuth?.type !== "api"
+      )
+        return { autoload: false }
 
       const baseURL =
         providerConfig?.options?.baseURL ??
@@ -880,7 +884,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
         const envKey = Env.get("LITELLM_API_KEY")
         if (envKey) return envKey
-        if (hasAuth) return litellmAuth.key
+        if (litellmAuth?.type === "api") return litellmAuth.key
         return undefined
       })()
 

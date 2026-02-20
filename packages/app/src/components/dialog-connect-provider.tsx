@@ -627,29 +627,26 @@ function ProviderConnection(props: {
     const [formStore, setFormStore] = createStore({
       baseURL: "",
       apiKey: "",
-      error: undefined as string | undefined,
     })
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
 
-      const form = e.currentTarget as HTMLFormElement
-      const formData = new FormData(form)
-      const baseURL = (formData.get("baseURL") as string)?.trim() || "http://localhost:4000"
-      const apiKey = (formData.get("apiKey") as string)?.trim()
+      const data = new FormData(e.currentTarget as HTMLFormElement)
+      const url = (data.get("baseURL") as string)?.trim() || "http://localhost:4000"
+      const key = (data.get("apiKey") as string)?.trim()
 
-      setFormStore("error", undefined)
       await serverSync().updateConfig({
         provider: {
           litellm: {
-            options: { baseURL },
+            options: { baseURL: url },
           },
         },
       })
-      if (apiKey) {
+      if (key) {
         await serverSDK().client.auth.set({
           providerID: props.provider,
-          auth: { type: "api", key: apiKey },
+          auth: { type: "api", key },
         })
       }
       await complete()
@@ -678,9 +675,6 @@ function ProviderConnection(props: {
             value={formStore.apiKey}
             onChange={(v) => setFormStore("apiKey", v)}
           />
-          <Show when={formStore.error}>
-            <div class="text-14-regular text-text-critical-base">{formStore.error}</div>
-          </Show>
           <Button class="w-auto" type="submit" size="large" variant="primary">
             {language.t("common.submit")}
           </Button>
