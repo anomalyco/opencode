@@ -589,8 +589,7 @@ export default function Layout(props: ParentProps) {
     const now = Date.now()
     if (workspaceSetting()) {
       const active = activeWorkspace(project)
-      if (!active) return []
-      const [workspace] = globalSync.child(active, { bootstrap: true })
+      const [workspace] = globalSync.child(active ?? project.worktree, { bootstrap: true })
       return sortedRootSessions(workspace, now)
     }
     const [projectStore] = globalSync.child(project.worktree)
@@ -628,7 +627,6 @@ export default function Layout(props: ParentProps) {
     const index = dirs.indexOf(selected)
     const start = index === -1 ? 0 : index
     const next = dirs[(start + offset + dirs.length) % dirs.length]
-    if (!next) return
     navigateToWorkspace(current, next)
   }
 
