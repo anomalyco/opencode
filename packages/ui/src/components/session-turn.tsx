@@ -247,6 +247,21 @@ export function SessionTurn(
     if (working()) return null
     return showAssistantCopyPartID() ?? null
   })
+  const turnDurationMs = createMemo(() => {
+    const start = message()?.time.created
+    if (typeof start !== "number") return undefined
+
+    const end = assistantMessages().reduce<number | undefined>((max, item) => {
+      const completed = item.time.completed
+      if (typeof completed !== "number") return max
+      if (max === undefined) return completed
+      return Math.max(max, completed)
+    }, undefined)
+
+    if (typeof end !== "number") return undefined
+    if (end < start) return undefined
+    return end - start
+  })
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
@@ -290,6 +305,7 @@ export function SessionTurn(
                     <AssistantParts
                       messages={assistantMessages()}
                       showAssistantCopyPartID={assistantCopyPartID()}
+                      turnDurationMs={turnDurationMs()}
                       working={working()}
                     />
                   </div>
