@@ -186,7 +186,11 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
-  if (model.api.id.includes("claude")) {
+  const isClaudeToolCall =
+    model.api.id.includes("claude") ||
+    (model.providerID === "litellm" &&
+      ((model.options?.underlyingModel as string) ?? "").toLowerCase().includes("claude"))
+  if (isClaudeToolCall) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
     msgs = msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -736,10 +740,23 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   }
 
   // LiteLLM proxied models: infer reasoning variant from the underlying model
-  // to avoid false-positive reasoning param injection for aliased models
+  // to avoid false-positive reasoning param injection for aliased models.
+  // Model aliases (e.g., "sonnet-4.5") may not contain "claude" or "anthropic",
+  // so we also check the underlying model stored in options.underlyingModel
+  // (e.g., "azure_ai/claude-sonnet-4-5").
   if (model.providerID === "litellm" && model.capabilities.reasoning) {
     const apiId = model.api.id.toLowerCase()
-    if (apiId.includes("claude") || apiId.includes("anthropic")) {
+    const underlying = ((model.options?.underlyingModel as string) ?? "").toLowerCase()
+    const isClaude = [apiId, underlying].some((s) => s.includes("claude") || s.includes("anthropic"))
+    if (isClaude) {
+      const isAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some(
+        (v) => apiId.includes(v) || underlying.includes(v),
+      )
+      if (isAdaptive) {
+        return Object.fromEntries(
+          ["low", "medium", "high", "max"].map((effort) => [effort, { thinking: { type: "adaptive" }, effort }]),
+        )
+      }
       return {
         high: {
           thinking: {
