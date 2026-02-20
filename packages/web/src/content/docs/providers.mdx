@@ -135,6 +135,8 @@ To use Amazon Bedrock with OpenCode:
 
 2. **Configure authentication** using one of the following methods:
 
+   ***
+
    #### Environment Variables (Quick Start)
 
    Set one of these environment variables while running opencode:
@@ -156,6 +158,8 @@ To use Amazon Bedrock with OpenCode:
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### Configuration File (Recommended)
 
@@ -184,6 +188,8 @@ To use Amazon Bedrock with OpenCode:
    Configuration file options take precedence over environment variables.
    :::
 
+   ***
+
    #### Advanced: VPC Endpoints
 
    If you're using VPC endpoints for Bedrock:
@@ -207,11 +213,15 @@ To use Amazon Bedrock with OpenCode:
    The `endpoint` option is an alias for the generic `baseURL` option, using AWS-specific terminology. If both `endpoint` and `baseURL` are specified, `endpoint` takes precedence.
    :::
 
+   ***
+
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
    - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM Roles for Service Accounts) or other Kubernetes environments with OIDC federation. These environment variables are automatically injected by Kubernetes when using service account annotations.
+
+   ***
 
    #### Authentication Precedence
 
@@ -230,7 +240,8 @@ To use Amazon Bedrock with OpenCode:
    ```
 
 :::note
-For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching:
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching.
+:::
 
 ```json title="opencode.json"
 {
@@ -247,8 +258,6 @@ For custom inference profiles, use the model and provider name in the key and se
   }
 }
 ```
-
-:::
 
 ---
 
