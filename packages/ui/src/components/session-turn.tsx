@@ -91,7 +91,7 @@ function partState(part: PartType, showReasoningSummaries: boolean) {
   }
   if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
   if (part.type === "reasoning") {
-    if (showReasoningSummaries) return "visible" as const
+    if (showReasoningSummaries && part.text?.trim()) return "visible" as const
     return
   }
   if (PART_MAPPING[part.type]) return "visible" as const
