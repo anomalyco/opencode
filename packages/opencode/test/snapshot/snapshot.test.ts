@@ -508,6 +508,68 @@ test("gitignore changes", async () => {
   })
 })
 
+test("git info exclude changes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const file = `${tmp.path}/.git/info/exclude`
+      const text = await Bun.file(file).text()
+      await Bun.write(file, `${text.trimEnd()}\nignored.txt\n`)
+      await Bun.write(`${tmp.path}/ignored.txt`, "ignored content")
+      await Bun.write(`${tmp.path}/normal.txt`, "normal content")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(`${tmp.path}/normal.txt`)
+      expect(patch.files).not.toContain(`${tmp.path}/ignored.txt`)
+
+      const after = await Snapshot.track()
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.some((x) => x.file === "normal.txt")).toBe(true)
+      expect(diffs.some((x) => x.file === "ignored.txt")).toBe(false)
+    },
+  })
+})
+
+test("git info exclude keeps global excludes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const global = `${tmp.path}/global.ignore`
+      const config = `${tmp.path}/global.gitconfig`
+      await Bun.write(global, "global.tmp\n")
+      await Bun.write(config, `[core]\n\texcludesFile = ${global}\n`)
+
+      const prev = process.env.GIT_CONFIG_GLOBAL
+      process.env.GIT_CONFIG_GLOBAL = config
+      try {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        const file = `${tmp.path}/.git/info/exclude`
+        const text = await Bun.file(file).text()
+        await Bun.write(file, `${text.trimEnd()}\ninfo.tmp\n`)
+
+        await Bun.write(`${tmp.path}/global.tmp`, "global content")
+        await Bun.write(`${tmp.path}/info.tmp`, "info content")
+        await Bun.write(`${tmp.path}/normal.txt`, "normal content")
+
+        const patch = await Snapshot.patch(before!)
+        expect(patch.files).toContain(`${tmp.path}/normal.txt`)
+        expect(patch.files).not.toContain(`${tmp.path}/global.tmp`)
+        expect(patch.files).not.toContain(`${tmp.path}/info.tmp`)
+      } finally {
+        if (prev) process.env.GIT_CONFIG_GLOBAL = prev
+        else delete process.env.GIT_CONFIG_GLOBAL
+      }
+    },
+  })
+})
+
 test("concurrent file operations during patch", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
