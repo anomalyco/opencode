@@ -179,6 +179,7 @@
 
 [data-component="text-part"] {
   width: 100%;
+  margin-top: 40px;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -227,13 +228,18 @@
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-large);
+  line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: normal;
     font-size: inherit;
+    color: var(--text-weak);
+
+    strong,
+    b {
+      color: var(--text-base);
+    }
 
     p:has(strong) {
       margin-top: 24px;
