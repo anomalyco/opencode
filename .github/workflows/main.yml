@@ -18,7 +18,7 @@ env:
   # URL originalnega (upstream) repozitorija
   UPSTREAM_REPO: https://github.com/anomalyco/opencode.git
   # branch v upstreamu, ki ga želiš syncat
-  UPSTREAM_BRANCH: main
+  UPSTREAM_BRANCH: dev
   # branch v tvojem forku, kamor syncaš
   FORK_BRANCH: dev
 
