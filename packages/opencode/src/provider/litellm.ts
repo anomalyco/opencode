@@ -85,7 +85,7 @@ export namespace LiteLLM {
       },
       status: "active",
       headers: {},
-      options: {},
+      options: underlyingModel ? { underlyingModel } : {},
       cost: {
         input: inputCost,
         output: outputCost,
