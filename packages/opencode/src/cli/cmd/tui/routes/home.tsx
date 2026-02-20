@@ -15,8 +15,7 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 
-// TODO: what is the best way to do this?
-let once = false
+let argsPromptUsed = false
 
 export function Home() {
   const sync = useSync()
@@ -77,13 +76,14 @@ export function Home() {
   let prompt: PromptRef
   const args = useArgs()
   onMount(() => {
-    if (once) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
-      once = true
-    } else if (args.prompt) {
+      return
+    }
+    if (argsPromptUsed) return
+    if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
-      once = true
+      argsPromptUsed = true
       prompt.submit()
     }
   })
