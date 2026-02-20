@@ -1,5 +1,5 @@
-import { APIEvent } from "@solidjs/start"
-import { DownloadPlatform } from "./types"
+import type { APIEvent } from "@solidjs/start"
+import type { DownloadPlatform } from "../types"
 
 const assetNames: Record<string, string> = {
   "darwin-aarch64-dmg": "opencode-desktop-darwin-aarch64.dmg",
@@ -17,17 +17,20 @@ const downloadNames: Record<string, string> = {
   "windows-x64-nsis": "OpenCode Desktop Installer.exe",
 } satisfies { [K in DownloadPlatform]?: string }
 
-export async function GET({ params: { platform } }: APIEvent) {
+export async function GET({ params: { platform, channel } }: APIEvent) {
   const assetName = assetNames[platform]
   if (!assetName) return new Response("Not Found", { status: 404 })
 
-  const resp = await fetch(`https://github.com/anomalyco/opencode/releases/latest/download/${assetName}`, {
-    cf: {
-      // in case gh releases has rate limits
-      cacheTtl: 60 * 5,
-      cacheEverything: true,
-    },
-  } as any)
+  const resp = await fetch(
+    `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
+    {
+      cf: {
+        // in case gh releases has rate limits
+        cacheTtl: 60 * 5,
+        cacheEverything: true,
+      },
+    } as any,
+  )
 
   const downloadName = downloadNames[platform]
 
