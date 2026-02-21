@@ -47,7 +47,7 @@ export const DialogSettings: Component = () => {
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
                     <Tabs.Trigger value="config">
-                      <Icon name="sliders" />
+                      <Icon name="settings-gear" />
                       {language.t("settings.config.title")}
                     </Tabs.Trigger>
                   </div>

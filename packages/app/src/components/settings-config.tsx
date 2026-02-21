@@ -9,6 +9,9 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNavigate } from "@solidjs/router"
 
+const joinPath = (...parts: string[]) =>
+  parts.map((p) => p.replace(/\\/g, "/")).join("/").replace(/\/+/g, "/")
+
 interface JsonError {
   message: string
   line: number
@@ -76,12 +79,12 @@ export const SettingsConfig: Component = () => {
     }
   })
 
-  const globalPath = createMemo(() => globalSync.data.path.config)
+  const globalPath = createMemo(() => globalSync.data.path.config.replace(/\\/g, "/"))
 
   const projectPath = createMemo(() => {
     const worktree = currentDir()
     if (!worktree) return null
-    return `${worktree}/opencode.json`
+    return joinPath(worktree, "opencode.json")
   })
 
   const findProjectConfig = async (worktree: string): Promise<{ path: string; content: string } | null> => {
