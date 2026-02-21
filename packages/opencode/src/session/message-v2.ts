@@ -509,6 +509,10 @@ export namespace MessageV2 {
         const id = model.api.id.toLowerCase()
         return id.includes("gemini-3") && !id.includes("gemini-2")
       }
+      if (model.api.npm === "@ai-sdk/github-copilot") {
+        const id = model.api.id.toLowerCase()
+        return id.includes("gemini-3") && !id.includes("gemini-2")
+      }
       return false
     })()
 
