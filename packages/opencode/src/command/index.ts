@@ -126,11 +126,6 @@ export namespace Command {
 
     // Add skills as invokable commands
     const seen: Record<string, number> = {}
-    const rank = (scope?: "system" | "user" | "project") => {
-      if (scope === "project") return 3
-      if (scope === "user") return 2
-      return 1
-    }
     for (const skill of await Skill.all()) {
       const next: Info = {
         name: skill.name,
@@ -145,25 +140,16 @@ export namespace Command {
       }
       const existing = result[skill.name]
       if (existing && existing.source !== "skill") continue
-      if (existing) {
-        const count = (seen[skill.name] ?? 0) + 1
-        seen[skill.name] = count
-        if (rank(next.skill_scope) >= rank(existing.skill_scope)) {
-          result["skill:" + skill.name + ":" + count] = existing
-          result[skill.name] = next
-          continue
-        }
-        result["skill:" + skill.name + ":" + count] = next
-        continue
-      }
-      result[skill.name] = next
+      const count = (seen[skill.name] ?? 0) + 1
+      seen[skill.name] = count
+      result["skill:" + skill.name + ":" + count] = next
     }
 
     return result
   })
 
   export async function get(name: string) {
-    return state().then((x) => x[name])
+    return state().then((x) => x[name] ?? Object.values(x).find((item) => item.name === name))
   }
 
   export async function list() {

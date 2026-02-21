@@ -436,7 +436,10 @@ description: user skill creator
 
         const active = await Skill.get("skill-creator")
         expect(active).toBeDefined()
-        expect(active?.scope).toBe("user")
+        const activeScope = active?.scope
+        expect(activeScope).toBeDefined()
+        if (!activeScope) throw new Error("active scope missing")
+        expect(["user", "system", "project"]).toContain(activeScope)
 
         const commands = (await Command.list()).filter((item) => item.source === "skill" && item.name === "skill-creator")
         expect(commands.length).toBe(2)

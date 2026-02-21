@@ -62,12 +62,6 @@ export namespace Skill {
     return process.platform === "win32" ? value.toLowerCase() : value
   }
 
-  const rank = (scope: Scope) => {
-    if (scope === SCOPE.PROJECT) return 3
-    if (scope === SCOPE.USER) return 2
-    return 1
-  }
-
   const scope = (input: string): Scope => {
     const value = key(input)
     const directory = key(Instance.directory)
@@ -79,7 +73,6 @@ export namespace Skill {
   }
 
   export const state = Instance.state(async () => {
-    const skills: Record<string, Info> = {}
     const list: Info[] = []
     const dirs = new Set<string>()
     const groups = new Map<string, number[]>()
@@ -112,7 +105,7 @@ export namespace Skill {
       if (group.length > 0) {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
+          existing: list[group[0]]?.location ?? "",
           duplicate: match,
         })
         for (const i of group) {
@@ -123,10 +116,6 @@ export namespace Skill {
       dirs.add(path.dirname(match))
       list.push(item)
       groups.set(parsed.data.name, [...group, list.length - 1])
-      const previous = skills[parsed.data.name]
-      if (!previous || rank(item.scope ?? SCOPE.USER) >= rank(previous.scope ?? SCOPE.USER)) {
-        skills[parsed.data.name] = item
-      }
     }
 
     const scanExternal = async (root: string, scope: "global" | "project") => {
@@ -211,14 +200,13 @@ export namespace Skill {
     }
 
     return {
-      skills,
       list,
       dirs: Array.from(dirs),
     }
   })
 
   export async function get(name: string) {
-    return state().then((x) => x.skills[name])
+    return state().then((x) => x.list.find((item) => item.name === name))
   }
 
   export async function all() {
