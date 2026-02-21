@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message PtyInfo {
+  string id = 1;
+  string shell = 2;
+  string cwd = 3;
+  int64 pid = 4;
+  int64 created = 5;
+  int64 updated = 6;
+  google.protobuf.Struct metadata = 7;
+}
+
+message ListPtyRequest {}
+
+message ListPtyResponse {
+  repeated PtyInfo ptys = 1;
+}
+
+message CreatePtyRequest {
+  optional string shell = 1;
+  optional string cwd = 2;
+  optional google.protobuf.Struct env = 3;
+}
+
+message GetPtyRequest {
+  string pty_id = 1;
+}
+
+message UpdatePtyRequest {
+  string pty_id = 1;
+  optional string shell = 2;
+  optional string cwd = 3;
+  optional google.protobuf.Struct metadata = 4;
+}
+
+message DeletePtyRequest {
+  string pty_id = 1;
+}
+
+message DeletePtyResponse {
+  bool success = 1;
+}
+
+service PtyService {
+  rpc List(ListPtyRequest) returns (ListPtyResponse) {}
+  rpc Create(CreatePtyRequest) returns (PtyInfo) {}
+  rpc Get(GetPtyRequest) returns (PtyInfo) {}
+  rpc Update(UpdatePtyRequest) returns (PtyInfo) {}
+  rpc Delete(DeletePtyRequest) returns (DeletePtyResponse) {}
+}

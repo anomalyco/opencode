@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message ProjectIcon {
+  optional string url = 1;
+  optional string override = 2;
+  optional string color = 3;
+}
+
+message ProjectCommands {
+  optional string start = 1;
+}
+
+message ProjectTime {
+  int64 created = 1;
+  int64 updated = 2;
+  optional int64 initialized = 3;
+}
+
+message Project {
+  string id = 1;
+  string worktree = 2;
+  optional string vcs = 3;
+  optional string name = 4;
+  optional ProjectIcon icon = 5;
+  optional ProjectCommands commands = 6;
+  ProjectTime time = 7;
+  repeated string sandboxes = 8;
+}
+
+message ListProjectsRequest {}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+}
+
+message GetCurrentProjectRequest {}
+
+message UpdateProjectRequest {
+  string project_id = 1;
+  optional string name = 2;
+  optional ProjectIcon icon = 3;
+  optional ProjectCommands commands = 4;
+}
+
+service ProjectService {
+  rpc List(ListProjectsRequest) returns (ListProjectsResponse) {}
+  rpc GetCurrent(GetCurrentProjectRequest) returns (Project) {}
+  rpc Update(UpdateProjectRequest) returns (Project) {}
+}

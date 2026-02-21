@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message QuestionOption {
+  string id = 1;
+  string value = 2;
+}
+
+message QuestionRequest {
+  string id = 1;
+  string session_id = 2;
+  string title = 3;
+  string message = 4;
+  string type = 5;
+  repeated QuestionOption options = 6;
+}
+
+message ListQuestionsRequest {}
+
+message ListQuestionsResponse {
+  repeated QuestionRequest questions = 1;
+}
+
+message ReplyToQuestionRequest {
+  string request_id = 1;
+  repeated string answers = 2;
+}
+
+message ReplyToQuestionResponse {
+  bool success = 1;
+}
+
+message RejectQuestionRequest {
+  string request_id = 1;
+}
+
+message RejectQuestionResponse {
+  bool success = 1;
+}
+
+service QuestionService {
+  rpc List(ListQuestionsRequest) returns (ListQuestionsResponse) {}
+  rpc Reply(ReplyToQuestionRequest) returns (ReplyToQuestionResponse) {}
+  rpc Reject(RejectQuestionRequest) returns (RejectQuestionResponse) {}
+}

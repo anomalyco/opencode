@@ -1,0 +1,86 @@
+name: gRPC
+
+on:
+  pull_request:
+    paths:
+      - "**/*.proto"
+      - "**/buf*.yaml"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: buf lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Buf
+        uses: bufbuild/buf-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          version: "1.50.0"
+          setup_only: true
+
+      - name: Run buf lint
+        working-directory: packages/opencode
+        run: buf lint
+
+  # Breaking check disabled for initial gRPC PR - protos don't exist in base branch
+  # breaking:
+  #   name: buf breaking
+  #   runs-on: blacksmith-4vcpu-ubuntu-2404
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #
+  #     - name: Fetch base branch
+  #       run: |
+  #         git fetch origin dev:refs/remotes/origin/dev || true
+  #
+  #     - name: Setup Buf
+  #       uses: bufbuild/buf-action@v1
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         version: "1.50.0"
+  #         setup_only: true
+  #
+  #     - name: Run buf breaking
+  #       working-directory: packages/opencode
+  #       run: buf breaking --against '../../.git#branch=origin/dev'
+
+  generate:
+    name: buf generate
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Buf
+        uses: bufbuild/buf-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          version: "1.50.0"
+          setup_only: true
+
+      - name: Install protoc plugins
+        run: |
+          bun add -g @bufbuild/protoc-gen-es @connectrpc/protoc-gen-connect-es
+
+      - name: Run buf generate
+        working-directory: packages/opencode
+        run: buf generate
+
+      - name: Verify generated code is up to date
+        run: |
+          git diff --exit-code packages/opencode/src/grpc/gen/ || (echo "Generated code is out of date. Run 'buf generate' in packages/opencode and commit the changes." && exit 1)
+
+      - name: Typecheck generated code
+        run: bun typecheck

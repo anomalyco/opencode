@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message Config {
+  optional string theme = 1;
+  optional string model = 2;
+  optional string small_model = 3;
+  optional string username = 4;
+  optional string share = 5;
+  optional bool snapshot = 6;
+  repeated string disabled_providers = 7;
+  repeated string enabled_providers = 8;
+  repeated string plugin = 9;
+  repeated string instructions = 10;
+  optional string default_agent = 11;
+  optional string log_level = 12;
+  optional google.protobuf.Struct agent = 13;
+  optional google.protobuf.Struct provider = 14;
+  optional google.protobuf.Struct mcp = 15;
+  optional google.protobuf.Struct keybinds = 16;
+  optional google.protobuf.Struct tui = 17;
+  optional google.protobuf.Struct server = 18;
+  optional google.protobuf.Struct compaction = 19;
+  optional google.protobuf.Struct experimental = 20;
+  optional google.protobuf.Struct permission = 21;
+  optional google.protobuf.Struct command = 22;
+  optional google.protobuf.Struct skills = 23;
+  optional google.protobuf.Struct lsp = 24;
+  optional google.protobuf.Struct formatter = 25;
+}
+
+message GetConfigRequest {}
+
+message UpdateConfigRequest {
+  Config config = 1;
+}
+
+service ConfigService {
+  rpc Get(GetConfigRequest) returns (Config) {}
+  rpc Update(UpdateConfigRequest) returns (Config) {}
+}

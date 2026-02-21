@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "opencode/v1/common.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message PartTime {
+  int64 start = 1;
+  optional int64 end = 2;
+}
+
+message TokenUsage {
+  optional int64 total = 1;
+  int64 input = 2;
+  int64 output = 3;
+  int64 reasoning = 4;
+  int64 cache_read = 5;
+  int64 cache_write = 6;
+}
+
+message TextPart {
+  string text = 1;
+  optional bool synthetic = 2;
+  optional bool ignored = 3;
+  optional PartTime time = 4;
+  optional google.protobuf.Struct metadata = 5;
+}
+
+message ReasoningPart {
+  string text = 1;
+  optional google.protobuf.Struct metadata = 2;
+  PartTime time = 3;
+}
+
+message FilePartSourceText {
+  string value = 1;
+  int64 start = 2;
+  int64 end = 3;
+}
+
+message FileSource {
+  FilePartSourceText text = 1;
+  string path = 2;
+}
+
+message SymbolSource {
+  FilePartSourceText text = 1;
+  string path = 2;
+  google.protobuf.Struct range = 3;
+  string name = 4;
+  int64 kind = 5;
+}
+
+message ResourceSource {
+  FilePartSourceText text = 1;
+  string client_name = 2;
+  string uri = 3;
+}
+
+message FilePartSource {
+  oneof source {
+    FileSource file = 1;
+    SymbolSource symbol = 2;
+    ResourceSource resource = 3;
+  }
+}
+
+message FilePart {
+  string mime = 1;
+  optional string filename = 2;
+  string url = 3;
+  optional FilePartSource source = 4;
+}
+
+message AgentPartSource {
+  string value = 1;
+  int64 start = 2;
+  int64 end = 3;
+}
+
+message AgentPart {
+  string name = 1;
+  optional AgentPartSource source = 2;
+}
+
+message CompactionPart {
+  bool auto = 1;
+}
+
+message SubtaskModel {
+  string provider_id = 1;
+  string model_id = 2;
+}
+
+message SubtaskPart {
+  string prompt = 1;
+  string description = 2;
+  string agent = 3;
+  optional SubtaskModel model = 4;
+  optional string command = 5;
+}
+
+message APIError {
+  string message = 1;
+  optional int64 status_code = 2;
+  bool is_retryable = 3;
+  map<string, string> response_headers = 4;
+  optional string response_body = 5;
+  map<string, string> metadata = 6;
+}
+
+message RetryPart {
+  int64 attempt = 1;
+  APIError error = 2;
+  int64 time_created = 3;
+}
+
+message StepStartPart {
+  optional string snapshot = 1;
+}
+
+message StepFinishPart {
+  string reason = 1;
+  optional string snapshot = 2;
+  double cost = 3;
+  TokenUsage tokens = 4;
+}
+
+message ToolStatePending {
+  google.protobuf.Struct input = 1;
+  string raw = 2;
+}
+
+message ToolStateRunning {
+  google.protobuf.Struct input = 1;
+  optional string title = 2;
+  optional google.protobuf.Struct metadata = 3;
+  int64 start = 4;
+}
+
+message ToolStateCompletedTime {
+  int64 start = 1;
+  int64 end = 2;
+  optional int64 compacted = 3;
+}
+
+message ToolStateCompleted {
+  google.protobuf.Struct input = 1;
+  string output = 2;
+  string title = 3;
+  google.protobuf.Struct metadata = 4;
+  ToolStateCompletedTime time = 5;
+  repeated FilePart attachments = 6;
+}
+
+message ToolStateError {
+  google.protobuf.Struct input = 1;
+  string error = 2;
+  optional google.protobuf.Struct metadata = 3;
+  int64 start = 4;
+  int64 end = 5;
+}
+
+message ToolState {
+  oneof state {
+    ToolStatePending pending = 1;
+    ToolStateRunning running = 2;
+    ToolStateCompleted completed = 3;
+    ToolStateError error = 4;
+  }
+}
+
+message ToolPart {
+  string call_id = 1;
+  string tool = 2;
+  ToolState state = 3;
+  optional google.protobuf.Struct metadata = 4;
+}
+
+message SnapshotPart {
+  string snapshot = 1;
+}
+
+message PatchPart {
+  string hash = 1;
+  repeated string files = 2;
+}
+
+message Part {
+  string id = 1;
+  string session_id = 2;
+  string message_id = 3;
+  oneof part {
+    TextPart text = 4;
+    ReasoningPart reasoning = 5;
+    FilePart file = 6;
+    AgentPart agent = 7;
+    CompactionPart compaction = 8;
+    SubtaskPart subtask = 9;
+    RetryPart retry = 10;
+    StepStartPart step_start = 11;
+    StepFinishPart step_finish = 12;
+    ToolPart tool = 13;
+    SnapshotPart snapshot = 14;
+    PatchPart patch = 15;
+  }
+}
+
+message MessageModel {
+  string provider_id = 1;
+  string model_id = 2;
+}
+
+message MessageSummary {
+  optional string title = 1;
+  optional string body = 2;
+  repeated FileDiff diffs = 3;
+}
+
+message UserMessage {
+  int64 time_created = 1;
+  optional google.protobuf.Struct format = 2;
+  optional MessageSummary summary = 3;
+  string agent = 4;
+  MessageModel model = 5;
+  optional string system = 6;
+  map<string, bool> tools = 7;
+  optional string variant = 8;
+}
+
+message MessageError {
+  string name = 1;
+  google.protobuf.Struct data = 2;
+}
+
+message MessagePath {
+  string cwd = 1;
+  string root = 2;
+}
+
+message AssistantMessage {
+  int64 time_created = 1;
+  optional int64 time_completed = 2;
+  optional MessageError error = 3;
+  string parent_id = 4;
+  string model_id = 5;
+  string provider_id = 6;
+  string mode = 7;
+  string agent = 8;
+  MessagePath path = 9;
+  optional bool summary = 10;
+  double cost = 11;
+  TokenUsage tokens = 12;
+  optional google.protobuf.Struct structured = 13;
+  optional string variant = 14;
+  optional string finish = 15;
+}
+
+message Message {
+  string id = 1;
+  string session_id = 2;
+  oneof message {
+    UserMessage user = 3;
+    AssistantMessage assistant = 4;
+  }
+}

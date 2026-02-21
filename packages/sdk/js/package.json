@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "./script/build.ts"
+    "build": "./script/build.ts",
+    "buf:generate": "buf generate"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -36,7 +37,11 @@
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@bufbuild/protobuf": "^1.10.0",
+    "@connectrpc/connect": "^1.6.1",
+    "@connectrpc/connect-web": "^1.6.1"
+  },
   "publishConfig": {
     "directory": "dist"
   }

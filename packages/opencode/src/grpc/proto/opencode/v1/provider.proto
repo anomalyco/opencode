@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message ModelApi {
+  string id = 1;
+  string url = 2;
+  string npm = 3;
+}
+
+message ModelModalities {
+  bool text = 1;
+  bool audio = 2;
+  bool image = 3;
+  bool video = 4;
+  bool pdf = 5;
+}
+
+message ModelCapabilities {
+  bool temperature = 1;
+  bool reasoning = 2;
+  bool attachment = 3;
+  bool toolcall = 4;
+  ModelModalities input = 5;
+  ModelModalities output = 6;
+  bool interleaved = 7;
+}
+
+message ModelCostTier {
+  double input = 1;
+  double output = 2;
+  double cache_read = 3;
+  double cache_write = 4;
+}
+
+message ModelCost {
+  double input = 1;
+  double output = 2;
+  double cache_read = 3;
+  double cache_write = 4;
+  optional ModelCostTier experimental_over_200k = 5;
+}
+
+message ModelLimit {
+  int64 context = 1;
+  optional int64 input = 2;
+  int64 output = 3;
+}
+
+message Model {
+  string id = 1;
+  string provider_id = 2;
+  ModelApi api = 3;
+  string name = 4;
+  optional string family = 5;
+  ModelCapabilities capabilities = 6;
+  ModelCost cost = 7;
+  ModelLimit limit = 8;
+  string status = 9;
+  google.protobuf.Struct options = 10;
+  map<string, string> headers = 11;
+  string release_date = 12;
+  optional google.protobuf.Struct variants = 13;
+}
+
+message Provider {
+  string id = 1;
+  string name = 2;
+  string source = 3;
+  repeated string env = 4;
+  optional string key = 5;
+  google.protobuf.Struct options = 6;
+  map<string, Model> models = 7;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated Provider providers = 1;
+  map<string, string> default_models = 2;
+  repeated string connected = 3;
+}
+
+message GetProviderAuthRequest {}
+
+message GetProviderAuthResponse {
+  google.protobuf.Struct methods = 1;
+}
+
+message OAuthAuthorizeRequest {
+  string provider_id = 1;
+  int32 method = 2;
+}
+
+message OAuthAuthorizeResponse {
+  optional string url = 1;
+  optional string method = 2;
+}
+
+message OAuthCallbackRequest {
+  string provider_id = 1;
+  int32 method = 2;
+  optional string code = 3;
+}
+
+message OAuthCallbackResponse {
+  bool success = 1;
+}
+
+service ProviderService {
+  rpc List(ListProvidersRequest) returns (ListProvidersResponse) {}
+  rpc GetAuth(GetProviderAuthRequest) returns (GetProviderAuthResponse) {}
+  rpc OAuthAuthorize(OAuthAuthorizeRequest) returns (OAuthAuthorizeResponse) {}
+  rpc OAuthCallback(OAuthCallbackRequest) returns (OAuthCallbackResponse) {}
+}

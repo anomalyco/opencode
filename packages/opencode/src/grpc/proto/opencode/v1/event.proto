@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "opencode/v1/common.proto";
+import "opencode/v1/session.proto";
+import "opencode/v1/message.proto";
+import "opencode/v1/project.proto";
+import "opencode/v1/permission.proto";
+import "opencode/v1/pty.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message SessionCreatedEvent {
+  Session info = 1;
+}
+
+message SessionUpdatedEvent {
+  Session info = 1;
+}
+
+message SessionDeletedEvent {
+  Session info = 1;
+}
+
+message SessionDiffEvent {
+  string session_id = 1;
+  repeated FileDiff diff = 2;
+}
+
+message SessionErrorEvent {
+  optional string session_id = 1;
+  google.protobuf.Struct error = 2;
+}
+
+message SessionStatusEvent {
+  string session_id = 1;
+  SessionStatus status = 2;
+}
+
+message SessionIdleEvent {
+  string session_id = 1;
+}
+
+message MessageUpdatedEvent {
+  Message info = 1;
+}
+
+message MessageRemovedEvent {
+  string session_id = 1;
+  string message_id = 2;
+}
+
+message MessagePartUpdatedEvent {
+  Part part = 1;
+}
+
+message MessagePartDeltaEvent {
+  string session_id = 1;
+  string message_id = 2;
+  string part_id = 3;
+  string field = 4;
+  string delta = 5;
+}
+
+message MessagePartRemovedEvent {
+  string session_id = 1;
+  string message_id = 2;
+  string part_id = 3;
+}
+
+message ProjectUpdatedEvent {
+  Project info = 1;
+}
+
+message PermissionAskedEvent {
+  PermissionRequest request = 1;
+}
+
+message PermissionRepliedEvent {
+  string session_id = 1;
+  string request_id = 2;
+  string reply = 3;
+}
+
+message TodoItem {
+  string content = 1;
+  string status = 2;
+  string priority = 3;
+}
+
+message TodoUpdatedEvent {
+  string session_id = 1;
+  repeated TodoItem todos = 2;
+}
+
+message PtyCreatedEvent {
+  PtyInfo info = 1;
+}
+
+message PtyUpdatedEvent {
+  PtyInfo info = 1;
+}
+
+message PtyExitedEvent {
+  string id = 1;
+  int64 exit_code = 2;
+}
+
+message PtyDeletedEvent {
+  string id = 1;
+}
+
+message InstallationUpdatedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message InstallationUpdateAvailableEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message ServerConnectedEvent {
+}
+
+message GlobalDisposedEvent {
+}
+
+message InstanceDisposedEvent {
+  string instance_id = 1;
+}
+
+message LspUpdatedEvent {
+}
+
+message LspDiagnosticsEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message WorktreeReadyEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message WorktreeFailedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message McpToolsChangedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message McpBrowserOpenFailedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message FileEditedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message FileWatcherUpdatedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message VcsBranchUpdatedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message QuestionAskedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message QuestionRepliedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message QuestionRejectedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message CommandExecutedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message CompactionCompactedEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message IdeInstalledEvent {
+  google.protobuf.Struct data = 1;
+}
+
+message BusEvent {
+  string type = 1;
+  oneof event {
+    SessionCreatedEvent session_created = 2;
+    SessionUpdatedEvent session_updated = 3;
+    SessionDeletedEvent session_deleted = 4;
+    SessionDiffEvent session_diff = 5;
+    SessionErrorEvent session_error = 6;
+    SessionStatusEvent session_status = 7;
+    SessionIdleEvent session_idle = 8;
+    MessageUpdatedEvent message_updated = 9;
+    MessageRemovedEvent message_removed = 10;
+    MessagePartUpdatedEvent message_part_updated = 11;
+    MessagePartDeltaEvent message_part_delta = 12;
+    MessagePartRemovedEvent message_part_removed = 13;
+    ProjectUpdatedEvent project_updated = 14;
+    PermissionAskedEvent permission_asked = 15;
+    PermissionRepliedEvent permission_replied = 16;
+    TodoUpdatedEvent todo_updated = 17;
+    PtyCreatedEvent pty_created = 18;
+    PtyUpdatedEvent pty_updated = 19;
+    PtyExitedEvent pty_exited = 20;
+    PtyDeletedEvent pty_deleted = 21;
+    InstallationUpdatedEvent installation_updated = 22;
+    InstallationUpdateAvailableEvent installation_update_available = 23;
+    ServerConnectedEvent server_connected = 24;
+    GlobalDisposedEvent global_disposed = 25;
+    InstanceDisposedEvent instance_disposed = 26;
+    LspUpdatedEvent lsp_updated = 27;
+    LspDiagnosticsEvent lsp_diagnostics = 28;
+    WorktreeReadyEvent worktree_ready = 29;
+    WorktreeFailedEvent worktree_failed = 30;
+    McpToolsChangedEvent mcp_tools_changed = 31;
+    McpBrowserOpenFailedEvent mcp_browser_open_failed = 32;
+    FileEditedEvent file_edited = 33;
+    FileWatcherUpdatedEvent file_watcher_updated = 34;
+    VcsBranchUpdatedEvent vcs_branch_updated = 35;
+    QuestionAskedEvent question_asked = 36;
+    QuestionRepliedEvent question_replied = 37;
+    QuestionRejectedEvent question_rejected = 38;
+    CommandExecutedEvent command_executed = 39;
+    CompactionCompactedEvent compaction_compacted = 40;
+    IdeInstalledEvent ide_installed = 41;
+  }
+}
+
+message SubscribeRequest {
+  string directory = 1;
+}
+
+message SubscribeGlobalRequest {
+}
+
+service EventService {
+  rpc Subscribe(SubscribeRequest) returns (stream BusEvent) {}
+  rpc SubscribeGlobal(SubscribeGlobalRequest) returns (stream BusEvent) {}
+}

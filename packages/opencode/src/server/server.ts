@@ -582,10 +582,30 @@ export namespace Server {
   }) {
     _corsWhitelist = opts.cors ?? []
 
+    // Lazy-load gRPC handler to avoid impacting server startup and e2e tests
+    let connectHandler: ((req: Request) => Promise<Response>) | null = null
+    const getConnectHandler = async (): Promise<(req: Request) => Promise<Response>> => {
+      if (!connectHandler) {
+        const { createConnectRouter } = await import("@connectrpc/connect")
+        const { createHandler, createRouter } = await import("../grpc")
+        const router = createConnectRouter()
+        createRouter(router)
+        connectHandler = createHandler(router)
+      }
+      return connectHandler
+    }
+
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch: async (req: Request, ...rest: any[]) => {
+        const ct = req.headers.get("content-type") ?? ""
+        if (ct.startsWith("application/connect+") || ct.startsWith("application/grpc")) {
+          const handler = await getConnectHandler()
+          return handler(req)
+        }
+        return App().fetch(req, ...rest)
+      },
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {

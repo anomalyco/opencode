@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message FileDiff {
+  string file = 1;
+  int64 additions = 2;
+  int64 deletions = 3;
+}
+
+enum PermissionAction {
+  PERMISSION_ACTION_UNSPECIFIED = 0;
+  PERMISSION_ACTION_ALLOW = 1;
+  PERMISSION_ACTION_DENY = 2;
+  PERMISSION_ACTION_ASK = 3;
+}
+
+message PermissionRule {
+  string permission = 1;
+  string pattern = 2;
+  PermissionAction action = 3;
+}

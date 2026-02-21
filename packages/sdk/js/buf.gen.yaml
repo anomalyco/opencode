@@ -1,0 +1,19 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/anomalyco/opencode/proto
+plugins:
+  - remote: buf.build/bufbuild/es:v1.10.0
+    out: src/grpc/gen
+    opt:
+      - target=ts
+      - import_extension=.js
+  - remote: buf.build/connectrpc/es:v1.6.1
+    out: src/grpc/gen
+    opt:
+      - target=ts
+      - import_extension=.js
+inputs:
+  - directory: ../../opencode/src/grpc/proto

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message PermissionRequestTool {
+  string message_id = 1;
+  string call_id = 2;
+}
+
+message PermissionRequest {
+  string id = 1;
+  string session_id = 2;
+  string permission = 3;
+  repeated string patterns = 4;
+  google.protobuf.Struct metadata = 5;
+  repeated string always = 6;
+  optional PermissionRequestTool tool = 7;
+}
+
+message ListPermissionsRequest {}
+
+message ListPermissionsResponse {
+  repeated PermissionRequest permissions = 1;
+}
+
+message ReplyToPermissionRequest {
+  string request_id = 1;
+  string reply = 2;
+  optional string message = 3;
+}
+
+message ReplyToPermissionResponse {
+  bool success = 1;
+}
+
+service PermissionService {
+  rpc List(ListPermissionsRequest) returns (ListPermissionsResponse) {}
+  rpc Reply(ReplyToPermissionRequest) returns (ReplyToPermissionResponse) {}
+}

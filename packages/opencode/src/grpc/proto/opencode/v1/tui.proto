@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message AppendPromptRequest {
+  string text = 1;
+}
+
+message ToastVariant {
+  enum Type {
+    TOAST_VARIANT_UNSPECIFIED = 0;
+    TOAST_VARIANT_INFO = 1;
+    TOAST_VARIANT_SUCCESS = 2;
+    TOAST_VARIANT_WARNING = 3;
+    TOAST_VARIANT_ERROR = 4;
+  }
+}
+
+message ShowToastRequest {
+  optional string title = 1;
+  string message = 2;
+  ToastVariant.Type variant = 3;
+  optional int64 duration = 4;
+}
+
+message ExecuteCommandRequest {
+  string command = 1;
+}
+
+message SelectSessionRequest {
+  string session_id = 1;
+}
+
+message PublishRequest {
+  string type = 1;
+  bytes properties = 2;
+}
+
+service TuiService {
+  rpc AppendPrompt(AppendPromptRequest) returns (google.protobuf.Empty) {}
+  rpc OpenHelp(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc OpenSessions(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc OpenThemes(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc OpenModels(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc SubmitPrompt(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc ClearPrompt(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc ExecuteCommand(ExecuteCommandRequest) returns (google.protobuf.Empty) {}
+  rpc ShowToast(ShowToastRequest) returns (google.protobuf.Empty) {}
+  rpc SelectSession(SelectSessionRequest) returns (google.protobuf.Empty) {}
+  rpc Publish(PublishRequest) returns (google.protobuf.Empty) {}
+}

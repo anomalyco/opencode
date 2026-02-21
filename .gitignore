@@ -28,3 +28,6 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Generated gRPC/protobuf files
+packages/opencode/src/grpc/gen/

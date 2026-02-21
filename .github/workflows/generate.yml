@@ -18,6 +18,12 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Setup Buf
+        uses: bufbuild/buf-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          version: "1.50.0"
+
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer

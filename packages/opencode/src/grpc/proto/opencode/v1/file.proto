@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message FindTextRequest {
+  string pattern = 1;
+}
+
+message FindTextMatch {
+  string path = 1;
+  int64 line = 2;
+  int64 column = 3;
+  string text = 4;
+}
+
+message FindTextResponse {
+  repeated FindTextMatch matches = 1;
+}
+
+message FindFilesRequest {
+  string query = 1;
+  optional bool dirs = 2;
+  optional string type = 3;
+  optional int32 limit = 4;
+}
+
+message FindFilesResponse {
+  repeated string paths = 1;
+}
+
+message FindSymbolsRequest {
+  string query = 1;
+}
+
+message Symbol {
+  string name = 1;
+  string kind = 2;
+  string container = 3;
+  string path = 4;
+  int64 line = 5;
+  int64 column = 6;
+}
+
+message FindSymbolsResponse {
+  repeated Symbol symbols = 1;
+}
+
+message ListFilesRequest {
+  string path = 1;
+}
+
+message FileNode {
+  string name = 1;
+  string path = 2;
+  bool is_dir = 3;
+  int64 size = 4;
+  int64 modified = 5;
+}
+
+message ListFilesResponse {
+  repeated FileNode nodes = 1;
+}
+
+message ReadFileRequest {
+  string path = 1;
+}
+
+message ReadFileResponse {
+  string path = 1;
+  string content = 2;
+  int64 size = 3;
+  int64 modified = 4;
+}
+
+message GetFileStatusRequest {}
+
+message FileInfo {
+  string path = 1;
+  string status = 2;
+}
+
+message GetFileStatusResponse {
+  repeated FileInfo files = 1;
+}
+
+service FileService {
+  rpc FindText(FindTextRequest) returns (FindTextResponse) {}
+  rpc FindFiles(FindFilesRequest) returns (FindFilesResponse) {}
+  rpc FindSymbols(FindSymbolsRequest) returns (FindSymbolsResponse) {}
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse) {}
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse) {}
+  rpc GetFileStatus(GetFileStatusRequest) returns (GetFileStatusResponse) {}
+}

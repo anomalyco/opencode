@@ -1,0 +1,8 @@
+version: v2
+plugins:
+  - local: protoc-gen-es
+    out: src/grpc/gen
+    opt: target=ts
+  - local: protoc-gen-connect-es
+    out: src/grpc/gen
+    opt: target=ts

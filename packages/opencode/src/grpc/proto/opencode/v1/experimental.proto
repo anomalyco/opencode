@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "opencode/v1/common.proto";
+import "opencode/v1/session.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+// Tool messages
+message ListToolIdsRequest {}
+
+message ListToolIdsResponse {
+  repeated string ids = 1;
+}
+
+message ListToolsRequest {
+  string provider = 1;
+  string model = 2;
+}
+
+message Tool {
+  string id = 1;
+  string description = 2;
+  string parameters = 3; // JSON schema as string
+}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+}
+
+// Worktree messages
+message Worktree {
+  string name = 1;
+  string branch = 2;
+  string directory = 3;
+}
+
+message CreateWorktreeRequest {
+  optional string name = 1;
+  optional string start_command = 2;
+}
+
+message CreateWorktreeResponse {
+  Worktree worktree = 1;
+}
+
+message ListWorktreesRequest {}
+
+message ListWorktreesResponse {
+  repeated string directories = 1;
+}
+
+message RemoveWorktreeRequest {
+  string directory = 1;
+}
+
+message RemoveWorktreeResponse {
+  bool success = 1;
+}
+
+message ResetWorktreeRequest {
+  string directory = 1;
+}
+
+message ResetWorktreeResponse {
+  bool success = 1;
+}
+
+// Global Session messages
+message GlobalSessionProject {
+  string id = 1;
+  optional string name = 2;
+  string worktree = 3;
+}
+
+message GlobalSession {
+  string id = 1;
+  string slug = 2;
+  string project_id = 3;
+  string directory = 4;
+  optional string parent_id = 5;
+  optional SessionSummary summary = 6;
+  optional SessionShare share = 7;
+  string title = 8;
+  string version = 9;
+  SessionTime time = 10;
+  repeated PermissionRule permission = 11;
+  optional SessionRevert revert = 12;
+  GlobalSessionProject project = 13;
+}
+
+message ListGlobalSessionsRequest {
+  optional string directory = 1;
+  optional bool roots = 2;
+  optional int64 start = 3;
+  optional int64 cursor = 4;
+  optional string search = 5;
+  optional int32 limit = 6;
+  optional bool archived = 7;
+}
+
+message ListGlobalSessionsResponse {
+  repeated GlobalSession sessions = 1;
+  optional int64 next_cursor = 2;
+}
+
+// MCP Resource messages
+message McpResource {
+  string name = 1;
+  string uri = 2;
+  optional string description = 3;
+  optional string mime_type = 4;
+  string client = 5;
+}
+
+message ListMcpResourcesRequest {}
+
+message ListMcpResourcesResponse {
+  repeated McpResource resources = 1;
+}
+
+service ExperimentalService {
+  rpc ListToolIds(ListToolIdsRequest) returns (ListToolIdsResponse) {}
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {}
+  rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
+  rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
+  rpc RemoveWorktree(RemoveWorktreeRequest) returns (RemoveWorktreeResponse) {}
+  rpc ResetWorktree(ResetWorktreeRequest) returns (ResetWorktreeResponse) {}
+  rpc ListGlobalSessions(ListGlobalSessionsRequest) returns (ListGlobalSessionsResponse) {}
+  rpc ListMcpResources(ListMcpResourcesRequest) returns (ListMcpResourcesResponse) {}
+}

@@ -1,0 +1,14 @@
+version: v2
+modules:
+  - path: src/grpc/proto
+lint:
+  use:
+    - STANDARD
+  except:
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - ENUM_VALUE_PREFIX
+breaking:
+  use:
+    - FILE

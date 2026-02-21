@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+import "opencode/v1/common.proto";
+import "opencode/v1/message.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message SessionSummary {
+  int64 additions = 1;
+  int64 deletions = 2;
+  int64 files = 3;
+  repeated FileDiff diffs = 4;
+}
+
+message SessionShare {
+  string url = 1;
+}
+
+message SessionTime {
+  int64 created = 1;
+  int64 updated = 2;
+  optional int64 compacting = 3;
+  optional int64 archived = 4;
+}
+
+message SessionRevert {
+  string message_id = 1;
+  optional string part_id = 2;
+  optional string snapshot = 3;
+  optional string diff = 4;
+}
+
+message Session {
+  string id = 1;
+  string slug = 2;
+  string project_id = 3;
+  string directory = 4;
+  optional string parent_id = 5;
+  optional SessionSummary summary = 6;
+  optional SessionShare share = 7;
+  string title = 8;
+  string version = 9;
+  SessionTime time = 10;
+  repeated PermissionRule permission = 11;
+  optional SessionRevert revert = 12;
+}
+
+message SessionStatusIdle {
+}
+
+message SessionStatusBusy {
+}
+
+message SessionStatusRetry {
+  int64 attempt = 1;
+  string message = 2;
+  int64 next = 3;
+}
+
+message SessionStatus {
+  oneof status {
+    SessionStatusIdle idle = 1;
+    SessionStatusBusy busy = 2;
+    SessionStatusRetry retry = 3;
+  }
+}
+
+message PromptRequest {
+  string session_id = 1;
+  string directory = 2;
+  string text = 3;
+  optional string provider_id = 4;
+  optional string model_id = 5;
+  optional string agent_id = 6;
+  repeated string attachments = 7;
+}
+
+message PromptResponsePart {
+  Part part = 1;
+  optional string message_id = 2;
+}
+
+message ListSessionsRequest {
+  optional string directory = 1;
+  optional bool roots = 2;
+  optional int64 start = 3;
+  optional string search = 4;
+  optional int32 limit = 5;
+}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message CreateSessionRequest {
+  optional string parent_id = 1;
+  optional string title = 2;
+  repeated PermissionRule permission = 3;
+}
+
+message UpdateSessionRequest {
+  string session_id = 1;
+  optional string title = 2;
+  optional int64 archived = 3;
+}
+
+message DeleteSessionRequest {
+  string session_id = 1;
+}
+
+message ForkSessionRequest {
+  string session_id = 1;
+  optional string message_id = 2;
+}
+
+message GetSessionChildrenRequest {
+  string session_id = 1;
+}
+
+message GetSessionChildrenResponse {
+  repeated Session sessions = 1;
+}
+
+message AbortSessionRequest {
+  string session_id = 1;
+}
+
+service SessionService {
+  rpc Prompt(PromptRequest) returns (stream PromptResponsePart) {}
+  rpc List(ListSessionsRequest) returns (ListSessionsResponse) {}
+  rpc Get(GetSessionRequest) returns (Session) {}
+  rpc Create(CreateSessionRequest) returns (Session) {}
+  rpc Update(UpdateSessionRequest) returns (Session) {}
+  rpc Delete(DeleteSessionRequest) returns (google.protobuf.Empty) {}
+  rpc Fork(ForkSessionRequest) returns (Session) {}
+  rpc GetChildren(GetSessionChildrenRequest) returns (GetSessionChildrenResponse) {}
+  rpc Abort(AbortSessionRequest) returns (google.protobuf.Empty) {}
+}

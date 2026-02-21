@@ -1,0 +1,13 @@
+syntax = "proto3";
+package opencode.v1;
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message HealthCheckRequest {}
+message HealthCheckResponse {
+  bool healthy = 1;
+  string version = 2;
+}
+
+service HealthService {
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse) {}
+}

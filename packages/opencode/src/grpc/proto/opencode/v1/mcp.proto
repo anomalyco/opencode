@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package opencode.v1;
+
+option go_package = "github.com/anomalyco/opencode/proto/opencode/v1;opencodev1";
+
+message McpStatusConnected {
+  string status = 1;
+}
+
+message McpStatusDisabled {
+  string status = 1;
+}
+
+message McpStatusFailed {
+  string status = 1;
+  string error = 2;
+}
+
+message McpStatusNeedsAuth {
+  string status = 1;
+}
+
+message McpStatusNeedsClientRegistration {
+  string status = 1;
+  string error = 2;
+}
+
+message McpStatus {
+  oneof status_type {
+    McpStatusConnected connected = 1;
+    McpStatusDisabled disabled = 2;
+    McpStatusFailed failed = 3;
+    McpStatusNeedsAuth needs_auth = 4;
+    McpStatusNeedsClientRegistration needs_client_registration = 5;
+  }
+}
+
+message GetMcpStatusRequest {}
+
+message GetMcpStatusResponse {
+  map<string, McpStatus> servers = 1;
+}
+
+message McpOAuthConfig {
+  optional string client_id = 1;
+  optional string client_secret = 2;
+  optional string scope = 3;
+}
+
+message McpLocalConfig {
+  string type = 1;
+  repeated string command = 2;
+  map<string, string> environment = 3;
+  optional bool enabled = 4;
+  optional int32 timeout = 5;
+}
+
+message McpRemoteConfig {
+  string type = 1;
+  string url = 2;
+  optional bool enabled = 3;
+  map<string, string> headers = 4;
+  oneof oauth {
+    McpOAuthConfig oauth_config = 5;
+    bool oauth_disabled = 6;
+  }
+  optional int32 timeout = 7;
+}
+
+message AddServerRequest {
+  string name = 1;
+  oneof config {
+    McpLocalConfig local = 2;
+    McpRemoteConfig remote = 3;
+  }
+}
+
+message AddServerResponse {
+  map<string, McpStatus> servers = 1;
+}
+
+message StartAuthRequest {
+  string name = 1;
+}
+
+message StartAuthResponse {
+  string authorization_url = 1;
+}
+
+message CompleteAuthRequest {
+  string name = 1;
+  string code = 2;
+}
+
+message CompleteAuthResponse {
+  McpStatus status = 1;
+}
+
+message ConnectRequest {
+  string name = 1;
+}
+
+message ConnectResponse {
+  bool success = 1;
+}
+
+message DisconnectRequest {
+  string name = 1;
+}
+
+message DisconnectResponse {
+  bool success = 1;
+}
+
+service McpService {
+  rpc GetStatus(GetMcpStatusRequest) returns (GetMcpStatusResponse) {}
+  rpc AddServer(AddServerRequest) returns (AddServerResponse) {}
+  rpc StartAuth(StartAuthRequest) returns (StartAuthResponse) {}
+  rpc CompleteAuth(CompleteAuthRequest) returns (CompleteAuthResponse) {}
+  rpc Connect(ConnectRequest) returns (ConnectResponse) {}
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse) {}
+}
