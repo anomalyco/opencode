@@ -4,11 +4,26 @@ import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
 
 export namespace ConfigMarkdown {
-  export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
+  // Note: We avoid lookbehind assertions (ES2018) here because they crash on
+  // macOS Monterey's WKWebView (JavaScriptCore). We capture the preceding
+  // character in group 1 and the file path in group 2, then the `files()`
+  // helper filters matches where group 1 indicates a word char or backtick.
+  export const FILE_REGEX = /(^|[^\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/gm
   export const SHELL_REGEX = /!`([^`]+)`/g
 
   export function files(template: string) {
-    return Array.from(template.matchAll(FILE_REGEX))
+    const matches = Array.from(template.matchAll(FILE_REGEX))
+    // Re-map so that callers using match[1] still get the file path.
+    // group 1 = preceding char (or empty at line start), group 2 = file path.
+    return matches
+      .filter((m) => m[1] === "" || (!/[\w`]/.test(m[1])))
+      .map((m) => {
+        // Shift group 2 (the path) into slot 1 so existing call-sites work.
+        const mapped = [m[0], m[2], ...m.slice(3)] as unknown as RegExpExecArray
+        mapped.index = m.index + m[1].length  // adjust index to point at @
+        mapped.input = m.input
+        return mapped
+      })
   }
 
   export function shell(template: string) {

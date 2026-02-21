@@ -393,15 +393,18 @@ function renderMathInText(text: string): string {
   })
 
   // Inline math: $...$
-  const inlineMathRegex = /(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g
-  result = result.replace(inlineMathRegex, (_, math) => {
+  // Note: We avoid lookbehind assertions (ES2018) here because they crash on
+  // macOS Monterey's WKWebView (JavaScriptCore). Instead we capture the
+  // character before $ explicitly and restore it in the replacement.
+  const inlineMathRegex = /(^|[^$])\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/gm
+  result = result.replace(inlineMathRegex, (_, prefix, math) => {
     try {
-      return katex.renderToString(math, {
+      return prefix + katex.renderToString(math, {
         displayMode: false,
         throwOnError: false,
       })
     } catch {
-      return `$${math}$`
+      return `${prefix}$${math}$`
     }
   })
 

@@ -38,6 +38,7 @@
     "@tauri-apps/cli": "^2",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "@vitejs/plugin-legacy": "^6.1.1",
     "typescript": "~5.6.2",
     "vite": "catalog:"
   }
