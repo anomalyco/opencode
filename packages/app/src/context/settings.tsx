@@ -24,6 +24,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    showReasoningSummaries: boolean
   }
   updates: {
     startup: boolean
@@ -44,6 +45,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    showReasoningSummaries: false,
   },
   updates: {
     startup: true,
@@ -123,6 +125,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+        showReasoningSummaries: withFallback(
+          () => store.general?.showReasoningSummaries,
+          defaultSettings.general.showReasoningSummaries,
+        ),
+        setShowReasoningSummaries(value: boolean) {
+          setStore("general", "showReasoningSummaries", value)
         },
       },
       updates: {
