@@ -78,8 +78,6 @@ export namespace SessionPrompt {
     },
     async (current) => {
       for (const item of Object.values(current)) {
-        // Avoid unhandled rejections during process/Instance teardown.
-        // Active loops/shells will observe abort and run their own deferred cleanup.
         item.callbacks = []
         item.abort.abort()
       }
