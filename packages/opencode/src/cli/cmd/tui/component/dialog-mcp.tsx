@@ -46,8 +46,8 @@ export function DialogMcp() {
 
   const keybinds = createMemo(() => [
     {
-      keybind: Keybind.parse("space")[0],
-      title: "toggle",
+      keybind: Keybind.parse("ctrl+a")[0],
+      title: "toggle (ctrl+a)",
       onTrigger: async (option: DialogSelectOption<string>) => {
         if (loading() !== null) return
 
