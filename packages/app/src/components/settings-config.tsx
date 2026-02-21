@@ -87,7 +87,7 @@ export const SettingsConfig: Component = () => {
     setJsonErrors([])
   })
 
-  const globalPath = createMemo(() => globalSync.data.path.config.replace(/\\/g, "/"))
+  const globalPath = createMemo(() => joinPath(globalSync.data.path.config.replace(/\\/g, "/"), "opencode.json"))
 
   const projectPath = createMemo(() => {
     const worktree = currentDir()
@@ -152,7 +152,8 @@ export const SettingsConfig: Component = () => {
     const path = selectedPath()
     if (!path) return
 
-    const isGlobal = path === globalPath()
+  const isGlobal = path === globalPath()
+
     if (isGlobal) {
       const config = tryParse(configContent())
       if (!config) {
@@ -163,6 +164,21 @@ export const SettingsConfig: Component = () => {
         })
         return
       }
+
+      if (platform.platform === "desktop" && platform.writeConfigFile) {
+        setLoading(true)
+        const err = await safeWriteConfigFile(path, configContent())
+        setLoading(false)
+        if (err) {
+          showToast({
+            variant: "error",
+            title: language.t("common.error"),
+            description: String(err),
+          })
+          return
+        }
+      }
+
       await globalSDK.client.global.config
         .update({ config })
         .then(async (result) => {
