@@ -15,6 +15,14 @@ import { Session } from "../session"
 
 export namespace File {
   const log = Log.create({ service: "file" })
+  type SearchResult = { files: string[]; dirs: string[] }
+  type ExternalCache = { key: string; time: number; value: SearchResult }
+  const EXTERNAL_CACHE_TTL = 2_000
+  const externalCache = new Map<string, ExternalCache>()
+
+  function empty(): SearchResult {
+    return { files: [], dirs: [] }
+  }
 
   export const Info = z
     .object({
@@ -333,13 +341,12 @@ export namespace File {
   }
 
   const state = Instance.state(async () => {
-    type Entry = { files: string[]; dirs: string[] }
-    let cache: Entry = { files: [], dirs: [] }
+    let cache: SearchResult = empty()
     let fetching = false
 
     const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
 
-    const fn = async (result: Entry) => {
+    const fn = async (result: SearchResult) => {
       // Disable scanning if in root of file system
       if (Instance.directory === path.parse(Instance.directory).root) return
       fetching = true
@@ -401,10 +408,7 @@ export namespace File {
     return {
       async files() {
         if (!fetching) {
-          fn({
-            files: [],
-            dirs: [],
-          })
+          fn(empty())
         }
         return cache
       },
@@ -620,10 +624,13 @@ export namespace File {
   }
 
   async function external(sessionID?: string) {
-    if (!sessionID) return { files: [], dirs: [] }
+    if (!sessionID) return empty()
 
     const session = await Session.get(sessionID).catch(() => undefined)
-    if (!session?.permission) return { files: [], dirs: [] }
+    if (!session?.permission) {
+      externalCache.delete(sessionID)
+      return empty()
+    }
 
     const dirs = Array.from(
       new Set(
@@ -632,9 +639,18 @@ export namespace File {
           .map((rule) => externalDirectory(rule.pattern))
           .filter((rule): rule is string => Boolean(rule)),
       ),
-    )
+    ).toSorted()
 
-    if (!dirs.length) return { files: [], dirs: [] }
+    const key = dirs.join("\0")
+    const now = Date.now()
+    const cached = externalCache.get(sessionID)
+    if (cached && cached.key === key && now - cached.time < EXTERNAL_CACHE_TTL) return cached.value
+
+    if (!dirs.length) {
+      const value = empty()
+      externalCache.set(sessionID, { key, time: now, value })
+      return value
+    }
 
     const files: string[] = []
     const folders = new Set<string>()
@@ -663,10 +679,12 @@ export namespace File {
       }
     }
 
-    return {
+    const value = {
       files: Array.from(new Set(files)),
       dirs: Array.from(folders),
     }
+    externalCache.set(sessionID, { key, time: now, value })
+    return value
   }
 
   export async function search(input: {
