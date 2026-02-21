@@ -343,7 +343,7 @@ function createGlobalSync() {
         throw error
       })
   }
-  
+
   return {
     data: globalStore,
     set: setGlobalStore,
