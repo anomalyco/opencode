@@ -13,7 +13,7 @@ export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; ass
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: "opencode-windows-x64",
+    ocBinary: "opencode-windows-x64-baseline",
     assetExt: "zip",
   },
   {
