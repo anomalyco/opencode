@@ -297,6 +297,11 @@ export const RunCommand = cmd({
         describe: "show thinking blocks",
         default: false,
       })
+      .option("auto-approve", {
+        type: "boolean",
+        describe: "auto-approve permission requests (use --no-auto-approve to reject instead)",
+        default: true,
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -539,14 +544,15 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
+            const reply = args["auto-approve"] ? "once" : "reject"
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
               UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-${reply === "once" ? "approving" : "rejecting"}`,
             )
             await sdk.permission.reply({
               requestID: permission.id,
-              reply: "reject",
+              reply,
             })
           }
         }
