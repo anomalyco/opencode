@@ -9,6 +9,13 @@ type PromptImageAttachmentsProps = {
   removeLabel: string
 }
 
+const fallbackClass = "size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base"
+const imageClass =
+  "size-16 rounded-md object-cover border border-border-base hover:border-border-strong-base transition-colors"
+const removeClass =
+  "absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
+const nameClass = "absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md"
+
 export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (props) => {
   return (
     <Show when={props.attachments.length > 0}>
@@ -19,7 +26,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
               <Show
                 when={attachment.mime.startsWith("image/")}
                 fallback={
-                  <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
+                  <div class={fallbackClass}>
                     <Icon name="folder" class="size-6 text-text-weak" />
                   </div>
                 }
@@ -27,19 +34,19 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                 <img
                   src={attachment.dataUrl}
                   alt={attachment.filename}
-                  class="size-16 rounded-md object-cover border border-border-base hover:border-border-strong-base transition-colors"
+                  class={imageClass}
                   onClick={() => props.onOpen(attachment)}
                 />
               </Show>
               <button
                 type="button"
                 onClick={() => props.onRemove(attachment.id)}
-                class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
+                class={removeClass}
                 aria-label={props.removeLabel}
               >
                 <Icon name="close" class="size-3 text-text-weak" />
               </button>
-              <div class="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md">
+              <div class={nameClass}>
                 <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
               </div>
             </div>

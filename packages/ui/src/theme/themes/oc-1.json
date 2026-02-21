@@ -440,7 +440,7 @@
       "icon-strong-disabled": "var(--smoke-dark-8)",
       "icon-strong-focus": "#fdfcfc",
       "icon-brand-base": "var(--white)",
-      "icon-interactive-base": "var(--cobalt-dark-9)",
+      "icon-interactive-base": "var(--cobalt-dark-11)",
       "icon-success-base": "var(--apple-dark-9)",
       "icon-success-hover": "var(--apple-dark-10)",
       "icon-success-active": "var(--apple-dark-11)",

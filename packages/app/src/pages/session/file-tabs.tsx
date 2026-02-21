@@ -1,48 +1,55 @@
-import { type ValidComponent, createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { checksum } from "@opencode-ai/util/encode"
+import { useParams } from "@solidjs/router"
+import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import { sampledChecksum } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useLayout } from "@/context/layout"
-import { useFile, type SelectedLineRange } from "@/context/file"
+import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
+import { usePrompt } from "@/context/prompt"
+import { getSessionHandoff } from "@/pages/session/handoff"
 
-export function FileTabContent(props: {
-  tab: string
-  activeTab: () => string
-  tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
-  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  handoffFiles: () => Record<string, SelectedLineRange | null> | undefined
-  file: ReturnType<typeof useFile>
-  comments: ReturnType<typeof useComments>
-  language: ReturnType<typeof useLanguage>
-  codeComponent: NonNullable<ValidComponent>
-  addCommentToContext: (input: {
-    file: string
-    selection: SelectedLineRange
-    comment: string
-    preview?: string
-    origin?: "review" | "file"
-  }) => void
-}) {
+const formatCommentLabel = (range: SelectedLineRange) => {
+  const start = Math.min(range.start, range.end)
+  const end = Math.max(range.start, range.end)
+  if (start === end) return `line ${start}`
+  return `lines ${start}-${end}`
+}
+
+export function FileTabContent(props: { tab: string }) {
+  const params = useParams()
+  const layout = useLayout()
+  const file = useFile()
+  const comments = useComments()
+  const language = useLanguage()
+  const prompt = usePrompt()
+  const codeComponent = useCodeComponent()
+
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
+
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
 
-  const path = createMemo(() => props.file.pathFromTab(props.tab))
+  const path = createMemo(() => file.pathFromTab(props.tab))
   const state = createMemo(() => {
     const p = path()
     if (!p) return
-    return props.file.get(p)
+    return file.get(p)
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
-  const cacheKey = createMemo(() => checksum(contents()))
+  const cacheKey = createMemo(() => sampledChecksum(contents()))
   const isImage = createMemo(() => {
     const c = state()?.content
     return c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
@@ -75,8 +82,7 @@ export function FileTabContent(props: {
     svgToast.shown = true
     showToast({
       variant: "error",
-      title: props.language.t("toast.file.loadFailed.title"),
-      description: "Invalid base64 content.",
+      title: language.t("toast.file.loadFailed.title"),
     })
   })
   const svgPreviewUrl = createMemo(() => {
@@ -94,16 +100,63 @@ export function FileTabContent(props: {
   const selectedLines = createMemo(() => {
     const p = path()
     if (!p) return null
-    if (props.file.ready()) return props.file.selectedLines(p) ?? null
-    return props.handoffFiles()?.[p] ?? null
+    if (file.ready()) return file.selectedLines(p) ?? null
+    return getSessionHandoff(sessionKey())?.files[p] ?? null
   })
+
+  const selectionPreview = (source: string, selection: FileSelection) => {
+    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
+    const end = Math.max(selection.startLine, selection.endLine)
+    const lines = source.split("\n").slice(start - 1, end)
+    if (lines.length === 0) return undefined
+    return lines.slice(0, 2).join("\n")
+  }
+
+  const addCommentToContext = (input: {
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+    origin?: "review" | "file"
+  }) => {
+    const selection = selectionFromLines(input.selection)
+    const preview =
+      input.preview ??
+      (() => {
+        if (input.file === path()) return selectionPreview(contents(), selection)
+        const source = file.get(input.file)?.content?.content
+        if (!source) return undefined
+        return selectionPreview(source, selection)
+      })()
+
+    const saved = comments.add({
+      file: input.file,
+      selection: input.selection,
+      comment: input.comment,
+    })
+    prompt.context.add({
+      type: "file",
+      path: input.file,
+      selection,
+      comment: input.comment,
+      commentID: saved.id,
+      commentOrigin: input.origin,
+      preview,
+    })
+  }
 
   let wrap: HTMLDivElement | undefined
 
   const fileComments = createMemo(() => {
     const p = path()
     if (!p) return []
-    return props.comments.list(p)
+    return comments.list(p)
+  })
+
+  const commentLayout = createMemo(() => {
+    return fileComments()
+      .map((comment) => `${comment.id}:${comment.selection.start}:${comment.selection.end}`)
+      .join("|")
   })
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
@@ -116,32 +169,11 @@ export function FileTabContent(props: {
     draftTop: undefined as number | undefined,
   })
 
-  const openedComment = () => note.openedComment
-  const setOpenedComment = (
-    value: typeof note.openedComment | ((value: typeof note.openedComment) => typeof note.openedComment),
-  ) => setNote("openedComment", value)
-
-  const commenting = () => note.commenting
-  const setCommenting = (value: typeof note.commenting | ((value: typeof note.commenting) => typeof note.commenting)) =>
-    setNote("commenting", value)
-
-  const draft = () => note.draft
-  const setDraft = (value: typeof note.draft | ((value: typeof note.draft) => typeof note.draft)) =>
-    setNote("draft", value)
-
-  const positions = () => note.positions
-  const setPositions = (value: typeof note.positions | ((value: typeof note.positions) => typeof note.positions)) =>
-    setNote("positions", value)
-
-  const draftTop = () => note.draftTop
-  const setDraftTop = (value: typeof note.draftTop | ((value: typeof note.draftTop) => typeof note.draftTop)) =>
-    setNote("draftTop", value)
-
-  const commentLabel = (range: SelectedLineRange) => {
-    const start = Math.min(range.start, range.end)
-    const end = Math.max(range.start, range.end)
-    if (start === end) return `line ${start}`
-    return `lines ${start}-${end}`
+  const setCommenting = (range: SelectedLineRange | null) => {
+    setNote("commenting", range)
+    scheduleComments()
+    if (!range) return
+    setNote("draft", "")
   }
 
   const getRoot = () => {
@@ -174,33 +206,57 @@ export function FileTabContent(props: {
     const el = wrap
     const root = getRoot()
     if (!el || !root) {
-      setPositions({})
-      setDraftTop(undefined)
+      setNote("positions", {})
+      setNote("draftTop", undefined)
       return
     }
+
+    const estimateTop = (range: SelectedLineRange) => {
+      const line = Math.max(range.start, range.end)
+      const height = 24
+      const offset = 2
+      return Math.max(0, (line - 1) * height + offset)
+    }
+
+    const large = contents().length > 500_000
 
     const next: Record<string, number> = {}
     for (const comment of fileComments()) {
       const marker = findMarker(root, comment.selection)
-      if (!marker) continue
-      next[comment.id] = markerTop(el, marker)
+      if (marker) next[comment.id] = markerTop(el, marker)
+      else if (large) next[comment.id] = estimateTop(comment.selection)
     }
 
-    setPositions(next)
+    const removed = Object.keys(note.positions).filter((id) => next[id] === undefined)
+    const changed = Object.entries(next).filter(([id, top]) => note.positions[id] !== top)
+    if (removed.length > 0 || changed.length > 0) {
+      setNote(
+        "positions",
+        produce((draft) => {
+          for (const id of removed) {
+            delete draft[id]
+          }
 
-    const range = commenting()
+          for (const [id, top] of changed) {
+            draft[id] = top
+          }
+        }),
+      )
+    }
+
+    const range = note.commenting
     if (!range) {
-      setDraftTop(undefined)
+      setNote("draftTop", undefined)
       return
     }
 
     const marker = findMarker(root, range)
-    if (!marker) {
-      setDraftTop(undefined)
+    if (marker) {
+      setNote("draftTop", markerTop(el, marker))
       return
     }
 
-    setDraftTop(markerTop(el, marker))
+    setNote("draftTop", large ? estimateTop(range) : undefined)
   }
 
   const scheduleComments = () => {
@@ -208,31 +264,24 @@ export function FileTabContent(props: {
   }
 
   createEffect(() => {
-    fileComments()
+    commentLayout()
     scheduleComments()
   })
 
   createEffect(() => {
-    const range = commenting()
-    scheduleComments()
-    if (!range) return
-    setDraft("")
-  })
-
-  createEffect(() => {
-    const focus = props.comments.focus()
+    const focus = comments.focus()
     const p = path()
     if (!focus || !p) return
     if (focus.file !== p) return
-    if (props.activeTab() !== props.tab) return
+    if (tabs().active() !== props.tab) return
 
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
 
-    setOpenedComment(target.id)
+    setNote("openedComment", target.id)
     setCommenting(null)
-    props.file.setSelectedLines(p, target.selection)
-    requestAnimationFrame(() => props.comments.clearFocus())
+    file.setSelectedLines(p, target.selection)
+    requestAnimationFrame(() => comments.clearFocus())
   })
 
   const getCodeScroll = () => {
@@ -261,7 +310,7 @@ export function FileTabContent(props: {
       pending = undefined
       if (!out) return
 
-      props.view().setScroll(props.tab, out)
+      view().setScroll(props.tab, out)
     })
   }
 
@@ -297,7 +346,7 @@ export function FileTabContent(props: {
     const el = scroll
     if (!el) return
 
-    const s = props.view()?.scroll(props.tab)
+    const s = view().scroll(props.tab)
     if (!s) return
 
     syncCodeScroll()
@@ -335,7 +384,7 @@ export function FileTabContent(props: {
 
   createEffect(
     on(
-      () => props.file.ready(),
+      () => file.ready(),
       (ready) => {
         if (!ready) return
         requestAnimationFrame(restoreScroll)
@@ -346,7 +395,7 @@ export function FileTabContent(props: {
 
   createEffect(
     on(
-      () => props.tabs().active() === props.tab,
+      () => tabs().active() === props.tab,
       (active) => {
         if (!active) return
         if (!state()?.loaded) return
@@ -373,7 +422,7 @@ export function FileTabContent(props: {
       class={`relative overflow-hidden ${wrapperClass}`}
     >
       <Dynamic
-        component={props.codeComponent}
+        component={codeComponent}
         file={{
           name: path() ?? "",
           contents: source,
@@ -389,7 +438,7 @@ export function FileTabContent(props: {
         onLineSelected={(range: SelectedLineRange | null) => {
           const p = path()
           if (!p) return
-          props.file.setSelectedLines(p, range)
+          file.setSelectedLines(p, range)
           if (!range) setCommenting(null)
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
@@ -398,7 +447,7 @@ export function FileTabContent(props: {
             return
           }
 
-          setOpenedComment(null)
+          setNote("openedComment", null)
           setCommenting(range)
         }}
         overflow="scroll"
@@ -408,43 +457,38 @@ export function FileTabContent(props: {
         {(comment) => (
           <LineCommentView
             id={comment.id}
-            top={positions()[comment.id]}
-            open={openedComment() === comment.id}
+            top={note.positions[comment.id]}
+            open={note.openedComment === comment.id}
             comment={comment.comment}
-            selection={commentLabel(comment.selection)}
+            selection={formatCommentLabel(comment.selection)}
             onMouseEnter={() => {
               const p = path()
               if (!p) return
-              props.file.setSelectedLines(p, comment.selection)
+              file.setSelectedLines(p, comment.selection)
             }}
             onClick={() => {
               const p = path()
               if (!p) return
               setCommenting(null)
-              setOpenedComment((current) => (current === comment.id ? null : comment.id))
-              props.file.setSelectedLines(p, comment.selection)
+              setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
+              file.setSelectedLines(p, comment.selection)
             }}
           />
         )}
       </For>
-      <Show when={commenting()}>
+      <Show when={note.commenting}>
         {(range) => (
-          <Show when={draftTop() !== undefined}>
+          <Show when={note.draftTop !== undefined}>
             <LineCommentEditor
-              top={draftTop()}
-              value={draft()}
-              selection={commentLabel(range())}
-              onInput={(value) => setDraft(value)}
+              top={note.draftTop}
+              value={note.draft}
+              selection={formatCommentLabel(range())}
+              onInput={(value) => setNote("draft", value)}
               onCancel={() => setCommenting(null)}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
-                props.addCommentToContext({
-                  file: p,
-                  selection: range(),
-                  comment: value,
-                  origin: "file",
-                })
+                addCommentToContext({ file: p, selection: range(), comment: value, origin: "file" })
                 setCommenting(null)
               }}
               onPopoverFocusOut={(e: FocusEvent) => {
@@ -466,51 +510,52 @@ export function FileTabContent(props: {
   )
 
   return (
-    <Tabs.Content
-      value={props.tab}
-      class="mt-3 relative"
-      ref={(el: HTMLDivElement) => {
-        scroll = el
-        restoreScroll()
-      }}
-      onScroll={handleScroll}
-    >
-      <Switch>
-        <Match when={state()?.loaded && isImage()}>
-          <div class="px-6 py-4 pb-40">
-            <img
-              src={imageDataUrl()}
-              alt={path()}
-              class="max-w-full"
-              onLoad={() => requestAnimationFrame(restoreScroll)}
-            />
-          </div>
-        </Match>
-        <Match when={state()?.loaded && isSvg()}>
-          <div class="flex flex-col gap-4 px-6 py-4">
-            {renderCode(svgContent() ?? "", "")}
-            <Show when={svgPreviewUrl()}>
-              <div class="flex justify-center pb-40">
-                <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-              </div>
-            </Show>
-          </div>
-        </Match>
-        <Match when={state()?.loaded && isBinary()}>
-          <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
-            <Mark class="w-14 opacity-10" />
-            <div class="flex flex-col gap-2 max-w-md">
-              <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
-              <div class="text-14-regular text-text-weak">{props.language.t("session.files.binaryContent")}</div>
+    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+      <ScrollView
+        class="h-full"
+        viewportRef={(el: HTMLDivElement) => {
+          scroll = el
+          restoreScroll()
+        }}
+        onScroll={handleScroll as any}
+      >
+        <Switch>
+          <Match when={state()?.loaded && isImage()}>
+            <div class="px-6 py-4 pb-40">
+              <img
+                src={imageDataUrl()}
+                alt={path()}
+                class="max-w-full"
+                onLoad={() => requestAnimationFrame(restoreScroll)}
+              />
             </div>
-          </div>
-        </Match>
-        <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
-        <Match when={state()?.loading}>
-          <div class="px-6 py-4 text-text-weak">{props.language.t("common.loading")}...</div>
-        </Match>
-        <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-      </Switch>
+          </Match>
+          <Match when={state()?.loaded && isSvg()}>
+            <div class="flex flex-col gap-4 px-6 py-4">
+              {renderCode(svgContent() ?? "", "")}
+              <Show when={svgPreviewUrl()}>
+                <div class="flex justify-center pb-40">
+                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                </div>
+              </Show>
+            </div>
+          </Match>
+          <Match when={state()?.loaded && isBinary()}>
+            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="flex flex-col gap-2 max-w-md">
+                <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
+                <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
+              </div>
+            </div>
+          </Match>
+          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+          <Match when={state()?.loading}>
+            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+          </Match>
+          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+        </Switch>
+      </ScrollView>
     </Tabs.Content>
   )
 }
