@@ -3,9 +3,9 @@ import { handler } from "~/routes/zen/util/handler"
 
 export function POST(input: APIEvent) {
   return handler(input, {
-    format: "anthropic",
-    modelList: "full",
-    parseApiKey: (headers: Headers) => headers.get("x-api-key") ?? undefined,
+    format: "oa-compat",
+    modelList: "lite",
+    parseApiKey: (headers: Headers) => headers.get("authorization")?.split(" ")[1],
     parseModel: (url: string, body: any) => body.model,
     parseIsStream: (url: string, body: any) => !!body.stream,
   })
