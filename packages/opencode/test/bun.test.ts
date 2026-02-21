@@ -51,3 +51,25 @@ describe("BunProc registry configuration", () => {
     }
   })
 })
+
+describe("Flag server password", () => {
+  test("removes OPENCODE_SERVER_PASSWORD from env on load", async () => {
+    const key = "OPENCODE_SERVER_PASSWORD"
+    const original = process.env[key]
+    process.env[key] = "secret"
+
+    try {
+      const flagPath = path.join(__dirname, "../src/flag/flag.ts")
+      const tempPath = path.join(path.dirname(flagPath), `flag-${Date.now()}-${Math.random().toString(16).slice(2)}.ts`)
+      const content = await fs.readFile(flagPath, "utf-8")
+      await fs.writeFile(tempPath, content)
+
+      const { Flag } = await import(tempPath)
+      expect(Flag.OPENCODE_SERVER_PASSWORD).toBe("secret")
+      expect(process.env[key]).toBeUndefined()
+    } finally {
+      if (original === undefined) delete process.env[key]
+      else process.env[key] = original
+    }
+  })
+})
