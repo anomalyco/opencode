@@ -36,7 +36,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
-        if (isModelValid(model, model.allowUncached ?? false)) return model
+        if (isModelValid(model, model.allowUncached ?? false)) {
+          // Strip allowUncached from returned model to match expected type
+          const { providerID, modelID } = model
+          return { providerID, modelID }
+        }
       }
     }
 
