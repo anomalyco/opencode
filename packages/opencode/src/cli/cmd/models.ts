@@ -47,10 +47,10 @@ export const ModelsCommand = cmd({
           return Object.entries(provider.models)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([modelID, model]) => ({
+              ...model,
               id: `${providerID}/${modelID}`,
               provider: providerID,
               model: modelID,
-              ...model,
             }))
         }
 
